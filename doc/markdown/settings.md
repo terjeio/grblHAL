@@ -292,11 +292,11 @@ Whenever a switch triggers, some of them can have electrical/mechanical noise th
 
 To play nice with the hard limits feature, where homing can share the same limit switches, the homing cycle will move off all of the limit switches by this pull-off travel after it completes. In other words, it helps to prevent accidental triggering of the hard limit after a homing cycle.
 
-### $28 - G73 retract distance
+#### $28 - G73 retract distance
 
 The distance G73 will retract between each "peck" when drilling in mm.
 
-### $29 - step pulse delay
+#### $29 - step pulse delay
 
 Step pulse delay from setting the direction pins in microseconds.
 
@@ -314,51 +314,51 @@ When enabled, Grbl will move continuously through consecutive `G1`, `G2`, or `G3
 
 When disabled, Grbl will operate as it always has, stopping motion with every `S` spindle speed command. This is the default operation of a milling machine to allow a pause to let the spindle change speeds.
 
-### $33 - Spindle PWM frequency 
+#### $33 - Spindle PWM frequency 
 
 Spindle PWM frequency in Hz
 
-### $34 - Spindle off
+#### $34 - Spindle off
 
-### $35 - Spindle min value
+#### $35 - Spindle min value
 
-### $36 - Spindle max value
+#### $36 - Spindle max value
 
-### $37 - Stepper deenergize mask
+#### $37 - Stepper deenergize mask
 
 Controls which axes to disable when grbl is idle, may be useful in a mill where disabling the Z-axis could result in the tool hitting the table.
 
-### $38 - Spindle encoder pulses per revolution
+#### $38 - Spindle encoder pulses per revolution
 
-### $39 - Spindle PID loop P-gain
+#### $39 - Spindle PID loop P-gain
 
-### $40 - Spindle PID loop I-gain
+#### $40 - Spindle PID loop I-gain
 
-### $41 - Spindle PID loop D-gain
+#### $41 - Spindle PID loop D-gain
 
-### $43 - Homing cycles
+#### $43 - Homing cycles
 
 Number of repeats of each cycle to perform when homing, more may improve accuracy
 
-### $44 - Homing cycle 1
-### $45 - Homing cycle 2
-### $46 - Homing cycle 3
-### $47 - Homing cycle 4
-### $48 - Homing cycle 5
-### $49 - Homing cycle 6
+#### $44 - Homing cycle 1
+#### $45 - Homing cycle 2
+#### $46 - Homing cycle 3
+#### $47 - Homing cycle 4
+#### $48 - Homing cycle 5
+#### $49 - Homing cycle 6
 
 Mask, specifies which axes to home in each cycle
 
-#### Some settings are driver specific, I have allocated these as "standard":
+### Some settings are driver specific, I have allocated these as "standard":
 
-### $50 Jogging speed, step mode
-### $51 Jogging speed, slow mode
-### $50 Jogging speed, fast mode
-### $50 Jogging distance, step mode
-### $50 Jogging distance, slow mode
-### $50 Jogging distance, fast mode
+#### $50 Jogging speed, step mode
+#### $51 Jogging speed, slow mode
+#### $50 Jogging speed, fast mode
+#### $50 Jogging distance, step mode
+#### $50 Jogging distance, slow mode
+#### $50 Jogging distance, fast mode
 
-#### End driver specific settings
+### End driver specific settings
 
 #### $100, $101 and $102 – [X,Y,Z] steps/mm
 
