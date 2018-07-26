@@ -1,0 +1,55 @@
+$-Code	Setting	Units	Datatype	Data format	Setting Description	Min	Max
+0	Step pulse time	microseconds	integer	#9	Sets time length per step. Minimum 3 microseconds.	3	
+1	Step idle delay	milliseconds	integer	##9	Sets a short hold delay when stopping to let dynamics settle before disabling steppers. Value 255 keeps motors enabled.		255
+2	Step pulse invert	mask	bitfield	axes	Inverts the step signals (active low).		
+3	Step direction invert	mask	bitfield	axes	Inverts the direction signals (active low).		
+4	Invert step enable pin	boolean	bitfield	axes	Inverts the stepper driver enable signals  (active low). If the stepper drivers shares the same enable signal only X is used.		
+5	Invert limit pins	mask	bitfield	axes	Inverts the axis limit input signals. 		
+6	Invert probe pin	boolean	bool		Inverts the probe input pin signal.		
+10	Status report options	mask	bitfield	Position type,Buffer state,Line numbers,Feed & speed,Pin state,Work coordinate offset,Overrides	Specifies optional data included in status reports.		
+11	Junction deviation	mm	float	#####0.000	Sets how fast Grbl travels through consecutive motions. Lower value slows it down.		
+12	Arc tolerance	mm	float	#####0.000	Sets the G2 and G3 arc tracing accuracy based on radial error. Beware: A very small value may effect performance.		
+13	Report in inches	boolean	bool		Enables inch units when returning any position and rate value that is not a settings value.		
+14	Invert control pins	mask	bitfield	Reset,Feed hold,Cycle start,Safety door	Inverts the control signals  (active low).		
+15	Invert coolant pins	mask	bitfield	Flood,Mist	Inverts the coolant and mist signals  (active low).		
+16	Invert spindle pins	mask	bitfield	Spindle on,Spindle CCW	Inverts the spindle on and counterclockwise signals ( (active low).		
+17	Pullup disable control pins	mask	bitfield	Reset,Feed hold,Cycle start,Safety door	Disable the control signals pullup resistors. Potentially enables pulldown resistor if available.		
+18	Pullup disable limit pins	mask	bitfield	axes	Disable the limit signals pullup resistors. Potentially enables pulldown resistor if available.		
+19	Pullup disable probe pin	boolean	bool		Disable the probe signal pullup resistor. Potentially enables pulldown resistor if available.		
+20	Soft limits enable	boolean	bool		Enables soft limits checks within machine travel and sets alarm when exceeded. Requires homing.		
+21	Hard limits enable	boolean	bool		Enables hard limits. Immediately halts motion and throws an alarm when switch is triggered.		
+22	Homing cycle enable	boolean	bool		Enables homing cycle. Requires limit switches on all axes.		
+23	Homing direction invert	mask	bitfield	axes	Homing searches for a switch in the positive direction. Set axis bit (00000ZYX) to search in negative direction.		
+24	Homing locate feed rate	mm/min	float	#####0.000	Feed rate to slowly engage limit switch to determine its location accurately.		
+25	Homing search seek rate	mm/min	float	#####0.000	Seek rate to quickly find the limit switch before the slower locating phase.		
+26	Homing switch debounce delay	milliseconds	integer	##9	Sets a short delay between phases of homing cycle to let a switch debounce.		
+27	Homing switch pull-off distance	mm	float	#####0.000	Retract distance after triggering switch to disengage it. Homing will fail if switch isn't cleared.		
+28	G73 Retract distance	mm	float	#####0.000	G73 retract distance (for chip breaking drilling).		
+29	Pulse delay	microseconds	integer	##9	Step pulse delay	0	10
+30	Maximum spindle speed	RPM	float	#####0.000	Maximum spindle speed. Sets PWM to maximum duty cycle.		
+31	Minimum spindle speed	RPM	float	#####0.000	Minimum spindle speed. Sets PWM to minimum duty cycle.		
+32	Laser-mode enable	boolean	bool		Enables laser mode. Consecutive G1/2/3 commands will not halt when spindle speed is changed.		
+33	Spindle PWM frequency	Hz	float	#####0	Spindle PWM frequency.		
+34	Spindle PWM off value	percent	float	##0.0	Spindle PWM off value in percent (duty cycle).		100
+35	Spindle PWM min value	percent	float	##0.0	Spindle PWM min value in percent (duty cycle).		100
+36	Spindle PWM max value	percent	float	##0.0	Spindle PWM max value in percent (duty cycle).		100
+37	Steppers deenergize 	mask	bitfield	axes	Specifies which steppers not to disable when stopped.		
+38	Spindle PPR	pulses	integer	###0	Spindle encoder pulses per revolution		
+50	Step jog speed 	mm/min	float	###0.0	Step jogging speed in millimeters per minute		
+51	Slow jog speed	mm/min	float	###0.0	Slow jogging speed in millimeters per minute		
+52	Fast jog speed 	mm/min	float	###0.0	Fast jogging speed in millimeters per minute		
+53	Step jog distance	mm	float	#0.000	Jog distance for single step jogging		
+54	Slow jog distance	mm	float	###0.0	Jog distance before automatic stop		
+55	Fast jog distance	mm	float	###0.0	Jog distance before automatic stop		
+100	X-axis travel resolution	step/mm	float	#####0.000	X-axis travel resolution in steps per millimeter.		
+101	Y-axis travel resolution	step/mm	float	#####0.000	Y-axis travel resolution in steps per millimeter.		
+102	Z-axis travel resolution	step/mm	float	#####0.000	Z-axis travel resolution in steps per millimeter.		
+110	X-axis maximum rate	mm/min	float	#####0.000	X-axis maximum rate. Used as G0 rapid rate.		
+111	Y-axis maximum rate	mm/min	float	#####0.000	Y-axis maximum rate. Used as G0 rapid rate.		
+112	Z-axis maximum rate	mm/min	float	#####0.000	Z-axis maximum rate. Used as G0 rapid rate.		
+120	X-axis acceleration	mm/sec^2	float	#####0.000	X-axis acceleration. Used for motion planning to not exceed motor torque and lose steps.		
+121	Y-axis acceleration	mm/sec^2	float	#####0.000	Y-axis acceleration. Used for motion planning to not exceed motor torque and lose steps.		
+122	Z-axis acceleration	mm/sec^2	float	#####0.000	Z-axis acceleration. Used for motion planning to not exceed motor torque and lose steps.		
+130	X-axis maximum travel	mm	float	#####0.000	Maximum X-axis travel distance from homing switch. Determines valid machine space for soft-limits and homing search distances.		
+131	Y-axis maximum travel	mm	float	#####0.000	Maximum Y-axis travel distance from homing switch. Determines valid machine space for soft-limits and homing search distances.		
+132	Z-axis maximum travel	mm	float	#####0.000	Maximum Z-axis travel distance from homing switch. Determines valid machine space for soft-limits and homing search distances.		

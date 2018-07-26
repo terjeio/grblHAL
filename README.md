@@ -38,7 +38,7 @@ List of Supported G-Codes in GrblHAL v1.1:
   - Cutter Compensation Modes: G40
   - Coordinate System Modes: G54, G55, G56, G57, G58, G59, G59.1, G59.2, G59.3
   - Control Modes: G61
-  - Program Flow: M0, M1, M2, M30*
+  - Program Flow: M0, M1, M2, M30
   - Coolant Control: M7, M8, M9
   - Spindle Control: M3, M4, M5
   - Switches: M49, M50, M51, M53
