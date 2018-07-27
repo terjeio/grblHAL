@@ -28,7 +28,7 @@
 #define KEYPAD_I2CADDR 0x49
 
 #define KEYINTR_PIN   GPIO_PIN_4
-#define KEYINTR_PORT  GPIO_PORTB_BASE
+#define KEYINTR_PORT  GPIO_PORTE_BASE
 
 #define JOG_XR   'R'
 #define JOG_XL   'L'

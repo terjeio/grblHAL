@@ -31,12 +31,14 @@
 #include "driver.h"
 #include "eeprom.h"
 #include "serial.h"
-#include "usermcodes.h"
-#include "keypad.h"
+//#include "usermcodes.h"
+//#include "keypad.h"
 //#include "atc.h"
 
 // prescale step counter to 20Mhz (80 / (STEPPER_DRIVER_PRESCALER + 1))
 #define STEPPER_DRIVER_PRESCALER 3
+
+//#define SPINDLE_SYNC // do NOT enable - not complete!
 
 #ifdef PWM_RAMPED
 
@@ -59,6 +61,21 @@ static pwm_ramp_t pwm_ramp;
 laser_ppi_t laser;
 
 static void ppi_timeout_isr (void);
+
+#endif
+
+#ifdef SPINDLE_SYNC
+
+typedef struct {                     // Set when last encoder pulse count did not match at last index
+    float block_start;
+    float prev_pos;
+    float dpp; // distance per pulse in mm
+    uint32_t timer_value_start;
+    uint_fast8_t segment_id;
+    uint32_t segments;
+} spindle_sync_t;
+
+static void stepperPulseStartSyncronized (stepper_t *stepper);
 
 #endif
 
@@ -145,7 +162,12 @@ static void driver_delay_ms (uint32_t ms, void (*callback)(void))
 static void stepperEnable (axes_signals_t enable)
 {
     enable.mask ^= settings.stepper_enable_invert.mask;
+#ifdef CNC_BOOSTERPACK
+    GPIOPinWrite(STEPPERS_DISABLE_XY_PORT, STEPPERS_DISABLE_XY_PIN, enable.x ? STEPPERS_DISABLE_XY_PIN : 0);
+    GPIOPinWrite(STEPPERS_DISABLE_Z_PORT, STEPPERS_DISABLE_Z_PIN, enable.z ? STEPPERS_DISABLE_Z_PIN : 0);
+#else
     GPIOPinWrite(STEPPERS_DISABLE_PORT, STEPPERS_DISABLE_PIN, enable.x ? STEPPERS_DISABLE_PIN : 0);
+#endif
 }
 
 // Starts stepper driver ISR timer and forces a stepper driver interrupt callback
@@ -231,6 +253,18 @@ static void stepperPulseStart (stepper_t *stepper)
 {
     static uint_fast16_t current_pwm = 0;
 
+#ifdef SPINDLE_SYNC
+    if(stepper->new_block) {
+        if(stepper->exec_segment->spindle_sync) {
+            hal.stepper_pulse_start = stepperPulseStartSyncronized;
+            stepperPulseStartSyncronized(stepper);
+            return;
+        }
+        stepper->new_block = false;
+        stepperSetDirOutputs(stepper->dir_outbits);
+    }
+#endif
+
     if(stepper->spindle_pwm != current_pwm)
         current_pwm = spindleSetSpeed(stepper->spindle_pwm);
 
@@ -242,6 +276,56 @@ static void stepperPulseStart (stepper_t *stepper)
     stepperSetStepOutputs(stepper->step_outbits);
     TimerEnable(PULSE_TIMER_BASE, TIMER_A);
 }
+
+#ifdef SPINDLE_SYNC
+
+// Sets stepper direction and pulse pins and starts a step pulse
+// When delayed pulse the step register is written in the step delay interrupt handler
+static void stepperPulseStartSyncronized (stepper_t *stepper)
+{
+    static spindle_sync_t spindle_sync;
+
+    if(stepper->new_block) {
+        if(!stepper->exec_segment->spindle_sync) {
+            hal.stepper_pulse_start = stepperPulseStart;
+            stepperPulseStart(stepper);
+            return;
+        } else {
+            spindle_sync.dpp = stepper->exec_block->programmed_rate * 120.0f;
+            spindle_sync.prev_pos = 0.0f;
+            spindle_sync.timer_value_start = 123;
+            spindle_sync.block_start = 2.33f;
+            spindle_sync.segments = 0;
+            spindle_sync.segment_id = stepper->exec_segment->id + 1; // force recalc
+        }
+        stepper->new_block = false;
+        stepperSetDirOutputs(stepper->dir_outbits);
+    }
+
+    stepperSetStepOutputs(stepper->step_outbits);
+
+    if(spindle_sync.segment_id != stepper->exec_segment->id) {
+
+        spindle_sync.segment_id = stepper->exec_segment->id;
+
+        float dist = stepper->exec_segment->target_position - spindle_sync.prev_pos;
+
+        float epulses = dist * spindle_sync.dpp;
+
+        sys.pid_log.target[spindle_sync.segments] = stepper->exec_segment->target_position;
+
+        spindle_sync.segments++;
+
+
+ //       float current_pos = (spindleGetData(true).angular_position - spindle_sync.block_start) * stepper->exec_block->programmed_rate;
+
+        spindle_sync.prev_pos = stepper->exec_segment->target_position;
+
+    }
+
+    TimerEnable(PULSE_TIMER_BASE, TIMER_A);
+}
+#endif
 
 // Sets stepper direction and pulse pins and starts a step pulse with an initial delay
 // When delayed pulse the step register is written in the step delay interrupt handler
@@ -340,9 +424,12 @@ static void limitsEnable (bool on)
 // Each bitfield bit indicates an axis limit, where triggered is 1 and not triggered is 0.
 inline static axes_signals_t limitsGetState()
 {
+    uint32_t flags = GPIOPinRead(LIMIT_PORT, HWLIMIT_MASK);
     axes_signals_t signals;
 
-    signals.value = (uint8_t)(GPIOPinRead(LIMIT_PORT, HWLIMIT_MASK) >> 2);
+    signals.x = (flags & X_LIMIT_PIN) != 0;
+    signals.y = (flags & Y_LIMIT_PIN) != 0;
+    signals.z = (flags & Z_LIMIT_PIN) != 0;
 
     if (settings.limit_invert.value)
         signals.value ^= settings.limit_invert.value;
@@ -354,7 +441,7 @@ inline static axes_signals_t limitsGetState()
 // Each bitfield bit indicates a control signal, where triggered is 1 and not triggered is 0.
 inline static control_signals_t systemGetState (void)
 {
-    uint8_t flags = GPIOPinRead(CONTROL_PORT, HWCONTROL_MASK);
+    uint32_t flags = GPIOPinRead(CONTROL_PORT, HWCONTROL_MASK);
     control_signals_t signals = {0};
 
     signals.reset = (flags & RESET_PIN) != 0;
@@ -399,13 +486,12 @@ inline static void spindleOff ()
 
 inline static void spindleOn ()
 {
-    GPIOPinWrite(SPINDLE_ENABLE_PORT, SPINDLE_ENABLE_PIN, settings.spindle_invert.on ? 0 : SPINDLE_ENABLE_PIN );
+    GPIOPinWrite(SPINDLE_ENABLE_PORT, SPINDLE_ENABLE_PIN, settings.spindle_invert.on ? 0 : SPINDLE_ENABLE_PIN);
 }
 
 inline static void spindleDir (bool ccw)
 {
-    if(hal.driver_cap.spindle_dir)
-        GPIOPinWrite(SPINDLE_DIRECTION_PORT, SPINDLE_DIRECTION_PIN, (ccw ^ settings.spindle_invert.ccw) ? SPINDLE_DIRECTION_PIN : 0);
+    GPIOPinWrite(SPINDLE_DIRECTION_PORT, SPINDLE_DIRECTION_PIN, (ccw ^ settings.spindle_invert.ccw) ? SPINDLE_DIRECTION_PIN : 0);
 }
 
 
@@ -522,6 +608,24 @@ static void spindleSetStateVariable (spindle_state_t state, float rpm, uint8_t s
     }
 }
 
+#ifdef SPINDLE_SYNC
+static spindle_data_t spindleGetData (spindle_data_request_t request)
+{
+    static spindle_data_t spindle_data;
+
+    spindle_data.rpm = GPIOPinRead(SPINDLE_ENABLE_PORT, SPINDLE_ENABLE_PIN) ? 300.0f : 0.0f;
+    spindle_data.angular_position = 0.0f;
+    spindle_data.index_count++;
+
+    return spindle_data;
+}
+
+static void spindleDataReset (void)
+{
+}
+
+#endif
+
 // Returns spindle state in a spindle_state_t variable
 static spindle_state_t spindleGetState (void)
 {
@@ -532,6 +636,9 @@ static spindle_state_t spindleGetState (void)
     state.value ^= settings.spindle_invert.mask;
 #ifdef PWM_RAMPED
     state.at_speed = pwm_ramp.pwm_current == pwm_ramp.pwm_target;
+#endif
+#ifdef SPINDLE_SYNC
+    state.at_speed = spindleGetData(SpindleData_RPM).rpm == (state.on ? 300.0f : 0.0f);
 #endif
 
     return state;
@@ -557,6 +664,13 @@ static coolant_state_t coolantGetState (void)
     state.value ^= settings.coolant_invert.mask;
 
     return state;
+}
+
+static void showMessage (const char *msg)
+{
+    hal.serial_write_string("[MSG:");
+    hal.serial_write_string(msg);
+    hal.serial_write_string("]\r\n");
 }
 
 // Helper functions for setting/clearing/inverting individual bits atomically (uninterruptable)
@@ -705,13 +819,23 @@ static bool driver_setup (settings_t *settings)
      *  Stepper init  *
      ******************/
 
+    // Unlock GPIOF0, used for stepper disable Z control
+    HWREG(GPIO_PORTF_BASE + GPIO_O_LOCK) = GPIO_LOCK_KEY;
+    HWREG(GPIO_PORTF_BASE + GPIO_O_CR) |= GPIO_PIN_0;
+    HWREG(GPIO_PORTF_BASE + GPIO_O_LOCK) = 0;
+
     GPIOPinTypeGPIOOutput(STEP_PORT, HWSTEP_MASK);
     GPIOPadConfigSet(STEP_PORT, HWSTEP_MASK, GPIO_STRENGTH_8MA, GPIO_PIN_TYPE_STD);
 
     GPIOPinTypeGPIOOutput(DIRECTION_PORT, HWDIRECTION_MASK);
     GPIOPadConfigSet(DIRECTION_PORT, HWDIRECTION_MASK, GPIO_STRENGTH_8MA, GPIO_PIN_TYPE_STD);
 
+#ifdef CNC_BOOSTERPACK
+    GPIOPinTypeGPIOOutput(STEPPERS_DISABLE_XY_PORT, STEPPERS_DISABLE_XY_PIN);
+    GPIOPinTypeGPIOOutput(STEPPERS_DISABLE_Z_PORT, STEPPERS_DISABLE_Z_PIN);
+#else
     GPIOPinTypeGPIOOutput(STEPPERS_DISABLE_PORT, STEPPERS_DISABLE_PIN);
+#endif
 
     // Configure stepper driver timer
     TimerConfigure(STEPPER_TIMER_BASE, TIMER_CFG_SPLIT_PAIR|TIMER_CFG_A_PERIODIC);
@@ -731,6 +855,12 @@ static bool driver_setup (settings_t *settings)
     TimerIntClear(PULSE_TIMER_BASE, 0xFFFF);
     IntPendClear(PULSE_TIMER_INT);
     TimerPrescaleSet(PULSE_TIMER_BASE, TIMER_A, 79); // for 1uS per count
+
+#ifdef CNC_BOOSTERPACK_A4998
+    GPIOPinTypeGPIOOutput(STEPPERS_VDD_PORT, STEPPERS_VDD_PIN);
+    GPIOPadConfigSet(STEPPERS_VDD_PORT, STEPPERS_VDD_PIN, GPIO_STRENGTH_12MA, GPIO_PIN_TYPE_STD);
+    GPIOPinWrite(STEPPERS_VDD_PORT, STEPPERS_VDD_PIN, STEPPERS_VDD_PIN);
+#endif
 
 #ifdef LASER_PPI
 
@@ -778,7 +908,7 @@ static bool driver_setup (settings_t *settings)
     ***********************/
 
     GPIOPinTypeGPIOInput(CONTROL_PORT, HWCONTROL_MASK);
-    GPIOIntRegister(CONTROL_PORT, &control_isr);             // Register interrupt handler
+    GPIOIntRegister(CONTROL_PORT, control_isr);             // Register interrupt handler
 
     GPIOPadConfigSet(CONTROL_PORT, CYCLE_START_PIN, GPIO_STRENGTH_2MA, settings->control_disable_pullup.cycle_start ? GPIO_PIN_TYPE_STD_WPD : GPIO_PIN_TYPE_STD_WPU);
     GPIOPadConfigSet(CONTROL_PORT, FEED_HOLD_PIN, GPIO_STRENGTH_2MA, settings->control_disable_pullup.feed_hold ? GPIO_PIN_TYPE_STD_WPD : GPIO_PIN_TYPE_STD_WPU);
@@ -821,10 +951,9 @@ static bool driver_setup (settings_t *settings)
     *  Coolant pins init  *
     ***********************/
 
-    //Unlock GPIOD7 - Like PF0 its used for NMI - Without this step it doesn't work
-
-    HWREG(GPIO_PORTD_BASE + GPIO_O_LOCK) = GPIO_LOCK_KEY; //In Tiva include this is the same as "_DD" in older versions (0x4C4F434B)
-    HWREG(GPIO_PORTD_BASE + GPIO_O_CR) |= 0x80;
+    // Unlock GPIOD7, used for mist control
+    HWREG(GPIO_PORTD_BASE + GPIO_O_LOCK) = GPIO_LOCK_KEY;
+    HWREG(GPIO_PORTD_BASE + GPIO_O_CR) |= GPIO_PIN_7;
     HWREG(GPIO_PORTD_BASE + GPIO_O_LOCK) = 0;
 
     GPIOPinTypeGPIOOutput(COOLANT_FLOOD_PORT, COOLANT_FLOOD_PIN);
@@ -840,8 +969,9 @@ static bool driver_setup (settings_t *settings)
     ******************/
 
     GPIOPinTypeGPIOOutput(SPINDLE_ENABLE_PORT, SPINDLE_ENABLE_PIN);
-    GPIOPinTypeGPIOOutput(SPINDLE_DIRECTION_PORT, SPINDLE_DIRECTION_PIN);
     GPIOPadConfigSet(SPINDLE_ENABLE_PORT, SPINDLE_ENABLE_PIN, GPIO_STRENGTH_8MA, GPIO_PIN_TYPE_STD);
+
+    GPIOPinTypeGPIOOutput(SPINDLE_DIRECTION_PORT, SPINDLE_DIRECTION_PIN);
     GPIOPadConfigSet(SPINDLE_DIRECTION_PORT, SPINDLE_DIRECTION_PIN, GPIO_STRENGTH_8MA, GPIO_PIN_TYPE_STD);
 
     if((hal.driver_cap.variable_spindle)) {
@@ -874,7 +1004,7 @@ static bool driver_setup (settings_t *settings)
 
   // Set defaults
 
-    IOInitDone = settings->version == 12;
+    IOInitDone = settings->version == 13;
 
     settings_changed(settings);
 
@@ -895,8 +1025,7 @@ bool user_defined_setting (uint_fast16_t param, float val)
 // NOTE: Grbl is not yet configured (from EEPROM data), driver_setup() will be called when done
 bool driver_init (void)
 {
-
-    // Set up systick time with a 1ms period
+    // Set up systick timer with a 1ms period
     SysTickPeriodSet((SysCtlClockGet() / 1000) - 1);
     SysTickIntRegister(systick_isr);
     SysTickIntEnable();
@@ -910,7 +1039,7 @@ bool driver_init (void)
     serialInit();
 
     setSerialBlockingCallback(hal.serial_blocking_callback);
-    hal.info = "TM4CHP6PM";
+    hal.info = "TM4C123HP6PM";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = 20000000;
     hal.rx_buffer_size = RX_BUFFER_SIZE;
@@ -938,6 +1067,10 @@ bool driver_init (void)
     hal.spindle_get_state = spindleGetState;
     hal.spindle_set_speed = spindleSetSpeed;
     hal.spindle_compute_pwm_value = spindleComputePWMValue;
+#ifdef SPINDLE_SYNC
+    hal.spindle_get_data = spindleGetData;
+    hal.spindle_reset_data = spindleDataReset;
+#endif
 
     hal.system_control_get_state = systemGetState;
 
@@ -958,11 +1091,13 @@ bool driver_init (void)
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
 
+#ifdef _USERMCODES_H_
     hal.userdefined_mcode_check = userMCodeCheck;
     hal.userdefined_mcode_validate = userMCodeValidate;
     hal.userdefined_mcode_execute = userMCodeExecute;
+#endif
 
-//    hal.show_message = serialWriteS;
+    hal.show_message = showMessage;
 
     hal.driver_setting = user_defined_setting;
 
@@ -983,6 +1118,10 @@ bool driver_init (void)
     hal.driver_cap.spindle_dir = On;
     hal.driver_cap.variable_spindle = On;
 #ifdef PWM_RAMPED
+    hal.driver_cap.spindle_at_speed = On;
+#endif
+#ifdef SPINDLE_SYNC
+    hal.driver_cap.spindle_sync = On;
     hal.driver_cap.spindle_at_speed = On;
 #endif
     hal.driver_cap.mist_control = On;
@@ -1093,7 +1232,7 @@ static void limit_isr_debounced (void)
 static void control_isr (void)
 {
 // No debounce??
-    uint8_t iflags = GPIOIntStatus(CONTROL_PORT, true) & HWCONTROL_MASK;
+    uint32_t iflags = GPIOIntStatus(CONTROL_PORT, true) & HWCONTROL_MASK;
 
     if(iflags) {
         GPIOIntClear(CONTROL_PORT, iflags);

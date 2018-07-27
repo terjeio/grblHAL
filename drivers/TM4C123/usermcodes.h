@@ -5,7 +5,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2017 Terje Io
+  Copyright (c) 2017-2018 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -22,7 +22,11 @@
 */
 
 // User defined mcode handling prototypes
+#ifndef _USERMCODES_H_
+#define _USERMCODES_H_
 
 uint8_t userMCodeCheck (uint8_t mcode);
 uint8_t userMCodeValidate (parser_block_t *gc_block, uint_fast16_t *value_words);
 void userMCodeExecute (uint8_t state, parser_block_t *gc_block);
+
+#endif
