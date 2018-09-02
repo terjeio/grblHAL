@@ -506,7 +506,7 @@
 #define EMULATE_EEPROM
 
 // Max number of entries in log for PID data reporting, to be used for tuning
-//#define PID_LOG 1000 // Default disabled. Uncomment to enable.
+#define PID_LOG 1000 // Default disabled. Uncomment to enable.
 
 // Define some default values if not defined above
 

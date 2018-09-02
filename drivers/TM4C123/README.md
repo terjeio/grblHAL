@@ -1,10 +1,10 @@
 ## TM4C123GrblDriver
 
-A GrblHAL driver for the Texas Instruments Tiva C \(TM4C123G\) Launchpad
+A GrblHAL driver for the Texas Instruments [Tiva C \(EK-TM4C123GXL\) Launchpad](http://www.ti.com/tool/EK-TM4C123GXL)
 
-This driver needs to be complemented with an UART or USB driver for host communication.
+This driver needs to be complemented with an [UART](https://github.com/terjeio/TM4C123UARTDriver) or USB driver for host communication.
 
-Optional support for I2C keypad added, can be used for jogging and mist/coolant overrides. Jogging can be toggled between fast, slow and step mode. Laser PPI mode (PPI - Pulses Per Inch) may also be enabled, this to ensure constant power delivered to the workpiece regardless of speed. PPI mode parameters are set by some user-defined M-codes:
+Optional support for [I2C keypad](https://github.com/terjeio/I2C-interface-for-4x4-keyboard) added, can be used for jogging and mist/coolant overrides. Jogging can be toggled between fast, slow and step mode. Laser PPI mode (PPI - Pulses Per Inch) may also be enabled, this to ensure constant power delivered to the workpiece regardless of speed. PPI mode parameters are set by some user-defined M-codes:
 
 #### M123P\<n\>
 

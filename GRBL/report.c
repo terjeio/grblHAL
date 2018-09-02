@@ -211,7 +211,6 @@ void report_grbl_settings() {
     report_util_float_setting(Setting_HomingSeekRate, settings.homing_seek_rate, N_DECIMAL_SETTINGVALUE);
     report_util_uint_setting(Setting_HomingDebounceDelay, settings.homing_debounce_delay);
     report_util_float_setting(Setting_HomingPulloff, settings.homing_pulloff, N_DECIMAL_SETTINGVALUE);
-    report_util_uint_setting(Setting_HomingLocateCycles, settings.homing_locate_cycles);
     report_util_float_setting(Setting_G73Retract, settings.g73_retract, N_DECIMAL_SETTINGVALUE);
     report_util_uint_setting(Setting_PulseDelayMicroseconds, settings.pulse_delay_microseconds);
     report_util_float_setting(Setting_RpmMax, settings.rpm_max, N_DECIMAL_RPMVALUE);
@@ -228,6 +227,7 @@ void report_grbl_settings() {
         report_util_float_setting(Setting_SpindleIGain, settings.spindle_I_gain, N_DECIMAL_SETTINGVALUE);
         report_util_float_setting(Setting_SpindleDGain, settings.spindle_D_gain, N_DECIMAL_SETTINGVALUE);
     }
+    report_util_uint_setting(Setting_HomingLocateCycles, settings.homing_locate_cycles);
 
     uint_fast8_t idx;
 

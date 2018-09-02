@@ -966,7 +966,7 @@ status_code_t gc_execute_block(char *block, char *message)
                     // Determine coordinate system to change and try to load from EEPROM.
                     gc_block.values.coord_data.idx = p_value == 0
                                                       ? gc_block.modal.coord_system.idx // Index P0 as the active coordinate system
-                                                      : (p_value - 1); // else adjust P1-P6 index to EEPROM coordinate data indexing.
+                                                      : (p_value - 1); // else adjust index to EEPROM coordinate data indexing.
 
                     if (!settings_read_coord_data(gc_block.values.coord_data.idx, &gc_block.values.coord_data.xyz))
                         FAIL(Status_SettingReadFail); // [EEPROM read fail]
@@ -976,11 +976,11 @@ status_code_t gc_execute_block(char *block, char *message)
                     do { // Axes indices are consistent, so loop may be used.
                         // Update axes defined only in block. Always in machine coordinates. Can change non-active system.
                         if (bit_istrue(axis_words, bit(--idx))) {
-                            if (gc_block.values.l == 20) {
+                            if (gc_block.values.l == 20)
                                 // L20: Update coordinate system axis at current position (with modifiers) with programmed value
                                 // WPos = MPos - WCS - G92 - TLO  ->  WCS = MPos - G92 - TLO - WPos
                                 gc_block.values.coord_data.xyz[idx] = gc_state.position[idx] - gc_state.g92_coord_offset[idx] - gc_block.values.xyz[idx] - gc_state.tool_length_offset[idx];
-                            } else // L2: Update coordinate system axis to programmed value.
+                            else // L2: Update coordinate system axis to programmed value.
                                 gc_block.values.coord_data.xyz[idx] = gc_block.values.xyz[idx];
                         } // else, keep current stored value.
                     } while(idx);
@@ -991,38 +991,36 @@ status_code_t gc_execute_block(char *block, char *message)
                     if(p_value == 0 || p_value > N_TOOLS)
                        FAIL(Status_GcodeIllegalToolTableEntry); // [Greater than N tools]
 
-                   tool_table[p_value].tool = p_value;
+                    tool_table[p_value].tool = p_value;
 
-                   if(bit_istrue(value_words, bit(Word_R))) {
-                       tool_table[p_value].radius = gc_block.values.r;
-                       bit_false(value_words, bit(Word_R));
-                   }
+                    if(bit_istrue(value_words, bit(Word_R))) {
+                        tool_table[p_value].radius = gc_block.values.r;
+                        bit_false(value_words, bit(Word_R));
+                    }
 
-                   float g59_3_offset[N_AXIS];
-                   if(gc_block.values.l == 11) {
-                       if (!settings_read_coord_data(SETTING_INDEX_G59_3, &g59_3_offset))
-                           FAIL(Status_SettingReadFail);
-                   }
+                    float g59_3_offset[N_AXIS];
+                    if(gc_block.values.l == 11 && !settings_read_coord_data(SETTING_INDEX_G59_3, &g59_3_offset))
+                        FAIL(Status_SettingReadFail);
 
-                   idx = N_AXIS;
-                   do {
-                       if (bit_istrue(axis_words, bit(--idx))) {
-                           if(gc_block.values.l == 1)
-                               tool_table[p_value].offset[idx] = gc_block.values.xyz[idx];
-                           else if(gc_block.values.l == 10)
-                               tool_table[p_value].offset[idx] = gc_state.position[idx] - gc_state.g92_coord_offset[idx] - gc_block.values.xyz[idx];
-                           else if(gc_block.values.l == 11)
-                               tool_table[p_value].offset[idx] = g59_3_offset[idx] - gc_block.values.xyz[idx];
-                           if (gc_block.values.l != 1)
-                               tool_table[p_value].offset[idx] -= gc_state.tool_length_offset[idx];
-                       }
+                    idx = N_AXIS;
+                    do {
+                        if (bit_istrue(axis_words, bit(--idx))) {
+                            if(gc_block.values.l == 1)
+                                tool_table[p_value].offset[idx] = gc_block.values.xyz[idx];
+                            else if(gc_block.values.l == 10)
+                                tool_table[p_value].offset[idx] = gc_state.position[idx] - gc_state.g92_coord_offset[idx] - gc_block.values.xyz[idx];
+                            else if(gc_block.values.l == 11)
+                                tool_table[p_value].offset[idx] = g59_3_offset[idx] - gc_block.values.xyz[idx];
+                            if (gc_block.values.l != 1)
+                                tool_table[p_value].offset[idx] -= gc_state.tool_length_offset[idx];
+                        }
                         // else, keep current stored value.
-                   } while(idx);
+                    } while(idx);
 
-                   if(gc_block.values.l == 1)
-                       settings_write_tool_data(p_value, &tool_table[p_value]);
+                    if(gc_block.values.l == 1)
+                        settings_write_tool_data(p_value, &tool_table[p_value]);
 
-                   break;
+                    break;
 #endif
                 default:
                     FAIL(Status_GcodeUnsupportedCommand); // [Unsupported L]
