@@ -35,7 +35,6 @@
 // one configuration file by placing their specific defaults and pin map at the bottom of this file.
 // If doing so, simply comment out these two defines and see instructions below.
 #define DEFAULTS_GENERIC
-#define CPU_MAP_GENERIC
 
 // Serial baud rate
 // #define BAUD_RATE 230400
@@ -54,6 +53,7 @@
 #define CMD_STATUS_REPORT '?'
 #define CMD_CYCLE_START '~'
 #define CMD_FEED_HOLD '!'
+#define CMD_PROGRAM_DEMARCATION '%'
 #define CMD_PID_REPORT 0xA2
 
 // NOTE: All override realtime commands must be in the extended ASCII character set, starting
@@ -80,6 +80,10 @@
 #define CMD_SPINDLE_OVR_STOP 0x9E
 #define CMD_COOLANT_FLOOD_OVR_TOGGLE 0xA0
 #define CMD_COOLANT_MIST_OVR_TOGGLE 0xA1
+
+// Number of axes supported: minimum 3, maximum 6
+// If more than 3 axes are required a compliant driver must be provided
+#define N_AXIS 3 // Number of axes
 
 // Constant surface speed (CSS) is for lathes, when enabled this adds support for G96/G97 as per linuxcnc specs.
 // A compliant HAL driver is required as the final RPM calculations are left to the driver to handle.

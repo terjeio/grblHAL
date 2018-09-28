@@ -172,6 +172,7 @@ typedef struct {
     volatile bool steppers_deenergize;	// Set to true to deenergize stepperes
     bool probe_succeeded;               // Tracks if last probing cycle was successful.
     bool suspend;                       // System suspend state flag.
+    bool block_input_stream;            // Input stream block flag. Set to true to discard all characters except real-time commands.
     step_control_t step_control;        // Governs the step segment generator depending on system state.
     axes_signals_t homing_axis_lock;    // Locks axes when limits engage. Used as an axis motion mask in the stepper ISR.
     uint8_t f_override;                 // Feed rate override value in percent

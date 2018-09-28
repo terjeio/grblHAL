@@ -192,13 +192,6 @@ bool protocol_main_loop()
             } else if (c == ';') {
                 // NOTE: ';' comment to EOL is a LinuxCNC definition. Not NIST.
                 line_flags.comment_semicolon = !line_flags.comment_parentheses;
-            // TODO: Install '%' feature
-            // } else if (c == '%') {
-            // Program start-end percent sign NOT SUPPORTED.
-            // NOTE: This maybe installed to tell Grbl when a program is running vs manual input,
-            // where, during a program, the system auto-cycle start will continue to execute
-            // everything until the next '%' sign. This will help fix resuming issues with certain
-            // functions that empty the planner buffer to execute its task on-time.
             } else if (char_counter >= (LINE_BUFFER_SIZE - 1)) {
                 // Detect line buffer overflow and set flag.
                 line_flags.overflow = On;
@@ -542,7 +535,7 @@ static void protocol_exec_rt_suspend ()
 // Called from serial input interrupt handler.
 bool protocol_process_realtime (char c) {
 
-    bool add = true;
+    bool add = !sys.block_input_stream;
 
     switch ((unsigned char)c) {
 

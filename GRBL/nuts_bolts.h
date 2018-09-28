@@ -26,6 +26,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "config.h"
+
 #ifndef true
 #define false 0
 #define true 1
@@ -43,7 +45,9 @@
 #define CAPS(c) ((c >= 'a' && c <= 'z') ? c & 0x5F : c)
 
 // Axis array index values. Must start with 0 and be continuous.
+#ifndef N_AXIS
 #define N_AXIS 3 // Number of axes
+#endif
 #define X_AXIS 0 // Axis indexing value.
 #define Y_AXIS 1
 #define Z_AXIS 2

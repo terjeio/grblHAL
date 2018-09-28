@@ -164,6 +164,8 @@ void report_feedback_message(message_code_t message_code)
             hal.serial_write_string("Emergency stop");
             break;
 
+        default:
+            break;
     }
     report_util_feedback_line_feed();
 }
@@ -809,6 +811,9 @@ void report_realtime_status ()
         hal.serial_write(sys.mpg_mode ? '1' : '0');
         mpg_mode = sys.mpg_mode;
     }
+
+    if(hal.userdefined_rt_report)
+        hal.userdefined_rt_report();
 
     hal.serial_write('>');
     report_util_line_feed();

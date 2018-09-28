@@ -71,7 +71,8 @@ typedef enum {
     Status_GcodeMaxValueExceeded = 38,
     Status_GcodeIllegalToolTableEntry = 39,
     Status_GcodeToolChangePending = 40,
-    Status_EStop = 41
+    Status_EStop = 41,
+    Status_Unhandled = 42 // For internal use only
 } status_code_t;
 
 

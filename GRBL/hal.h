@@ -34,9 +34,6 @@
 
 #define HAL_VERSION 4
 
-//#define bit_true_atomic(var, bit) HWREGBITW(&var, bit) = 1;
-//#define bit_false_atomic(var, bit) HWREGBITW(&var, bit) = 0;
-
 // driver capabilities, to be set by driver in driver_init(), flags may be cleared after to switch off option
 typedef union {
     uint32_t value;
@@ -110,8 +107,10 @@ typedef struct HAL {
     void (*execute_realtime)(uint8_t state);
     uint8_t (*userdefined_mcode_check)(uint8_t mcode);
     status_code_t (*userdefined_mcode_validate)(parser_block_t *gc_block, uint32_t *value_words);
-    void (*userdefined_mcode_execute)(uint8_t state, parser_block_t *gc_block);
+    void (*userdefined_mcode_execute)(uint_fast16_t state, parser_block_t *gc_block);
     void (*userdefined_rt_command_execute)(uint8_t cmd);
+    void (*userdefined_rt_report)(void);
+    status_code_t (*userdefined_sys_command_execute)(uint_fast16_t state, char *line); // return Status_Unhandled
     bool (*get_position)(int32_t (*position)[N_AXIS]);
     void (*tool_select)(tool_data_t *tool);
     void (*tool_change)(parser_state_t *gc_state);

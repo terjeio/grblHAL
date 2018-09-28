@@ -113,7 +113,12 @@ status_code_t gc_execute_block(char *block, char *message)
     static parser_block_t gc_block;
 
     // Determine if the line is a program start/end marker.
-    if (block[0] == '%' && block[1] == '\0') {
+    // Old comment from protocol.c:
+    // NOTE: This maybe installed to tell Grbl when a program is running vs manual input,
+    // where, during a program, the system auto-cycle start will continue to execute
+    // everything until the next '%' sign. This will help fix resuming issues with certain
+    // functions that empty the planner buffer to execute its task on-time.
+    if (block[0] == CMD_PROGRAM_DEMARCATION && block[1] == '\0') {
         gc_state.file_run = !gc_state.file_run;
         return Status_OK;
     }
@@ -793,6 +798,9 @@ status_code_t gc_execute_block(char *block, char *message)
                 gc_block.modal.override_ctrl.parking_disable = gc_block.values.p == 0.0f;
                 break;
 #endif
+
+            default:
+                break;
         }
     }
 
@@ -851,7 +859,7 @@ status_code_t gc_execute_block(char *block, char *message)
                     scale_factor.xyz[idx] = gc_block.values.xyz[idx];
                     bit_false(axis_words, bit(idx));
                 }
-                gc_block.modal.scaling_active = gc_block.modal.scaling_active | scale_factor.xyz[idx] != 1.0f;
+                gc_block.modal.scaling_active = gc_block.modal.scaling_active | (scale_factor.xyz[idx] != 1.0f);
             } while(idx);
 
             bit_false(value_words, AXIS_WORDS_MASK); // Remove axis words.
@@ -863,7 +871,7 @@ status_code_t gc_execute_block(char *block, char *message)
                     bit_false(ijk_words, bit(idx));
                     bit_false(value_words, bit(idx)); // Remove axis words.
                 }
-                gc_block.modal.scaling_active = gc_block.modal.scaling_active | scale_factor.ijk[idx] != 1.0f;
+                gc_block.modal.scaling_active = gc_block.modal.scaling_active | (scale_factor.ijk[idx] != 1.0f);
             } while(idx);
 
             gc_state.modal.scaling_active = gc_block.modal.scaling_active;
@@ -910,6 +918,8 @@ status_code_t gc_execute_block(char *block, char *message)
                     gc_block.values.xyz[TOOL_LENGTH_OFFSET_AXIS] += gc_state.tool->offset[TOOL_LENGTH_OFFSET_AXIS];
                 break;
 #endif
+            default:
+                break;
         }
     }
 
@@ -1230,6 +1240,9 @@ status_code_t gc_execute_block(char *block, char *message)
                         } else if(gc_parser_flags.canned_cycle_change)
                             FAIL(Status_GcodeValueWordMissing);
                         gc_state.canned.dwell = 0.25f;
+                        break;
+
+                    default:
                         break;
 
                 } // end switch gc_state.canned.motion

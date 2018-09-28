@@ -77,7 +77,6 @@ status_code_t system_execute_line (char *line)
 {
 
     uint_fast8_t counter = 1;
-    float parameter, value;
     control_signals_t control_signals;
 
     switch (line[1]) {
@@ -158,8 +157,15 @@ status_code_t system_execute_line (char *line)
 
         default :
 
+            // TODO: reorganize system_execute_line for cleaner logic (single return point?)
+            if(hal.userdefined_sys_command_execute) {
+                status_code_t retval;
+                if((retval = hal.userdefined_sys_command_execute(sys.state, line)) != Status_Unhandled)
+                    return retval;
+            }
+
             // Block any system command that requires the state as IDLE/ALARM. (i.e. sleep, homing)
-            if (sys.state == STATE_IDLE || sys.state == STATE_IDLE) switch(line[1]) {
+            if (sys.state == STATE_IDLE || sys.state == STATE_ALARM) switch(line[1]) {
 
                 case 'H' : // Perform homing cycle [IDLE/ALARM]
 
@@ -307,26 +313,29 @@ status_code_t system_execute_line (char *line)
                         return Status_IdleError;
                     // No break. Continues into default: to read remaining command characters.
 
-                default :  // Storing setting methods [IDLE/ALARM]
+                default:;  // Storing setting methods [IDLE/ALARM]
+                    float parameter, value;
                     if(!read_float(line, &counter, &parameter))
                         return Status_BadNumberFormat;
-                    if(line[counter++] != '=')
+                    if(line[counter++] != '=' || parameter - truncf(parameter) != 0.0f)
                         return Status_InvalidStatement;
                     if (line[1] == 'N') { // Store startup line
+                        if(parameter > (float)N_STARTUP_LINE)
+                           return Status_InvalidStatement;
                         line = &line[counter];
                         if(strlen(line) >= (MAX_STORED_LINE_LENGTH - 1))
                             return Status_Overflow;
                         status_code_t retval;
                         if ((retval = gc_execute_block(line, NULL)) == Status_OK) // Execute gcode block to ensure block is valid.
-                            settings_write_startup_line((uint8_t)truncf(parameter), line);
+                            settings_write_startup_line((uint8_t)parameter, line);
                         else
                             return retval;
                     } else { // Store global setting.
                         if(!read_float(line, &counter, &value))
                             return Status_BadNumberFormat;
-                         if(line[counter] != '\0')
+                        if(line[counter] != '\0' || (uint_fast16_t)parameter > Setting_AxisSettingsMax)
                             return Status_InvalidStatement;
-                         return settings_store_global_setting((uint_fast16_t)parameter, value);
+                        return settings_store_global_setting((uint_fast16_t)parameter, value);
                     }
             } else
                 return Status_IdleError;

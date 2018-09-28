@@ -313,6 +313,8 @@ void settings_restore (uint8_t restore_flag) {
 
     if((restore_flag & SETTINGS_RESTORE_DRIVER_PARAMETERS) && hal.driver_settings_restore)
         hal.driver_settings_restore(restore_flag);
+
+    eeprom_emu_sync_physical();
 }
 
 // A helper method to set settings from command line
