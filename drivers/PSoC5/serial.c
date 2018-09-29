@@ -38,9 +38,9 @@ void serialInit (void)
     UART_RX_Interrupt_StartEx(uart_rx_interrupt_handler);
 }
 
-int32_t serialGetC (void) {
+int16_t serialGetC (void) {
 
-    int32_t data;
+    int16_t data;
     uint16_t bptr = rx_tail;
 
     if(bptr == rx_head)        // If buffer empty
@@ -108,8 +108,9 @@ void serialWrite(const char *data, unsigned int length) {
 
 }
 
-void serialPutC (const char c) {
+bool serialPutC (const char c) {
     UART_PutChar(c);
+    return true;
 }
 
 static void uart_rx_interrupt_handler (void) {

@@ -41,8 +41,8 @@
 #define RX_BUFFER_LWM 300
 
 void serialInit(void);
-int32_t serialGetC(void);
-void serialPutC(const char data);
+int16_t serialGetC(void);
+bool serialPutC(const char data);
 void serialWriteS(const char *data);
 void serialWriteLn(const char *data);
 void serialWrite(const char *data, unsigned int length);

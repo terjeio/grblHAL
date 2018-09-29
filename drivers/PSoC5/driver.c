@@ -1,11 +1,11 @@
 /*
-  I2CKeypad.c - An embedded CNC Controller with rs274/ngc (g-code) support
+  driver.c - An embedded CNC Controller with rs274/ngc (g-code) support
 
   Driver for Cypress PSoC 5 (CY8CKIT-059)
 
   Part of Grbl
 
-  Copyright (c) 2017 Terje Io
+  Copyright (c) 2017-2018 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -36,7 +36,7 @@
 static volatile uint8_t curr_step_outbits = 0;
 static volatile uint32_t ms_count = 1;
 static uint32_t curr_spindle_pwm = 0;
-static bool spindlePWM = false;
+static bool spindlePWM = false, IOInitDone = false;
 static spindle_pwm_t spindle_pwm;
 static axes_signals_t next_step_outbits;
 static void (*delayCallback)(void) = 0;
@@ -75,29 +75,29 @@ static void spindleSetStateFixed (spindle_state_t state, float rpm, uint8_t spee
 // Variable spindle
 
 // Called by spindle_set_state() and step segment generator. Keep routine small and efficient.
-static uint32_t spindleComputePWMValue (float rpm, uint8_t speed_ovr)
+static uint_fast16_t spindleComputePWMValue (float rpm, uint8_t speed_ovr)
 {
-    uint32_t pwm_value;
+    uint_fast16_t pwm_value;
 
     rpm *= (0.010f * speed_ovr); // Scale by spindle speed override value.
     // Calculate PWM register value based on rpm max/min settings and programmed rpm.
     if ((settings.rpm_min >= settings.rpm_max) || (rpm >= settings.rpm_max)) {
         // No PWM range possible. Set simple on/off spindle control pin state.
-        sys.spindle_speed = settings.rpm_max;
+        sys.spindle_rpm = settings.rpm_max;
         pwm_value = spindle_pwm.max_value - 1;
     } else if (rpm <= settings.rpm_min) {
         if (rpm == 0.0f) { // S0 disables spindle
-            sys.spindle_speed = 0.0f;
+            sys.spindle_rpm = 0.0f;
             pwm_value = spindle_pwm.off_value;
         } else { // Set minimum PWM output
-            sys.spindle_speed = settings.rpm_min;
+            sys.spindle_rpm = settings.rpm_min;
             pwm_value = spindle_pwm.min_value;
         }
     } else {
         // Compute intermediate PWM value with linear spindle speed model.
         // NOTE: A nonlinear model could be installed here, if required, but keep it VERY light-weight.
-        sys.spindle_speed = rpm;
-        pwm_value = (uint32_t)floorf((rpm - settings.rpm_min) * spindle_pwm.pwm_gradient) + spindle_pwm.min_value;
+        sys.spindle_rpm = rpm;
+        pwm_value = (uint_fast16_t)floorf((rpm - settings.rpm_min) * spindle_pwm.pwm_gradient) + spindle_pwm.min_value;
         if(pwm_value >= spindle_pwm.max_value)
         	pwm_value = spindle_pwm.max_value - 1;
     }
@@ -106,7 +106,7 @@ static uint32_t spindleComputePWMValue (float rpm, uint8_t speed_ovr)
 }
 
 // Set spindle speed. Note: spindle direction must be kept if stopped or restarted
-static uint32_t spindleSetSpeed (uint32_t pwm_value)
+static uint_fast16_t spindleSetSpeed (uint_fast16_t pwm_value)
 {
     if (pwm_value == hal.spindle_pwm_off) {
         if(settings.flags.spindle_disable_with_zero_speed)
@@ -143,8 +143,9 @@ static spindle_state_t spindleGetState (void)
 // end spindle code
 
 // Enable/disable steppers, called from st_wake_up() and st_go_idle()
-static void stepperEnable (bool on) {
-    StepperEnable_Write(on);
+static void stepperEnable (axes_signals_t enable)
+{
+    StepperEnable_Write(enable.x);
 }
 
 // Sets up for a step pulse and forces a stepper driver interrupt, called from st_wake_up()
@@ -158,7 +159,7 @@ static void stepperWakeUp ()
     }
 */
     // Enable stepper drivers.
-    StepperEnable_Write(on);
+    StepperEnable_Write(On);
     StepperTimer_WritePeriod(5000); // dummy
     StepperTimer_Enable();
     Stepper_Interrupt_SetPending();
@@ -195,23 +196,23 @@ inline static void stepperSetDirOutputs (axes_signals_t dir_outbits)
 
 // Sets stepper direction and pulse pins and starts a step pulse, called from stepper_driver_interrupt_handler()
 // When delayed pulse the step register is written in the step delay interrupt handler
-static void stepperPulseStart (axes_signals_t dir_outbits, axes_signals_t step_outbits, uint32_t spindle_pwm)
+static void stepperPulseStart (stepper_t *stepper)
 {
     
-	if(spindlePWM && spindle_pwm != curr_spindle_pwm)
-		curr_spindle_pwm = spindleSetSpeed(spindle_pwm);
+	if(spindlePWM && stepper->spindle_pwm != curr_spindle_pwm)
+		curr_spindle_pwm = spindleSetSpeed(stepper->spindle_pwm);
 
-    StepOutput_Write(step_outbits.value);
-    DirOutput_Write(dir_outbits.value);
+    StepOutput_Write(stepper->step_outbits.value);
+    DirOutput_Write(stepper->dir_outbits.value);
 }
 
-static void stepperPulseStartDelayed (axes_signals_t dir_outbits, axes_signals_t step_outbits, uint32_t spindle_pwm)
+static void stepperPulseStartDelayed (stepper_t *stepper)
 {
-	if(spindlePWM && spindle_pwm != curr_spindle_pwm)
-		curr_spindle_pwm = spindleSetSpeed(spindle_pwm);
+	if(spindlePWM && stepper->spindle_pwm != curr_spindle_pwm)
+		curr_spindle_pwm = spindleSetSpeed(stepper->spindle_pwm);
 
-    stepperSetDirOutputs(dir_outbits);
-    next_step_outbits = step_outbits; // Store out_bits
+    stepperSetDirOutputs(stepper->dir_outbits);
+    next_step_outbits = stepper->step_outbits; // Store out_bits
 //    TimerEnable(TIMER2_BASE, TIMER_A);
 }
 
@@ -287,26 +288,26 @@ bool eepromReadBlockWithChecksum (uint8_t *destination, uint32_t source, uint32_
 }
 
 // Helper functions for setting/clearing/inverting individual bits atomically (uninterruptable)
-static void bitsSetAtomic (volatile uint8_t *ptr, uint8_t bits)
+static void bitsSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t bits)
 {
 	CyGlobalIntDisable;
 	*ptr |= bits;
 	CyGlobalIntEnable;
 }
 
-static uint8_t bitsClearAtomic (volatile uint8_t *ptr, uint8_t bits)
+static uint_fast16_t bitsClearAtomic (volatile uint_fast16_t *ptr, uint_fast16_t bits)
 {
 	CyGlobalIntDisable;
-    uint8_t prev = *ptr;
+    uint_fast16_t prev = *ptr;
 	*ptr &= ~bits;
 	CyGlobalIntEnable;
 	return prev;
 }
 
-static uint8_t valueSetAtomic (volatile uint8_t *ptr, uint8_t value)
+static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t value)
 {
 	CyGlobalIntDisable;
-    uint8_t prev = *ptr;
+    uint_fast16_t prev = *ptr;
     *ptr = value;
 	CyGlobalIntEnable;
     return prev;
@@ -314,54 +315,57 @@ static uint8_t valueSetAtomic (volatile uint8_t *ptr, uint8_t value)
 
 // Callback to inform settings has been changed, called by settings_store_global_setting()
 // Used to (re)configure hardware and set up helper variables
-void settings_changed (settings_t *settings) {
-
+void settings_changed (settings_t *settings)
+{
     //TODO: disable interrupts while reconfigure?
+    if(IOInitDone) {
+    
+        StepPulseClock_SetDivider(hal.f_step_timer / 1000000UL * settings->pulse_microseconds);
 
-    StepPulseClock_SetDivider(hal.f_step_timer / 1000000UL * settings->pulse_microseconds);
+        DirInvert_Write(settings->dir_invert.mask);
+        StepInvert_Write(settings->step_invert.mask);
+        StepperEnableInvert_Write(settings->stepper_enable_invert.x);
+        SpindleInvert_Write(settings->spindle_invert.mask);
+        CoolantInvert_Write(settings->coolant_invert.mask);
 
-    DirInvert_Write(settings->dir_invert_mask.value);
-    StepInvert_Write(settings->step_invert_mask.value);
-    StepperEnableInvert_Write(settings->flags.invert_st_enable);
-    SpindleInvert_Write(settings->spindle_invert_mask.value);
-    CoolantInvert_Write(settings->coolant_invert_mask.value);
+        stepperEnable(settings->stepper_deenergize);
 
-    // Homing (limit) inputs
-    XHome_Write(settings->limit_disable_pullup_mask.x ? 0 : 1);
-    XHome_SetDriveMode(settings->limit_disable_pullup_mask.x ? XHome_DM_RES_DWN : XHome_DM_RES_UP);
-    YHome_Write(settings->limit_disable_pullup_mask.y ? 0 : 1);
-    YHome_SetDriveMode(settings->limit_disable_pullup_mask.y ? YHome_DM_RES_DWN : YHome_DM_RES_UP);
-    ZHome_Write(settings->limit_disable_pullup_mask.z ? 0 : 1);
-    ZHome_SetDriveMode(settings->limit_disable_pullup_mask.z ? ZHome_DM_RES_DWN : ZHome_DM_RES_UP);
-    HomingSignalsInvert_Write(settings->limit_invert_mask.value);
+        // Homing (limit) inputs
+        XHome_Write(settings->limit_disable_pullup.x ? 0 : 1);
+        XHome_SetDriveMode(settings->limit_disable_pullup.x ? XHome_DM_RES_DWN : XHome_DM_RES_UP);
+        YHome_Write(settings->limit_disable_pullup.y ? 0 : 1);
+        YHome_SetDriveMode(settings->limit_disable_pullup.y ? YHome_DM_RES_DWN : YHome_DM_RES_UP);
+        ZHome_Write(settings->limit_disable_pullup.z ? 0 : 1);
+        ZHome_SetDriveMode(settings->limit_disable_pullup.z ? ZHome_DM_RES_DWN : ZHome_DM_RES_UP);
+        HomingSignalsInvert_Write(settings->limit_invert.mask);
 
-    // Control inputs
-    Reset_Write(settings->control_disable_pullup_mask.reset ? 0 : 1);
-    Reset_SetDriveMode(settings->control_disable_pullup_mask.reset ? Reset_DM_RES_DWN : Reset_DM_RES_UP);
-    FeedHold_Write(settings->control_disable_pullup_mask.feed_hold ? 0 : 1);
-    FeedHold_SetDriveMode(settings->control_disable_pullup_mask.feed_hold ? FeedHold_DM_RES_DWN : FeedHold_DM_RES_UP);
-    CycleStart_Write(settings->control_disable_pullup_mask.cycle_start ? 0 : 1);
-    CycleStart_SetDriveMode(settings->control_disable_pullup_mask.cycle_start ? CycleStart_DM_RES_DWN : CycleStart_DM_RES_UP);
-    SafetyDoor_Write(settings->control_disable_pullup_mask.safety_door_ajar ? 0 : 1);
-    SafetyDoor_SetDriveMode(settings->control_disable_pullup_mask.safety_door_ajar ? SafetyDoor_DM_RES_DWN : SafetyDoor_DM_RES_UP);
-    ControlSignalsInvert_Write(settings->control_invert_mask.value);
+        // Control inputs
+        Reset_Write(settings->control_disable_pullup.reset ? 0 : 1);
+        Reset_SetDriveMode(settings->control_disable_pullup.reset ? Reset_DM_RES_DWN : Reset_DM_RES_UP);
+        FeedHold_Write(settings->control_disable_pullup.feed_hold ? 0 : 1);
+        FeedHold_SetDriveMode(settings->control_disable_pullup.feed_hold ? FeedHold_DM_RES_DWN : FeedHold_DM_RES_UP);
+        CycleStart_Write(settings->control_disable_pullup.cycle_start ? 0 : 1);
+        CycleStart_SetDriveMode(settings->control_disable_pullup.cycle_start ? CycleStart_DM_RES_DWN : CycleStart_DM_RES_UP);
+        SafetyDoor_Write(settings->control_disable_pullup.safety_door_ajar ? 0 : 1);
+        SafetyDoor_SetDriveMode(settings->control_disable_pullup.safety_door_ajar ? SafetyDoor_DM_RES_DWN : SafetyDoor_DM_RES_UP);
+        ControlSignalsInvert_Write(settings->control_invert.mask);
 
-    // Probe input
-    ProbeInvert_Write(settings->flags.disable_probe_pullup ? 0 : 1);
-    Probe_SetDriveMode(settings->flags.disable_probe_pullup ? Probe_DM_RES_DWN : Probe_DM_RES_UP);
-    Probe_Write(settings->flags.disable_probe_pullup ? 0 : 1);
+        // Probe input
+        ProbeInvert_Write(settings->flags.disable_probe_pullup ? 0 : 1);
+        Probe_SetDriveMode(settings->flags.disable_probe_pullup ? Probe_DM_RES_DWN : Probe_DM_RES_UP);
+        Probe_Write(settings->flags.disable_probe_pullup ? 0 : 1);
 
-    spindle_pwm.period = (uint32_t)(hal.f_step_timer / settings->spindle_pwm_freq);
-    spindle_pwm.off_value = (uint32_t)(spindle_pwm.period * settings->spindle_pwm_off_value / 100.0f);
-    spindle_pwm.min_value = (uint32_t)(spindle_pwm.period * settings->spindle_pwm_min_value / 100.0f);
-    spindle_pwm.max_value = (uint32_t)(spindle_pwm.period * settings->spindle_pwm_max_value / 100.0f);
-    spindle_pwm.pwm_gradient = (float)(spindle_pwm.max_value - spindle_pwm.min_value) / (settings->rpm_max - settings->rpm_min);
+        spindle_pwm.period = (uint32_t)(hal.f_step_timer / settings->spindle_pwm_freq);
+        spindle_pwm.off_value = (uint32_t)(spindle_pwm.period * settings->spindle_pwm_off_value / 100.0f);
+        spindle_pwm.min_value = (uint32_t)(spindle_pwm.period * settings->spindle_pwm_min_value / 100.0f);
+        spindle_pwm.max_value = (uint32_t)(spindle_pwm.period * settings->spindle_pwm_max_value / 100.0f);
+        spindle_pwm.pwm_gradient = (float)(spindle_pwm.max_value - spindle_pwm.min_value) / (settings->rpm_max - settings->rpm_min);
 
-    hal.spindle_pwm_off = spindle_pwm.off_value;
+        hal.spindle_pwm_off = spindle_pwm.off_value;
 
-    if(spindlePWM)
-        SpindlePWM_WritePeriod(spindle_pwm.period);
-
+        if(spindlePWM)
+            SpindlePWM_WritePeriod(spindle_pwm.period);
+    }
 }
 
 // Initializes MCU peripherals for Grbl use
@@ -389,7 +393,7 @@ static bool driver_setup (settings_t *settings)
         SpindlePWM_Start();
         SpindlePWM_WritePeriod(spindle_pwm.period);
     } else
-        hal.spindle_set_status = &spindleSetStateFixed;
+        hal.spindle_set_state = &spindleSetStateFixed;
 
 //    CyIntSetSysVector(SYSTICK_INTERRUPT_VECTOR_NUMBER, systick_isr);
 //    SysTick_Config(BCLK__BUS_CLK__HZ / INTERRUPT_FREQ);
@@ -400,9 +404,11 @@ static bool driver_setup (settings_t *settings)
     DelayTimer_Start();
 
     if(spindlePWM)
-        spindleSetStateVariable((spindle_state_t){0}, spindle_pwm.off_value, DEFAULT_SPINDLE_SPEED_OVERRIDE);
+        spindleSetStateVariable((spindle_state_t){0}, spindle_pwm.off_value, DEFAULT_SPINDLE_RPM_OVERRIDE);
     else
         spindleSetStateFixed((spindle_state_t){0}, 0, 0);
+
+    IOInitDone = settings->version == 12;
 
     coolantSetState((coolant_state_t){0});
     stepperSetDirOutputs((axes_signals_t){0});
@@ -427,70 +433,72 @@ bool driver_init (void) {
     serialInit();
     EEPROM_Start();
     
-	hal.driver_setup = &driver_setup;
+    hal.info = "PSoC 5";
+	hal.driver_setup = driver_setup;
 	hal.f_step_timer = 24000000UL;
 	hal.rx_buffer_size = RX_BUFFER_SIZE;
-	hal.delay_milliseconds = &driver_delay_ms;
-    hal.settings_changed = &settings_changed;
+	hal.delay_ms = driver_delay_ms;
+    hal.settings_changed = settings_changed;
 
-	hal.stepper_wake_up = &stepperWakeUp;
-	hal.stepper_go_idle = &stepperGoIdle;
-	hal.stepper_enable = &stepperEnable;
-	hal.stepper_set_outputs = &stepperSetStepOutputs;
-	hal.stepper_set_directions = &stepperSetDirOutputs;
-	hal.stepper_cycles_per_tick = &stepperCyclesPerTick;
-	hal.stepper_pulse_start = &stepperPulseStart;
+	hal.stepper_wake_up = stepperWakeUp;
+	hal.stepper_go_idle = stepperGoIdle;
+	hal.stepper_enable = stepperEnable;
+	hal.stepper_set_outputs = stepperSetStepOutputs;
+	hal.stepper_set_directions = stepperSetDirOutputs;
+	hal.stepper_cycles_per_tick = stepperCyclesPerTick;
+	hal.stepper_pulse_start = stepperPulseStart;
 
-	hal.limits_enable = &limitsEnable;
-	hal.limits_get_state = &limitsGetState;
+	hal.limits_enable = limitsEnable;
+	hal.limits_get_state = limitsGetState;
 
-	hal.coolant_set_state = &coolantSetState;
-	hal.coolant_get_state = &coolantGetState;
+	hal.coolant_set_state = coolantSetState;
+	hal.coolant_get_state = coolantGetState;
 
-	hal.probe_get_state = &probeGetState;
-	hal.probe_configure_invert_mask = &probeConfigureInvertMask;
+	hal.probe_get_state = probeGetState;
+	hal.probe_configure_invert_mask = probeConfigureInvertMask;
 
-	hal.spindle_set_status = &spindleSetStateVariable;
-	hal.spindle_get_state = &spindleGetState;
-	hal.spindle_set_speed = &spindleSetSpeed;
-	hal.spindle_compute_pwm_value = &spindleComputePWMValue;
+	hal.spindle_set_state = spindleSetStateVariable;
+	hal.spindle_get_state = spindleGetState;
+	hal.spindle_set_speed = spindleSetSpeed;
+	hal.spindle_compute_pwm_value = spindleComputePWMValue;
 
-	hal.system_control_get_state = &systemGetState;
+	hal.system_control_get_state = systemGetState;
 
-    hal.serial_read = &serialGetC;
-    hal.serial_write = (void (*)(uint8_t))&serialPutC;
-    hal.serial_write_string = &serialWriteS;
-    hal.serial_get_rx_buffer_available = &serialRxFree;
-    hal.serial_reset_read_buffer = &serialRxFlush;
-    hal.serial_cancel_read_buffer = &serialRxCancel;
+    hal.serial_read = serialGetC;
+    hal.serial_write = serialPutC;
+    hal.serial_write_string = serialWriteS;
+    hal.serial_get_rx_buffer_available = serialRxFree;
+    hal.serial_reset_read_buffer = serialRxFlush;
+    hal.serial_cancel_read_buffer = serialRxCancel;
 
     hal.eeprom.type = EEPROM_Physical;
 	hal.eeprom.get_byte = (uint8_t (*)(uint32_t))&EEPROM_ReadByte;
-	hal.eeprom.put_byte = &eepromPutByte;
-	hal.eeprom.memcpy_to_with_checksum = &eepromWriteBlockWithChecksum;
-	hal.eeprom.memcpy_from_with_checksum = &eepromReadBlockWithChecksum;
+	hal.eeprom.put_byte = eepromPutByte;
+	hal.eeprom.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
+	hal.eeprom.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
 
-	hal.set_bits_atomic = &bitsSetAtomic;
-	hal.clear_bits_atomic = &bitsClearAtomic;
-	hal.set_value_atomic = &valueSetAtomic;
+	hal.set_bits_atomic = bitsSetAtomic;
+	hal.clear_bits_atomic = bitsClearAtomic;
+	hal.set_value_atomic = valueSetAtomic;
 
 #ifdef HAS_KEYPAD
-    hal.execute_realtime = &process_keypress;
+    hal.execute_realtime = process_keypress;
 #endif
 
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
 
-    hal.driver_cap.variable_spindle = on;
-    hal.driver_cap.mist_control = on;
-    hal.driver_cap.software_debounce = on;
-    hal.driver_cap.step_pulse_delay = on;
+    hal.driver_cap.spindle_dir = On;
+    hal.driver_cap.variable_spindle = On;
+    hal.driver_cap.mist_control = On;
+    hal.driver_cap.software_debounce = On;
+    hal.driver_cap.step_pulse_delay = On;
     hal.driver_cap.amass_level = 3;
-    hal.driver_cap.control_pull_up = on;
-    hal.driver_cap.limits_pull_up = on;
-    hal.driver_cap.probe_pull_up = on;
+    hal.driver_cap.control_pull_up = On;
+    hal.driver_cap.limits_pull_up = On;
+    hal.driver_cap.probe_pull_up = On;
 
     // no need to move version check before init - compiler will fail any mismatch for existing entries
-	return hal.version == 3;
+	return hal.version == 4;
 }
 
 /* interrupt handlers */

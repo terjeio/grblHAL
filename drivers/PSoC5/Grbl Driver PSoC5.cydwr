@@ -385,8 +385,8 @@
   </Group>
   <Group key="Component">
     <Group key="v1">
-      <Data key="cy_boot" value="cy_boot_v5_50" />
-      <Data key="LIN_Dynamic" value="LIN_Dynamic_v3_40" />
+      <Data key="cy_boot" value="cy_boot_v5_60" />
+      <Data key="LIN_Dynamic" value="LIN_Dynamic_v4_0" />
     </Group>
   </Group>
   <Data key="DataVersionKey" value="2" />
@@ -3520,13 +3520,55 @@
     </Group>
   </Group>
   <Group key="Interrupt">
-    <Data key="5e0276cb-b177-4028-aef8-32d9fbe416ab" value="1" />
-    <Data key="9d2d5401-ea8b-479b-888d-63050cb59ec0" value="2" />
-    <Data key="4533b90e-010d-4ea0-aa35-8b4bc190fff2" value="0" />
-    <Data key="a78df876-86cf-4bd7-89f0-ba6b39cb8c8b" value="1" />
-    <Data key="b0162966-0060-4af5-82d1-fcb491ad7619/0758f7e0-b58c-4a6b-bb59-e7d003cac7de" value="2" />
-    <Data key="dc37e40f-97f8-4cf9-9360-29e578cdb4b0" value="2" />
-    <Data key="ea3b5d72-e106-4a65-a3f1-237367dcbe8b" value="3" />
+    <Group key="5e0276cb-b177-4028-aef8-32d9fbe416ab">
+      <Group key="CortexM3">
+        <Data key="Assigned" value="True" />
+        <Data key="Priority" value="1" />
+        <Data key="Vector" value="-1" />
+      </Group>
+    </Group>
+    <Group key="9d2d5401-ea8b-479b-888d-63050cb59ec0">
+      <Group key="CortexM3">
+        <Data key="Assigned" value="True" />
+        <Data key="Priority" value="2" />
+        <Data key="Vector" value="-1" />
+      </Group>
+    </Group>
+    <Group key="4533b90e-010d-4ea0-aa35-8b4bc190fff2">
+      <Group key="CortexM3">
+        <Data key="Assigned" value="True" />
+        <Data key="Priority" value="0" />
+        <Data key="Vector" value="-1" />
+      </Group>
+    </Group>
+    <Group key="a78df876-86cf-4bd7-89f0-ba6b39cb8c8b">
+      <Group key="CortexM3">
+        <Data key="Assigned" value="True" />
+        <Data key="Priority" value="1" />
+        <Data key="Vector" value="-1" />
+      </Group>
+    </Group>
+    <Group key="b0162966-0060-4af5-82d1-fcb491ad7619/0758f7e0-b58c-4a6b-bb59-e7d003cac7de">
+      <Group key="CortexM3">
+        <Data key="Assigned" value="True" />
+        <Data key="Priority" value="2" />
+        <Data key="Vector" value="-1" />
+      </Group>
+    </Group>
+    <Group key="dc37e40f-97f8-4cf9-9360-29e578cdb4b0">
+      <Group key="CortexM3">
+        <Data key="Assigned" value="True" />
+        <Data key="Priority" value="2" />
+        <Data key="Vector" value="-1" />
+      </Group>
+    </Group>
+    <Group key="ea3b5d72-e106-4a65-a3f1-237367dcbe8b">
+      <Group key="CortexM3">
+        <Data key="Assigned" value="True" />
+        <Data key="Priority" value="3" />
+        <Data key="Vector" value="-1" />
+      </Group>
+    </Group>
   </Group>
   <Group key="Pin2">
     <Group key="0a969fa3-ca80-48ad-a9ea-d16f6d3ff8bb">

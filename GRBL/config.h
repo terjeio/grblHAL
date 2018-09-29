@@ -25,10 +25,8 @@
 
 // IMPORTANT: Any changes here requires a full re-compiling of the source code to propagate them.
 
-#ifndef config_h
-#define config_h
-
-#include "grbl.h"
+#ifndef _grbl_config_h_
+#define _grbl_config_h_
 
 // Define CPU pin map and default settings.
 // NOTE: OEMs can avoid the need to maintain/update the defaults.h and cpu_map.h files and use only
@@ -37,7 +35,6 @@
 #define DEFAULTS_GENERIC
 
 // Serial baud rate
-// #define BAUD_RATE 230400
 #define BAUD_RATE 115200
 
 // Define realtime command special characters. These characters are 'picked-off' directly from the
