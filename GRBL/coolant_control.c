@@ -28,7 +28,7 @@ void coolant_set_state (coolant_state_t mode)
 {
     if (!sys.abort) { // Block during abort.
         hal.coolant_set_state(mode);
-        sys.report_ovr_counter = -1; // Set to report change immediately
+        sys.report.ovr_counter = -1; // Set to report change immediately
     }
 }
 

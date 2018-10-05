@@ -558,7 +558,7 @@ void plan_feed_override (uint_fast8_t feed_override, uint_fast8_t rapid_override
 	if ((feed_override != sys.f_override) || (rapid_override != sys.r_override)) {
 	  sys.f_override = (uint8_t)feed_override;
 	  sys.r_override = (uint8_t)rapid_override;
-	  sys.report_ovr_counter = 0; // Set to report change immediately
+	  sys.report.ovr_counter = 0; // Set to report change immediately
 	  plan_update_velocity_profile_parameters();
 	  plan_cycle_reinitialize();
 	}

@@ -342,8 +342,8 @@ void stepper_driver_interrupt_handler (void)
     // Check probing state.
     // Monitors probe pin state and records the system position when detected.
     // NOTE: This function must be extremely efficient as to not bog down the stepper ISR.
-    if (sys_probe_state == PROBE_ACTIVE && hal.probe_get_state()) {
-        sys_probe_state = PROBE_OFF;
+    if (sys_probe_state == Probe_Active && hal.probe_get_state()) {
+        sys_probe_state = Probe_Off;
         memcpy(sys_probe_position, sys_position, sizeof(sys_position));
         bit_true(sys_rt_exec_state, EXEC_MOTION_CANCEL);
     }

@@ -25,10 +25,10 @@
 
 // Declare system global variable structure
 system_t sys;
-int32_t sys_position[N_AXIS];         // Real-time machine (aka home) position vector in steps.
-int32_t sys_probe_position[N_AXIS];   // Last probe position in machine coordinates and steps.
-bool mpg_init;                        // Enter MPG mode on startup?
-volatile uint8_t sys_probe_state;     // Probing state value.  Used to coordinate the probing cycle with stepper ISR.
+int32_t sys_position[N_AXIS];               // Real-time machine (aka home) position vector in steps.
+int32_t sys_probe_position[N_AXIS];         // Last probe position in machine coordinates and steps.
+bool mpg_init;                              // Enter MPG mode on startup?
+volatile probe_state_t sys_probe_state;     // Probing state value.  Used to coordinate the probing cycle with stepper ISR.
 volatile uint_fast16_t sys_rt_exec_state;   // Global realtime executor bitflag variable for state management. See EXEC bitmasks.
 volatile uint_fast16_t sys_rt_exec_alarm;   // Global realtime executor bitflag variable for setting various alarms.
 
@@ -172,7 +172,7 @@ int grbl_enter (void)
       #endif
 
 		memset(sys_probe_position, 0, sizeof(sys_probe_position)); // Clear probe position.
-		sys_probe_state = 0;
+		sys_probe_state = Probe_Off;
 		sys_rt_exec_state = 0;
 		sys_rt_exec_alarm = 0;
 
@@ -197,7 +197,7 @@ int grbl_enter (void)
         else if(sys.state == STATE_ESTOP)
             set_state(STATE_ALARM);
 
-		if((sys.mpg_mode = mpg_init)) {
+		if((sys.mpg_mode = sys.report.mpg_mode = mpg_init)) {
 		    mpg_init = false;
             report_realtime_status();
 		}

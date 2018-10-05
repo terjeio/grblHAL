@@ -41,8 +41,10 @@ List of Supported G-Codes in GrblHAL v1.1:
   - Program Flow: M0, M1, M2, M30
   - Coolant Control: M7, M8, M9
   - Spindle Control: M3, M4, M5
+  - Tool Change: M6* \(Two modes possible: manual** - supports jogging, ATC\)
   - Switches: M49, M50, M51, M53
   - Valid Non-Command Words: A*, B*, C*, F, H*, I, J, K, L, N, P, Q*, R, S, T, X, Y, Z
 
-  * driver/configuration dependent
+  *  driver/configuration dependent
+  ** requires compatible GCode sender due to protocol extensions, new state and RT command
 ```

@@ -31,6 +31,7 @@ static void state_await_hold (uint_fast16_t rt_exec);
 static void state_noop (uint_fast16_t rt_exec);
 static void state_await_motion_cancel (uint_fast16_t rt_exec);
 static void state_await_resume (uint_fast16_t rt_exec);
+static void state_await_toolchanged (uint_fast16_t rt_exec);
 #ifdef PARKING_ENABLE
 static void state_await_waypoint_retract (uint_fast16_t rt_exec);
 static void state_restore (uint_fast16_t rt_exec);
@@ -191,8 +192,15 @@ void set_state (uint_fast16_t new_state)
             break;
 
         case STATE_JOG:
+            if(sys.state == STATE_TOOL_CHANGE)
+                pending_state = STATE_TOOL_CHANGE;
             sys.state = new_state;
             stateHandler = state_cycle;
+            break;
+
+        case STATE_TOOL_CHANGE:
+            sys.state = new_state;
+            stateHandler = state_await_toolchanged;
             break;
 
         case STATE_HOLD:
@@ -238,12 +246,20 @@ static void state_idle (uint_fast16_t rt_exec)
 
     if(rt_exec & EXEC_FEED_HOLD)
         set_state(STATE_HOLD);
+
+    if ((rt_exec & EXEC_TOOL_CHANGE)) {
+        sys.await_tool_ack = true; // block further reading from input stream until buffers are swapped
+        set_state(STATE_TOOL_CHANGE);
+    }
 }
 
 static void state_cycle (uint_fast16_t rt_exec)
 {
+    if ((rt_exec & EXEC_TOOL_CHANGE))
+        sys.await_tool_ack = true;
+
     if (rt_exec & EXEC_CYCLE_COMPLETE)
-        set_state(STATE_IDLE);
+        set_state(gc_state.tool_change ? STATE_TOOL_CHANGE : STATE_IDLE);
 
     if (rt_exec & EXEC_MOTION_CANCEL) {
         st_update_plan_block_parameters();  // Notify stepper module to recompute for hold deceleration.
@@ -256,6 +272,19 @@ static void state_cycle (uint_fast16_t rt_exec)
         set_state(STATE_HOLD);
 }
 
+static void state_await_toolchanged (uint_fast16_t rt_exec)
+{
+    if ((rt_exec & EXEC_CYCLE_START) && !gc_state.tool_change) {
+        if(hal.serial_restore_job && hal.serial_restore_job()) {
+            sys.state = STATE_CYCLE;    // Force a running state realtime report
+            report_realtime_status();   // to get the streaming going again
+        }
+        pending_state = STATE_IDLE;
+        set_state(STATE_IDLE);
+        set_state(STATE_CYCLE);
+    }
+}
+
 static void state_await_motion_cancel (uint_fast16_t rt_exec)
 {
     if (rt_exec & EXEC_CYCLE_COMPLETE) {
@@ -265,6 +294,7 @@ static void state_await_motion_cancel (uint_fast16_t rt_exec)
             st_reset();
             gc_sync_position();
             plan_sync_position();
+            sys.suspend = false;
         }
         set_state(pending_state);
     }

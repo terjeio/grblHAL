@@ -32,8 +32,7 @@ void control_interrupt_handler (control_signals_t signals)
             mc_reset();
         else if (signals.cycle_start) {
             // Cancel any pending tool change
-            if(gc_state.tool_change)
-                gc_state.tool_change = false;
+            gc_state.tool_change = false;
             bit_true(sys_rt_exec_state, EXEC_CYCLE_START);
         }
         else if (signals.feed_hold)
@@ -75,283 +74,302 @@ void system_execute_startup (char *line)
 // be an issue, since these commands are not typically used during a cycle.
 status_code_t system_execute_line (char *line)
 {
-
-    uint_fast8_t counter = 1;
-    control_signals_t control_signals;
+    status_code_t retval = Status_OK;
 
     switch (line[1]) {
 
-        case '\0' :
+        case '\0':
             report_grbl_help();
             break;
 
-        case 'J' : // Jogging
-            // Execute only if in IDLE or JOG states.
+        case 'J': // Jogging, execute only if in IDLE or JOG states.
             if (!(sys.state == STATE_IDLE || (sys.state & (STATE_JOG|STATE_TOOL_CHANGE))))
-                return Status_IdleError;
-            return line[2] != '=' ? Status_InvalidStatement : gc_execute_block(line, NULL); // NOTE: $J= is ignored inside g-code parser and used to detect jog motions.
-//            break;
+                retval = Status_IdleError;
+            else
+                retval = line[2] != '=' ? Status_InvalidStatement : gc_execute_block(line, NULL); // NOTE: $J= is ignored inside g-code parser and used to detect jog motions.
+            break;
 
-        case '$' : // Prints Grbl settings
+        case '$': // Prints Grbl settings
             if (line[2] != '\0' )
-                return Status_InvalidStatement;
-            if (sys.state & (STATE_CYCLE|STATE_HOLD))
-                return Status_IdleError; // Block during cycle. Takes too long to print.
-            report_grbl_settings();
+                retval = Status_InvalidStatement;
+            else if (sys.state & (STATE_CYCLE|STATE_HOLD))
+                retval =  Status_IdleError; // Block during cycle. Takes too long to print.
+            else
+                report_grbl_settings();
             break;
 
-        case 'G' : // Prints gcode parser state
+        case 'G': // Prints gcode parser state
             if (line[2] != '\0' )
-                return Status_InvalidStatement;
-            // TODO: Move this to realtime commands for GUIs to request this data during suspend-state.
-            report_gcode_modes();
+                retval = Status_InvalidStatement;
+            else
+                // TODO: Move this to realtime commands for GUIs to request this data during suspend-state.
+                report_gcode_modes();
             break;
 
-        case 'B' : // Toggle block delete mode
+        case 'B': // Toggle block delete mode
             if (line[2] != '\0')
-                return Status_InvalidStatement;
-            sys.block_delete_enabled = !sys.block_delete_enabled;
-            report_feedback_message(sys.block_delete_enabled ? Message_Enabled : Message_Disabled);
+                retval = Status_InvalidStatement;
+            else {
+                sys.block_delete_enabled = !sys.block_delete_enabled;
+                report_feedback_message(sys.block_delete_enabled ? Message_Enabled : Message_Disabled);
+            }
             break;
 
-        case 'C' : // Set check g-code mode [IDLE/CHECK]
+        case 'C': // Set check g-code mode [IDLE/CHECK]
             if (line[2] != '\0')
-                return Status_InvalidStatement;
-            // Perform reset when toggling off. Check g-code mode should only work if Grbl
-            // is idle and ready, regardless of alarm locks. This is mainly to keep things
-            // simple and consistent.
-            if (sys.state == STATE_CHECK_MODE) {
+                retval = Status_InvalidStatement;
+            else if (sys.state == STATE_CHECK_MODE) {
+                // Perform reset when toggling off. Check g-code mode should only work if Grbl
+                // is idle and ready, regardless of alarm locks. This is mainly to keep things
+                // simple and consistent.
                 mc_reset();
                 report_feedback_message(Message_Disabled);
-            }
-            else if (sys.state != STATE_IDLE)  // Requires idle mode.
-                return Status_IdleError;
-            set_state(STATE_CHECK_MODE);
-            report_feedback_message(Message_Enabled);
+            } else if (sys.state == STATE_IDLE) { // Requires idle mode.
+                set_state(STATE_CHECK_MODE);
+                report_feedback_message(Message_Enabled);
+            } else
+                retval = Status_IdleError;
             break;
 
-        case 'X' : // Disable alarm lock [ALARM]
+        case 'X': // Disable alarm lock [ALARM]
             if (line[2] != '\0' )
-                return Status_InvalidStatement;
+                retval = Status_InvalidStatement;
             else if (sys.state & (STATE_ALARM|STATE_ESTOP)) {
 
-            	control_signals = hal.system_control_get_state();
+                control_signals_t control_signals = hal.system_control_get_state();
 
                 // Block if e-stop is active.
                 if (control_signals.e_stop)
-                    return Status_EStop;
-
+                    retval = Status_EStop;
             	// Block if safety door is ajar.
-                if (control_signals.safety_door_ajar)
-                    return Status_CheckDoor;
-
+                else if (control_signals.safety_door_ajar)
+                    retval = Status_CheckDoor;
             	// Block if safety reset is active.
-                if(control_signals.reset)
-                    return Status_Reset;
-
-                report_feedback_message(Message_AlarmUnlock);
-                set_state(STATE_IDLE);
+                else if(control_signals.reset)
+                    retval = Status_Reset;
+                else {
+                    report_feedback_message(Message_AlarmUnlock);
+                    set_state(STATE_IDLE);
+                }
                 // Don't run startup script. Prevents stored moves in startup from causing accidents.
             } // Otherwise, no effect.
             break;
 
-        default :
+        case 'H' : // Perform homing cycle [IDLE/ALARM]
+            if(!(sys.state == STATE_IDLE || sys.state == STATE_ALARM))
+                retval = Status_IdleError;
+            else {
 
-            // TODO: reorganize system_execute_line for cleaner logic (single return point?)
-            if(hal.userdefined_sys_command_execute) {
-                status_code_t retval;
-                if((retval = hal.userdefined_sys_command_execute(sys.state, line)) != Status_Unhandled)
-                    return retval;
+                control_signals_t control_signals = hal.system_control_get_state();
+
+                // Block if e-stop is active.
+                if (control_signals.e_stop)
+                    retval = Status_EStop;
+                else if (!settings.flags.homing_enable)
+                    retval = Status_SettingDisabled;
+                // Block if safety door is ajar.
+                else if (control_signals.safety_door_ajar)
+                    retval = Status_CheckDoor;
+                // Block if safety reset is active.
+                else if(control_signals.reset)
+                    retval = Status_Reset;
             }
 
-            // Block any system command that requires the state as IDLE/ALARM. (i.e. sleep, homing)
-            if (sys.state == STATE_IDLE || sys.state == STATE_ALARM) switch(line[1]) {
+            if(retval == Status_OK) {
 
-                case 'H' : // Perform homing cycle [IDLE/ALARM]
+                set_state(STATE_HOMING); // Set system state variable
 
-                    control_signals = hal.system_control_get_state();
+                if (line[2] == '\0')
+                    mc_homing_cycle(0); // Home axes according to configuration
 
-                    // Block if e-stop is active.
-                    if (control_signals.e_stop)
-                        return Status_EStop;
+                else if (line[3] == '\0') {
 
-                    if (!settings.flags.homing_enable)
-                        return Status_SettingDisabled;
-
-                    // Block if safety door is ajar.
-                    if (control_signals.safety_door_ajar)
-                        return Status_CheckDoor;
-
-                    // Block if safety reset is active.
-                    if(control_signals.reset)
-                        return Status_Reset;
-
-                    set_state(STATE_HOMING); // Set system state variable
-
-                    if (line[2] == '\0')
-                        mc_homing_cycle(0); // Home axes according to configuration
-
-                    else if (line[3] == '\0') {
-                        switch (line[2]) {
-                            case 'X':
-                                mc_homing_cycle(X_AXIS_BIT);
-                                break;
-                            case 'Y':
-                                mc_homing_cycle(Y_AXIS_BIT);
-                                break;
-                            case 'Z':
-                                mc_homing_cycle(Z_AXIS_BIT);
-                                break;
-                          #ifdef A_AXIS
-                            case 'A':
-                                mc_homing_cycle(A_AXIS_BIT);
-                                break;
-                          #endif
-                          #ifdef B_AXIS
-                            case 'B':
-                                mc_homing_cycle(B_AXIS_BIT);
-                                break;
-                          #endif
-                          #ifdef C_AXIS
-                            case 'C':
-                                mc_homing_cycle(C_AXIS_BIT);
-                                break;
-                          #endif
-                          default:
-                                return Status_InvalidStatement;
-                        }
-
-                    } else
-                        return Status_InvalidStatement;
-
-                    if (!sys.abort) {  // Execute startup scripts after successful homing.
-                        set_state(STATE_IDLE); // Set to IDLE when complete.
-                        st_go_idle(); // Set steppers to the settings idle state before returning.
-                        if (line[2] == '\0')
-                            system_execute_startup(line);
+                    switch (line[2]) {
+                        case 'X':
+                            mc_homing_cycle(X_AXIS_BIT);
+                            break;
+                        case 'Y':
+                            mc_homing_cycle(Y_AXIS_BIT);
+                            break;
+                        case 'Z':
+                            mc_homing_cycle(Z_AXIS_BIT);
+                            break;
+                      #ifdef A_AXIS
+                        case 'A':
+                            mc_homing_cycle(A_AXIS_BIT);
+                            break;
+                      #endif
+                      #ifdef B_AXIS
+                        case 'B':
+                            mc_homing_cycle(B_AXIS_BIT);
+                            break;
+                      #endif
+                      #ifdef C_AXIS
+                        case 'C':
+                            mc_homing_cycle(C_AXIS_BIT);
+                            break;
+                      #endif
+                      default:
+                          retval = Status_InvalidStatement;
+                          break;
                     }
-                    break;
-
-                case 'S' : // Puts Grbl to sleep [IDLE/ALARM]
-                    if ((line[2] != 'L') || (line[3] != 'P') || (line[4] != '\0'))
-                        return Status_InvalidStatement;
-                    system_set_exec_state_flag(EXEC_SLEEP); // Set to execute sleep mode immediately
-                    break;
-
+                } else
+                    retval = Status_InvalidStatement;
             }
 
-            // Block any system command that requires the state as IDLE/ALARM/ESTOP. (i.e. EEPROM)
-            if (sys.state == STATE_IDLE || (sys.state & (STATE_ALARM|STATE_ESTOP))) switch(line[1]) {
+            if (retval == Status_OK && !sys.abort) {  // Execute startup scripts after successful homing.
+                set_state(STATE_IDLE); // Set to IDLE when complete.
+                st_go_idle(); // Set steppers to the settings idle state before returning.
+                if (line[2] == '\0')
+                    system_execute_startup(line);
+            }
+            break;
 
-                case '#' : // Print Grbl NGC parameters
-                    if (line[2] != '\0')
-                        return Status_InvalidStatement;
-                    report_ngc_parameters();
+#ifdef SLEEP_ENABLE
+        case 'S' : // Puts Grbl to sleep [IDLE/ALARM]
+            if (!(line[2] == 'L' && line[3] == 'P' && line[4] == '\0'))
+                retval = = Status_InvalidStatement;
+            else if(!(sys.state == STATE_IDLE || sys.state == STATE_ALARM))
+                retval = Status_IdleError;
+            else
+                system_set_exec_state_flag(EXEC_SLEEP); // Set to execute sleep mode immediately
+            break;
+#endif
+
+        case '#' : // Print Grbl NGC parameters
+            if (line[2] != '\0')
+                retval = Status_InvalidStatement;
+            else if (!(sys.state == STATE_IDLE || (sys.state & (STATE_ALARM|STATE_ESTOP))))
+                retval = Status_IdleError;
+            else
+                report_ngc_parameters();
+            break;
+
+        case 'I' : // Print or store build info. [IDLE/ALARM]
+            if (!(sys.state == STATE_IDLE || (sys.state & (STATE_ALARM|STATE_ESTOP))))
+                retval = Status_IdleError;
+            else if (line[2] == '\0') {
+                settings_read_build_info(line);
+                report_build_info(line);
+            }
+          #ifdef ENABLE_BUILD_INFO_WRITE_COMMAND
+            else if (line[2] == '=' && strlen(&line[3]) < (MAX_STORED_LINE_LENGTH - 1))
+                settings_write_build_info(&line[3]);
+          #endif
+            else
+                retval = Status_InvalidStatement;
+            break;
+
+        case 'R' : // Restore defaults [IDLE/ALARM]
+            if (!(line[2] == 'S' && line[3] == 'T' && line[4] == '=' && line[6] == '\0'))
+                retval = Status_InvalidStatement;
+            else if (!(sys.state == STATE_IDLE || (sys.state & (STATE_ALARM|STATE_ESTOP))))
+                retval = Status_IdleError;
+            else switch (line[5]) {
+
+              #ifdef ENABLE_RESTORE_EEPROM_DEFAULT_SETTINGS
+                case '$':
+                    settings_restore SETTINGS_RESTORE_DEFAULTS;
                     break;
+              #endif
 
-                case 'I' : // Print or store build info. [IDLE/ALARM]
-                    if (line[2] == '\0') {
-                        settings_read_build_info(line);
-                        report_build_info(line);
-                    }
-                  #ifdef ENABLE_BUILD_INFO_WRITE_COMMAND
-                    else if (line[2] == '=' && strlen(&line[3]) < (MAX_STORED_LINE_LENGTH - 1))
-                        settings_write_build_info(&line[3]);
-                  #endif
+              #ifdef ENABLE_RESTORE_EEPROM_CLEAR_PARAMETERS
+                case '#':
+                    settings_restore(SETTINGS_RESTORE_PARAMETERS);
+                    break;
+              #endif
+
+              #ifdef ENABLE_RESTORE_EEPROM_WIPE_ALL
+                case '*':
+                    settings_restore(SETTINGS_RESTORE_ALL);
+                    break;
+              #endif
+
+              #ifdef ENABLE_RESTORE_DRIVER_PARAMETERS
+                case '&':
+                    settings_restore(SETTINGS_RESTORE_DRIVER_PARAMETERS);
+                    break;
+              #endif
+
+                default:
+                    retval = Status_InvalidStatement;
+                    break;
+            }
+            if(retval == Status_OK) {
+                report_feedback_message(Message_RestoreDefaults);
+                mc_reset(); // Force reset to ensure settings are initialized correctly.
+            }
+            break;
+
+        case 'N' : // Startup lines. [IDLE/ALARM]
+            if (!(sys.state == STATE_IDLE || (sys.state & (STATE_ALARM|STATE_ESTOP))))
+                retval = Status_IdleError;
+            else if (line[2] == '\0') { // Print startup lines
+                uint_fast8_t counter;
+                for (counter = 0; counter < N_STARTUP_LINE; counter++) {
+                    if (!(settings_read_startup_line(counter, line)))
+                        report_status_message(Status_SettingReadFail);
                     else
-                        return Status_InvalidStatement;
-                    break;
+                        report_startup_line(counter, line);
+                }
+                break;
+            } else if (sys.state == STATE_IDLE) { // Store startup line [IDLE Only] Prevents motion during ALARM.
 
-                case 'R' : // Restore defaults [IDLE/ALARM]
+                uint_fast8_t counter = 2;
+                float parameter;
+                if(!read_float(line, &counter, &parameter))
+                    retval = Status_BadNumberFormat;
+                else if(line[counter++] != '=' || parameter - truncf(parameter) != 0.0f)
+                    retval = Status_InvalidStatement;
+                else if(parameter > (float)N_STARTUP_LINE)
+                    retval = Status_InvalidStatement;
+                else {
+                    line = &line[counter];
+                    if(strlen(line) >= (MAX_STORED_LINE_LENGTH - 1))
+                        retval = Status_Overflow;
+                    else if ((retval = gc_execute_block(line, NULL)) == Status_OK) // Execute gcode block to ensure block is valid.
+                        settings_write_startup_line((uint8_t)parameter, line);
+                }
+            } else
+                retval = Status_IdleError;
+            break;
 
-                    if ((line[2] != 'S') || (line[3] != 'T') || (line[4] != '=') || (line[6] != '\0'))
-                        return Status_InvalidStatement;
+        default :
+            retval = Status_Unhandled;
 
-                    switch (line[5]) {
+            // Let user code have a peek at system commands before check for global setting
+            if(hal.userdefined_sys_command_execute)
+                retval = hal.userdefined_sys_command_execute(sys.state, line);
 
-                      #ifdef ENABLE_RESTORE_EEPROM_DEFAULT_SETTINGS
-                        case '$':
-                            settings_restore SETTINGS_RESTORE_DEFAULTS;
-                            break;
-                      #endif
-
-                      #ifdef ENABLE_RESTORE_EEPROM_CLEAR_PARAMETERS
-                        case '#':
-                            settings_restore(SETTINGS_RESTORE_PARAMETERS);
-                            break;
-                      #endif
-
-                      #ifdef ENABLE_RESTORE_EEPROM_WIPE_ALL
-                        case '*':
-                            settings_restore(SETTINGS_RESTORE_ALL);
-                            break;
-                      #endif
-
-                      #ifdef ENABLE_RESTORE_DRIVER_PARAMETERS
-                        case '&':
-                            settings_restore(SETTINGS_RESTORE_DRIVER_PARAMETERS);
-                            break;
-                      #endif
-
-                        default: return Status_InvalidStatement;
-                    }
-                    report_feedback_message(Message_RestoreDefaults);
-                    mc_reset(); // Force reset to ensure settings are initialized correctly.
-                    break;
-
-                case 'N' : // Startup lines. [IDLE/ALARM]
-                    if (line[++counter] == '\0') { // Print startup lines
-                        for (counter = 0; counter < N_STARTUP_LINE; counter++) {
-                            if (!(settings_read_startup_line(counter, line)))
-                                report_status_message(Status_SettingReadFail);
-                            else
-                                report_startup_line(counter, line);
-                        }
-                        break;
-                    }
-                    if (sys.state != STATE_IDLE) // Store startup line [IDLE Only] Prevents motion during ALARM.
-                        return Status_IdleError;
-                    // No break. Continues into default: to read remaining command characters.
-
-                default:;  // Storing setting methods [IDLE/ALARM]
+            if (retval == Status_Unhandled) {
+                // Check for global setting, store if so
+                if(sys.state == STATE_IDLE || (sys.state & (STATE_ALARM|STATE_ESTOP))) {
+                    uint_fast8_t counter = 1;
                     float parameter, value;
                     if(!read_float(line, &counter, &parameter))
-                        return Status_BadNumberFormat;
-                    if(line[counter++] != '=' || parameter - truncf(parameter) != 0.0f)
-                        return Status_InvalidStatement;
-                    if (line[1] == 'N') { // Store startup line
-                        if(parameter > (float)N_STARTUP_LINE)
-                           return Status_InvalidStatement;
-                        line = &line[counter];
-                        if(strlen(line) >= (MAX_STORED_LINE_LENGTH - 1))
-                            return Status_Overflow;
-                        status_code_t retval;
-                        if ((retval = gc_execute_block(line, NULL)) == Status_OK) // Execute gcode block to ensure block is valid.
-                            settings_write_startup_line((uint8_t)parameter, line);
-                        else
-                            return retval;
-                    } else { // Store global setting.
-                        if(!read_float(line, &counter, &value))
-                            return Status_BadNumberFormat;
-                        if(line[counter] != '\0' || (uint_fast16_t)parameter > Setting_AxisSettingsMax)
-                            return Status_InvalidStatement;
-                        return settings_store_global_setting((uint_fast16_t)parameter, value);
-                    }
-            } else
-                return Status_IdleError;
+                        retval = Status_BadNumberFormat;
+                    else if(line[counter++] != '=' || parameter - truncf(parameter) != 0.0f)
+                        retval = Status_InvalidStatement;
+                    else if(!read_float(line, &counter, &value))
+                        retval = Status_BadNumberFormat;
+                    else if(line[counter] != '\0' || (uint_fast16_t)parameter > Setting_AxisSettingsMax)
+                        retval = Status_InvalidStatement;
+                    else
+                        retval = settings_store_global_setting((uint_fast16_t)parameter, value);
+                } else
+                    return Status_IdleError;
+            }
     }
 
-    return Status_OK; // If '$' command makes it to here, then everything's ok.
+    return retval;
 }
-
-
 
 void system_flag_wco_change ()
 {
   #ifdef FORCE_BUFFER_SYNC_DURING_WCO_CHANGE
     protocol_buffer_synchronize();
   #endif
-    sys.report_wco_counter = 0;
+    sys.report.wco_counter = 0;
 }
 
 

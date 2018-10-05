@@ -51,7 +51,6 @@
 #define CMD_CYCLE_START '~'
 #define CMD_FEED_HOLD '!'
 #define CMD_PROGRAM_DEMARCATION '%'
-#define CMD_PID_REPORT 0xA2
 
 // NOTE: All override realtime commands must be in the extended ASCII character set, starting
 // at character value 128 (0x80) and up to 255 (0xFF). If the normal set of realtime commands,
@@ -77,6 +76,8 @@
 #define CMD_SPINDLE_OVR_STOP 0x9E
 #define CMD_COOLANT_FLOOD_OVR_TOGGLE 0xA0
 #define CMD_COOLANT_MIST_OVR_TOGGLE 0xA1
+#define CMD_PID_REPORT 0xA2
+#define CMD_TOOL_ACK 0xA3
 
 // Number of axes supported: minimum 3, maximum 6
 // If more than 3 axes are required a compliant driver must be provided
@@ -131,10 +132,10 @@
 // Upon a successful probe cycle, this option provides immediately feedback of the probe coordinates
 // through an automatically generated message. If disabled, users can still access the last probe
 // coordinates through Grbl '$#' print parameters.
-#define MESSAGE_PROBE_COORDINATES // Enabled by default. Comment to disable.
+#define MESSAGE_PROBE_COORDINATES // Enabled by default. Comment to disable. TODO: move to setting
 
 // for testing... open is ignored when cycle starts
-//#define SAFETY_DOOR_IGNORE_WHEN_IDLE
+//#define SAFETY_DOOR_IGNORE_WHEN_IDLE TODO: move to setting
 
 // After the safety door switch has been toggled and restored, this setting sets the power-up delay
 // between restoring the spindle and coolant and resuming the cycle.

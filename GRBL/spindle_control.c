@@ -34,7 +34,7 @@ void spindle_set_override (uint_fast8_t speed_ovr)
     if ((uint8_t)speed_ovr != sys.spindle_rpm_ovr) {
         sys.step_control.update_spindle_rpm = On;
         sys.spindle_rpm_ovr = (uint8_t)speed_ovr;
-        sys.report_ovr_counter = 0; // Set to report change immediately
+        sys.report.ovr_counter = 0; // Set to report change immediately
     }
 }
 
@@ -56,7 +56,7 @@ bool spindle_set_state (spindle_state_t state, float rpm)
 
             hal.spindle_set_state(state, rpm, sys.spindle_rpm_ovr);
         }
-        sys.report_ovr_counter = -1; // Set to report change immediately
+        sys.report.ovr_counter = -1; // Set to report change immediately
     }
 
     return !sys.abort;

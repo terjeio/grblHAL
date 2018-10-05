@@ -426,6 +426,11 @@ typedef struct {
     bool tool_change;
 } parser_state_t;
 
+typedef struct {
+    float xyz[N_AXIS]; // Center point
+    float ijk[N_AXIS]; // Scaling factors
+} scale_factor_t;
+
 extern parser_state_t gc_state;
 #ifdef N_TOOLS
 extern tool_data_t tool_table[N_TOOLS + 1];
@@ -453,5 +458,6 @@ status_code_t gc_execute_block(char *block, char *message);
 #define gc_sync_position() system_convert_array_steps_to_mpos (gc_state.position, sys_position)
 
 void gc_set_laser_ppimode (bool on);
+uint8_t gc_get_g51_state ();
 
 #endif

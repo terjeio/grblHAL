@@ -51,7 +51,6 @@
 #include "planner.h"
 #include "motion_control.h"
 #include "print.h"
-#include "probe.h"
 #include "protocol.h"
 #include "state_machine.h"
 #include "report.h"

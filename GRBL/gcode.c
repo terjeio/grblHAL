@@ -28,6 +28,8 @@
 #define MAX_LINE_NUMBER 10000000
 #define MAX_TOOL_NUMBER 255 // Limited by max unsigned 8-bit value
 
+#define MACH3_SCALING
+
 typedef enum {
     AxisCommand_None = 0,
     AxisCommand_NonModal,
@@ -46,10 +48,7 @@ tool_data_t tool_table;
 
 #define FAIL(status) return(status);
 
-struct {
-    float xyz[N_AXIS];
-    float ijk[3];
-} scale_factor;
+static scale_factor_t scale_factor;
 
 // Simple hypotenuse computation function.
 inline float hypot_f (float x, float y)
@@ -57,16 +56,33 @@ inline float hypot_f (float x, float y)
     return sqrtf(x*x + y*y);
 }
 
-void reset_scaling (float factor)
+static void set_scaling (float factor)
 {
-    uint_fast8_t idx = N_AXIS;
+    uint_fast8_t idx = N_AXIS, state = gc_get_g51_state();
     do {
-        scale_factor.xyz[--idx] = factor;
-        if(idx <= 2)
-            scale_factor.ijk[idx] = factor;
+        scale_factor.ijk[--idx] = factor;
+#ifdef MACH3_SCALING
+        scale_factor.xyz[idx] = 0.0f;
+#endif
     } while(idx);
 
     gc_state.modal.scaling_active = factor != 1.0f;
+
+    if(state != gc_get_g51_state())
+        sys.report.scaling = true;
+}
+
+uint8_t gc_get_g51_state ()
+{
+    uint_fast8_t idx = N_AXIS, scaled = 0;
+    do {
+        scaled <<= 1;
+        if(scale_factor.ijk[--idx] != 1.0f)
+            scaled |= 0x01;
+
+    } while(idx);
+
+    return (uint8_t)scaled;
 }
 
 void gc_init()
@@ -87,7 +103,7 @@ void gc_init()
     gc_state.spindle.max_rpm = settings.rpm_max;
   #endif
 
-    reset_scaling(1.0f);
+    set_scaling(1.0f);
 
     // Load default G54 coordinate system.
     if (!settings_read_coord_data(gc_state.modal.coord_system.idx, &gc_state.modal.coord_system.xyz))
@@ -407,7 +423,10 @@ status_code_t gc_execute_block(char *block, char *message)
                         break;
 #ifndef N_TOOLS
                     case 6:
-                        word_bit.group = ModalGroup_M6;
+                        if(hal.serial_restore_job)
+                            word_bit.group = ModalGroup_M6;
+                        else
+                            FAIL(Status_GcodeUnsupportedCommand); // [Unsupported M command]
                         break;
 #endif
                     case 7: case 8: case 9:
@@ -439,12 +458,12 @@ status_code_t gc_execute_block(char *block, char *message)
                         break;
 
                     default:
-                        if(hal.userdefined_mcode_check && (gc_block.user_defined_mcode = hal.userdefined_mcode_check(int_value)))
+                        if(hal.userdefined_mcode_check && (gc_block.user_defined_mcode = hal.userdefined_mcode_check(int_value))) {
                             if(int_value == 6) // M6
                                 word_bit.group = ModalGroup_M6;
                             else
                                 gc_block.non_modal_command = NonModal_UserDefinedMCode;
-                        else
+                        } else
                             FAIL(Status_GcodeUnsupportedCommand); // [Unsupported M command]
                 } // end M-value switch
 
@@ -845,39 +864,63 @@ status_code_t gc_execute_block(char *block, char *message)
 
         if(gc_block.modal.scaling_active) {
 
-            // [G50 Errors]: No axis words. TODO: add support for P (scale all with same factor)?
-            if (!(axis_words || ijk_words))
-                FAIL(Status_GcodeNoAxisWords); // [No axis words]
-
             // TODO: precheck for 0.0f and fail if found?
 
             gc_block.modal.scaling_active = false;
 
+#ifdef MACH3_SCALING
+            // [G51 Errors]: No axis words. TODO: add support for P (scale all with same factor)?
+            if (!axis_words)
+                FAIL(Status_GcodeNoAxisWords); // [No axis words]
+
             idx = N_AXIS;
             do {
-                if (bit_istrue(axis_words, bit(--idx))) {
-                    scale_factor.xyz[idx] = gc_block.values.xyz[idx];
+                if(bit_istrue(axis_words, bit(--idx))) {
+                    sys.report.scaling = sys.report.scaling || scale_factor.ijk[idx] != gc_block.values.xyz[idx];
+                    scale_factor.ijk[idx] = gc_block.values.xyz[idx];
                     bit_false(axis_words, bit(idx));
                 }
-                gc_block.modal.scaling_active = gc_block.modal.scaling_active | (scale_factor.xyz[idx] != 1.0f);
+                gc_block.modal.scaling_active = gc_block.modal.scaling_active || (scale_factor.xyz[idx] != 1.0f);
+            } while(idx);
+
+            bit_false(value_words, AXIS_WORDS_MASK); // Remove axis words.
+#else
+            if (!(value_words & bit(Word_P) || ijk_words))
+                FAIL(Status_GcodeNoAxisWords); // [No axis words]
+
+            idx = N_AXIS;
+            do {
+                if(bit_istrue(axis_words, bit(--idx)))
+                    scale_factor.xyz[idx] = gc_block.values.xyz[idx];
+                else
+                    scale_factor.xyz[idx] = gc_state.position[idx];
             } while(idx);
 
             bit_false(value_words, AXIS_WORDS_MASK); // Remove axis words.
 
             idx = 3;
             do {
-                if(bit_istrue(ijk_words, bit(--idx))) {
+                idx--;
+                if(value_words & bit(Word_P)) {
+                    sys.report.scaling = sys.report.scaling || scale_factor.ijk[idx] != gc_block.values.p;
+                    scale_factor.ijk[idx] = gc_block.values.p;
+                } else if(bit_istrue(ijk_words, bit(idx))) {
+                    sys.report.scaling = sys.report.scaling || scale_factor.ijk[idx] != gc_block.values.ijk[idx];
                     scale_factor.ijk[idx] = gc_block.values.ijk[idx];
-                    bit_false(ijk_words, bit(idx));
-                    bit_false(value_words, bit(idx)); // Remove axis words.
                 }
-                gc_block.modal.scaling_active = gc_block.modal.scaling_active | (scale_factor.ijk[idx] != 1.0f);
+                gc_block.modal.scaling_active = gc_block.modal.scaling_active || (scale_factor.ijk[idx] != 1.0f);
             } while(idx);
 
+            if(value_words & bit(Word_P))
+                bit_false(value_words, bit(Word_P));
+            else
+                bit_false(value_words, bit(Word_I)|bit(Word_J)|bit(Word_K));
+#endif
+            sys.report.scaling = sys.report.scaling || gc_state.modal.scaling_active != gc_block.modal.scaling_active;
             gc_state.modal.scaling_active = gc_block.modal.scaling_active;
 
         } else
-            reset_scaling(1.0f);
+            set_scaling(1.0f);
     }
 
     // Scale axis words if scaling active
@@ -885,7 +928,10 @@ status_code_t gc_execute_block(char *block, char *message)
         idx = N_AXIS;
         do {
             if (bit_istrue(axis_words, bit(--idx)))
-                gc_block.values.xyz[idx] *= scale_factor.xyz[idx];
+                if(gc_block.modal.distance == DistanceMode_Absolute)
+                     gc_block.values.xyz[idx] = (gc_block.values.xyz[idx] - scale_factor.xyz[idx]) * scale_factor.ijk[idx] + scale_factor.xyz[idx];
+                else
+                     gc_block.values.xyz[idx] *= scale_factor.ijk[idx];
         } while(idx);
     }
 
@@ -1290,6 +1336,11 @@ status_code_t gc_execute_block(char *block, char *message)
                         if (gc_block.modal.units == UnitsMode_Inches)
                             gc_block.values.r *= MM_PER_INCH;
 
+                        if(gc_state.modal.scaling_active)
+                            gc_block.values.r *= (scale_factor.ijk[plane.axis_0] > scale_factor.ijk[plane.axis_1]
+                                                   ? scale_factor.ijk[plane.axis_0]
+                                                   : scale_factor.ijk[plane.axis_1]);
+
                         /*  We need to calculate the center of the circle that has the designated radius and passes
                              through both the current position and the target position. This method calculates the following
                              set of equations where [x,y] is the vector from current to target position, d == magnitude of
@@ -1395,7 +1446,7 @@ status_code_t gc_execute_block(char *block, char *message)
                             } while(idx);
                         }
 
-                        // Scale values if scaling active
+                        // Scale values if scaling active - NOTE: only incremental mode is supported
                         if(gc_state.modal.scaling_active) {
                             idx = 3;
                             do {
@@ -1586,9 +1637,8 @@ status_code_t gc_execute_block(char *block, char *message)
         hal.tool_change(&gc_state);
         gc_state.tool_change = false;
 #else
-// TODO: see if it is possible somehow to allow jogging when state is suspended (not easy!)...
-//        system_set_exec_state_flag(EXEC_TOOL_CHANGE); // Enter program pause for manual tool change.
-//        protocol_execute_realtime(); // Execute suspend.
+        system_set_exec_state_flag(EXEC_TOOL_CHANGE);   // Set up program pause for manual tool change
+        protocol_execute_realtime();                    // Execute...
 #endif
     }
 
@@ -1704,7 +1754,7 @@ status_code_t gc_execute_block(char *block, char *message)
                 mc_line(gc_block.values.xyz, &plan_data);
             mc_line(gc_block.values.coord_data.xyz, &plan_data);
             memcpy(gc_state.position, gc_block.values.coord_data.xyz, sizeof(gc_state.position));
-            reset_scaling(1.0f);
+            set_scaling(1.0f);
             break;
 
         case NonModal_SetHome_0:

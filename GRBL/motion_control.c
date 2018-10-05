@@ -293,7 +293,7 @@ void mc_dwell (float seconds)
 // Perform homing cycle to locate and set machine zero. Only '$H' executes this command.
 // NOTE: There should be no motions in the buffer and Grbl must be in an idle state before
 // executing the homing cycle. This prevents incorrect buffered plans after homing.
-void mc_homing_cycle(uint8_t cycle_mask)
+void mc_homing_cycle (uint8_t cycle_mask)
 {
     // Check and abort homing cycle, if hard limits are already enabled. Helps prevent problems
     // with machines with limits wired on both ends of travel to one limit pin.
@@ -361,10 +361,8 @@ gc_probe_t mc_probe_cycle (float *target, plan_line_data_t *pl_data, gc_parser_f
         return GCProbe_Abort; // Return if system reset has been issued.
 
     // Initialize probing control variables
-    bool is_probe_away = parser_flags.probe_is_away;
-    bool is_no_error = parser_flags.probe_is_no_error;
     sys.probe_succeeded = false; // Re-initialize probe history before beginning cycle.
-    hal.probe_configure_invert_mask(is_probe_away);
+    hal.probe_configure_invert_mask(parser_flags.probe_is_away);
 
     // After syncing, check if probe is already triggered. If so, halt and issue alarm.
     // NOTE: This probe initialization error applies to all probing cycles.
@@ -379,7 +377,7 @@ gc_probe_t mc_probe_cycle (float *target, plan_line_data_t *pl_data, gc_parser_f
     mc_line(target, pl_data);
 
     // Activate the probing state monitor in the stepper module.
-    sys_probe_state = PROBE_ACTIVE;
+    sys_probe_state = Probe_Active;
 
     // Perform probing cycle. Wait here until probe is triggered or motion completes.
     system_set_exec_state_flag(EXEC_CYCLE_START);
@@ -391,22 +389,22 @@ gc_probe_t mc_probe_cycle (float *target, plan_line_data_t *pl_data, gc_parser_f
     // Probing cycle complete!
 
     // Set state variables and error out, if the probe failed and cycle with error is enabled.
-    if (sys_probe_state == PROBE_ACTIVE) {
-        if (is_no_error)
+    if (sys_probe_state == Probe_Active) {
+        if (parser_flags.probe_is_no_error)
             memcpy(sys_probe_position, sys_position, sizeof(sys_position));
         else
             system_set_exec_alarm(Alarm_ProbeFailContact);
     } else
         sys.probe_succeeded = true; // Indicate to system the probing cycle completed successfully.
 
-    sys_probe_state = PROBE_OFF; // Ensure probe state monitor is disabled.
+    sys_probe_state = Probe_Off;            // Ensure probe state monitor is disabled.
     hal.probe_configure_invert_mask(false); // Re-initialize invert mask.
-    protocol_execute_realtime();   // Check and execute run-time commands
+    protocol_execute_realtime();            // Check and execute run-time commands
 
     // Reset the stepper and planner buffers to remove the remainder of the probe motion.
-    st_reset(); // Reset step segment buffer.
-    plan_reset(); // Reset planner buffer. Zero planner positions. Ensure probing motion is cleared.
-    plan_sync_position(); // Sync planner position to current machine position.
+    st_reset();             // Reset step segment buffer.
+    plan_reset();           // Reset planner buffer. Zero planner positions. Ensure probing motion is cleared.
+    plan_sync_position();   // Sync planner position to current machine position.
 
     #ifdef MESSAGE_PROBE_COORDINATES
     // All done! Output the probe position as message.

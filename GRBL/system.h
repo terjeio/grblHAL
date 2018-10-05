@@ -101,6 +101,13 @@ typedef enum {
     Hold_Pending = 2
 } hold_state_t;
 
+// Values that define the probing state machine.
+
+typedef enum {
+    Probe_Off = 0,
+    Probe_Active
+} probe_state_t;
+
 // Define step segment generator state flags.
 typedef union {
     uint8_t flags;
@@ -159,6 +166,13 @@ typedef struct {
 
 #endif
 
+typedef struct {
+    int8_t ovr_counter;                 // Tracks when to add override data to status reports.
+    uint8_t wco_counter;                // Tracks when to add work coordinate offset data to status reports.
+    bool mpg_mode;
+    bool scaling;                       // Tracks when to add scaling info to status reports.
+} report_tracking_t;
+
 // Define global system variables
 typedef struct {
     uint_fast16_t state;                // Tracks the current system state of Grbl.
@@ -173,14 +187,14 @@ typedef struct {
     bool probe_succeeded;               // Tracks if last probing cycle was successful.
     bool suspend;                       // System suspend state flag.
     bool block_input_stream;            // Input stream block flag. Set to true to discard all characters except real-time commands.
+    bool await_tool_ack;
     step_control_t step_control;        // Governs the step segment generator depending on system state.
     axes_signals_t homing_axis_lock;    // Locks axes when limits engage. Used as an axis motion mask in the stepper ISR.
     uint8_t f_override;                 // Feed rate override value in percent
     uint8_t r_override;                 // Rapids override value in percent
     uint8_t spindle_rpm_ovr;            // Spindle speed value in percent
     spindle_stop_t spindle_stop_ovr;    // Tracks spindle stop override states
-    int8_t report_ovr_counter;          // Tracks when to add override data to status reports.
-    uint8_t report_wco_counter;         // Tracks when to add work coordinate offset data to status reports.
+    report_tracking_t report;           // Tracks when to add data to status reports.
     gc_override_flags_t override_ctrl;  // Tracks override control states.
     parking_state_t parking_state;      // Tracks parking state
     hold_state_t holding_state;         // Tracks holding state
@@ -197,7 +211,7 @@ extern system_t sys;
 extern int32_t sys_position[N_AXIS];      // Real-time machine (aka home) position vector in steps.
 extern int32_t sys_probe_position[N_AXIS]; // Last probe position in machine coordinates and steps.
 
-extern volatile uint8_t sys_probe_state;     // Probing state value.  Used to coordinate the probing cycle with stepper ISR.
+extern volatile probe_state_t sys_probe_state;     // Probing state value.  Used to coordinate the probing cycle with stepper ISR.
 extern volatile uint_fast16_t sys_rt_exec_state;   // Global realtime executor bitflag variable for state management. See EXEC bitmasks.
 extern volatile uint_fast16_t sys_rt_exec_alarm;   // Global realtimeate val executor bitflag variable for setting various alarms.
 

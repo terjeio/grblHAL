@@ -115,7 +115,7 @@ bool protocol_main_loop()
 
         // Process one line of incoming serial data, as the data becomes available. Performs an
         // initial filtering by removing spaces and comments and capitalizing all letters.
-        while((c = hal.serial_read()) != SERIAL_NO_DATA) {
+        while(!sys.await_tool_ack && (c = hal.serial_read()) != SERIAL_NO_DATA) {
 
             if(c == CMD_RESET) {
 
@@ -345,9 +345,11 @@ bool protocol_exec_rt_system ()
         if(rt_exec & EXEC_STOP) { // Experimental for now, must be verified. Do NOT move to interrupt context!
             sys.cancel = true;
             sys.step_control.flags = 0;
-            // Kill spindle and coolant.
+            // Kill spindle and coolant. TODO: Check Mach3 behaviour
+            gc_state.modal.coolant.value = 0;
+            gc_state.modal.spindle.value = 0;
             spindle_stop();
-            hal.coolant_set_state((coolant_state_t){0});
+            hal.coolant_set_state(gc_state.modal.coolant);
             plan_reset();
             st_reset();
             gc_sync_position();
@@ -571,8 +573,7 @@ bool protocol_process_realtime (char c) {
         case CMD_CYCLE_START: // Set as true
             system_set_exec_state_flag(EXEC_CYCLE_START);
             // Cancel any pending tool change
-            if(gc_state.tool_change)
-                gc_state.tool_change = false;
+            gc_state.tool_change = false;
             add = false;
             break;
 
@@ -589,6 +590,10 @@ bool protocol_process_realtime (char c) {
         case CMD_JOG_CANCEL: // Cancel jogging
             char_counter = 0;
             hal.serial_cancel_read_buffer();
+            break;
+
+        case CMD_TOOL_ACK: // Restart reading input stream
+            sys.await_tool_ack = false;
             break;
 
         case CMD_FEED_OVR_RESET:

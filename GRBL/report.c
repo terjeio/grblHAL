@@ -390,6 +390,22 @@ void report_gcode_modes ()
     report_util_gcode_modes_G();
     print_uint8_base10(gc_state.modal.scaling_active ? 51 : 50);
 
+    if(gc_state.modal.scaling_active) {
+        hal.serial_write(':');
+        print_uint8_base10(gc_get_g51_state());
+
+/* report using axis letters instead?
+        g5x = gc_get_g50_status();
+
+        uint_fast8_t idx = N_AXIS;
+        for(idx = 0; idx < N_AXIS; idx++) {
+            if(g5x & 0x01)
+                hal.serial_write("XYZABC"[idx]);
+            g5x >>= 1;
+        }
+*/
+    }
+
     if (gc_state.modal.program_flow) {
         report_util_gcode_modes_M();
         switch (gc_state.modal.program_flow) {
@@ -549,7 +565,10 @@ void report_build_info(char *line)
     hal.serial_write('W');
   #endif
   #ifdef N_TOOLS
-    hal.serial_write('T'); // TODO: change char assignment!
+    hal.serial_write('V'); // ATC supported
+  #else
+    if(hal.serial_restore_job)
+        hal.serial_write('U'); // Manual tool change supported (M6)
   #endif
 
   // NOTE: Compiled values, like override increments/max/min values, may be added at some point later.
@@ -585,8 +604,6 @@ void report_echo_line_received (char *line)
  // especially during g-code programs with fast, short line segments and high frequency reports (5-20Hz).
 void report_realtime_status ()
 {
-    static bool mpg_mode = false;
-
     int32_t current_position[N_AXIS]; // Copy current state of the system position variable
     float print_position[N_AXIS];
 
@@ -645,7 +662,7 @@ void report_realtime_status ()
 
     uint_fast8_t idx;
     float wco[N_AXIS];
-    if (!settings.status_report.position_type || sys.report_wco_counter == 0) {
+    if (!settings.status_report.position_type || sys.report.wco_counter == 0) {
         for (idx = 0; idx < N_AXIS; idx++) {
             // Apply work coordinate offsets and tool length offset to current position.
             wco[idx] = gc_state.modal.coord_system.xyz[idx] + gc_state.g92_coord_offset[idx] + gc_state.tool_length_offset[idx];
@@ -749,14 +766,14 @@ void report_realtime_status ()
         }
     }
 
-    bool report_overrides = sys.report_ovr_counter <= 0;
+    bool report_overrides = sys.report.ovr_counter <= 0;
 
     if(settings.status_report.work_coord_offset) {
 
-        if (sys.report_wco_counter > 0)
-            sys.report_wco_counter--;
+        if (sys.report.wco_counter > 0)
+            sys.report.wco_counter--;
         else {
-            sys.report_wco_counter = sys.state & (STATE_HOMING | STATE_CYCLE | STATE_HOLD | STATE_JOG | STATE_SAFETY_DOOR)
+            sys.report.wco_counter = sys.state & (STATE_HOMING|STATE_CYCLE|STATE_HOLD|STATE_JOG|STATE_SAFETY_DOOR)
                                       ? (REPORT_WCO_REFRESH_BUSY_COUNT - 1) // Reset counter for slow refresh
                                       : (REPORT_WCO_REFRESH_IDLE_COUNT - 1);
             report_overrides = false; // Set override on next report.
@@ -767,8 +784,8 @@ void report_realtime_status ()
 
     if(settings.status_report.overrrides) {
 
-        if (sys.report_ovr_counter > 0)
-            sys.report_ovr_counter--;
+        if (sys.report.ovr_counter > 0)
+            sys.report.ovr_counter--;
         else if(report_overrides) {
 
             hal.serial_write_string("|Ov:");
@@ -780,7 +797,7 @@ void report_realtime_status ()
 
             spindle_state_t sp_state = hal.spindle_get_state();
             coolant_state_t cl_state = hal.coolant_get_state();
-            if (sp_state.on || cl_state.value || gc_state.tool_change || sys.report_ovr_counter < 0) {
+            if (sp_state.on || cl_state.value || gc_state.tool_change || sys.report.ovr_counter < 0) {
 
                 hal.serial_write_string("|A:");
 
@@ -798,7 +815,7 @@ void report_realtime_status ()
 
             }
 
-            sys.report_ovr_counter = sys.state & (STATE_HOMING | STATE_CYCLE | STATE_HOLD | STATE_JOG | STATE_SAFETY_DOOR)
+            sys.report.ovr_counter = sys.state & (STATE_HOMING|STATE_CYCLE|STATE_HOLD|STATE_JOG|STATE_SAFETY_DOOR)
                                       ? (REPORT_OVR_REFRESH_BUSY_COUNT - 1) // Reset counter for slow refresh
                                       : (REPORT_OVR_REFRESH_IDLE_COUNT - 1);
 
@@ -806,10 +823,16 @@ void report_realtime_status ()
     } else if(gc_state.tool_change)
         hal.serial_write_string("|A:T");
 
-    if(sys.mpg_mode != mpg_mode) {
+    if(sys.report.scaling) {
+        hal.serial_write_string("|Sc:");
+        print_uint8_base10(gc_get_g51_state());
+        sys.report.scaling = false;
+    }
+
+    if(sys.report.mpg_mode) {
         hal.serial_write_string("|MPG:");
         hal.serial_write(sys.mpg_mode ? '1' : '0');
-        mpg_mode = sys.mpg_mode;
+        sys.report.mpg_mode = false;
     }
 
     if(hal.userdefined_rt_report)
