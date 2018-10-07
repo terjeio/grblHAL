@@ -95,7 +95,7 @@ typedef struct HAL {
     int16_t (*serial_read)(void);
     void (*serial_reset_read_buffer)(void);
     void (*serial_cancel_read_buffer)(void);
-    bool (*serial_restore_job)(void);
+    bool (*serial_suspend_read)(bool await);
 
     void (*set_bits_atomic)(volatile uint_fast16_t *value, uint_fast16_t bits);
     uint_fast16_t (*clear_bits_atomic)(volatile uint_fast16_t *value, uint_fast16_t bits);

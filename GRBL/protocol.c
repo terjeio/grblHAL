@@ -58,7 +58,9 @@ typedef struct {
 // add gcode to execute not originating from serial stream
 bool protocol_enqueue_gcode (char *gcode)
 {
-    bool ok = xcommand[0] == '\0' && (sys.state == STATE_IDLE || sys.state == STATE_JOG) && bit_isfalse(sys_rt_exec_state, EXEC_MOTION_CANCEL);
+    bool ok = xcommand[0] == '\0' &&
+               (sys.state == STATE_IDLE || (sys.state & (STATE_JOG|STATE_TOOL_CHANGE))) &&
+                 bit_isfalse(sys_rt_exec_state, EXEC_MOTION_CANCEL);
 
     if(ok && gc_state.file_run)
         ok = gc_state.modal.program_flow != ProgramFlow_Running || strncmp((char *)gcode, "$J=", 3);
@@ -115,7 +117,7 @@ bool protocol_main_loop()
 
         // Process one line of incoming serial data, as the data becomes available. Performs an
         // initial filtering by removing spaces and comments and capitalizing all letters.
-        while(!sys.await_tool_ack && (c = hal.serial_read()) != SERIAL_NO_DATA) {
+        while((c = hal.serial_read()) != SERIAL_NO_DATA) {
 
             if(c == CMD_RESET) {
 
@@ -535,8 +537,8 @@ static void protocol_exec_rt_suspend ()
 
 // Checks for and process real-time commands in input stream.
 // Called from serial input interrupt handler.
-bool protocol_process_realtime (char c) {
-
+bool protocol_process_realtime (char c)
+{
     bool add = !sys.block_input_stream;
 
     switch ((unsigned char)c) {
@@ -590,10 +592,6 @@ bool protocol_process_realtime (char c) {
         case CMD_JOG_CANCEL: // Cancel jogging
             char_counter = 0;
             hal.serial_cancel_read_buffer();
-            break;
-
-        case CMD_TOOL_ACK: // Restart reading input stream
-            sys.await_tool_ack = false;
             break;
 
         case CMD_FEED_OVR_RESET:

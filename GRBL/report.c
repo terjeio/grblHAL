@@ -567,7 +567,7 @@ void report_build_info(char *line)
   #ifdef N_TOOLS
     hal.serial_write('V'); // ATC supported
   #else
-    if(hal.serial_restore_job)
+    if(hal.serial_suspend_read)
         hal.serial_write('U'); // Manual tool change supported (M6)
   #endif
 
@@ -759,6 +759,10 @@ void report_realtime_status ()
                     hal.serial_write('S');
                 if (ctrl_pin_state.e_stop)
                     hal.serial_write('E');
+                if (ctrl_pin_state.block_delete)
+                    hal.serial_write('B');
+                if (ctrl_pin_state.stop_disable)
+                    hal.serial_write('T');
             }
 
             if(sys.block_delete_enabled)

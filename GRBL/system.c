@@ -181,7 +181,7 @@ status_code_t system_execute_line (char *line)
 
                 if (line[2] == '\0')
                     mc_homing_cycle(0); // Home axes according to configuration
-
+#ifdef HOMING_SINGLE_AXIS_COMMANDS
                 else if (line[3] == '\0') {
 
                     switch (line[2]) {
@@ -213,7 +213,9 @@ status_code_t system_execute_line (char *line)
                           retval = Status_InvalidStatement;
                           break;
                     }
-                } else
+                }
+#endif
+                else
                     retval = Status_InvalidStatement;
             }
 

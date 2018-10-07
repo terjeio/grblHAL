@@ -248,7 +248,7 @@ static void state_idle (uint_fast16_t rt_exec)
         set_state(STATE_HOLD);
 
     if ((rt_exec & EXEC_TOOL_CHANGE)) {
-        sys.await_tool_ack = true; // block further reading from input stream until buffers are swapped
+        hal.serial_suspend_read(true); // Block reading from serial input until tool change state is acknowledged
         set_state(STATE_TOOL_CHANGE);
     }
 }
@@ -256,7 +256,7 @@ static void state_idle (uint_fast16_t rt_exec)
 static void state_cycle (uint_fast16_t rt_exec)
 {
     if ((rt_exec & EXEC_TOOL_CHANGE))
-        sys.await_tool_ack = true;
+        hal.serial_suspend_read(true); // Block reading from serial input until tool change state is acknowledged
 
     if (rt_exec & EXEC_CYCLE_COMPLETE)
         set_state(gc_state.tool_change ? STATE_TOOL_CHANGE : STATE_IDLE);
@@ -275,7 +275,8 @@ static void state_cycle (uint_fast16_t rt_exec)
 static void state_await_toolchanged (uint_fast16_t rt_exec)
 {
     if ((rt_exec & EXEC_CYCLE_START) && !gc_state.tool_change) {
-        if(hal.serial_restore_job && hal.serial_restore_job()) {
+        // Tool change complete, restore "normal" serial input
+        if(hal.serial_suspend_read && hal.serial_suspend_read(false)) {
             sys.state = STATE_CYCLE;    // Force a running state realtime report
             report_realtime_status();   // to get the streaming going again
         }

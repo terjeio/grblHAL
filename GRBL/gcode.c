@@ -423,7 +423,7 @@ status_code_t gc_execute_block(char *block, char *message)
                         break;
 #ifndef N_TOOLS
                     case 6:
-                        if(hal.serial_restore_job)
+                        if(hal.serial_suspend_read)
                             word_bit.group = ModalGroup_M6;
                         else
                             FAIL(Status_GcodeUnsupportedCommand); // [Unsupported M command]
