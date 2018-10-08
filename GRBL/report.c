@@ -538,8 +538,12 @@ void report_build_info(char *line)
   #ifdef SPINDLE_ENABLE_OFF_WITH_ZERO_SPEED
     hal.serial_write('0');
   #endif
-    if(hal.driver_cap.software_debounce)
+    if(hal.driver_cap.sd_card)
         hal.serial_write('S');
+    if(hal.driver_cap.bluetooth)
+        hal.serial_write('B');
+    if(hal.driver_cap.software_debounce)
+        hal.serial_write('D');
   #ifdef ENABLE_PARKING_OVERRIDE_CONTROL
     hal.serial_write('R');
   #endif

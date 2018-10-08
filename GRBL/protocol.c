@@ -172,10 +172,10 @@ bool protocol_main_loop()
                         user_message.show = user_message.show || user_message.tracker == 5;
                     }
                 }
-            } else if (c == '/') {
+            } else if (c == '/' && char_counter == 0) {
                 // Block delete. Ignore character.
                 // NOTE: If supported, would simply need to check the system if block delete is enabled.
-                line_flags.block_delete = char_counter == 0 && sys.block_delete_enabled;
+                line_flags.block_delete = sys.block_delete_enabled;
             } else if (c == '(') {
                 // Enable comments flag and ignore all characters until ')' or EOL unless it is a message.
                 // NOTE: This doesn't follow the NIST definition exactly, but is good enough for now.

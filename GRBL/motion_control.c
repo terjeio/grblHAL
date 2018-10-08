@@ -461,6 +461,9 @@ void mc_reset ()
         spindle_stop();
         hal.coolant_set_state((coolant_state_t){0});
 
+        if(hal.driver_reset)
+            hal.driver_reset();
+
         // Kill steppers only if in any motion state, i.e. cycle, actively holding, or homing.
         // NOTE: If steppers are kept enabled via the step idle delay setting, this also keeps
         // the steppers enabled by avoiding the go_idle call altogether, unless the motion state is

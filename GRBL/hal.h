@@ -53,7 +53,9 @@ typedef union {
                  laser_ppi_mode          :1,
                  constant_surface_speed  :1,
                  spindle_sync            :1,
-                 unassigned              :16;
+                 sd_card                 :1,
+                 bluetooth               :1,
+                 unassigned              :14;
     };
 } driver_cap_t;
 
@@ -116,6 +118,7 @@ typedef struct HAL {
     void (*tool_select)(tool_data_t *tool);
     void (*tool_change)(parser_state_t *gc_state);
     void (*show_message)(const char *msg);
+    void (*driver_reset)(void);
     bool (*driver_setting)(uint_fast16_t setting, float value);
     void (*driver_settings_restore)(uint8_t restore_flag);
     void (*driver_settings_report)(bool axis_settings);
