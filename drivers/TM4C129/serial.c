@@ -1,12 +1,12 @@
 //
-// serial.c - (UART) port library for Tiva
+// serial.c - (UART) port library for Tiva C (TM4C1294MCPDT)
 //
-// v1.0 / 2017-04-01 / Io Engineering / Terje
+// v1.01 / 2018-09-21 / Io Engineering / Terje
 //
 
 /*
 
-Copyright (c) 2017, Terje Io
+Copyright (c) 2018, Terje Io
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -38,16 +38,34 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "tiva.h"
 #include "serial.h"
+#include "GRBL/grbl.h"
 
-#if defined(RX_BUFFER_SIZE) || defined(TX_BUFFER_SIZE)
+typedef struct {
+    volatile uint16_t head;
+    volatile uint16_t tail;
+    bool overflow;
+    bool rts_state;
+    bool backup;
+    char data[RX_BUFFER_SIZE];
+} serial_buffer_t;
 
 #define BUFCOUNT(head, tail, size) ((head >= tail) ? (head - tail) : (size - tail + head))
 
-static void uart_interrupt_handler (void);
+#if defined(RX_BUFFER_SIZE) || defined(TX_BUFFER_SIZE)
+
+ static void uart_interrupt_handler (void);
 
  #ifdef RX_BUFFER_SIZE
-  static char rxbuf[RX_BUFFER_SIZE];
-  static volatile uint16_t rx_head = 0, rx_tail = 0, rx_overflow = 0, rts_state = 0;
+//  static char rxbuf[RX_BUFFER_SIZE];
+//  static volatile uint16_t rx_head = 0, rx_tail = 0, rx_overflow = 0, rts_state = 0;
+  static serial_buffer_t rxbuffer = {
+    .head = 0,
+    .tail = 0,
+    .backup = false,
+    .overflow = false,
+    .rts_state = false
+  };
+  static serial_buffer_t rxbackup;
   static bool (*serialReceiveCallback)(char) = 0;
  #endif
 
@@ -56,72 +74,82 @@ static void uart_interrupt_handler (void);
   static volatile uint16_t tx_head = 0, tx_tail = 0;
  #endif
 
+ #ifdef SERIAL2_MOD
+   static char rx2buf[RX_BUFFER_SIZE];
+   static volatile uint16_t rx2_head = 0, rx2_tail = 0, rx2_overflow = 0;
+
+  static void uart2_interrupt_handler (void);
+ #endif
+
 #endif
 
 static bool (*serialBlockingCallback)(void) = 0;
 
-void serialInit (void) {
-
-#ifdef BACKCHANNEL
-
-    #define UARTCH UART0_BASE
-    #define INT_UART INT_UART0
-
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
+void serialInit (void)
+{
+    SysCtlPeripheralEnable(SERIAL1_PERIPH);
+    SysCtlPeripheralEnable(SERIAL1_SYSCTL);
     SysCtlDelay(3);
 
-    GPIOPinConfigure(GPIO_PA0_U0RX);
-    GPIOPinConfigure(GPIO_PA1_U0TX);
-    GPIOPinTypeUART(GPIO_PORTA_BASE, GPIO_PIN_0|GPIO_PIN_1);
+    GPIOPinConfigure(SERIAL1_RX); // JP4.1
+    GPIOPinConfigure(SERIAL1_TX);
+    GPIOPinTypeUART(SERIAL1_PORT, SERIAL1_PINS);
 
-#else
+    UARTClockSourceSet(SERIAL1_BASE, UART_CLOCK_PIOSC);
+    UARTConfigSetExpClk(SERIAL1_BASE, 16000000, 115200, (UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE | UART_CONFIG_PAR_NONE));
+    UARTFIFOEnable(SERIAL1_BASE);
+    UARTFIFOLevelSet(SERIAL1_BASE, UART_FIFO_TX1_8, UART_FIFO_RX1_8);
 
-    #define UARTCH UART1_BASE
-    #define INT_UART INT_UART1
+#if defined(RX_BUFFER_SIZE) || defined(TX_BUFFER_SIZE)
+    IntPrioritySet(SERIAL1_INT, 0x40);
+    UARTIntRegister(SERIAL1_BASE, uart_interrupt_handler);
+  #ifdef RX_BUFFER_SIZE
+    UARTIntEnable(SERIAL1_BASE, UART_INT_RX|UART_INT_RT);
+  #endif
+  #ifdef TX_BUFFER_SIZE
+    UARTTxIntModeSet(SERIAL1_BASE, UART_TXINT_MODE_EOT);
+  #endif
+#endif
 
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB);
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOC);
+    UARTEnable(SERIAL1_BASE);
+
+#ifdef RTS_PORT
+
+    SysCtlPeripheralEnable(RTS_PERIPH);
     SysCtlDelay(3);
 
-    GPIOPinConfigure(GPIO_PB0_U1RX);
-    GPIOPinConfigure(GPIO_PB1_U1TX);
     GPIOPinTypeGPIOOutput(RTS_PORT, RTS_PIN);
     GPIOPinWrite(RTS_PORT, RTS_PIN, 0);
 
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_UART1);
+#endif
+
+#ifdef SERIAL2_MOD
+
+    SysCtlPeripheralEnable(SERIAL2_PERIPH);
+    SysCtlPeripheralEnable(SERIAL2_SYSCTL);
     SysCtlDelay(3);
 
-    GPIOPinTypeUART(GPIO_PORTB_BASE, GPIO_PIN_0 | GPIO_PIN_1);
+    GPIOPinConfigure(SERIAL2_RX);
+    GPIOPinConfigure(SERIAL2_TX);
+    GPIOPinTypeUART(SERIAL2_PORT, SERIAL2_PINS);
 
+    UARTClockSourceSet(SERIAL2_BASE, UART_CLOCK_PIOSC);
+    UARTConfigSetExpClk(SERIAL2_BASE, 16000000, 115200, (UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE | UART_CONFIG_PAR_NONE));
+    UARTFIFOEnable(SERIAL2_BASE);
+    UARTFIFOLevelSet(SERIAL2_BASE, UART_FIFO_TX1_8, UART_FIFO_RX1_8);
+    IntPrioritySet(SERIAL2_INT, 0x40);
+    UARTIntRegister(SERIAL2_BASE, uart2_interrupt_handler);
+    UARTEnable(SERIAL2_BASE);
 #endif
-
-    UARTClockSourceSet(UARTCH, UART_CLOCK_PIOSC);
-    UARTConfigSetExpClk(UARTCH, 16000000, 115200, (UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE | UART_CONFIG_PAR_NONE));
-    UARTFIFOEnable(UARTCH);
-    UARTFIFOLevelSet(UARTCH, UART_FIFO_TX1_8, UART_FIFO_RX1_8);
-
-#if defined(RX_BUFFER_SIZE) || defined(TX_BUFFER_SIZE)
-    IntPrioritySet(INT_UART, 0x40);
-    UARTIntRegister(UARTCH, uart_interrupt_handler);
-  #ifdef RX_BUFFER_SIZE
-    UARTIntEnable(UARTCH, UART_INT_RX|UART_INT_RT);
-  #endif
-  #ifdef TX_BUFFER_SIZE
-    UARTTxIntModeSet(UARTCH, UART_TXINT_MODE_EOT);
-  #endif
-#endif
-
-    UARTEnable(UARTCH);
 }
-
 
 static bool serialBlockingCallbackDummy (void)
 {
     return true;
 }
 
-void setSerialBlockingCallback (bool (*fn)(void)) {
+void setSerialBlockingCallback (bool (*fn)(void))
+{
     serialBlockingCallback = fn == 0 ? serialBlockingCallbackDummy : fn;
 }
 
@@ -143,48 +171,59 @@ void setSerialReceiveCallback (bool (*fn)(char))
 int16_t serialGetC (void)
 {
     int16_t data;
-    uint16_t bptr = rx_tail;
+    uint16_t bptr = rxbuffer.tail;
 
-    if(bptr == rx_head)
+    if(bptr == rxbuffer.head)
         return -1; // no data available else EOF
 
-//    UARTIntDisable(UARTCH, UART_INT_RX|UART_INT_RT);
-    data = rxbuf[bptr++];                   // Get next character, increment tmp pointer
-    rx_tail = bptr & (RX_BUFFER_SIZE - 1);  // and update pointer
+//    UARTIntDisable(SERIAL1_PORT, UART_INT_RX|UART_INT_RT);
+    data = rxbuffer.data[bptr++];                   // Get next character, increment tmp pointer
+    rxbuffer.tail = bptr & (RX_BUFFER_SIZE - 1);  // and update pointer
 
-//    UARTIntEnable(UARTCH, UART_INT_RX|UART_INT_RT);
-
-    if (rts_state && BUFCOUNT(rx_head, rx_tail, RX_BUFFER_SIZE) < RX_BUFFER_LWM)    // Clear RTS if
-        GPIOPinWrite(RTS_PORT, RTS_PIN, rts_state = 0);                             // buffer count is below low water mark
-
+//    UARTIntEnable(SERIAL1_PORT, UART_INT_RX|UART_INT_RT);
+ #ifdef RTS_PORT
+    if (rxbuffer.rts_state && BUFCOUNT(rxbuffer.head, rxbuffer.tail, RX_BUFFER_SIZE) < RX_BUFFER_LWM)    // Clear RTS if
+        GPIOPinWrite(RTS_PORT, RTS_PIN, rxbuffer.rts_state = 0);                             // buffer count is below low water mark
+ #endif
     return data;
+}
+
+// "dummy" version of serialGetC
+static int16_t serialGetNull (void)
+{
+    return -1;
 }
 
 inline uint16_t serialRxCount (void)
 {
-    uint16_t head = rx_head, tail = rx_tail;
+    uint16_t head = rxbuffer.head, tail = rxbuffer.tail;
 
     return BUFCOUNT(head, tail, RX_BUFFER_SIZE);
 }
 
 uint16_t serialRxFree (void)
 {
-    return RX_BUFFER_SIZE - serialRxCount();
+    uint16_t head = rxbuffer.head, tail = rxbuffer.tail;
+
+    return (RX_BUFFER_SIZE - 1) - BUFCOUNT(head, tail, RX_BUFFER_SIZE);
 }
 
 void serialRxFlush (void)
 {
-    rx_tail = rx_head;
-    GPIOPinWrite(RTS_PORT, RTS_PIN, rts_state = 0);
+    rxbuffer.tail = rxbuffer.head;
+ #ifdef RTS_PORT
+    GPIOPinWrite(RTS_PORT, RTS_PIN, rxbuffer.rts_state = 0);
+ #endif
 }
 
 void serialRxCancel (void)
 {
-    rxbuf[rx_head] = CAN;
-    rx_tail = rx_head;
-    rx_head = (rx_tail + 1) & (RX_BUFFER_SIZE - 1);
-
-    GPIOPinWrite(RTS_PORT, RTS_PIN, rts_state = 0);
+    rxbuffer.data[rxbuffer.head] = CAN;
+    rxbuffer.tail = rxbuffer.head;
+    rxbuffer.head = (rxbuffer.tail + 1) & (RX_BUFFER_SIZE - 1);
+ #ifdef RTS_PORT
+    GPIOPinWrite(RTS_PORT, RTS_PIN, rxbuffer.rts_state = 0);
+ #endif
 }
 
 #else
@@ -195,11 +234,11 @@ int32_t serialGetC ()
 
     while(waitCount && c == -1) {
 
-        if(!UARTCharsAvail(UARTCH)) {
+        if(!UARTCharsAvail(SERIAL1_PORT)) {
             SysCtlDelay(500);
             waitCount--;
         } else
-            c = UARTCharGetNonBlocking(UARTCH);
+            c = UARTCharGetNonBlocking(SERIAL1_PORT);
     }
 
     return c;
@@ -230,10 +269,20 @@ void serialWrite (const char *data, unsigned int length)
 
 }
 
+bool serialSuspendInput (bool suspend)
+{
+    if(suspend)
+        hal.serial_read = serialGetNull;
+    else if(rxbuffer.backup)
+        memcpy(&rxbuffer, &rxbackup, sizeof(serial_buffer_t));
+
+    return rxbuffer.tail != rxbuffer.head;
+}
+
 #ifdef LINE_BUFFER_SIZE
 
-char *serialReadLn (void) {
-
+char *serialReadLn (void)
+{
     static char cmdbuf[LINE_BUFFER_SIZE];
 
     int32_t c = 0;
@@ -255,15 +304,16 @@ char *serialReadLn (void) {
 
     return count ? cmdbuf : 0;
 }
+
 #endif
 
 #ifdef TX_BUFFER_SIZE
 
-bool serialPutC (const char c) {
-
+bool serialPutC (const char c)
+{
     uint32_t next_head;
 
-    if(tx_head != tx_tail || !UARTCharPutNonBlocking(UARTCH, c)) {  // Send character without buffering if possible
+    if(tx_head != tx_tail || !UARTCharPutNonBlocking(SERIAL1_BASE, c)) {  // Send character without buffering if possible
 
         next_head = (tx_head + 1) & (TX_BUFFER_SIZE - 1);           // Get and update head pointer
 
@@ -275,14 +325,14 @@ bool serialPutC (const char c) {
         txbuf[tx_head] = c;                                         // Add data to buffer
         tx_head = next_head;                                        // and update head pointer
 
-        UARTIntEnable(UARTCH, UART_INT_TX); // Enable interrupts
+        UARTIntEnable(SERIAL1_BASE, UART_INT_TX); // Enable interrupts
     }
 
     return true;
 }
 
-uint16_t serialTxCount(void) {
-
+uint16_t serialTxCount (void)
+{
     uint16_t head = tx_head, tail = tx_tail;
 
     return BUFCOUNT(head, tail, TX_BUFFER_SIZE);
@@ -291,20 +341,20 @@ uint16_t serialTxCount(void) {
 #else
 
 void serialPutC (const char c) {
-    UARTCharPut(UARTCH, c);
+    UARTCharPut(SERIAL1_PORT, c);
 }
 
 #endif
 
 #if defined(RX_BUFFER_SIZE) || defined(TX_BUFFER_SIZE)
 
-static void uart_interrupt_handler (void) {
-
+static void uart_interrupt_handler (void)
+{
     uint16_t bptr;
     int32_t data;
-    uint32_t iflags = UARTIntStatus(UARTCH, true);
+    uint32_t iflags = UARTIntStatus(SERIAL1_BASE, true);
 
-#ifdef TX_BUFFER_SIZE
+ #ifdef TX_BUFFER_SIZE
 
     if(iflags & UART_INT_TX) {
 
@@ -312,52 +362,144 @@ static void uart_interrupt_handler (void) {
 
         if(tx_head != bptr) {
 
-            UARTCharPut(UARTCH, txbuf[bptr++]);                 // Put character in TXT FIFO
+            UARTCharPut(SERIAL1_BASE, txbuf[bptr++]);                 // Put character in TXT FIFO
             bptr &= (TX_BUFFER_SIZE - 1);                       // and update tmp tail pointer
 
-            while(tx_head != bptr && UARTSpaceAvail(UARTCH)) {  // While data in TX buffer and free space in TX FIFO
-                UARTCharPut(UARTCH, txbuf[bptr++]);             // put next character
+            while(tx_head != bptr && UARTSpaceAvail(SERIAL1_BASE)) {  // While data in TX buffer and free space in TX FIFO
+                UARTCharPut(SERIAL1_BASE, txbuf[bptr++]);             // put next character
                 bptr &= (TX_BUFFER_SIZE - 1);                   // and update tmp tail pointer
             }
 
             tx_tail = bptr;                                     //  Update tail pinter
 
             if(bptr == tx_head)                                 // Disable TX  interrups
-                UARTIntDisable(UARTCH, UART_INT_TX);            // when TX buffer empty
+                UARTIntDisable(SERIAL1_BASE, UART_INT_TX);            // when TX buffer empty
 
 /*        } else {
-            UARTIntDisable(UARTCH, UART_INT_TX);
-            UARTIntClear(UARTCH, UART_INT_TX); */
+            UARTIntDisable(SERIAL1_PORT, UART_INT_TX);
+            UARTIntClear(SERIAL1_PORT, UART_INT_TX); */
         }
 
     }
 
-#endif
+ #endif
 
-#ifdef RX_BUFFER_SIZE
+ #ifdef RX_BUFFER_SIZE
 
     if(iflags & (UART_INT_RX|UART_INT_RT)) {
 
-        bptr = (rx_head + 1) & (RX_BUFFER_SIZE - 1);    // Get next head pointer
+        data = UARTCharGet(SERIAL1_BASE);
 
-        if(bptr == rx_tail) {                           // If buffer full
-            rx_overflow = 1;                            // flag overlow
-            UARTCharGet(UARTCH);                        // and do dummy read to clear interrupt;
-        } else {
-            data = UARTCharGet(UARTCH);
-            if(!serialReceiveCallback || serialReceiveCallback((char)data)) {
-                rxbuf[rx_head] = (char)data;   // Add data to buffer
-                rx_head = bptr;                         // and update pointer
+        if(data == CMD_TOOL_ACK && !rxbuffer.backup) {
+
+            memcpy(&rxbackup, &rxbuffer, sizeof(serial_buffer_t));
+            rxbuffer.backup = true;
+            rxbuffer.tail = rxbuffer.head;
+            hal.serial_read = serialGetC; // restore normal input
+
+        } else if(!serialReceiveCallback || serialReceiveCallback((char)data)) {
+
+            bptr = (rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1);  // Get next head pointer
+
+            if(bptr == rxbuffer.tail)                           // If buffer full
+                rxbuffer.overflow = 1;                          // flag overflow,
+            else {
+                rxbuffer.data[rxbuffer.head] = (char)data;      // else add data to buffer
+                rxbuffer.head = bptr;                           // and update pointer
             }
         }
 
-        if (!rts_state && BUFCOUNT(rx_head, rx_tail, RX_BUFFER_SIZE) >= RX_BUFFER_HWM)
-            GPIOPinWrite(RTS_PORT, RTS_PIN, rts_state = RTS_PIN);
+   #ifdef RTS_PORT
+        if (!rxbuffer.rts_state && BUFCOUNT(rxbuffer.head, rxbuffer.tail, RX_BUFFER_SIZE) >= RX_BUFFER_HWM)
+            GPIOPinWrite(RTS_PORT, RTS_PIN, rxbuffer.rts_state = RTS_PIN);
+   #endif
+    }
+ #endif
+}
 
+#ifdef SERIAL2_MOD
+
+void serialSelect (bool mpg)
+{
+    if(mpg) {
+        UARTIntDisable(SERIAL1_BASE, UART_INT_RX|UART_INT_RT);
+        UARTIntEnable(SERIAL2_BASE, UART_INT_RX|UART_INT_RT);
+    } else {
+        UARTIntEnable(SERIAL1_BASE, UART_INT_RX|UART_INT_RT);
+        UARTIntDisable(SERIAL2_BASE, UART_INT_RX|UART_INT_RT);
+    }
+}
+
+//
+// Returns number of free characters in serial input buffer
+//
+uint16_t serial2RxFree (void)
+{
+    uint16_t tail = rx2_tail, head = rx2_head;
+
+    return (RX_BUFFER_SIZE - 1) - BUFCOUNT(head, tail, RX_BUFFER_SIZE);
+}
+
+//
+// Flushes the serial input buffer
+//
+void serial2RxFlush (void)
+{
+    rx2_head = rx2_tail = 0;
+}
+
+//
+// Flushes and adds a CAN character to the serial input buffer
+//
+void serial2RxCancel (void)
+{
+    rx2buf[rx2_head] = CAN;
+    rx2_tail = rx2_head;
+    rx2_head = (rx2_tail + 1) & (RX_BUFFER_SIZE - 1);
+}
+
+//
+// serialGetC - returns -1 if no data available
+//
+int16_t serial2GetC (void)
+{
+    uint16_t bptr = rx2_tail;
+
+    if(bptr == rx2_head)
+        return -1; // no data available else EOF
+
+    char data = rx2buf[bptr++];             // Get next character, increment tmp pointer
+    rx2_tail = bptr & (RX_BUFFER_SIZE - 1); // and update pointer
+
+    return (int16_t)data;
+}
+
+static void uart2_interrupt_handler (void)
+{
+    uint32_t iflags = UARTIntStatus(SERIAL2_BASE, true);
+
+ #ifdef RX_BUFFER_SIZE
+
+    if(iflags & (UART_INT_RX|UART_INT_RT)) {
+
+        uint16_t bptr = (rx2_head + 1) & (RX_BUFFER_SIZE - 1);   // Get next head pointer
+
+        if(bptr == rx2_tail) {                                  // If buffer full
+            rx2_overflow = 1;                                   // flag overlow
+            UARTCharGet(SERIAL2_BASE);                          // and do dummy read to clear interrupt;
+        } else {
+            int32_t data = UARTCharGet(SERIAL2_BASE);
+            if(!serialReceiveCallback || serialReceiveCallback((char)data)) {
+                rx2buf[rx2_head] = (char)data;  // Add data to buffer
+                rx2_head = bptr;                // and update pointer
+            }
+        }
     }
 
-#endif
+ #endif
 
 }
 
-#endif
+#endif // SERIAL2_MOD
+
+#endif // defined(RX_BUFFER_SIZE) || defined(TX_BUFFER_SIZE)

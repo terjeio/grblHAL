@@ -28,6 +28,8 @@
 
 // Configuration
 
+//#define FreeRTOS                // comment in to enable Ethernet streaming
+
 #define CNC_BOOSTERPACK         // comment in if for CNC Boosterpack
 #ifdef CNC_BOOSTERPACK
 #define CNC_BOOSTERPACK_SHORTS  // comment in if for CNC Boosterpack with shorts
@@ -106,10 +108,10 @@
 #endif
 
 // Define step direction output pins. NOTE: All direction pins must be on the same port.
-#define DIRECTION_PORT		GPIO_PORTD_BASE
-#define X_DIRECTION_PIN		GPIO_PIN_1
-#define Y_DIRECTION_PIN		GPIO_PIN_0
-#define Z_DIRECTION_PIN		GPIO_PIN_3
+#define DIRECTION_PORT      GPIO_PORTD_BASE
+#define X_DIRECTION_PIN     GPIO_PIN_1
+#define Y_DIRECTION_PIN     GPIO_PIN_0
+#define Z_DIRECTION_PIN     GPIO_PIN_3
 #define HWDIRECTION_MASK    (X_DIRECTION_PIN|Y_DIRECTION_PIN|Z_DIRECTION_PIN) // All direction bits
 #define DIRECTION_OUTMODE   GPIO_MAP
 #ifdef CNC_BOOSTERPACK2
@@ -183,8 +185,8 @@
 #define COOLANT_FLOOD_PORT  GPIO_PORTL_BASE
 #define COOLANT_FLOOD_PIN   GPIO_PIN_1
 
-#define COOLANT_MIST_PORT	GPIO_PORTL_BASE
-#define COOLANT_MIST_PIN	GPIO_PIN_2
+#define COOLANT_MIST_PORT   GPIO_PORTL_BASE
+#define COOLANT_MIST_PIN    GPIO_PIN_2
 
 // Define user-control CONTROLs (cycle start, reset, feed hold) input pins.
 #ifdef CNC_BOOSTERPACK
@@ -207,13 +209,49 @@
 #endif
 
 // Define probe switch input pin.
-#define PROBE_PORT		GPIO_PORTC_BASE
-#define PROBE_PIN		GPIO_PIN_7
+#define PROBE_PORT      GPIO_PORTC_BASE
+#define PROBE_PIN       GPIO_PIN_7
 
 // Start of PWM & Stepper Enabled Spindle
 #define SPINDLEPPORT    GPIO_PORTM_BASE
 #define SPINDLEPPIN     GPIO_PIN_3
 #define SPINDLEPWM_MAP  GPIO_PM3_T3CCP1
+
+/*
+ * CNC Boosterpack GPIO assignments
+ */
+
+#define GPIO0_PORT           GPIO_PORTL_BASE
+#define GPIO0_PIN            GPIO_PIN_3
+
+#define GPIO1_PORT           GPIO_PORTN_BASE
+#define GPIO1_PIN            GPIO_PIN_2
+
+// Normally used as MPG mode input
+#define GPIO2_PORT           GPIO_PORTN_BASE
+#define GPIO2_PIN            GPIO_PIN_3
+
+#define GPIO3_PORT           GPIO_PORTP_BASE
+#define GPIO3_PIN            GPIO_PIN_3
+
+// GPIO4 is shared with UART2 RX
+#define GPIO4_PORT           GPIO_PORTC_BASE
+#define GPIO4_PIN            GPIO_PIN_4
+
+// GPIO5 is shared with UART2 TX
+#define GPIO5_PORT           GPIO_PORTC_BASE
+#define GPIO5_PIN            GPIO_PIN_5
+
+// Normally used as keypad strobe input
+#define GPIO6_PORT           GPIO_PORTC_BASE
+#define GPIO6_PIN            GPIO_PIN_6
+
+// Define MPG mode input (for selecting secondary UART input)
+
+#define MODE_PORT           GPIO2_PORT
+#define MODE_GPIO           GPIO2_GPIO
+#define MODE_INT            GPIO2_INT
+#define MODE_SWITCH_PIN     GPIO2_PIN
 
 #ifdef LASER_PPI
 

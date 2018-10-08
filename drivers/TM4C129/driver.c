@@ -31,9 +31,18 @@
 #include "driver.h"
 #include "eeprom.h"
 #include "serial.h"
+
+//#include "sdcard.h"
 //#include "usermcodes.h"
 //#include "keypad.h"
 //#include "atc.h"
+
+#ifdef FreeRTOS
+#include "TCPStream.h"
+#include "FreeRTOS.h"
+#include "task.h"
+#include "timers.h"
+#endif
 
 // prescale step counter to 20Mhz (120 / (STEPPER_DRIVER_PRESCALER + 1))
 #define STEPPER_DRIVER_PRESCALER 5
@@ -120,7 +129,6 @@ static volatile uint32_t ms_count = 1; // NOTE: initial value 1 is for "resettin
 static bool pwmEnabled = false, IOInitDone = false;
 static axes_signals_t next_step_outbits;
 static spindle_pwm_t spindle_pwm;
-static void (*delayCallback)(void) = 0;
 
 static uint16_t step_prescaler[3] = {
     STEPPER_DRIVER_PRESCALER,
@@ -189,6 +197,7 @@ static uint_fast16_t spindleSetSpeed (uint_fast16_t pwm_value);
 static void stepper_driver_isr (void);
 static void stepper_pulse_isr (void);
 static void stepper_pulse_isr_delayed (void);
+static void mode_select_isr (void);
 #ifdef CNC_BOOSTERPACK
 static void limit_yz_isr (void);
 static void limit_debounced_yz_isr (void);
@@ -209,7 +218,46 @@ static void limit_debounced_isr (void);
 static void control_isr (void);
 static void control_isr_sd (void);
 static void software_debounce_isr (void);
+
+#ifdef FreeRTOS
+
+static TimerHandle_t xDelayTimer = NULL;
+
+void vTimerCallback (TimerHandle_t xTimer)
+{
+    configASSERT( pxTimer );
+
+    void (*callback)(void) = (void (*)(void)) pvTimerGetTimerID(xTimer);
+
+    if(callback)
+        callback();
+
+    xTimerDelete(xDelayTimer, 3);
+    xDelayTimer = NULL;
+}
+static void driver_delay_ms (uint32_t ms, void (*callback)(void))
+{
+    if(callback) {
+        if(xDelayTimer) {
+            xTimerDelete(xDelayTimer, 3);
+            xDelayTimer = NULL;
+        }
+        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+        xDelayTimer = xTimerCreate("msDelay", pdMS_TO_TICKS(ms), pdFALSE, callback, vTimerCallback);
+        xTimerStartFromISR(xDelayTimer, &xHigherPriorityTaskWoken);
+    } else {
+        if(xDelayTimer) {
+            xTimerDelete(xDelayTimer, 3);
+            xDelayTimer = NULL;
+        }
+        vTaskDelay(pdMS_TO_TICKS(ms));
+    }
+}
+#else
+
 static void systick_isr (void);
+
+static void (*delayCallback)(void) = 0;
 
 static void driver_delay_ms (uint32_t ms, void (*callback)(void))
 {
@@ -227,6 +275,7 @@ static void driver_delay_ms (uint32_t ms, void (*callback)(void))
             callback();
     }
 }
+#endif
 
 // Enable/disable steppers
 static void stepperEnable (axes_signals_t enable)
@@ -823,6 +872,50 @@ static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t 
     return prev;
 }
 
+static void modeSelect (bool mpg_mode)
+{
+#ifndef FreeRTOS
+
+    // Deny entering MPG mode if busy
+    if(mpg_mode == sys.mpg_mode || (mpg_mode && (gc_state.file_run || sys.state != STATE_IDLE)))
+        return;
+
+//    BITBAND_PERI(MODE_PORT->OUT, MODE_LED_PIN) = mpg_mode;
+
+    serialSelect(mpg_mode);
+
+    if(mpg_mode) {
+        hal.serial_read = serial2GetC;
+        hal.serial_get_rx_buffer_available = serial2RxFree;
+        hal.serial_cancel_read_buffer = serial2RxCancel;
+        hal.serial_reset_read_buffer = serial2RxFlush;
+    } else {
+        hal.serial_read = serialGetC;
+        hal.serial_get_rx_buffer_available = serialRxFree;
+        hal.serial_cancel_read_buffer = serialRxCancel;
+        hal.serial_reset_read_buffer = serialRxFlush;
+    }
+
+    hal.serial_reset_read_buffer();
+
+    // Report WCO on first status report request from MPG processor
+    if(mpg_mode)
+        sys.report.wco_counter = 1;
+
+    // Force a realtime status report
+    hal.protocol_process_realtime('?');
+
+    sys.mpg_mode = mpg_mode;
+    sys.report.mpg_mode = true;
+#endif
+}
+
+static void modechange (void)
+{
+    modeSelect(GPIOPinRead(MODE_PORT, MODE_SWITCH_PIN) == 0);
+    GPIOIntEnable(MODE_PORT, MODE_SWITCH_PIN);
+}
+
 // Configures perhipherals when settings are initialized or changed
 static void settings_changed (settings_t *settings)
 {
@@ -964,6 +1057,12 @@ static void settings_changed (settings_t *settings)
 
         } while(i);
 
+#ifdef SERIAL2_MOD
+       if(sys.mpg_mode != !(GPIOPinRead(MODE_PORT, MODE_SWITCH_PIN) == MODE_SWITCH_PIN))
+            modeSelect(true);
+       GPIOIntEnable(MODE_PORT, MODE_SWITCH_PIN);
+#endif
+
     }
 }
 
@@ -989,6 +1088,9 @@ static bool driver_setup (settings_t *settings)
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOQ);
     SysCtlPeripheralEnable(STEPPER_TIMER_PERIPH);
     SysCtlPeripheralEnable(PULSE_TIMER_PERIPH);
+
+
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPION);
 
     SysCtlDelay(26); // wait a bit for peripherals to wake up
 
@@ -1191,6 +1293,19 @@ static bool driver_setup (settings_t *settings)
 
 #endif
 
+#ifdef _SDCARD_H_
+    sdcard_init();
+#endif
+
+    /*********************
+     * Mode select input *
+     *********************/
+
+    GPIOPadConfigSet(MODE_PORT, MODE_SWITCH_PIN, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
+    GPIOIntTypeSet(MODE_PORT, MODE_SWITCH_PIN, GPIO_BOTH_EDGES);
+    GPIOIntClear(MODE_PORT, MODE_SWITCH_PIN);     // Clear any pending interrupt
+    GPIOIntRegister(MODE_PORT, mode_select_isr);
+
   // Set defaults
 
     IOInitDone = settings->version == 13;
@@ -1198,6 +1313,9 @@ static bool driver_setup (settings_t *settings)
     settings_changed(settings);
 
     setSerialReceiveCallback(hal.protocol_process_realtime);
+#ifdef FreeRTOS
+    TCPStreamSetReceiveCallback(hal.protocol_process_realtime);
+#endif
     spindleSetState((spindle_state_t){0}, spindle_pwm.off_value, DEFAULT_SPINDLE_RPM_OVERRIDE);
     coolantSetState((coolant_state_t){0});
     stepperSetDirOutputs((axes_signals_t){0});
@@ -1214,13 +1332,19 @@ bool user_defined_setting (uint_fast16_t param, float val)
 // NOTE: Grbl is not yet configured (from EEPROM data), driver_setup() will be called when done
 bool driver_init (void)
 {
+#ifdef FreeRTOS
+    hal.f_step_timer = configCPU_CLOCK_HZ;
+#else
+    FPUEnable();
+    FPULazyStackingEnable();
     hal.f_step_timer = SysCtlClockFreqSet(SYSCTL_XTAL_25MHZ|SYSCTL_OSC_MAIN|SYSCTL_USE_PLL|SYSCTL_CFG_VCO_480, 120000000);
+
     // Set up systick timer with a 1ms period
     SysTickPeriodSet((hal.f_step_timer / 1000) - 1);
     SysTickIntRegister(systick_isr);
     SysTickIntEnable();
     SysTickEnable();
-
+#endif
     // Enable EEPROM and serial port here for Grbl to be able to configure itself and report any errors
     SysCtlPeripheralEnable(SYSCTL_PERIPH_EEPROM0);
     SysCtlDelay(26); // wait a bit for peripheral to wake up
@@ -1229,7 +1353,11 @@ bool driver_init (void)
     serialInit();
 
     setSerialBlockingCallback(hal.serial_blocking_callback);
+#ifdef FreeRTOS
+    hal.info = "TM4C1294NCPDT FreeRTOS";
+#else
     hal.info = "TM4C1294NCPDT";
+#endif
     hal.driver_setup = driver_setup;
     hal.f_step_timer = hal.f_step_timer / (STEPPER_DRIVER_PRESCALER + 1);
     hal.rx_buffer_size = RX_BUFFER_SIZE;
@@ -1264,12 +1392,22 @@ bool driver_init (void)
 
     hal.system_control_get_state = systemGetState;
 
+#ifdef FreeRTOS
+    hal.serial_read = TCPStreamGetC;
+    hal.serial_write = TCPStreamPutC;
+    hal.serial_write_string = TCPStreamWriteS;
+    hal.serial_get_rx_buffer_available = TCPStreamRxFree;
+    hal.serial_reset_read_buffer = TCPStreamRxFlush;
+    hal.serial_cancel_read_buffer = TCPStreamRxCancel;
+#else
     hal.serial_read = serialGetC;
     hal.serial_write = serialPutC;
     hal.serial_write_string = serialWriteS;
     hal.serial_get_rx_buffer_available = serialRxFree;
     hal.serial_reset_read_buffer = serialRxFlush;
     hal.serial_cancel_read_buffer = serialRxCancel;
+    hal.serial_suspend_read = serialSuspendInput;
+#endif
 
     hal.eeprom.type = EEPROM_Physical;
     hal.eeprom.get_byte = eepromGetByte;
@@ -1303,6 +1441,10 @@ bool driver_init (void)
     hal.tool_change = atc_tool_change;
 #endif
 
+#ifdef _SDCARD_H_
+    hal.driver_reset = sdcard_reset;
+#endif
+
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
 
     hal.driver_cap.spindle_dir = On;
@@ -1326,6 +1468,9 @@ bool driver_init (void)
 #endif
 #ifdef CONSTANT_SURFACE_SPEED_OPTION
     hal.driver_cap.constant_surface_speed = On;
+#endif
+#ifdef _SDCARD_H_
+    hal.driver_cap.sd_card = On;
 #endif
 
     // no need to move version check before init - compiler will fail any mismatch for existing entries
@@ -1448,6 +1593,14 @@ static void limit_debounced_x_isr (void)
         TimerLoadSet(DEBOUNCE_TIMER_BASE, TIMER_A, 32000);  // 32ms
         TimerEnable(DEBOUNCE_TIMER_BASE, TIMER_A);
     }
+}
+
+static void mode_select_isr (void)
+{
+    GPIOIntDisable(MODE_PORT, MODE_SWITCH_PIN); // Disable mode pin interrupt
+    GPIOIntClear(MODE_PORT, MODE_SWITCH_PIN);   // and clear it
+
+    driver_delay_ms(50, modechange);            // Debounce 50ms before attempting mode change
 }
 
   #ifdef CNC_BOOSTERPACK2
@@ -1580,6 +1733,7 @@ static void control_isr_sd (void)
         hal.control_interrupt_callback(systemGetState());
 }
 
+#ifndef FreeRTOS
 // Interrupt handler for 1 ms interval timer
 #ifdef PWM_RAMPED
 static void systick_isr (void)
@@ -1635,3 +1789,4 @@ static void systick_isr (void)
     }
 }
 #endif
+#endif // FreeRTOS
