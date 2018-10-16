@@ -122,23 +122,21 @@
 #define PROBE_PORT_IE   portIe(PROBE_PORT)
 
 // Start of PWM & Stepper Enabled Spindle
-#ifdef VARIABLE_SPINDLE
-    #define PWM_PORT     2
-    #define PWM_PIN      BIT0
-    #define PWM_PORT_DIR portDir(PROBE_PORT)
-    #define PWM_SEL      portSel(PWM_PORT)
 
-    #define PWM_TIMER A
-    #define PWM_TIMER_INSTANCE 1
-    #define PWM_TIMER_CTL     timerCtl(PWM_TIMER, PWM_TIMER_INSTANCE)
-    #define PWM_TIMER_CCTL0   timerCCtl(PWM_TIMER, PWM_TIMER_INSTANCE, 0)
-    #define PWM_TIMER_CCTL1   timerCCtl(PWM_TIMER, PWM_TIMER_INSTANCE, 1)
-    #define PWM_TIMER_CCR0    timerCcr(PWM_TIMER, PWM_TIMER_INSTANCE, 0)
-    #define PWM_TIMER_CCR1    timerCcr(PWM_TIMER, PWM_TIMER_INSTANCE, 1)
-    #define PWM_TIMER_IV      timerIv(PWM_TIMER, PWM_TIMER_INSTANCE)
-    #define PWM_TIMER_EX0     timerEx(PWM_TIMER, PWM_TIMER_INSTANCE)
-#endif // End of VARIABLE_SPINDLE
+#define PWM_PORT     2
+#define PWM_PIN      BIT0
+#define PWM_PORT_DIR portDir(PROBE_PORT)
+#define PWM_SEL      portSel(PWM_PORT)
 
+#define PWM_TIMER A
+#define PWM_TIMER_INSTANCE 1
+#define PWM_TIMER_CTL     timerCtl(PWM_TIMER, PWM_TIMER_INSTANCE)
+#define PWM_TIMER_CCTL0   timerCCtl(PWM_TIMER, PWM_TIMER_INSTANCE, 0)
+#define PWM_TIMER_CCTL1   timerCCtl(PWM_TIMER, PWM_TIMER_INSTANCE, 1)
+#define PWM_TIMER_CCR0    timerCcr(PWM_TIMER, PWM_TIMER_INSTANCE, 0)
+#define PWM_TIMER_CCR1    timerCcr(PWM_TIMER, PWM_TIMER_INSTANCE, 1)
+#define PWM_TIMER_IV      timerIv(PWM_TIMER, PWM_TIMER_INSTANCE)
+#define PWM_TIMER_EX0     timerEx(PWM_TIMER, PWM_TIMER_INSTANCE)
 
 #define PULSE_TIMER A
 #define PULSE_TIMER_INSTANCE 0

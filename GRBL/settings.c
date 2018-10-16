@@ -28,29 +28,38 @@ const settings_t defaults = {
 
     .version = SETTINGS_VERSION,
 
-    .pulse_microseconds = DEFAULT_STEP_PULSE_MICROSECONDS,
-    .pulse_delay_microseconds = DEFAULT_STEP_PULSE_DELAY,
-    .stepper_idle_lock_time = DEFAULT_STEPPER_IDLE_LOCK_TIME,
-    .step_invert.mask = DEFAULT_STEPPING_INVERT_MASK,
-    .dir_invert.mask = DEFAULT_DIRECTION_INVERT_MASK,
-    .status_report.mask = DEFAULT_STATUS_REPORT_MASK,
+    .stream = StreamSetting_Serial,
     .junction_deviation = DEFAULT_JUNCTION_DEVIATION,
     .arc_tolerance = DEFAULT_ARC_TOLERANCE,
-
-    .homing_dir_mask = DEFAULT_HOMING_DIR_MASK,
-    .homing_feed_rate = DEFAULT_HOMING_FEED_RATE,
-    .homing_seek_rate = DEFAULT_HOMING_SEEK_RATE,
-    .homing_debounce_delay = DEFAULT_HOMING_DEBOUNCE_DELAY,
-    .homing_pulloff = DEFAULT_HOMING_PULLOFF,
-    .homing_locate_cycles = N_HOMING_LOCATE_CYCLE,
     .g73_retract = DEFAULT_G73_RETRACT,
 
     .flags.report_inches = DEFAULT_REPORT_INCHES,
     .flags.laser_mode = DEFAULT_LASER_MODE,
-    .flags.hard_limit_enable = DEFAULT_HARD_LIMIT_ENABLE,
-    .flags.homing_enable = DEFAULT_HOMING_ENABLE,
-    .flags.soft_limit_enable = DEFAULT_SOFT_LIMIT_ENABLE,
     .flags.invert_probe_pin = DEFAULT_INVERT_PROBE_PIN,
+    .flags.sleep_enable = DEFAULT_SLEEP_ENABLE,
+    .flags.disable_laser_during_hold = DEFAULT_DISABLE_LASER_DURING_HOLD,
+    .flags.force_initialization_alarm = DEFAULT_FORCE_INITIALIZATION_ALARM,
+    .flags.disable_probe_pullup = DISABLE_PROBE_PIN_PULL_UP,
+
+    .steppers.pulse_microseconds = DEFAULT_STEP_PULSE_MICROSECONDS,
+    .steppers.pulse_delay_microseconds = DEFAULT_STEP_PULSE_DELAY,
+    .steppers.idle_lock_time = DEFAULT_STEPPER_IDLE_LOCK_TIME,
+    .steppers.step_invert.mask = DEFAULT_STEPPING_INVERT_MASK,
+    .steppers.dir_invert.mask = DEFAULT_DIRECTION_INVERT_MASK,
+    .steppers.enable_invert.mask = INVERT_ST_ENABLE_MASK,
+    .steppers.deenergize.mask = ST_DEENERGIZE_MASK,
+
+    .homing.flags.enabled = DEFAULT_HOMING_ENABLE,
+    .homing.flags.init_lock = DEFAULT_HOMING_INIT_LOCK,
+    .homing.dir_mask = DEFAULT_HOMING_DIR_MASK,
+    .homing.feed_rate = DEFAULT_HOMING_FEED_RATE,
+    .homing.seek_rate = DEFAULT_HOMING_SEEK_RATE,
+    .homing.debounce_delay = DEFAULT_HOMING_DEBOUNCE_DELAY,
+    .homing.pulloff = DEFAULT_HOMING_PULLOFF,
+    .homing.locate_cycles = DEFAULT_N_HOMING_LOCATE_CYCLE,
+    .homing.cycle[X_AXIS] = 0, // indexing references of these are a bit of a misnomer...
+    .homing.cycle[Y_AXIS] = 0,
+    .homing.cycle[Z_AXIS] = 0,
 
     .status_report.buffer_state = REPORT_FIELD_BUFFER_STATE,
     .status_report.line_numbers = REPORT_FIELD_LINE_NUMBERS,
@@ -59,14 +68,27 @@ const settings_t defaults = {
     .status_report.work_coord_offset = REPORT_FIELD_WORK_COORD_OFFSET,
     .status_report.overrrides = REPORT_FIELD_OVERRIDES,
 
-    .stepper_enable_invert.mask = INVERT_ST_ENABLE_MASK,
-    .stepper_deenergize.mask = ST_DEENERGIZE_MASK,
+    .limits.flags.hard_enabled = DEFAULT_HARD_LIMIT_ENABLE,
+    .limits.flags.soft_enabled = DEFAULT_SOFT_LIMIT_ENABLE,
+    .limits.flags.check_at_init = DEFAULT_CHECK_LIMITS_AT_INIT,
+    .limits.invert.mask = INVERT_LIMIT_PIN_MASK,
+    .limits.disable_pullup.mask = DISABLE_LIMIT_PINS_PULL_UP_MASK,
 
-    .limit_invert.mask = INVERT_LIMIT_PIN_MASK,
     .control_invert.mask = INVERT_CONTROL_PIN_MASK,
-    .limit_disable_pullup.mask = DISABLE_LIMIT_PINS_PULL_UP_MASK,
-    .flags.disable_probe_pullup = DISABLE_PROBE_PIN_PULL_UP,
     .control_disable_pullup.mask = DISABLE_CONTROL_PINS_PULL_UP_MASK,
+
+    .spindle.rpm_max = DEFAULT_SPINDLE_RPM_MAX,
+    .spindle.rpm_min = DEFAULT_SPINDLE_RPM_MIN,
+    .spindle.disable_with_zero_speed = DEFAULT_SPINDLE_ENABLE_OFF_WITH_ZERO_SPEED,
+    .spindle.invert.on = INVERT_SPINDLE_ENABLE_PIN,
+    .spindle.pwm_freq = DEFAULT_SPINDLE_PWM_FREQ,
+    .spindle.pwm_off_value = DEFAULT_SPINDLE_PWM_OFF_VALUE,
+    .spindle.pwm_min_value = DEFAULT_SPINDLE_PWM_MIN_VALUE,
+    .spindle.pwm_max_value = DEFAULT_SPINDLE_PWM_MAX_VALUE,
+    .spindle.ppr = DEFAULT_SPINDLE_PPR,
+    .spindle.P_gain = 1.0f,
+    .spindle.I_gain = 0.0f,
+    .spindle.D_gain = 100.0f,
 
     .steps_per_mm[X_AXIS] = DEFAULT_X_STEPS_PER_MM,
     .steps_per_mm[Y_AXIS] = DEFAULT_Y_STEPS_PER_MM,
@@ -80,44 +102,37 @@ const settings_t defaults = {
     .max_travel[X_AXIS] = (-DEFAULT_X_MAX_TRAVEL),
     .max_travel[Y_AXIS] = (-DEFAULT_Y_MAX_TRAVEL),
     .max_travel[Z_AXIS] = (-DEFAULT_Z_MAX_TRAVEL),
-    .homing_cycle[X_AXIS] = 0, // indexing references of these are a bit of a misnomer...
-    .homing_cycle[Y_AXIS] = 0,
-    .homing_cycle[Z_AXIS] = 0,
 
   #ifdef A_AXIS
     .steps_per_mm[A_AXIS] = DEFAULT_A_STEPS_PER_MM,
     .max_rate[A_AXIS] = DEFAULT_A_MAX_RATE,
     .acceleration[A_AXIS] = DEFAULT_A_ACCELERATION,
     .max_travel[A_AXIS] = (-DEFAULT_A_MAX_TRAVEL),
-    .homing_cycle[A_AXIS] = 0,
+    .homing.cycle[A_AXIS] = 0,
   #endif
   #ifdef B_AXIS
     .steps_per_mm[B_AXIS] = DEFAULT_B_STEPS_PER_MM,
     .max_rate[B_AXIS] = DEFAULT_B_MAX_RATE,
     .acceleration[B_AXIS] = DEFAULT_B_ACCELERATION,
     .max_travel[B_AXIS] = (-DEFAULT_B_MAX_TRAVEL),
-    .homing_cycle[B_AXIS] = 0,
+    .homing.cycle[B_AXIS] = 0,
   #endif
   #ifdef C_AXIS
     .steps_per_mm[C_AXIS] = DEFAULT_C_STEPS_PER_MM,
     .acceleration[C_AXIS] = DEFAULT_C_ACCELERATION,
     .max_rate[C_AXIS] = DEFAULT_C_MAX_RATE,
     .max_travel[C_AXIS] = (-DEFAULT_C_MAX_TRAVEL),
-    .homing_cycle[C_AXIS] = 0,
+    .homing.cycle[C_AXIS] = 0,
   #endif
 
-    .rpm_max = DEFAULT_SPINDLE_RPM_MAX,
-    .rpm_min = DEFAULT_SPINDLE_RPM_MIN,
-
-    .spindle_invert.on = INVERT_SPINDLE_ENABLE_PIN,
-    .spindle_pwm_freq = DEFAULT_SPINDLE_PWM_FREQ,
-    .spindle_pwm_off_value = DEFAULT_SPINDLE_PWM_OFF_VALUE,
-    .spindle_pwm_min_value = DEFAULT_SPINDLE_PWM_MIN_VALUE,
-    .spindle_pwm_max_value = DEFAULT_SPINDLE_PWM_MAX_VALUE,
-    .spindle_ppr = DEFAULT_SPINDLE_PPR,
-    .spindle_P_gain = 1.0f,
-    .spindle_I_gain = 0.0f,
-    .spindle_D_gain = 100.0f
+    .parking.flags.enabled = DEFAULT_PARKING_ENABLE,
+    .parking.flags.deactivate_upon_init = DEFAULT_DEACTIVATE_PARKING_UPON_INIT,
+    .parking.flags.enable_override_control= DEFAULT_ENABLE_PARKING_OVERRIDE_CONTROL,
+    .parking.axis = DEFAULT_PARKING_AXIS,
+    .parking.target = DEFAULT_PARKING_TARGET,
+    .parking.rate = DEFAULT_PARKING_RATE,
+    .parking.pullout_rate = DEFAULT_PARKING_PULLOUT_RATE,
+    .parking.pullout_increment = DEFAULT_PARKING_PULLOUT_INCREMENT
 };
 
 // Write build info to persistent storage
@@ -384,33 +399,33 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, float valu
             case Setting_PulseMicroseconds:
                 if (int_value < 3)
                     return Status_SettingStepPulseMin;
-                settings.pulse_microseconds = int_value;
+                settings.steppers.pulse_microseconds = int_value;
                 break;
 
             case Setting_PulseDelayMicroseconds:
                 if(int_value > 0 && !hal.driver_cap.step_pulse_delay)
                     return Status_SettingDisabled;
-                settings.pulse_delay_microseconds = int_value;
+                settings.steppers.pulse_delay_microseconds = int_value;
                 break;
 
             case Setting_StepperIdleLockTime:
-                settings.stepper_idle_lock_time = int_value;
+                settings.steppers.idle_lock_time = int_value;
                 break;
 
             case Setting_StepInvertMask:
-                settings.step_invert.mask = int_value & AXES_BITMASK;
+                settings.steppers.step_invert.mask = int_value & AXES_BITMASK;
                 break;
 
             case Setting_DirInvertMask:
-                settings.dir_invert.mask = int_value & AXES_BITMASK;
+                settings.steppers.dir_invert.mask = int_value & AXES_BITMASK;
                 break;
 
             case Setting_InvertStepperEnable: // Reset to ensure change. Immediate re-init may cause problems.
-                settings.stepper_enable_invert.mask = int_value & AXES_BITMASK;
+                settings.steppers.enable_invert.mask = int_value & AXES_BITMASK;
                 break;
 
             case Setting_LimitPinsInvertMask: // Reset to ensure change. Immediate re-init may cause problems.
-                settings.limit_invert.mask = int_value & AXES_BITMASK;
+                settings.limits.invert.mask = int_value & AXES_BITMASK;
                 break;
 
             case Setting_InvertProbePin: // Reset to ensure change. Immediate re-init may cause problems.
@@ -444,7 +459,7 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, float valu
                 break;
 
             case Setting_SpindleInvertMask:
-                settings.spindle_invert.mask = int_value;
+                settings.spindle.invert.mask = int_value;
                 break;
 
             case Setting_ControlPullUpDisableMask:
@@ -452,7 +467,7 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, float valu
                 break;
 
             case Setting_LimitPullUpDisableMask:
-                settings.limit_disable_pullup.mask = int_value;
+                settings.limits.disable_pullup.mask = int_value;
                 break;
 
             case Setting_ProbePullUpDisable:
@@ -460,44 +475,72 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, float valu
                 break;
 
             case Setting_SoftLimitsEnable:
-                if (int_value && !settings.flags.homing_enable)
+                if (int_value && !settings.homing.flags.enabled)
                     return Status_SoftLimitError;
-                settings.flags.soft_limit_enable = int_value != 0;
+                settings.limits.flags.soft_enabled = int_value != 0;
                 break;
 
             case Setting_HardLimitsEnable:
-                settings.flags.hard_limit_enable = int_value != 0;
-                hal.limits_enable(settings.flags.hard_limit_enable); // Change immediately. NOTE: Nice to have but could be problematic later.
+                settings.limits.flags.hard_enabled = int_value != 0;
+                hal.limits_enable(settings.limits.flags.hard_enabled); // Change immediately. NOTE: Nice to have but could be problematic later.
+                break;
+
+            case Setting_RestoreOverrides:
+                settings.flags.restore_overrides = int_value != 0;
+                break;
+
+           case Setting_IgnoreDoorWhenIdle:
+                settings.flags.safety_door_ignore_when_idle = int_value != 0;
+                break;
+
+            case Setting_SleepEnable:
+                settings.flags.sleep_enable = int_value != 0;
+                break;
+
+            case Setting_DisableLaserDuringHold:
+                settings.flags.disable_laser_during_hold = int_value != 0;
+                break;
+
+            case Setting_ForceInitAlarm:
+                settings.flags.force_initialization_alarm = int_value != 0;
+                break;
+
+            case Setting_CheckLimitsAtInit:
+                settings.limits.flags.check_at_init = int_value != 0;
+                break;
+
+            case Setting_HomingInitLock:
+                settings.homing.flags.init_lock = int_value != 0;
                 break;
 
             case Setting_HomingEnable:
-                settings.flags.homing_enable = int_value != 0;
+                settings.homing.flags.enabled = int_value != 0;
                 if (!int_value)
-                    settings.flags.soft_limit_enable = 0; // Force disable soft-limits.
+                    settings.limits.flags.soft_enabled = 0; // Force disable soft-limits.
                 break;
 
             case Setting_HomingDirMask:
-                settings.homing_dir_mask = int_value & AXES_BITMASK;
+                settings.homing.dir_mask = int_value & AXES_BITMASK;
                 break;
 
             case Setting_HomingFeedRate:
-                settings.homing_feed_rate = value;
+                settings.homing.feed_rate = value;
                 break;
 
             case Setting_HomingSeekRate:
-                settings.homing_seek_rate = value;
+                settings.homing.seek_rate = value;
                 break;
 
             case Setting_HomingDebounceDelay:
-                settings.homing_debounce_delay = int_value;
+                settings.homing.debounce_delay = int_value;
                 break;
 
             case Setting_HomingPulloff:
-                settings.homing_pulloff = value;
+                settings.homing.pulloff = value;
                 break;
 
             case Setting_HomingLocateCycles:
-                settings.homing_locate_cycles = int_value < 1 ? 1 :(int_value > 127 ? 127 : int_value);
+                settings.homing.locate_cycles = int_value < 1 ? 1 :(int_value > 127 ? 127 : int_value);
                 break;
 
             case Setting_HomingCycle_1:
@@ -506,7 +549,7 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, float valu
             case Setting_HomingCycle_4:
             case Setting_HomingCycle_5:
             case Setting_HomingCycle_6:
-                settings.homing_cycle[parameter - Setting_HomingCycle_1] = int_value;
+                settings.homing.cycle[parameter - Setting_HomingCycle_1] = int_value;
                 break;
 
             case Setting_G73Retract:
@@ -514,12 +557,12 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, float valu
                 break;
 
             case Setting_RpmMax:
-                settings.rpm_max = value;
+                settings.spindle.rpm_max = value;
                 // spindle_init();
                 break; // Re-initialize spindle rpm calibration
 
             case Setting_RpmMin:
-                settings.rpm_min = value;
+                settings.spindle.rpm_min = value;
                 // spindle_init();
                 break; // Re-initialize spindle rpm calibration
 
@@ -531,43 +574,73 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, float valu
                 break;
 
             case Setting_PWMFreq:
-                settings.spindle_pwm_freq = value;
+                settings.spindle.pwm_freq = value;
 //              spindle_init();
                 break; // Re-initialize spindle pwm calibration
 
             case Setting_PWMOffValue:
-                settings.spindle_pwm_off_value = value;
+                settings.spindle.pwm_off_value = value;
 //              spindle_init();
                 break; // Re-initialize spindle pwm calibration
 
             case Setting_PWMMinValue:
-                settings.spindle_pwm_min_value = value;
+                settings.spindle.pwm_min_value = value;
 //              spindle_init();
                 break; // Re-initialize spindle pwm calibration
 
             case Setting_PWMMaxValue:
-                settings.spindle_pwm_max_value = value;
+                settings.spindle.pwm_max_value = value;
 //              spindle_init();
                 break; // Re-initialize spindle pwm calibration
 
             case Setting_StepperDeenergizeMask:
-                settings.stepper_deenergize.mask = int_value & AXES_BITMASK;
+                settings.steppers.deenergize.mask = int_value & AXES_BITMASK;
                 break;
 
             case Setting_SpindlePPR:
-                settings.spindle_ppr = int_value;
+                settings.spindle.ppr = int_value;
                 break;
 
             case Setting_SpindlePGain:
-                settings.spindle_P_gain = value;
+                settings.spindle.P_gain = value;
                 break;
 
             case Setting_SpindleIGain:
-                settings.spindle_I_gain = value;
+                settings.spindle.I_gain = value;
                 break;
 
             case Setting_SpindleDGain:
-                settings.spindle_D_gain = value;
+                settings.spindle.D_gain = value;
+                break;
+
+            case Settings_Stream:
+
+                switch((stream_setting_t)int_value) {
+
+                    case StreamSetting_Serial:
+                        // Always available?
+                        break;
+
+                    case StreamSetting_Bluetooth:
+                        if(!hal.driver_cap.bluetooth)
+                            return Status_InvalidStatement;
+                        break;
+
+                    case StreamSetting_Ethernet:
+                        if(!hal.driver_cap.ethernet)
+                            return Status_InvalidStatement;
+                        break;
+
+                    case StreamSetting_WiFi:
+                        if(!hal.driver_cap.wifi)
+                            return Status_InvalidStatement;
+                        break;
+
+                    default:
+                        return Status_InvalidStatement;
+                }
+
+                settings.stream = (stream_setting_t)int_value;
                 break;
 
             default:

@@ -85,8 +85,7 @@
 #define LASER_PPI_TIMER_BASE timerBase(LASER_PPI_TIM)
 #define LASER_PPI_TIMER_INT timerINT(LASER_PPI_TIM, A)
 
-// Define step pulse output pins. NOTE: Routed to RGB led on Tiva C LaunchPad.
-#define STEP_PERIPH	SYSCTL_PERIPH_GPIOD
+// Define step pulse output pins.
 #define STEP_PORT	GPIO_PORTD_BASE
 #define X_STEP_PIN	GPIO_PIN_1
 #define Y_STEP_PIN	GPIO_PIN_2
@@ -95,7 +94,6 @@
 #define STEP_OUTMODE GPIO_SHIFT1
 
 // Define step direction output pins. NOTE: All direction pins must be on the same port.
-#define DIRECTION_PERIPH	SYSCTL_PERIPH_GPIOB
 #define DIRECTION_PORT		GPIO_PORTB_BASE
 #define X_DIRECTION_PIN		GPIO_PIN_7
 #define Y_DIRECTION_PIN		GPIO_PIN_6
@@ -117,7 +115,7 @@
 #ifdef CNC_BOOSTERPACK_A4998
 // Stepper driver VDD supply
 #define STEPPERS_VDD_PORT GPIO_PORTE_BASE
-#define STEPPERS_VDD_PIN  5
+#define STEPPERS_VDD_PIN  GPIO_PIN_5
 #endif
 
 // Define homing/hard limit switch input pins and limit interrupt vectors.
@@ -130,7 +128,6 @@
     #define HWLIMIT_MASK    (X_LIMIT_PIN|Y_LIMIT_PIN|Z_LIMIT_PIN) // All limit bits
   #endif
 #else
-    #define LIMIT_PERIPH SYSCTL_PERIPH_GPIOA
     #define LIMIT_PORT   GPIO_PORTA_BASE
     #define X_LIMIT_PIN  GPIO_PIN_1
     #define Y_LIMIT_PIN  GPIO_PIN_3
@@ -139,27 +136,22 @@
 #endif
 
 // Define spindle enable and spindle direction output pins.
-#define SPINDLE_ENABLE_PERIPH	SYSCTL_PERIPH_GPIOE
 #define SPINDLE_ENABLE_PORT		GPIO_PORTE_BASE
 #define SPINDLE_ENABLE_PIN		GPIO_PIN_2
 
-#define SPINDLE_DIRECTION_PERIPH	SYSCTL_PERIPH_GPIOE
 #define SPINDLE_DIRECTION_PORT		GPIO_PORTE_BASE
 #define SPINDLE_DIRECTION_PIN		GPIO_PIN_3
 
 // Define flood and mist coolant enable output pins.
-#define COOLANT_FLOOD_PERIPH	SYSCTL_PERIPH_GPIOD
 #define COOLANT_FLOOD_PORT		GPIO_PORTD_BASE
 #define COOLANT_FLOOD_PIN		GPIO_PIN_6
 
-#define COOLANT_MIST_PERIPH	SYSCTL_PERIPH_GPIOD
 #define COOLANT_MIST_PORT	GPIO_PORTD_BASE
 #define COOLANT_MIST_PIN	GPIO_PIN_7
 
 // Define user-control CONTROLs (cycle start, reset, feed hold) input pins.
 #ifdef CNC_BOOSTERPACK
   #ifdef CNC_BOOSTERPACK_SHORTS
-    #define CONTROL_PERIPH		SYSCTL_PERIPH_GPIOC
     #define CONTROL_PORT		GPIO_PORTC_BASE
     #define RESET_PIN			GPIO_PIN_7
     #define FEED_HOLD_PIN		GPIO_PIN_5
@@ -168,7 +160,6 @@
     #define HWCONTROL_MASK		(RESET_PIN|FEED_HOLD_PIN|CYCLE_START_PIN|SAFETY_DOOR_PIN)
   #endif
 #else
-#define CONTROL_PERIPH      SYSCTL_PERIPH_GPIOC
 #define CONTROL_PORT        GPIO_PORTC_BASE
 #define RESET_PIN           GPIO_PIN_7
 #define FEED_HOLD_PIN       GPIO_PIN_6
@@ -178,7 +169,6 @@
 #endif
 
 // Define probe switch input pin.
-#define PROBE_PERIPH	SYSCTL_PERIPH_GPIOA
 #define PROBE_PORT		GPIO_PORTA_BASE
 #define PROBE_PIN		GPIO_PIN_5
 

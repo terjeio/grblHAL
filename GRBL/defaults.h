@@ -18,13 +18,6 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-/* The defaults.h file serves as a central default settings selector for different machine
-   types, from DIY CNC mills to CNC conversions of off-the-shelf machines. The settings
-   files listed here are supplied by users, so your results may vary. However, this should
-   give you a good starting point as you get to know your machine and tweak the settings for
-   your nefarious needs.
-   NOTE: Ensure one and only one of these DEFAULTS_XXX values is defined in config.h */
-
 #ifndef defaults_h
 
 // By default, Grbl sets all input pins to normal-low operation with their internal pull-up resistors
@@ -90,457 +83,169 @@
 // NOTE: Compute duty cycle at the minimum PWM by this equation: (% duty cycle)=(SPINDLE_PWM_MIN_VALUE/255)*100
 // #define SPINDLE_PWM_MIN_VALUE 5 // Default disabled. Uncomment to enable. Must be greater than zero. Integer (1-255).
 
+// Grbl default settings
 
-#ifdef DEFAULTS_GENERIC
-  // Grbl generic default settings. Should work across different machines.
-  #define DEFAULT_X_STEPS_PER_MM 250.0f
-  #define DEFAULT_Y_STEPS_PER_MM 250.0f
-  #define DEFAULT_Z_STEPS_PER_MM 250.0f
-  #define DEFAULT_X_MAX_RATE 500.0f // mm/min
-  #define DEFAULT_Y_MAX_RATE 500.0f // mm/min
-  #define DEFAULT_Z_MAX_RATE 500.0f // mm/min
-  #define DEFAULT_X_ACCELERATION (10.0*60*60) // 10*60*60 mm/min^2 = 10 mm/sec^2
-  #define DEFAULT_Y_ACCELERATION (10.0*60*60) // 10*60*60 mm/min^2 = 10 mm/sec^2
-  #define DEFAULT_Z_ACCELERATION (10.0*60*60) // 10*60*60 mm/min^2 = 10 mm/sec^2
-  #define DEFAULT_X_MAX_TRAVEL 200.0f // mm NOTE: Must be a positive value.
-  #define DEFAULT_Y_MAX_TRAVEL 200.0f // mm NOTE: Must be a positive value.
-  #define DEFAULT_Z_MAX_TRAVEL 200.0f // mm NOTE: Must be a positive value.
-  #define DEFAULT_X_CURRENT 0.0 // amps
-  #define DEFAULT_Y_CURRENT 0.0 // amps
-  #define DEFAULT_Z_CURRENT 0.0 // amps
-  #define DEFAULT_A_CURRENT 0.0 // amps
-  #define DEFAULT_SPINDLE_PWM_FREQ          5000	// Hz
-  #define DEFAULT_SPINDLE_PWM_OFF_VALUE     0.0f    // Percent
-  #define DEFAULT_SPINDLE_PWM_MIN_VALUE     0.0f	// Percent
-  #define DEFAULT_SPINDLE_PWM_MAX_VALUE     100.0f	// Percent
-  #define DEFAULT_SPINDLE_RPM_MAX 1000.0 // rpm
-  #define DEFAULT_SPINDLE_RPM_MIN 0.0 // rpm
-  #define DEFAULT_STEP_PULSE_MICROSECONDS 10
-  #define DEFAULT_STEP_PULSE_DELAY 0
-  #define DEFAULT_STEPPING_INVERT_MASK 0
-  #define DEFAULT_DIRECTION_INVERT_MASK 0
-  #define DEFAULT_STEPPER_IDLE_LOCK_TIME 25 // msec (0-254, 255 keeps steppers enabled)
-  #define DEFAULT_STATUS_REPORT_MASK 1 // MPos enabled
-  #define DEFAULT_JUNCTION_DEVIATION 0.01f // mm
-  #define DEFAULT_ARC_TOLERANCE 0.002f // mm
-  #define DEFAULT_REPORT_INCHES 0 // false
-  #define DEFAULT_INVERT_LIMIT_PINS 0 // false
-  #define DEFAULT_SOFT_LIMIT_ENABLE 0 // false
-  #define DEFAULT_HARD_LIMIT_ENABLE 0  // false
-  #define DEFAULT_INVERT_PROBE_PIN 0 // false
-  #define DEFAULT_LASER_MODE 0 // false
-  #define DEFAULT_HOMING_ENABLE 0  // false
-  #define DEFAULT_HOMING_DIR_MASK 0 // move positive dir
-  #define DEFAULT_HOMING_FEED_RATE 25.0f // mm/min
-  #define DEFAULT_HOMING_SEEK_RATE 500.0f // mm/min
-  #define DEFAULT_HOMING_DEBOUNCE_DELAY 250 // msec (0-65k)
-  #define DEFAULT_HOMING_PULLOFF 1.0f // mm
+#define DEFAULT_X_STEPS_PER_MM 250.0f
+#define DEFAULT_Y_STEPS_PER_MM 250.0f
+#define DEFAULT_Z_STEPS_PER_MM 250.0f
+#define DEFAULT_X_MAX_RATE 500.0f // mm/min
+#define DEFAULT_Y_MAX_RATE 500.0f // mm/min
+#define DEFAULT_Z_MAX_RATE 500.0f // mm/min
+#define DEFAULT_X_ACCELERATION (10.0*60*60) // 10*60*60 mm/min^2 = 10 mm/sec^2
+#define DEFAULT_Y_ACCELERATION (10.0*60*60) // 10*60*60 mm/min^2 = 10 mm/sec^2
+#define DEFAULT_Z_ACCELERATION (10.0*60*60) // 10*60*60 mm/min^2 = 10 mm/sec^2
+#define DEFAULT_X_MAX_TRAVEL 200.0f // mm NOTE: Must be a positive value.
+#define DEFAULT_Y_MAX_TRAVEL 200.0f // mm NOTE: Must be a positive value.
+#define DEFAULT_Z_MAX_TRAVEL 200.0f // mm NOTE: Must be a positive value.
+#define DEFAULT_X_CURRENT 0.0 // amps
+#define DEFAULT_Y_CURRENT 0.0 // amps
+#define DEFAULT_Z_CURRENT 0.0 // amps
+#define DEFAULT_A_CURRENT 0.0 // amps
+#define DEFAULT_SPINDLE_PWM_FREQ          5000	// Hz
+#define DEFAULT_SPINDLE_PWM_OFF_VALUE     0.0f    // Percent
+#define DEFAULT_SPINDLE_PWM_MIN_VALUE     0.0f	// Percent
+#define DEFAULT_SPINDLE_PWM_MAX_VALUE     100.0f	// Percent
+#define DEFAULT_SPINDLE_RPM_MAX 1000.0 // rpm
+#define DEFAULT_SPINDLE_RPM_MIN 0.0 // rpm
+#define DEFAULT_SPINDLE_ENABLE_OFF_WITH_ZERO_SPEED 0
+#define DEFAULT_STEP_PULSE_MICROSECONDS 10
+#define DEFAULT_STEP_PULSE_DELAY 0
+#define DEFAULT_STEPPING_INVERT_MASK 0
+#define DEFAULT_DIRECTION_INVERT_MASK 0
+#define DEFAULT_STEPPER_IDLE_LOCK_TIME 25 // msec (0-254, 255 keeps steppers enabled)
+#define DEFAULT_JUNCTION_DEVIATION 0.01f // mm
+#define DEFAULT_ARC_TOLERANCE 0.002f // mm
+#define DEFAULT_REPORT_INCHES 0 // false
+#define DEFAULT_INVERT_LIMIT_PINS 0 // false
+#define DEFAULT_SOFT_LIMIT_ENABLE 0 // false
+#define DEFAULT_HARD_LIMIT_ENABLE 0  // false
+#define DEFAULT_INVERT_PROBE_PIN 0 // false
+#define DEFAULT_LASER_MODE 0 // false
+#define DEFAULT_HOMING_ENABLE 0  // false
+#define DEFAULT_HOMING_DIR_MASK 0 // move positive dir
+#define DEFAULT_HOMING_FEED_RATE 25.0f // mm/min
+#define DEFAULT_HOMING_SEEK_RATE 500.0f // mm/min
+#define DEFAULT_HOMING_DEBOUNCE_DELAY 250 // msec (0-65k)
+#define DEFAULT_HOMING_PULLOFF 1.0f // mm
 
- #define DEFAULT_A_STEPS_PER_MM 250.0f
- #define DEFAULT_A_MAX_RATE 500.0f // mm/min
- #define DEFAULT_A_ACCELERATION (10.0*60*60) // 10*60*60 mm/min^2 = 10 mm/sec^2
- #define DEFAULT_A_MAX_TRAVEL 200.0f // mm
+#define DEFAULT_A_STEPS_PER_MM 250.0f
+#define DEFAULT_A_MAX_RATE 500.0f // mm/min
+#define DEFAULT_A_ACCELERATION (10.0*60*60) // 10*60*60 mm/min^2 = 10 mm/sec^2
+#define DEFAULT_A_MAX_TRAVEL 200.0f // mm
 
- #define DEFAULT_B_STEPS_PER_MM 250.0f
- #define DEFAULT_B_MAX_RATE 500.0f // mm/min
- #define DEFAULT_B_ACCELERATION (10.0*60*60) // 10*60*60 mm/min^2 = 10 mm/sec^2
- #define DEFAULT_B_MAX_TRAVEL 200.0f // mm
+#define DEFAULT_B_STEPS_PER_MM 250.0f
+#define DEFAULT_B_MAX_RATE 500.0f // mm/min
+#define DEFAULT_B_ACCELERATION (10.0*60*60) // 10*60*60 mm/min^2 = 10 mm/sec^2
+#define DEFAULT_B_MAX_TRAVEL 200.0f // mm
 
- #define DEFAULT_C_STEPS_PER_MM 250.0f
- #define DEFAULT_C_MAX_RATE 500.0f // mm/min
- #define DEFAULT_C_ACCELERATION (10.0*60*60) // 10*60*60 mm/min^2 = 10 mm/sec^2
- #define DEFAULT_C_MAX_TRAVEL 200.0f // mm
+#define DEFAULT_C_STEPS_PER_MM 250.0f
+#define DEFAULT_C_MAX_RATE 500.0f // mm/min
+#define DEFAULT_C_ACCELERATION (10.0*60*60) // 10*60*60 mm/min^2 = 10 mm/sec^2
+#define DEFAULT_C_MAX_TRAVEL 200.0f // mm
 
- #define DEFAULT_G73_RETRACT 0.1f // mm
- #define DEFAULT_SPINDLE_PPR 100 // pulses per revolution
+#define DEFAULT_G73_RETRACT 0.1f // mm
+#define DEFAULT_SPINDLE_PPR 100 // pulses per revolution
 
+// Enables and configures Grbl's sleep mode feature. If the spindle or coolant are powered and Grbl
+// is not actively moving or receiving any commands, a sleep timer will start. If any data or commands
+// are received, the sleep timer will reset and restart until the above condition are not satisfied.
+// If the sleep timer elaspes, Grbl will immediately execute the sleep mode by shutting down the spindle
+// and coolant and entering a safe sleep state. If parking is enabled, Grbl will park the machine as
+// well. While in sleep mode, only a hard/soft reset will exit it and the job will be unrecoverable.
+// NOTE: Sleep mode is a safety feature, primarily to address communication disconnect problems. To
+// keep Grbl from sleeping, employ a stream of '?' status report commands as a connection "heartbeat".
+#define DEFAULT_SLEEP_ENABLE 0
+
+// This option will automatically disable the laser during a feed hold by invoking a spindle stop
+// override immediately after coming to a stop. However, this also means that the laser still may
+// be reenabled by disabling the spindle stop override, if needed. This is purely a safety feature
+// to ensure the laser doesn't inadvertently remain powered while at a stop and cause a fire.
+#define DEFAULT_DISABLE_LASER_DURING_HOLD 1 // Default enabled. Set to 0 to disable.
+
+// When Grbl powers-cycles or is hard reset with the MCU reset button, Grbl boots up with no ALARM
+// by default. This is to make it as simple as possible for new users to start using Grbl. When homing
+// is enabled and a user has installed limit switches, Grbl will boot up in an ALARM state to indicate
+// Grbl doesn't know its position and to force the user to home before proceeding. This option forces
+// Grbl to always initialize into an ALARM state regardless of homing or not. This option is more for
+// OEMs and LinuxCNC users that would like this power-cycle behavior.
+#define DEFAULT_FORCE_INITIALIZATION_ALARM 0 // Default disabled. Set to 1 to enable.
+
+// At power-up or a reset, Grbl will check the limit switch states to ensure they are not active
+// before initialization. If it detects a problem and the hard limits setting is enabled, Grbl will
+// simply message the user to check the limits and enter an alarm state, rather than idle. Grbl will
+// not throw an alarm message.
+#define DEFAULT_CHECK_LIMITS_AT_INIT 0 // Default disabled. Set to 1 to enable.
+
+// If homing is enabled, homing init lock sets Grbl into an alarm state upon power up. This forces
+// the user to perform the homing cycle (or override the locks) before doing anything else. This is
+// mainly a safety feature to remind the user to home, since position is unknown to Grbl.
+#define DEFAULT_HOMING_INIT_LOCK 0 // Default disabled. Set to 1 to enable.
+
+// Enables and configures parking motion methods upon a safety door state. Primarily for OEMs
+// that desire this feature for their integrated machines. At the moment, Grbl assumes that
+// the parking motion only involves one axis, although the parking implementation was written
+// to be easily refactored for any number of motions on different axes by altering the parking
+// source code. At this time, Grbl only supports parking one axis (typically the Z-axis) that
+// moves in the positive direction upon retracting and negative direction upon restoring position.
+// The motion executes with a slow pull-out retraction motion, power-down, and a fast park.
+// Restoring to the resume position follows these set motions in reverse: fast restore to
+// pull-out position, power-up with a time-out, and plunge back to the original position at the
+// slower pull-out rate.
+// NOTE: Still a work-in-progress. Machine coordinates must be in all negative space and
+// does not work with HOMING_FORCE_SET_ORIGIN enabled. Parking motion also moves only in
+// positive direction.
+#define DEFAULT_PARKING_ENABLE 0  // Default disabled. Uncomment to enable
+
+// Configure options for the parking motion, if enabled.
+#define DEFAULT_PARKING_AXIS Z_AXIS // Define which axis that performs the parking motion
+#define DEFAULT_PARKING_TARGET -5.0f // Parking axis target. In mm, as machine coordinate [-max_travel,0].
+#define DEFAULT_PARKING_RATE 500.0f // Parking fast rate after pull-out in mm/min.
+#define DEFAULT_PARKING_PULLOUT_RATE 100.0f // Pull-out/plunge slow feed rate in mm/min.
+#define DEFAULT_PARKING_PULLOUT_INCREMENT 5.0f // Spindle pull-out and plunge distance in mm. Incremental distance.
+                                      // Must be positive value or equal to zero.
+
+// Enables a special set of M-code commands that enables and disables the parking motion.
+// These are controlled by `M56`, `M56 P1`, or `M56 Px` to enable and `M56 P0` to disable.
+// The command is modal and will be set after a planner sync. Since it is g-code, it is
+// executed in sync with g-code commands. It is not a real-time command.
+// NOTE: PARKING_ENABLE is required. By default, M56 is active upon initialization. Use
+// DEACTIVATE_PARKING_UPON_INIT to set M56 P0 as the power-up default.
+#define DEFAULT_ENABLE_PARKING_OVERRIDE_CONTROL 0  // Default disabled. Uncomment to enable
+#define DEFAULT_DEACTIVATE_PARKING_UPON_INIT 0 // Default disabled. Uncomment to enable.
+
+
+// Define some default values if not defined above
+
+#ifndef ST_DEENERGIZE_MASK
+#define ST_DEENERGIZE_MASK 0
 #endif
 
-#ifdef DEFAULTS_SHERLINE_5400
-  // Description: Sherline 5400 mill with three NEMA 23 Keling  KL23H256-21-8B 185 oz-in stepper motors,
-  // driven by three Pololu A4988 stepper drivers with a 30V, 6A power supply at 1.5A per winding.
-  #define MICROSTEPS 2
-  #define STEPS_PER_REV 200.0
-  #define MM_PER_REV (0.050*MM_PER_INCH) // 0.050 inch/rev leadscrew
-  #define DEFAULT_X_STEPS_PER_MM (STEPS_PER_REV*MICROSTEPS/MM_PER_REV)
-  #define DEFAULT_Y_STEPS_PER_MM (STEPS_PER_REV*MICROSTEPS/MM_PER_REV)
-  #define DEFAULT_Z_STEPS_PER_MM (STEPS_PER_REV*MICROSTEPS/MM_PER_REV)
-  #define DEFAULT_X_MAX_RATE 635.0 // mm/min (25 ipm)
-  #define DEFAULT_Y_MAX_RATE 635.0 // mm/min
-  #define DEFAULT_Z_MAX_RATE 635.0 // mm/min
-  #define DEFAULT_X_ACCELERATION (50.0*60*60) // 50*60*60 mm/min^2 = 50 mm/sec^2
-  #define DEFAULT_Y_ACCELERATION (50.0*60*60) // 50*60*60 mm/min^2 = 50 mm/sec^2
-  #define DEFAULT_Z_ACCELERATION (50.0*60*60) // 50*60*60 mm/min^2 = 50 mm/sec^2
-  #define DEFAULT_X_MAX_TRAVEL 225.0 // mm NOTE: Must be a positive value.
-  #define DEFAULT_Y_MAX_TRAVEL 125.0 // mm NOTE: Must be a positive value.
-  #define DEFAULT_Z_MAX_TRAVEL 170.0 // mm NOTE: Must be a positive value.
-  #define DEFAULT_SPINDLE_RPM_MAX 2800.0 // rpm
-  #define DEFAULT_SPINDLE_RPM_MIN 0.0 // rpm
-  #define DEFAULT_STEP_PULSE_MICROSECONDS 10
-  #define DEFAULT_STEPPING_INVERT_MASK 0
-  #define DEFAULT_DIRECTION_INVERT_MASK ((1<<Y_AXIS)|(1<<Z_AXIS))
-  #define DEFAULT_STEPPER_IDLE_LOCK_TIME 25 // msec (0-254, 255 keeps steppers enabled)
-  #define DEFAULT_STATUS_REPORT_MASK 1 // MPos enabled
-  #define DEFAULT_JUNCTION_DEVIATION 0.01 // mm
-  #define DEFAULT_ARC_TOLERANCE 0.002 // mm
-  #define DEFAULT_REPORT_INCHES 0 // true
-  #define DEFAULT_INVERT_ST_ENABLE 0 // false
-  #define DEFAULT_INVERT_LIMIT_PINS 0 // false
-  #define DEFAULT_SOFT_LIMIT_ENABLE 0 // false
-  #define DEFAULT_HARD_LIMIT_ENABLE 0  // false
-  #define DEFAULT_INVERT_PROBE_PIN 0 // false
-  #define DEFAULT_LASER_MODE 0 // false
-  #define DEFAULT_HOMING_ENABLE 0  // false
-  #define DEFAULT_HOMING_DIR_MASK 0 // move positive dir
-  #define DEFAULT_HOMING_FEED_RATE 50.0 // mm/min
-  #define DEFAULT_HOMING_SEEK_RATE 635.0 // mm/min
-  #define DEFAULT_HOMING_DEBOUNCE_DELAY 250 // msec (0-65k)
-  #define DEFAULT_HOMING_PULLOFF 1.0 // mm
+#ifndef INVERT_ST_ENABLE_MASK
+#define INVERT_ST_ENABLE_MASK 0
 #endif
 
-#ifdef DEFAULTS_SHAPEOKO
-  // Description: Shapeoko CNC mill with three NEMA 17 stepper motors, driven by Synthetos
-  // grblShield with a 24V, 4.2A power supply.
-  #define MICROSTEPS_XY 8
-  #define STEP_REVS_XY 400
-  #define MM_PER_REV_XY (0.08*18*MM_PER_INCH) // 0.08 in belt pitch, 18 pulley teeth
-  #define MICROSTEPS_Z 2
-  #define STEP_REVS_Z 400
-  #define MM_PER_REV_Z 1.250 // 1.25 mm/rev leadscrew
-  #define DEFAULT_X_STEPS_PER_MM (MICROSTEPS_XY*STEP_REVS_XY/MM_PER_REV_XY)
-  #define DEFAULT_Y_STEPS_PER_MM (MICROSTEPS_XY*STEP_REVS_XY/MM_PER_REV_XY)
-  #define DEFAULT_Z_STEPS_PER_MM (MICROSTEPS_Z*STEP_REVS_Z/MM_PER_REV_Z)
-  #define DEFAULT_X_MAX_RATE 1000.0 // mm/min
-  #define DEFAULT_Y_MAX_RATE 1000.0 // mm/min
-  #define DEFAULT_Z_MAX_RATE 1000.0 // mm/min
-  #define DEFAULT_X_ACCELERATION (15.0*60*60) // 15*60*60 mm/min^2 = 15 mm/sec^2
-  #define DEFAULT_Y_ACCELERATION (15.0*60*60) // 15*60*60 mm/min^2 = 15 mm/sec^2
-  #define DEFAULT_Z_ACCELERATION (15.0*60*60) // 15*60*60 mm/min^2 = 15 mm/sec^2
-  #define DEFAULT_X_MAX_TRAVEL 200.0 // mm NOTE: Must be a positive value.
-  #define DEFAULT_Y_MAX_TRAVEL 200.0 // mm NOTE: Must be a positive value.
-  #define DEFAULT_Z_MAX_TRAVEL 200.0 // mm NOTE: Must be a positive value.
-  #define DEFAULT_SPINDLE_RPM_MAX 10000.0 // rpm
-  #define DEFAULT_SPINDLE_RPM_MIN 0.0 // rpm
-  #define DEFAULT_STEP_PULSE_MICROSECONDS 10
-  #define DEFAULT_STEPPING_INVERT_MASK 0
-  #define DEFAULT_DIRECTION_INVERT_MASK ((1<<Y_AXIS)|(1<<Z_AXIS))
-  #define DEFAULT_STEPPER_IDLE_LOCK_TIME 255 // msec (0-254, 255 keeps steppers enabled)
-  #define DEFAULT_STATUS_REPORT_MASK 1 // MPos enabled
-  #define DEFAULT_JUNCTION_DEVIATION 0.02 // mm
-  #define DEFAULT_ARC_TOLERANCE 0.002 // mm
-  #define DEFAULT_REPORT_INCHES 0 // false
-  #define DEFAULT_INVERT_ST_ENABLE 0 // false
-  #define DEFAULT_INVERT_LIMIT_PINS 0 // false
-  #define DEFAULT_SOFT_LIMIT_ENABLE 0 // false
-  #define DEFAULT_HARD_LIMIT_ENABLE 0  // false
-  #define DEFAULT_INVERT_PROBE_PIN 0 // false
-  #define DEFAULT_LASER_MODE 0 // false
-  #define DEFAULT_HOMING_ENABLE 0  // false
-  #define DEFAULT_HOMING_DIR_MASK 0 // move positive dir
-  #define DEFAULT_HOMING_FEED_RATE 25.0 // mm/min
-  #define DEFAULT_HOMING_SEEK_RATE 250.0 // mm/min
-  #define DEFAULT_HOMING_DEBOUNCE_DELAY 250 // msec (0-65k)
-  #define DEFAULT_HOMING_PULLOFF 1.0 // mm
+#ifndef INVERT_LIMIT_PIN_MASK
+#define INVERT_LIMIT_PIN_MASK 0
 #endif
 
-#ifdef DEFAULTS_SHAPEOKO_2
-  // Description: Shapeoko CNC mill with three NEMA 17 stepper motors, driven by Synthetos
-  // grblShield at 28V.
-  #define MICROSTEPS_XY 8
-  #define STEP_REVS_XY 200
-  #define MM_PER_REV_XY (2.0*20) // 2mm belt pitch, 20 pulley teeth
-  #define MICROSTEPS_Z 2
-  #define STEP_REVS_Z 200
-  #define MM_PER_REV_Z 1.250 // 1.25 mm/rev leadscrew
-  #define DEFAULT_X_STEPS_PER_MM (MICROSTEPS_XY*STEP_REVS_XY/MM_PER_REV_XY)
-  #define DEFAULT_Y_STEPS_PER_MM (MICROSTEPS_XY*STEP_REVS_XY/MM_PER_REV_XY)
-  #define DEFAULT_Z_STEPS_PER_MM (MICROSTEPS_Z*STEP_REVS_Z/MM_PER_REV_Z)
-  #define DEFAULT_X_MAX_RATE 5000.0 // mm/min
-  #define DEFAULT_Y_MAX_RATE 5000.0 // mm/min
-  #define DEFAULT_Z_MAX_RATE 500.0 // mm/min
-  #define DEFAULT_X_ACCELERATION (250.0*60*60) // 25*60*60 mm/min^2 = 25 mm/sec^2
-  #define DEFAULT_Y_ACCELERATION (250.0*60*60) // 25*60*60 mm/min^2 = 25 mm/sec^2
-  #define DEFAULT_Z_ACCELERATION (50.0*60*60) // 25*60*60 mm/min^2 = 25 mm/sec^2
-  #define DEFAULT_X_MAX_TRAVEL 290.0 // mm NOTE: Must be a positive value.
-  #define DEFAULT_Y_MAX_TRAVEL 290.0 // mm NOTE: Must be a positive value.
-  #define DEFAULT_Z_MAX_TRAVEL 100.0 // mm NOTE: Must be a positive value.
-  #define DEFAULT_SPINDLE_RPM_MAX 10000.0 // rpm
-  #define DEFAULT_SPINDLE_RPM_MIN 0.0 // rpm
-  #define DEFAULT_STEP_PULSE_MICROSECONDS 10
-  #define DEFAULT_STEPPING_INVERT_MASK 0
-  #define DEFAULT_DIRECTION_INVERT_MASK ((1<<X_AXIS)|(1<<Z_AXIS))
-  #define DEFAULT_STEPPER_IDLE_LOCK_TIME 255 // msec (0-254, 255 keeps steppers enabled)
-  #define DEFAULT_STATUS_REPORT_MASK 1 // MPos enabled
-  #define DEFAULT_JUNCTION_DEVIATION 0.02 // mm
-  #define DEFAULT_ARC_TOLERANCE 0.002 // mm
-  #define DEFAULT_REPORT_INCHES 0 // false
-  #define DEFAULT_INVERT_ST_ENABLE 0 // false
-  #define DEFAULT_INVERT_LIMIT_PINS 0 // false
-  #define DEFAULT_SOFT_LIMIT_ENABLE 0 // false
-  #define DEFAULT_HARD_LIMIT_ENABLE 0  // false
-  #define DEFAULT_INVERT_PROBE_PIN 0 // false
-  #define DEFAULT_LASER_MODE 0 // false
-  #define DEFAULT_HOMING_ENABLE 0  // false
-  #define DEFAULT_HOMING_DIR_MASK 0 // move positive dir
-  #define DEFAULT_HOMING_FEED_RATE 25.0 // mm/min
-  #define DEFAULT_HOMING_SEEK_RATE 250.0 // mm/min
-  #define DEFAULT_HOMING_DEBOUNCE_DELAY 250 // msec (0-65k)
-  #define DEFAULT_HOMING_PULLOFF 1.0 // mm
+#ifndef INVERT_CONTROL_PIN_MASK
+#define INVERT_CONTROL_PIN_MASK 0
 #endif
 
-#ifdef DEFAULTS_SHAPEOKO_3
-  // Description: Shapeoko CNC mill with three NEMA 23 stepper motors, driven by CarbideMotion
-  #define MICROSTEPS_XY 8
-  #define STEP_REVS_XY 200
-  #define MM_PER_REV_XY (2.0*20) // 2mm belt pitch, 20 pulley teeth
-  #define MICROSTEPS_Z 8
-  #define STEP_REVS_Z 200
-  #define MM_PER_REV_Z (2.0*20) // 2mm belt pitch, 20 pulley teeth
-  #define DEFAULT_X_STEPS_PER_MM (MICROSTEPS_XY*STEP_REVS_XY/MM_PER_REV_XY)
-  #define DEFAULT_Y_STEPS_PER_MM (MICROSTEPS_XY*STEP_REVS_XY/MM_PER_REV_XY)
-  #define DEFAULT_Z_STEPS_PER_MM (MICROSTEPS_Z*STEP_REVS_Z/MM_PER_REV_Z)
-  #define DEFAULT_X_MAX_RATE 5000.0 // mm/min
-  #define DEFAULT_Y_MAX_RATE 5000.0 // mm/min
-  #define DEFAULT_Z_MAX_RATE 5000.0 // mm/min
-  #define DEFAULT_X_ACCELERATION (400.0*60*60) // 400*60*60 mm/min^2 = 400 mm/sec^2
-  #define DEFAULT_Y_ACCELERATION (400.0*60*60) // 400*60*60 mm/min^2 = 400 mm/sec^2
-  #define DEFAULT_Z_ACCELERATION (400.0*60*60) // 400*60*60 mm/min^2 = 400 mm/sec^2
-  #define DEFAULT_X_MAX_TRAVEL 425.0 // mm NOTE: Must be a positive value.
-  #define DEFAULT_Y_MAX_TRAVEL 465.0 // mm NOTE: Must be a positive value.
-  #define DEFAULT_Z_MAX_TRAVEL 80.0 // mm NOTE: Must be a positive value.
-  #define DEFAULT_SPINDLE_RPM_MAX 10000.0 // rpm
-  #define DEFAULT_SPINDLE_RPM_MIN 0.0 // rpm
-  #define DEFAULT_STEP_PULSE_MICROSECONDS 10
-  #define DEFAULT_STEPPING_INVERT_MASK 0
-  #define DEFAULT_DIRECTION_INVERT_MASK ((1<<X_AXIS)|(1<<Z_AXIS))
-  #define DEFAULT_STEPPER_IDLE_LOCK_TIME 255 // msec (0-254, 255 keeps steppers enabled)
-  #define DEFAULT_STATUS_REPORT_MASK 1 // MPos enabled
-  #define DEFAULT_JUNCTION_DEVIATION 0.02 // mm
-  #define DEFAULT_ARC_TOLERANCE 0.01 // mm
-  #define DEFAULT_REPORT_INCHES 0 // false
-  #define DEFAULT_INVERT_ST_ENABLE 0 // false
-  #define DEFAULT_INVERT_LIMIT_PINS 0 // false
-  #define DEFAULT_SOFT_LIMIT_ENABLE 0 // false
-  #define DEFAULT_HARD_LIMIT_ENABLE 0  // false
-  #define DEFAULT_INVERT_PROBE_PIN 0 // false
-  #define DEFAULT_LASER_MODE 0 // false
-  #define DEFAULT_HOMING_ENABLE 0  // false
-  #define DEFAULT_HOMING_DIR_MASK 0 // move positive dir
-  #define DEFAULT_HOMING_FEED_RATE 100.0 // mm/min
-  #define DEFAULT_HOMING_SEEK_RATE 1000.0 // mm/min
-  #define DEFAULT_HOMING_DEBOUNCE_DELAY 25 // msec (0-65k)
-  #define DEFAULT_HOMING_PULLOFF 5.0 // mm
+#ifndef INVERT_SPINDLE_ENABLE_PIN
+#define INVERT_SPINDLE_ENABLE_PIN 0
 #endif
 
-#ifdef DEFAULTS_X_CARVE_500MM
-  // Description: X-Carve 3D Carver CNC mill with three 200 step/rev motors driven by Synthetos
-  // grblShield at 24V.
-  #define MICROSTEPS_XY 8
-  #define STEP_REVS_XY 200
-  #define MM_PER_REV_XY (2.0*20) // 2mm belt pitch, 20 pulley teeth
-  #define MICROSTEPS_Z 2
-  #define STEP_REVS_Z 200
-  #define MM_PER_REV_Z 2.117 // ACME 3/8-12 Leadscrew
-  #define DEFAULT_X_STEPS_PER_MM (MICROSTEPS_XY*STEP_REVS_XY/MM_PER_REV_XY)
-  #define DEFAULT_Y_STEPS_PER_MM (MICROSTEPS_XY*STEP_REVS_XY/MM_PER_REV_XY)
-  #define DEFAULT_Z_STEPS_PER_MM (MICROSTEPS_Z*STEP_REVS_Z/MM_PER_REV_Z)
-  #define DEFAULT_X_MAX_RATE 8000.0 // mm/min
-  #define DEFAULT_Y_MAX_RATE 8000.0 // mm/min
-  #define DEFAULT_Z_MAX_RATE 500.0 // mm/min
-  #define DEFAULT_X_ACCELERATION (500.0*60*60) // 25*60*60 mm/min^2 = 25 mm/sec^2
-  #define DEFAULT_Y_ACCELERATION (500.0*60*60) // 25*60*60 mm/min^2 = 25 mm/sec^2
-  #define DEFAULT_Z_ACCELERATION (50.0*60*60) // 25*60*60 mm/min^2 = 25 mm/sec^2
-  #define DEFAULT_X_MAX_TRAVEL 290.0 // mm NOTE: Must be a positive value.
-  #define DEFAULT_Y_MAX_TRAVEL 290.0 // mm NOTE: Must be a positive value.
-  #define DEFAULT_Z_MAX_TRAVEL 100.0 // mm NOTE: Must be a positive value.
-  #define DEFAULT_SPINDLE_RPM_MAX 10000.0 // rpm
-  #define DEFAULT_SPINDLE_RPM_MIN 0.0 // rpm
-  #define DEFAULT_STEP_PULSE_MICROSECONDS 10
-  #define DEFAULT_STEPPING_INVERT_MASK 0
-  #define DEFAULT_DIRECTION_INVERT_MASK ((1<<X_AXIS)|(1<<Y_AXIS))
-  #define DEFAULT_STEPPER_IDLE_LOCK_TIME 255 // msec (0-254, 255 keeps steppers enabled)
-  #define DEFAULT_STATUS_REPORT_MASK 1 // MPos enabled
-  #define DEFAULT_JUNCTION_DEVIATION 0.02 // mm
-  #define DEFAULT_ARC_TOLERANCE 0.002 // mm
-  #define DEFAULT_REPORT_INCHES 0 // false
-  #define DEFAULT_INVERT_ST_ENABLE 0 // false
-  #define DEFAULT_INVERT_LIMIT_PINS 0 // false
-  #define DEFAULT_SOFT_LIMIT_ENABLE 0 // false
-  #define DEFAULT_HARD_LIMIT_ENABLE 0  // false
-  #define DEFAULT_INVERT_PROBE_PIN 0 // false
-  #define DEFAULT_LASER_MODE 0 // false
-  #define DEFAULT_HOMING_ENABLE 0  // false
-  #define DEFAULT_HOMING_DIR_MASK 3 // move positive dir
-  #define DEFAULT_HOMING_FEED_RATE 25.0 // mm/min
-  #define DEFAULT_HOMING_SEEK_RATE 750.0 // mm/min
-  #define DEFAULT_HOMING_DEBOUNCE_DELAY 250 // msec (0-65k)
-  #define DEFAULT_HOMING_PULLOFF 1.0 // mm
+#ifndef DISABLE_LIMIT_PINS_PULL_UP_MASK
+#define DISABLE_LIMIT_PINS_PULL_UP_MASK 0
 #endif
 
-#ifdef DEFAULTS_X_CARVE_1000MM
-  // Description: X-Carve 3D Carver CNC mill with three 200 step/rev motors driven by Synthetos
-  // grblShield at 24V.
-  #define MICROSTEPS_XY 8
-  #define STEP_REVS_XY 200
-  #define MM_PER_REV_XY (2.0*20) // 2mm belt pitch, 20 pulley teeth
-  #define MICROSTEPS_Z 2
-  #define STEP_REVS_Z 200
-  #define MM_PER_REV_Z 2.117 // ACME 3/8-12 Leadscrew
-  #define DEFAULT_X_STEPS_PER_MM (MICROSTEPS_XY*STEP_REVS_XY/MM_PER_REV_XY)
-  #define DEFAULT_Y_STEPS_PER_MM (MICROSTEPS_XY*STEP_REVS_XY/MM_PER_REV_XY)
-  #define DEFAULT_Z_STEPS_PER_MM (MICROSTEPS_Z*STEP_REVS_Z/MM_PER_REV_Z)
-  #define DEFAULT_X_MAX_RATE 8000.0 // mm/min
-  #define DEFAULT_Y_MAX_RATE 8000.0 // mm/min
-  #define DEFAULT_Z_MAX_RATE 500.0 // mm/min
-  #define DEFAULT_X_ACCELERATION (500.0*60*60) // 25*60*60 mm/min^2 = 25 mm/sec^2
-  #define DEFAULT_Y_ACCELERATION (500.0*60*60) // 25*60*60 mm/min^2 = 25 mm/sec^2
-  #define DEFAULT_Z_ACCELERATION (50.0*60*60) // 25*60*60 mm/min^2 = 25 mm/sec^2
-  #define DEFAULT_X_MAX_TRAVEL 740.0 // mm NOTE: Must be a positive value.
-  #define DEFAULT_Y_MAX_TRAVEL 790.0 // mm NOTE: Must be a positive value.
-  #define DEFAULT_Z_MAX_TRAVEL 100.0 // mm NOTE: Must be a positive value.
-  #define DEFAULT_SPINDLE_RPM_MAX 10000.0 // rpm
-  #define DEFAULT_SPINDLE_RPM_MIN 0.0 // rpm
-  #define DEFAULT_STEP_PULSE_MICROSECONDS 10
-  #define DEFAULT_STEPPING_INVERT_MASK 0
-  #define DEFAULT_DIRECTION_INVERT_MASK ((1<<X_AXIS)|(1<<Y_AXIS))
-  #define DEFAULT_STEPPER_IDLE_LOCK_TIME 255 // msec (0-254, 255 keeps steppers enabled)
-  #define DEFAULT_STATUS_REPORT_MASK 1 // MPos enabled
-  #define DEFAULT_JUNCTION_DEVIATION 0.02 // mm
-  #define DEFAULT_ARC_TOLERANCE 0.002 // mm
-  #define DEFAULT_REPORT_INCHES 0 // false
-  #define DEFAULT_INVERT_ST_ENABLE 0 // false
-  #define DEFAULT_INVERT_LIMIT_PINS 0 // false
-  #define DEFAULT_SOFT_LIMIT_ENABLE 0 // false
-  #define DEFAULT_HARD_LIMIT_ENABLE 0  // false
-  #define DEFAULT_INVERT_PROBE_PIN 0 // false
-  #define DEFAULT_LASER_MODE 0 // false
-  #define DEFAULT_HOMING_ENABLE 0  // false
-  #define DEFAULT_HOMING_DIR_MASK 3 // move positive dir
-  #define DEFAULT_HOMING_FEED_RATE 25.0 // mm/min
-  #define DEFAULT_HOMING_SEEK_RATE 750.0 // mm/min
-  #define DEFAULT_HOMING_DEBOUNCE_DELAY 250 // msec (0-65k)
-  #define DEFAULT_HOMING_PULLOFF 1.0 // mm
+#ifndef DISABLE_PROBE_PIN_PULL_UP
+#define DISABLE_PROBE_PIN_PULL_UP 0
 #endif
 
-#ifdef DEFAULTS_ZEN_TOOLWORKS_7x7
-  // Description: Zen Toolworks 7x7 mill with three Shinano SST43D2121 65oz-in NEMA 17 stepper motors.
-  // Leadscrew is different from some ZTW kits, where most are 1.25mm/rev rather than 8.0mm/rev here.
-  // Driven by 30V, 6A power supply and TI DRV8811 stepper motor drivers.
-  #define MICROSTEPS 8
-  #define STEPS_PER_REV 200.0
-  #define MM_PER_REV 8.0 // 8 mm/rev leadscrew
-  #define DEFAULT_X_STEPS_PER_MM (STEPS_PER_REV*MICROSTEPS/MM_PER_REV)
-  #define DEFAULT_Y_STEPS_PER_MM (STEPS_PER_REV*MICROSTEPS/MM_PER_REV)
-  #define DEFAULT_Z_STEPS_PER_MM (STEPS_PER_REV*MICROSTEPS/MM_PER_REV)
-  #define DEFAULT_X_MAX_RATE 6000.0 // mm/min
-  #define DEFAULT_Y_MAX_RATE 6000.0 // mm/min
-  #define DEFAULT_Z_MAX_RATE 6000.0 // mm/min
-  #define DEFAULT_X_ACCELERATION (600.0*60*60) // 600*60*60 mm/min^2 = 600 mm/sec^2
-  #define DEFAULT_Y_ACCELERATION (600.0*60*60) // 600*60*60 mm/min^2 = 600 mm/sec^2
-  #define DEFAULT_Z_ACCELERATION (600.0*60*60) // 600*60*60 mm/min^2 = 600 mm/sec^2
-  #define DEFAULT_X_MAX_TRAVEL 190.0 // mm NOTE: Must be a positive value.
-  #define DEFAULT_Y_MAX_TRAVEL 180.0 // mm NOTE: Must be a positive value.
-  #define DEFAULT_Z_MAX_TRAVEL 150.0 // mm NOTE: Must be a positive value.
-  #define DEFAULT_SPINDLE_RPM_MAX 10000.0 // rpm
-  #define DEFAULT_SPINDLE_RPM_MIN 0.0 // rpm
-  #define DEFAULT_STEP_PULSE_MICROSECONDS 10
-  #define DEFAULT_STEPPING_INVERT_MASK 0
-  #define DEFAULT_DIRECTION_INVERT_MASK ((1<<Y_AXIS))
-  #define DEFAULT_STEPPER_IDLE_LOCK_TIME 25 // msec (0-254, 255 keeps steppers enabled)
-  #define DEFAULT_STATUS_REPORT_MASK 1 // MPos enabled
-  #define DEFAULT_JUNCTION_DEVIATION 0.02 // mm
-  #define DEFAULT_ARC_TOLERANCE 0.002 // mm
-  #define DEFAULT_REPORT_INCHES 0 // false
-  #define DEFAULT_INVERT_ST_ENABLE 0 // false
-  #define DEFAULT_INVERT_LIMIT_PINS 0 // false
-  #define DEFAULT_SOFT_LIMIT_ENABLE 0 // false
-  #define DEFAULT_HARD_LIMIT_ENABLE 0  // false
-  #define DEFAULT_INVERT_PROBE_PIN 0 // false
-  #define DEFAULT_LASER_MODE 0 // false
-  #define DEFAULT_HOMING_ENABLE 0  // false
-  #define DEFAULT_HOMING_DIR_MASK 0 // move positive dir
-  #define DEFAULT_HOMING_FEED_RATE 25.0 // mm/min
-  #define DEFAULT_HOMING_SEEK_RATE 250.0 // mm/min
-  #define DEFAULT_HOMING_DEBOUNCE_DELAY 250 // msec (0-65k)
-  #define DEFAULT_HOMING_PULLOFF 1.0 // mm
-#endif
-
-#ifdef DEFAULTS_OXCNC
-  // Grbl settings for OpenBuilds OX CNC Machine
-  // http://www.openbuilds.com/builds/openbuilds-ox-cnc-machine.341/
-  #define DEFAULT_X_STEPS_PER_MM 26.670
-  #define DEFAULT_Y_STEPS_PER_MM 26.670
-  #define DEFAULT_Z_STEPS_PER_MM 50
-  #define DEFAULT_X_MAX_RATE 500.0 // mm/min
-  #define DEFAULT_Y_MAX_RATE 500.0 // mm/min
-  #define DEFAULT_Z_MAX_RATE 500.0 // mm/min
-  #define DEFAULT_X_ACCELERATION (10.0*60*60) // 10*60*60 mm/min^2 = 10 mm/sec^2
-  #define DEFAULT_Y_ACCELERATION (10.0*60*60) // 10*60*60 mm/min^2 = 10 mm/sec^2
-  #define DEFAULT_Z_ACCELERATION (10.0*60*60) // 10*60*60 mm/min^2 = 10 mm/sec^2
-  #define DEFAULT_X_MAX_TRAVEL 500.0 // mm NOTE: Must be a positive value.
-  #define DEFAULT_Y_MAX_TRAVEL 750.0 // mm NOTE: Must be a positive value.
-  #define DEFAULT_Z_MAX_TRAVEL 80.0 // mm NOTE: Must be a positive value.
-  #define DEFAULT_SPINDLE_RPM_MAX 1000.0 // rpm
-  #define DEFAULT_SPINDLE_RPM_MIN 0.0 // rpm
-  #define DEFAULT_STEP_PULSE_MICROSECONDS 10
-  #define DEFAULT_STEPPING_INVERT_MASK 0
-  #define DEFAULT_DIRECTION_INVERT_MASK 0
-  #define DEFAULT_STEPPER_IDLE_LOCK_TIME 25 // msec (0-254, 255 keeps steppers enabled)
-  #define DEFAULT_STATUS_REPORT_MASK 1 // MPos enabled
-  #define DEFAULT_JUNCTION_DEVIATION 0.02 // mm
-  #define DEFAULT_ARC_TOLERANCE 0.002 // mm
-  #define DEFAULT_REPORT_INCHES 0 // false
-  #define DEFAULT_INVERT_ST_ENABLE 0 // false
-  #define DEFAULT_INVERT_LIMIT_PINS 0 // false
-  #define DEFAULT_SOFT_LIMIT_ENABLE 0 // false
-  #define DEFAULT_HARD_LIMIT_ENABLE 0  // false
-  #define DEFAULT_INVERT_PROBE_PIN 0 // false
-  #define DEFAULT_LASER_MODE 0 // false
-  #define DEFAULT_HOMING_ENABLE 0  // false
-  #define DEFAULT_HOMING_DIR_MASK 0 // move positive dir
-  #define DEFAULT_HOMING_FEED_RATE 25.0 // mm/min
-  #define DEFAULT_HOMING_SEEK_RATE 500.0 // mm/min
-  #define DEFAULT_HOMING_DEBOUNCE_DELAY 250 // msec (0-65k)
-  #define DEFAULT_HOMING_PULLOFF 1.0 // mm
-#endif
-
-#ifdef DEFAULTS_SIMULATOR
-  // Settings only for Grbl Simulator (www.github.com/grbl/grbl-sim)
-  // Grbl generic default settings. Should work across different machines.
-  #define DEFAULT_X_STEPS_PER_MM 1000.0
-  #define DEFAULT_Y_STEPS_PER_MM 1000.0
-  #define DEFAULT_Z_STEPS_PER_MM 1000.0
-  #define DEFAULT_X_MAX_RATE 1000.0 // mm/min
-  #define DEFAULT_Y_MAX_RATE 1000.0 // mm/min
-  #define DEFAULT_Z_MAX_RATE 1000.0 // mm/min
-  #define DEFAULT_X_ACCELERATION (100.0*60*60) // 10*60*60 mm/min^2 = 10 mm/sec^2
-  #define DEFAULT_Y_ACCELERATION (100.0*60*60) // 10*60*60 mm/min^2 = 10 mm/sec^2
-  #define DEFAULT_Z_ACCELERATION (100.0*60*60) // 10*60*60 mm/min^2 = 10 mm/sec^2
-  #define DEFAULT_X_MAX_TRAVEL 1000.0 // mm NOTE: Must be a positive value.
-  #define DEFAULT_Y_MAX_TRAVEL 1000.0 // mm NOTE: Must be a positive value.
-  #define DEFAULT_Z_MAX_TRAVEL 1000.0 // mm NOTE: Must be a positive value.
-  #define DEFAULT_SPINDLE_RPM_MAX 1000.0 // rpm
-  #define DEFAULT_SPINDLE_RPM_MIN 0.0 // rpm
-  #define DEFAULT_STEP_PULSE_MICROSECONDS 10
-  #define DEFAULT_STEPPING_INVERT_MASK 0
-  #define DEFAULT_DIRECTION_INVERT_MASK 0
-  #define DEFAULT_STEPPER_IDLE_LOCK_TIME 25 // msec (0-254, 255 keeps steppers enabled)
-  #define DEFAULT_STATUS_REPORT_MASK 1 // MPos enabled
-  #define DEFAULT_JUNCTION_DEVIATION 0.01 // mm
-  #define DEFAULT_ARC_TOLERANCE 0.002 // mm
-  #define DEFAULT_REPORT_INCHES 0 // false
-  #define DEFAULT_INVERT_ST_ENABLE 0 // false
-  #define DEFAULT_INVERT_LIMIT_PINS 0 // false
-  #define DEFAULT_SOFT_LIMIT_ENABLE 0 // false
-  #define DEFAULT_HARD_LIMIT_ENABLE 0  // false
-  #define DEFAULT_INVERT_PROBE_PIN 0 // false
-  #define DEFAULT_LASER_MODE 0 // false
-  #define DEFAULT_HOMING_ENABLE 0  // false
-  #define DEFAULT_HOMING_DIR_MASK 0 // move positive dir
-  #define DEFAULT_HOMING_FEED_RATE 25.0 // mm/min
-  #define DEFAULT_HOMING_SEEK_RATE 500.0 // mm/min
-  #define DEFAULT_HOMING_DEBOUNCE_DELAY 250 // msec (0-65k)
-  #define DEFAULT_HOMING_PULLOFF 1.0 // mm
+#ifndef DISABLE_CONTROL_PINS_PULL_UP_MASK
+#define DISABLE_CONTROL_PINS_PULL_UP_MASK 0
 #endif
 
 #endif

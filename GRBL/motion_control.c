@@ -36,7 +36,7 @@ bool mc_line (float *target, plan_line_data_t *pl_data)
     // If enabled, check for soft limit violations. Placed here all line motions are picked up
     // from everywhere in Grbl.
     // NOTE: Block jog state. Jogging is a special case and soft limits are handled independently.
-    if (sys.state != STATE_JOG && settings.flags.soft_limit_enable)
+    if (sys.state != STATE_JOG && settings.limits.flags.soft_enabled)
         limits_soft_check(target);
 
     // If in check gcode mode, prevent motion by blocking planner. Soft limits still work.
@@ -319,8 +319,8 @@ void mc_homing_cycle (uint8_t cycle_mask)
         uint_fast8_t idx = 0;
 
         do {
-            if(settings.homing_cycle[idx]) {
-                cycle_mask = settings.homing_cycle[idx];
+            if(settings.homing.cycle[idx]) {
+                cycle_mask = settings.homing.cycle[idx];
                 limits_go_home(cycle_mask);
             }
         } while(++idx < N_AXIS);
@@ -342,7 +342,7 @@ void mc_homing_cycle (uint8_t cycle_mask)
     }
 
     // If hard limits feature enabled, re-enable hard limits pin change register after homing cycle.
-    hal.limits_enable(settings.flags.hard_limit_enable);
+    hal.limits_enable(settings.limits.flags.hard_enabled);
 }
 
 
@@ -406,10 +406,10 @@ gc_probe_t mc_probe_cycle (float *target, plan_line_data_t *pl_data, gc_parser_f
     plan_reset();           // Reset planner buffer. Zero planner positions. Ensure probing motion is cleared.
     plan_sync_position();   // Sync planner position to current machine position.
 
-    #ifdef MESSAGE_PROBE_COORDINATES
-    // All done! Output the probe position as message.
-    report_probe_parameters();
-    #endif
+    // All done! Output the probe position as message if configured.
+    if(settings.status_report.probe_coordinates)
+        report_probe_parameters();
+
     // Successful probe cycle or Failed to trigger probe within travel. With or without error.
     return sys.probe_succeeded ? GCProbe_Found : GCProbe_FailEnd;
 }
@@ -417,7 +417,6 @@ gc_probe_t mc_probe_cycle (float *target, plan_line_data_t *pl_data, gc_parser_f
 
 // Plans and executes the single special motion case for parking. Independent of main planner buffer.
 // NOTE: Uses the always free planner ring buffer head to store motion parameters for execution.
-#ifdef PARKING_ENABLE
 bool mc_parking_motion (float *parking_target, plan_line_data_t *pl_data)
 {
     if (sys.abort)
@@ -435,7 +434,6 @@ bool mc_parking_motion (float *parking_target, plan_line_data_t *pl_data)
         return false;
     }
 }
-#endif
 
 void mc_override_ctrl_update (gc_override_flags_t override_state)
 {
@@ -450,7 +448,7 @@ void mc_override_ctrl_update (gc_override_flags_t override_state)
 // is in a motion state. If so, kills the steppers and sets the system alarm to flag position
 // lost, since there was an abrupt uncontrolled deceleration. Called at an interrupt level by
 // realtime abort command and hard limits. So, keep to a minimum.
-void mc_reset ()
+ISR_CODE void mc_reset ()
 {
     // Only this function can set the system reset. Helps prevent multiple kill calls.
     if (bit_isfalse(sys_rt_exec_state, EXEC_RESET)) {
@@ -463,6 +461,9 @@ void mc_reset ()
 
         if(hal.driver_reset)
             hal.driver_reset();
+
+        if(hal.serial_suspend_read)
+            hal.serial_suspend_read(false);
 
         // Kill steppers only if in any motion state, i.e. cycle, actively holding, or homing.
         // NOTE: If steppers are kept enabled via the step idle delay setting, this also keeps

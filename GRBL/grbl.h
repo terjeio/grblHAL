@@ -65,14 +65,14 @@
 // ---------------------------------------------------------------------------------------
 // COMPILE-TIME ERROR CHECKING OF DEFINE VALUES:
 
-#if defined(PARKING_ENABLE)
-  #if defined(HOMING_FORCE_SET_ORIGIN)
+#if DEFAULT_PARKING_ENABLE > 0
+  #if DEFAULT_HOMING_FORCE_SET_ORIGIN > 0
     #error "HOMING_FORCE_SET_ORIGIN is not supported with PARKING_ENABLE at this time."
   #endif
 #endif
 
-#if defined(ENABLE_PARKING_OVERRIDE_CONTROL)
-  #if !defined(PARKING_ENABLE)
+#if DEFAULT_ENABLE_PARKING_OVERRIDE_CONTROL > 0
+  #if DEFAULT_PARKING_ENABLE < 1
     #error "ENABLE_PARKING_OVERRIDE_CONTROL must be enabled with PARKING_ENABLE."
   #endif
 #endif

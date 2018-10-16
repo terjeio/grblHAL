@@ -77,12 +77,11 @@ bool protocol_enqueue_gcode (char *gcode)
 bool protocol_main_loop()
 {
     // Perform some machine checks to make sure everything is good to go.
-  #ifdef CHECK_LIMITS_AT_INIT
-    if (settings.flags.hard_limit_enable && hal.limits_get_state().value) {
+
+    if (settings.limits.flags.hard_enabled && settings.limits.flags.check_at_init && hal.limits_get_state().value) {
         set_state(STATE_ALARM); // Ensure alarm state is active.
         report_feedback_message(Message_CheckLimits);
     }
-  #endif
 
     // Check for and report alarm state after a reset, error, or an initial power up.
     // NOTE: Sleep mode disables the stepper drivers and position can't be guaranteed.
@@ -108,7 +107,6 @@ bool protocol_main_loop()
 
     int32_t c;
     line_flags_t line_flags = {0};
-    status_code_t rstatus;
 
     xcommand[0] = '\0';
     user_message.show = false;
@@ -141,17 +139,17 @@ bool protocol_main_loop()
 
                 // Direct and execute one line of formatted input, and report status of execution.
                 if (line_flags.overflow) // Report line overflow error.
-                    rstatus = Status_Overflow;
+                    gc_state.last_error = Status_Overflow;
                 else if ((line[0] == '\0' || char_counter == 0) && !user_message.show) // Empty or comment line. For syncing purposes.
-                    rstatus = Status_OK;
+                    gc_state.last_error = Status_OK;
                 else if (line[0] == '$') // Grbl '$' system command
-                    rstatus = system_execute_line(line);
+                    gc_state.last_error = system_execute_line(line);
                 else if (sys.state & (STATE_ALARM|STATE_ESTOP|STATE_JOG)) // Everything else is gcode. Block if in alarm, eStop or jog mode.
-                    rstatus = Status_SystemGClock;
+                    gc_state.last_error = Status_SystemGClock;
                 else  // Parse and execute g-code block.
-                    rstatus = gc_execute_block(line, user_message.show ? user_message.message : NULL);
+                    gc_state.last_error = gc_execute_block(line, user_message.show ? user_message.message : NULL);
 
-                report_status_message(rstatus);
+                report_status_message(gc_state.last_error);
 
                 // Reset tracking data for next line.
                 user_message.show = false;
@@ -352,10 +350,18 @@ bool protocol_exec_rt_system ()
             gc_state.modal.spindle.value = 0;
             spindle_stop();
             hal.coolant_set_state(gc_state.modal.coolant);
+
+            if(hal.driver_reset)
+                hal.driver_reset();
+
+            if(hal.serial_suspend_read && hal.serial_suspend_read(false))
+                hal.serial_cancel_read_buffer(); // flush pending blocks (after M6)
+
             plan_reset();
             st_reset();
             gc_sync_position();
             plan_sync_position();
+            gc_state.tool_change = false;
             set_state(STATE_IDLE);
         }
 
@@ -524,12 +530,11 @@ static void protocol_exec_rt_suspend ()
         if(sys.state == STATE_SAFETY_DOOR && !hal.system_control_get_state().safety_door_ajar)
             system_set_exec_state_flag(EXEC_CYCLE_START);
 
-      #ifdef SLEEP_ENABLE
         // Check for sleep conditions and execute auto-park, if timeout duration elapses.
         // Sleep is valid for both hold and door states, if the spindle or coolant are on or
         // set to be re-enabled.
-        sleep_check();
-      #endif
+        if(settings.flags.sleep_enable)
+            sleep_check();
 
         protocol_exec_rt_system();
     }
@@ -537,7 +542,7 @@ static void protocol_exec_rt_suspend ()
 
 // Checks for and process real-time commands in input stream.
 // Called from serial input interrupt handler.
-bool protocol_process_realtime (char c)
+ISR_CODE bool protocol_process_realtime (char c)
 {
     bool add = !sys.block_input_stream;
 

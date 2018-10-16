@@ -22,7 +22,6 @@
 
 #include "grbl.h"
 
-
 // Homing axis search distance multiplier. Computed by this value times the cycle travel.
 #ifndef HOMING_AXIS_SEARCH_SCALAR
   #define HOMING_AXIS_SEARCH_SCALAR 1.5f // Must be > 1 to ensure limit switch will be engaged.
@@ -43,7 +42,7 @@
 // special pinout for an e-stop, but it is generally recommended to just directly connect
 // your e-stop switch to the microcontroller reset pin, since it is the most correct way to do this.
 
-void limit_interrupt_handler (axes_signals_t state) // DEFAULT: Limit pin change interrupt process.
+ISR_CODE void limit_interrupt_handler (axes_signals_t state) // DEFAULT: Limit pin change interrupt process.
 {
     // Ignore limit switches if already in an alarm state or in-process of executing an alarm.
     // When in the alarm state, Grbl should have been reset or will force a reset, so any pending
@@ -81,12 +80,12 @@ void limits_go_home (uint8_t cycle_mask)
     plan_line_data_t plan_data;
     plan_line_data_t *pl_data = &plan_data;
     // Initialize variables used for homing computations.
-    uint_fast8_t n_cycle = (2 * settings.homing_locate_cycles + 1);
+    uint_fast8_t n_cycle = (2 * settings.homing.locate_cycles + 1);
     uint_fast8_t step_pin[N_AXIS];
     float target[N_AXIS];
     float max_travel = 0.0f;
     bool approach = true;
-    float homing_rate = settings.homing_seek_rate;
+    float homing_rate = settings.homing.seek_rate;
     uint_fast8_t limit_state, axislock, n_active_axis;
 
     memset(pl_data,0,sizeof(plan_line_data_t));
@@ -140,7 +139,7 @@ void limits_go_home (uint8_t cycle_mask)
 
                 // Set target direction based on cycle mask and homing cycle approach state.
                 // NOTE: This happens to compile smaller than any other implementation tried.
-                if (bit_istrue(settings.homing_dir_mask, bit(idx)))
+                if (bit_istrue(settings.homing.dir_mask, bit(idx)))
                     target[idx] = approach ? - max_travel : max_travel;
                 else
                     target[idx] = approach ? max_travel : - max_travel;
@@ -223,18 +222,18 @@ void limits_go_home (uint8_t cycle_mask)
         } while (AXES_BITMASK & axislock);
 
         st_reset(); // Immediately force kill steppers and reset step segment buffer.
-        hal.delay_ms(settings.homing_debounce_delay, 0); // Delay to allow transient dynamics to dissipate.
+        hal.delay_ms(settings.homing.debounce_delay, 0); // Delay to allow transient dynamics to dissipate.
 
         // Reverse direction and reset homing rate for locate cycle(s).
         approach = !approach;
 
         // After first cycle, homing enters locating phase. Shorten search to pull-off distance.
         if (approach) {
-            max_travel = settings.homing_pulloff * HOMING_AXIS_LOCATE_SCALAR;
-            homing_rate = settings.homing_feed_rate;
+            max_travel = settings.homing.pulloff * HOMING_AXIS_LOCATE_SCALAR;
+            homing_rate = settings.homing.feed_rate;
         } else {
-            max_travel = settings.homing_pulloff;
-            homing_rate = settings.homing_seek_rate;
+            max_travel = settings.homing.pulloff;
+            homing_rate = settings.homing.seek_rate;
         }
 
     } while (n_cycle-- > 0);
@@ -256,9 +255,9 @@ void limits_go_home (uint8_t cycle_mask)
           #ifdef HOMING_FORCE_SET_ORIGIN
             set_axis_position = 0;
           #else
-            set_axis_position = bit_istrue(settings.homing_dir_mask, bit(idx))
-                                 ? lroundf((settings.max_travel[idx] + settings.homing_pulloff) * settings.steps_per_mm[idx])
-                                 : lroundf(-settings.homing_pulloff * settings.steps_per_mm[idx]);
+            set_axis_position = bit_istrue(settings.homing.dir_mask, bit(idx))
+                                 ? lroundf((settings.max_travel[idx] + settings.homing.pulloff) * settings.steps_per_mm[idx])
+                                 : lroundf(-settings.homing.pulloff * settings.steps_per_mm[idx]);
           #endif
 
           #ifdef COREXY

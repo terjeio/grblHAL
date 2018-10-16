@@ -28,6 +28,10 @@
 #ifndef _grbl_config_h_
 #define _grbl_config_h_
 
+#define ISR_CODE
+
+// #define DEBUGOUT // Remove comment to add HAL entry point for debug output
+
 // Define CPU pin map and default settings.
 // NOTE: OEMs can avoid the need to maintain/update the defaults.h and cpu_map.h files and use only
 // one configuration file by placing their specific defaults and pin map at the bottom of this file.
@@ -87,20 +91,10 @@
 // A compliant HAL driver is required as the final RPM calculations are left to the driver to handle.
 // #define CONSTANT_SURFACE_SPEED_OPTION // Uncomment to enable
 
-// If homing is enabled, homing init lock sets Grbl into an alarm state upon power up. This forces
-// the user to perform the homing cycle (or override the locks) before doing anything else. This is
-// mainly a safety feature to remind the user to home, since position is unknown to Grbl.
-//#define HOMING_INIT_LOCK // Comment to disable
-
 // After homing, Grbl will set by default the entire machine space into negative space, as is typical
 // for professional CNC machines, regardless of where the limit switches are located. Uncomment this
 // define to force Grbl to always set the machine origin at the homed location despite switch orientation.
 // #define HOMING_FORCE_SET_ORIGIN // Uncomment to enable.
-
-// Number of homing cycles performed after when the machine initially jogs to limit switches.
-// This help in preventing overshoot and should improve repeatability. This value should be one or
-// greater.
-#define N_HOMING_LOCATE_CYCLE 1 // Integer (1-128)
 
 // Number of blocks Grbl executes upon startup. These blocks are stored in EEPROM, where the size
 // and addresses are defined in settings.h. With the current settings, up to 2 startup blocks may
@@ -129,14 +123,6 @@
 // homing cycle while on the limit switch and not have to move the machine off of it.
 // #define LIMITS_TWO_SWITCHES_ON_AXES
 
-// Upon a successful probe cycle, this option provides immediately feedback of the probe coordinates
-// through an automatically generated message. If disabled, users can still access the last probe
-// coordinates through Grbl '$#' print parameters.
-#define MESSAGE_PROBE_COORDINATES // Enabled by default. Comment to disable. TODO: move to setting
-
-// for testing... open is ignored when cycle starts
-//#define SAFETY_DOOR_IGNORE_WHEN_IDLE TODO: move to setting
-
 // After the safety door switch has been toggled and restored, this setting sets the power-up delay
 // between restoring the spindle and coolant and resuming the cycle.
 #define SAFETY_DOOR_SPINDLE_DELAY 4.0f // Float (seconds)
@@ -150,54 +136,6 @@
 // described, if not, motions may move in strange directions. Grbl requires the CoreXY A and B motors
 // have the same steps per mm internally.
 // #define COREXY // Default disabled. Uncomment to enable.
-
-// By default, Grbl sets all input pins to normal-low operation with their internal pull-up resistors
-// enabled. This simplifies the wiring for users by requiring only a normally closed (NC) switch connected
-// to ground. It is not recommended to use normally-open (NO) switches as this increases the risk
-// of electrical noise spuriously triggering the inputs. If normally-open (NO) switches are used the
-// logic of the input signals should be be inverted with the invert settings below.
-// The following options disable the internal pull-up resistors, and switches must be now connect to Vcc
-// instead of ground.
-// WARNING: When the pull-ups are disabled, this might require additional wiring with pull-down resistors!
-//          Please check driver code and/or documentation.
-// #define DISABLE_LIMIT_PINS_PULL_UP_MASK AXES_BITMASK
-// #define DISABLE_LIMIT_PINS_PULL_UP_MASK (X_AXIS_BIT|Y_AXIS_BIT)
-// #define DISABLE_CONTROL_PINS_PULL_UP_MASK SIGNAL_MASK
-// #define DISABLE_CONTROL_PINS_PULL_UP_MASK (SIGNAL_SAFETYDOOR|SIGNAL_RESET)
-// #define DISABLE_PROBE_PIN_PULL_UP
-
-// Inverts logic of the stepper enable signal(s).
-// NOTE: Not universally available for individual axes - check driver documentation.
-//       Specify at least X_AXIS_BIT if a common enable signal is used.
-// #define INVERT_ST_ENABLE_MASK (X_AXIS_BIT|Y_AXIS_BIT|Z_AXIS_BIT) // Default disabled. Uncomment to enable.
-// Mask to be OR'ed with stepper disable signal(s). Axes configured will not be disabled.
-// NOTE: Not universally available for individual axes - check driver documentation.
-//       Specify at least X_AXIS_BIT if a common enable signal is used.
-// #define ST_DEENERGIZE_MASK (X_AXIS_BIT|Y_AXIS_BIT|Z_AXIS_BIT) // Default disabled. Uncomment to enable.
-
-// Inverts logic of the input signals based on a mask. This essentially means you are using
-// normally-open (NO) switches on the specified pins, rather than the default normally-closed (NC) switches.
-// NOTE: The first option will invert all control pins. The second option is an example of
-// inverting only a few pins. See system.h and/or nuts_bolts.h for other signal definitions.
-// #define INVERT_CONTROL_PIN_MASK SIGNAL_MASK // Default disabled. Uncomment to enable.
-// #define INVERT_CONTROL_PIN_MASK (SIGNAL_SAFETYDOOR|SIGNAL_RESET) // Default disabled. Uncomment to enable.
-// #define INVERT_LIMIT_PIN_MASK AXES_BITMASK // Default disabled. Uncomment to enable. Uncomment to enable.
-// #define INVERT_LIMIT_PIN_MASK (X_AXIS_BIT|Y_AXIS_BIT) // Default disabled. Uncomment to enable.
-// For inverting the probe pin use DEFAULT_INVERT_PROBE_PIN in defaults.h
-
-// When Grbl powers-cycles or is hard reset with the MCU reset button, Grbl boots up with no ALARM
-// by default. This is to make it as simple as possible for new users to start using Grbl. When homing
-// is enabled and a user has installed limit switches, Grbl will boot up in an ALARM state to indicate
-// Grbl doesn't know its position and to force the user to home before proceeding. This option forces
-// Grbl to always initialize into an ALARM state regardless of homing or not. This option is more for
-// OEMs and LinuxCNC users that would like this power-cycle behavior.
-// #define FORCE_INITIALIZATION_ALARM // Default disabled. Uncomment to enable.
-
-// At power-up or a reset, Grbl will check the limit switch states to ensure they are not active
-// before initialization. If it detects a problem and the hard limits setting is enabled, Grbl will
-// simply message the user to check the limits and enter an alarm state, rather than idle. Grbl will
-// not throw an alarm message.
-#define CHECK_LIMITS_AT_INIT
 
 // ---------------------------------------------------------------------------------------
 // ADVANCED CONFIGURATION OPTIONS:
@@ -224,11 +162,6 @@
 #define MIN_SPINDLE_RPM_OVERRIDE           10 // Percent of programmed spindle speed (1-100). Usually 10%.
 #define SPINDLE_OVERRIDE_COARSE_INCREMENT  10 // (1-99). Usually 10%.
 #define SPINDLE_OVERRIDE_FINE_INCREMENT     1 // (1-99). Usually 1%.
-
-// When a M2 or M30 program end command is executed, most g-code states are restored to their defaults.
-// This compile-time option includes the restoring of the feed, rapid, and spindle speed override values
-// to their default values at program end.
-#define RESTORE_OVERRIDES_AFTER_PROGRAM_END // Default enabled. Comment to disable.
 
 // Some status report data isn't necessary for realtime, only intermittently, because the values don't
 // change often. The following macros configures how many times a status report needs to be called before
@@ -287,27 +220,6 @@
 // the selected axis with the tool oriented toward the negative direction. In other words, a positive
 // tool length offset value is subtracted from the current location.
 #define TOOL_LENGTH_OFFSET_AXIS Z_AXIS // Default z-axis. Valid values are X_AXIS, Y_AXIS, or Z_AXIS.
-
-// Disables spindle PWM output in driver (if supported) for different RPM values.
-#define VARIABLE_SPINDLE // Default enabled. Comment to disable.
-
-// Used by variable spindle output only. This forces the PWM output to a minimum duty cycle when enabled.
-// The PWM pin will still read 0V when the spindle is disabled. Most users will not need this option, but
-// it may be useful in certain scenarios. This minimum PWM settings coincides with the spindle rpm minimum
-// setting, like rpm max to max PWM. This is handy if you need a larger voltage difference between 0V disabled
-// and the voltage set by the minimum PWM for minimum rpm. This difference is 0.02V per PWM value. So, when
-// minimum PWM is at 1, only 0.02 volts separate enabled and disabled. At PWM 5, this would be 0.1V. Keep
-// in mind that you will begin to lose PWM resolution with increased minimum PWM values, since you have less
-// and less range over the total 255 PWM levels to signal different spindle speeds.
-// NOTE: Compute duty cycle at the minimum PWM by this equation: (% duty cycle)=(SPINDLE_PWM_MIN_VALUE/255)*100
-// #define SPINDLE_PWM_MIN_VALUE 5 // Default disabled. Uncomment to enable. Must be greater than zero. Integer (1-255).
-
-// Alters the behavior of the spindle enable pin. By default,
-// Grbl will not disable the enable pin if spindle speed is zero and M3/4 is active, but still sets the PWM
-// output to zero. This allows the users to know if the spindle is active and use it as an additional control
-// input. However, in some use cases, user may want the enable pin to disable with a zero spindle speed and
-// re-enable when spindle speed is greater than zero. This option does that.
-// #define SPINDLE_ENABLE_OFF_WITH_ZERO_SPEED // Default disabled. Uncomment to enable.
 
 // With this enabled, Grbl sends back an echo of the line it has received, which has been pre-parsed (spaces
 // removed, capitalized letters, no comments) and is to be immediately executed by Grbl. Echoes will not be
@@ -369,18 +281,6 @@
 // execution lead time there is for other Grbl processes have to compute and do their thing
 // before having to come back and refill this buffer, currently at ~50msec of step moves.
 // #define SEGMENT_BUFFER_SIZE 6 // Uncomment to override default in stepper.h.
-
-// Serial send and receive buffer size. The receive buffer is often used as another streaming
-// buffer to store incoming blocks to be processed by Grbl when its ready. Most streaming
-// interfaces will character count and track each block send to each block response. So,
-// increase the receive buffer if a deeper receive buffer is needed for streaming and avaiable
-// memory allows. The send buffer primarily handles messages in Grbl. Only increase if large
-// messages are sent and Grbl begins to stall, waiting to send the rest of the message.
-// NOTE: Grbl generates an average status report in about 0.5msec, but the serial TX stream at
-// 115200 baud will take 5 msec to transmit a typical 55 character report. Worst case reports are
-// around 90-100 characters. As long as the serial TX buffer doesn't get continually maxed, Grbl
-// will continue operating efficiently. Size the TX buffer around the size of a worst-case report.
-// NOTE: buffer allocation is delgated to the HAL driver
 
 // Configures the position after a probing cycle during Grbl's check mode. Disabled sets
 // the position to the probe target, when enabled sets the position to the start position.
@@ -446,55 +346,8 @@
 // repeatable. If needed, you can disable this behavior by uncommenting the define below.
 // #define ALLOW_FEED_OVERRIDE_DURING_PROBE_CYCLES // Default disabled. Uncomment to enable.
 
-// Enables and configures parking motion methods upon a safety door state. Primarily for OEMs
-// that desire this feature for their integrated machines. At the moment, Grbl assumes that
-// the parking motion only involves one axis, although the parking implementation was written
-// to be easily refactored for any number of motions on different axes by altering the parking
-// source code. At this time, Grbl only supports parking one axis (typically the Z-axis) that
-// moves in the positive direction upon retracting and negative direction upon restoring position.
-// The motion executes with a slow pull-out retraction motion, power-down, and a fast park.
-// Restoring to the resume position follows these set motions in reverse: fast restore to
-// pull-out position, power-up with a time-out, and plunge back to the original position at the
-// slower pull-out rate.
-// NOTE: Still a work-in-progress. Machine coordinates must be in all negative space and
-// does not work with HOMING_FORCE_SET_ORIGIN enabled. Parking motion also moves only in
-// positive direction.
-//#define PARKING_ENABLE  // Default disabled. Uncomment to enable
-
-// Configure options for the parking motion, if enabled.
-#define PARKING_AXIS Z_AXIS // Define which axis that performs the parking motion
-#define PARKING_TARGET -5.0f // Parking axis target. In mm, as machine coordinate [-max_travel,0].
-#define PARKING_RATE 500.0f // Parking fast rate after pull-out in mm/min.
-#define PARKING_PULLOUT_RATE 100.0f // Pull-out/plunge slow feed rate in mm/min.
-#define PARKING_PULLOUT_INCREMENT 5.0f // Spindle pull-out and plunge distance in mm. Incremental distance.
-                                      // Must be positive value or equal to zero.
-
-// Enables a special set of M-code commands that enables and disables the parking motion.
-// These are controlled by `M56`, `M56 P1`, or `M56 Px` to enable and `M56 P0` to disable.
-// The command is modal and will be set after a planner sync. Since it is g-code, it is
-// executed in sync with g-code commands. It is not a real-time command.
-// NOTE: PARKING_ENABLE is required. By default, M56 is active upon initialization. Use
-// DEACTIVATE_PARKING_UPON_INIT to set M56 P0 as the power-up default.
-// #define ENABLE_PARKING_OVERRIDE_CONTROL   // Default disabled. Uncomment to enable
-// #define DEACTIVATE_PARKING_UPON_INIT // Default disabled. Uncomment to enable.
-
-// This option will automatically disab
-// Enables and configures Grbl's sleep mode feature. If the spindle or coolant are powered and Grbl
-// is not actively moving or receiving any commands, a sleep timer will start. If any data or commands
-// are received, the sleep timer will reset and restart until the above condition are not satisfied.
-// If the sleep timer elaspes, Grbl will immediately execute the sleep mode by shutting down the spindle
-// and coolant and entering a safe sleep state. If parking is enabled, Grbl will park the machine as
-// well. While in sleep mode, only a hard/soft reset will exit it and the job will be unrecoverable.
-// NOTE: Sleep mode is a safety feature, primarily to address communication disconnect problems. To
-// keep Grbl from sleeping, employ a stream of '?' status report commands as a connection "heartbeat".
-// #define SLEEP_ENABLE  // Default disabled. Uncomment to enable.
+// Used if sleep mode is enabled
 #define SLEEP_DURATION 5.0f // Float (0.25 - 61.0) seconds before sleep mode is executed.
-
-// This option will automatically disable the laser during a feed hold by invoking a spindle stop
-// override immediately after coming to a stop. However, this also means that the laser still may
-// be reenabled by disabling the spindle stop override, if needed. This is purely a safety feature
-// to ensure the laser doesn't inadvertently remain powered while at a stop and cause a fire.
-#define DISABLE_LASER_DURING_HOLD // Default enabled. Comment to disable.
 
 // Max length of gcode lines (blocks) stored in EEPROM, do not set > 80 unless EEPROM space is reallocated
 #define MAX_STORED_LINE_LENGTH 80
@@ -508,40 +361,6 @@
 #define EMULATE_EEPROM
 
 // Max number of entries in log for PID data reporting, to be used for tuning
-#define PID_LOG 1000 // Default disabled. Uncomment to enable.
-
-// Define some default values if not defined above
-
-#ifndef ST_DEENERGIZE_MASK
-#define ST_DEENERGIZE_MASK 0
-#endif
-
-#ifndef INVERT_ST_ENABLE_MASK
-#define INVERT_ST_ENABLE_MASK 0
-#endif
-
-#ifndef INVERT_LIMIT_PIN_MASK
-#define INVERT_LIMIT_PIN_MASK 0
-#endif
-
-#ifndef INVERT_CONTROL_PIN_MASK
-#define INVERT_CONTROL_PIN_MASK 0
-#endif
-
-#ifndef INVERT_SPINDLE_ENABLE_PIN
-#define INVERT_SPINDLE_ENABLE_PIN 0
-#endif
-
-#ifndef DISABLE_LIMIT_PINS_PULL_UP_MASK
-#define DISABLE_LIMIT_PINS_PULL_UP_MASK 0
-#endif
-
-#ifndef DISABLE_PROBE_PIN_PULL_UP
-#define DISABLE_PROBE_PIN_PULL_UP 0
-#endif
-
-#ifndef DISABLE_CONTROL_PINS_PULL_UP_MASK
-#define DISABLE_CONTROL_PINS_PULL_UP_MASK 0
-#endif
+//#define PID_LOG 1000 // Default disabled. Uncomment to enable.
 
 #endif

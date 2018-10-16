@@ -83,32 +83,32 @@ bool driver_setting (uint_fast16_t setting, float value)
 
     switch(setting) {
 
-        case 50:
+        case Setting_JogStepSpeed:
             jog_config.step_speed = value;
             ok = true;
             break;
 
-        case 51:
+        case Setting_JogSlowSpeed:
             jog_config.slow_speed = value;
             ok = true;
             break;
 
-        case 52:
+        case Setting_JogFastSpeed:
             jog_config.fast_speed = value;
             ok = true;
             break;
 
-        case 53:
+        case Setting_JogStepDistance:
             jog_config.step_distance = value;
             ok = true;
             break;
 
-        case 54:
+        case Setting_JogSlowDistance:
             jog_config.slow_distance = value;
             ok = true;
             break;
 
-        case 55:
+        case Setting_JogFastDistance:
             jog_config.fast_distance = value;
             ok = true;
             break;
@@ -137,12 +137,12 @@ void driver_settings_restore (uint8_t restore_flag)
 void driver_settings_report (bool axis_settings)
 {
     if(!axis_settings) {
-        report_util_float_setting((setting_type_t)50, jog_config.step_speed, 0);
-        report_util_float_setting((setting_type_t)51, jog_config.slow_speed, 0);
-        report_util_float_setting((setting_type_t)52, jog_config.fast_speed, 0);
-        report_util_float_setting((setting_type_t)53, jog_config.step_distance, N_DECIMAL_SETTINGVALUE);
-        report_util_float_setting((setting_type_t)54, jog_config.slow_distance, 0);
-        report_util_float_setting((setting_type_t)55, jog_config.fast_distance, 0);
+        report_util_float_setting(Setting_JogStepSpeed, jog_config.step_speed, 0);
+        report_util_float_setting(Setting_JogSlowSpeed, jog_config.slow_speed, 0);
+        report_util_float_setting(Setting_JogFastSpeed, jog_config.fast_speed, 0);
+        report_util_float_setting(Setting_JogStepDistance, jog_config.step_distance, N_DECIMAL_SETTINGVALUE);
+        report_util_float_setting(Setting_JogSlowDistance, jog_config.slow_distance, N_DECIMAL_SETTINGVALUE);
+        report_util_float_setting(Setting_JogFastDistance, jog_config.fast_distance, N_DECIMAL_SETTINGVALUE);
     }
 }
 

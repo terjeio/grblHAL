@@ -29,6 +29,7 @@
 #include "driver.h"
 #include "eeprom.h"
 #include "serial.h"
+
 //#include "usermcodes.h"
 //#include "keypad.h"
 
@@ -59,7 +60,7 @@ static void driver_delay_ms (uint32_t ms, void (*callback)(void))
 // Enable/disable stepper motors
 static void stepperEnable (axes_signals_t enable)
 {
-    enable.mask ^= settings.stepper_enable_invert.mask;
+    enable.mask ^= settings.steppers.enable_invert.mask;
 
     if(enable.x)
         STEPPERS_DISABLE_OUT_XY &= ~STEPPERS_DISABLE_PIN_XY;
@@ -160,7 +161,7 @@ static void stepperPulseStartDelayed (stepper_t *stepper)
 // Enable/disable limit pins interrupt
 static void limitsEnable (bool on)
 {
-    if (on && settings.flags.hard_limit_enable)
+    if (on && settings.limits.flags.hard_enabled)
         LIMIT_PORT_IE |= HWLIMIT_MASK; // Enable Pin Change Interrupt
     else
         LIMIT_PORT_IE &= ~HWLIMIT_MASK; // Disable Pin Change Interrupt
@@ -177,8 +178,8 @@ inline static axes_signals_t limitsGetState()
     signals.y = (flags & Y_LIMIT_PIN) == Y_LIMIT_PIN;
     signals.z = (flags & Z_LIMIT_PIN) == Z_LIMIT_PIN;
 
-    if (settings.limit_invert.value)
-        signals.value ^= settings.limit_invert.value;
+    if (settings.limits.invert.value)
+        signals.value ^= settings.limits.invert.value;
 
     return signals;
 }
@@ -226,7 +227,7 @@ bool probeGetState (void)
 
 inline static void spindleOff (void)
 {
-    if(settings.spindle_invert.on)
+    if(settings.spindle.invert.on)
         SPINDLE_ENABLE_OUT |= SPINDLE_ENABLE_PIN;
     else
         SPINDLE_ENABLE_OUT &= ~SPINDLE_ENABLE_PIN;
@@ -234,7 +235,7 @@ inline static void spindleOff (void)
 
 inline static void spindleOn (void)
 {
-    if(settings.spindle_invert.on)
+    if(settings.spindle.invert.on)
         SPINDLE_ENABLE_OUT &= ~SPINDLE_ENABLE_PIN;
     else
         SPINDLE_ENABLE_OUT |= SPINDLE_ENABLE_PIN;
@@ -243,7 +244,7 @@ inline static void spindleOn (void)
 inline static void spindleDir (bool ccw)
 {
     if(hal.driver_cap.spindle_dir) {
-        if(ccw ^ settings.spindle_invert.ccw)
+        if(ccw ^ settings.spindle.invert.ccw)
             SPINDLE_DIRECTION_OUT |= SPINDLE_DIRECTION_PIN;
         else
             SPINDLE_DIRECTION_OUT &= ~SPINDLE_DIRECTION_PIN;
@@ -270,23 +271,23 @@ static uint_fast16_t spindleComputePWMValue (float rpm, uint8_t speed_ovr)
 
     rpm *= (0.010f * speed_ovr); // Scale by spindle speed override value.
     // Calculate PWM register value based on rpm max/min settings and programmed rpm.
-    if ((settings.rpm_min >= settings.rpm_max) || (rpm >= settings.rpm_max)) {
+    if ((settings.spindle.rpm_min >= settings.spindle.rpm_max) || (rpm >= settings.spindle.rpm_max)) {
         // No PWM range possible. Set simple on/off spindle control pin state.
-        sys.spindle_rpm = settings.rpm_max;
+        sys.spindle_rpm = settings.spindle.rpm_max;
         pwm_value = spindle_pwm.max_value - 1;
-    } else if (rpm <= settings.rpm_min) {
+    } else if (rpm <= settings.spindle.rpm_min) {
         if (rpm == 0.0f) { // S0 disables spindle
             sys.spindle_rpm = 0.0f;
             pwm_value = spindle_pwm.off_value;
         } else { // Set minimum PWM output
-            sys.spindle_rpm = settings.rpm_min;
+            sys.spindle_rpm = settings.spindle.rpm_min;
             pwm_value = spindle_pwm.min_value;
         }
     } else {
         // Compute intermediate PWM value with linear spindle speed model.
         // NOTE: A nonlinear model could be installed here, if required, but keep it VERY light-weight.
         sys.spindle_rpm = rpm;
-        pwm_value = (uint32_t)floorf((rpm - settings.rpm_min) * spindle_pwm.pwm_gradient) + spindle_pwm.min_value;
+        pwm_value = (uint32_t)floorf((rpm - settings.spindle.rpm_min) * spindle_pwm.pwm_gradient) + spindle_pwm.min_value;
         if(pwm_value >= spindle_pwm.max_value)
             pwm_value = spindle_pwm.max_value - 1;
     }
@@ -299,7 +300,7 @@ static uint_fast16_t spindleSetSpeed (uint_fast16_t pwm_value)
 {
     if (pwm_value == hal.spindle_pwm_off) {
         pwmEnabled = false;
-        if(settings.flags.spindle_disable_with_zero_speed)
+        if(settings.spindle.disable_with_zero_speed)
             spindleOff();
         PWM_TIMER_CCTL1 = 0;
     } else {
@@ -332,7 +333,7 @@ static spindle_state_t spindleGetState (void)
 
     state.on = pwmEnabled || (SPINDLE_ENABLE_In & SPINDLE_ENABLE_PIN) != 0;
     state.ccw = hal.driver_cap.spindle_dir && (SPINDLE_DIRECTION_IN & SPINDLE_DIRECTION_PIN) != 0;
-    state.value ^= settings.spindle_invert.mask;
+    state.value ^= settings.spindle.invert.mask;
 
     return state;
 }
@@ -405,25 +406,25 @@ static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t 
 // Configures perhipherals when settings are initialized or changed
 static void settings_changed (settings_t *settings)
 {
-    step_port_invert = settings->step_invert;
-    dir_port_invert = settings->dir_invert;
+    step_port_invert = settings->steppers.step_invert;
+    dir_port_invert = settings->steppers.dir_invert;
 
-    spindle_pwm.period = (uint32_t)(3125000 / settings->spindle_pwm_freq);
-    spindle_pwm.off_value = (uint32_t)(spindle_pwm.period * settings->spindle_pwm_off_value / 100.0f);
-    spindle_pwm.min_value = (uint32_t)(spindle_pwm.period * settings->spindle_pwm_min_value / 100.0f);
-    spindle_pwm.max_value = (uint32_t)(spindle_pwm.period * settings->spindle_pwm_max_value / 100.0f);
-    spindle_pwm.pwm_gradient = (float)(spindle_pwm.max_value - spindle_pwm.min_value) / (settings->rpm_max - settings->rpm_min);
+    spindle_pwm.period = (uint32_t)(3125000 / settings->spindle.pwm_freq);
+    spindle_pwm.off_value = (uint32_t)(spindle_pwm.period * settings->spindle.pwm_off_value / 100.0f);
+    spindle_pwm.min_value = (uint32_t)(spindle_pwm.period * settings->spindle.pwm_min_value / 100.0f);
+    spindle_pwm.max_value = (uint32_t)(spindle_pwm.period * settings->spindle.pwm_max_value / 100.0f);
+    spindle_pwm.pwm_gradient = (float)(spindle_pwm.max_value - spindle_pwm.min_value) / (settings->spindle.rpm_max - settings->spindle.rpm_min);
 
     hal.spindle_pwm_off = spindle_pwm.off_value;
 
     if(IOInitDone) {
 
-        stepperEnable(settings->stepper_deenergize);
+        stepperEnable(settings->steppers.deenergize);
 
-        step_pulse_ticks = settings->pulse_microseconds * 5 - 1;
-        if(settings->pulse_delay_microseconds) {
+        step_pulse_ticks = settings->steppers.pulse_microseconds * 5 - 1;
+        if(settings->steppers.pulse_delay_microseconds) {
             hal.stepper_pulse_start = &stepperPulseStartDelayed;
-            PULSE_TIMER_CCR1 = settings->pulse_delay_microseconds * 5;
+            PULSE_TIMER_CCR1 = settings->steppers.pulse_delay_microseconds * 5;
             PULSE_TIMER_CCR0 = step_pulse_ticks + PULSE_TIMER_CCR1;
             PULSE_TIMER_CCTL1 |= CCIE;                   // Enable CCR1 interrupt
         } else {
@@ -498,19 +499,19 @@ static void settings_changed (settings_t *settings)
 
         axes_signals_t limit_ies;
 
-        limit_ies.mask = ~(settings->limit_disable_pullup.mask ^ settings->limit_invert.mask);
+        limit_ies.mask = ~(settings->limits.disable_pullup.mask ^ settings->limits.invert.mask);
 
-         if(settings->limit_disable_pullup.x)
+         if(settings->limits.disable_pullup.x)
              LIMIT_PORT_OUT &= ~X_LIMIT_PIN;
          else
              LIMIT_PORT_OUT |= X_LIMIT_PIN;
 
-         if(settings->limit_disable_pullup.y)
+         if(settings->limits.disable_pullup.y)
              LIMIT_PORT_OUT &= ~Y_LIMIT_PIN;
          else
              LIMIT_PORT_OUT |= Y_LIMIT_PIN;
 
-         if(settings->limit_disable_pullup.z)
+         if(settings->limits.disable_pullup.z)
              LIMIT_PORT_OUT &= ~Z_LIMIT_PIN;
          else
              LIMIT_PORT_OUT |= Z_LIMIT_PIN;

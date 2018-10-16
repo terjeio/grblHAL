@@ -80,4 +80,14 @@ void spindle_sync (spindle_state_t state, float rpm);
 // Sets spindle running state with direction, enable, and spindle RPM.
 bool spindle_set_state (spindle_state_t state, float rpm);
 
+//
+// The following functions are not called by the core, may be called by driver code.
+//
+
+// Precomute PWM values for faster conversion.
+void spindle_precompute_pwm_values (spindle_pwm_t *pwm_data, uint32_t clock_hz);
+
+// Spindle speed to PWM conversion.
+uint_fast16_t spindle_compute_pwm_value (spindle_pwm_t *pwm_data, float rpm, uint8_t speed_ovr);
+
 #endif

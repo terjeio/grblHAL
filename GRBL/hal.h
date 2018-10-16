@@ -55,7 +55,9 @@ typedef union {
                  spindle_sync            :1,
                  sd_card                 :1,
                  bluetooth               :1,
-                 unassigned              :14;
+                 ethernet                :1,
+                 wifi                    :1,
+                 unassigned              :12;
     };
 } driver_cap_t;
 
@@ -124,7 +126,9 @@ typedef struct HAL {
     void (*driver_settings_report)(bool axis_settings);
     spindle_data_t (*spindle_get_data)(spindle_data_request_t request);
     void (*spindle_reset_data)(void);
-
+#ifdef DEBUGOUT
+    void (*debug_out)(bool on);
+#endif
     eeprom_io_t eeprom;
 
     // callbacks - set up by grbl before MCU init

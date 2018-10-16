@@ -26,7 +26,7 @@
 static uint8_t feed_buf[FEED_OVR_BUFSIZE], accessory_buf[FEED_OVR_BUFSIZE];
 static volatile uint_fast8_t feed_head = 0, feed_tail = 0, accessory_head = 0, accessory_tail = 0;
 
-void enqueue_feed_ovr (uint8_t cmd)
+ISR_CODE void enqueue_feed_ovr (uint8_t cmd)
 {
     uint_fast8_t bptr = (feed_head + 1) & (FEED_OVR_BUFSIZE - 1);    // Get next head pointer
 
@@ -50,7 +50,7 @@ uint8_t get_feed_ovr (void)
     return data;
 }
 
-void enqueue_accessory_ovr (uint8_t cmd)
+ISR_CODE void enqueue_accessory_ovr (uint8_t cmd)
 {
     uint_fast8_t bptr = (accessory_head + 1) & (FEED_OVR_BUFSIZE - 1);    // Get next head pointer
 

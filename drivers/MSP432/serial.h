@@ -24,6 +24,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "GRBL/config.h"
+
 #define BACKCHANNEL // comment out to use Launchpad Backchannel UART
 
 #define eusci(p) eusciM(p)
@@ -79,6 +81,7 @@ bool serialPutC(const char c);
 void serialWriteS(const char *s);
 void serialWriteLn(const char *s);
 void serialWrite(const char *s, uint16_t length);
+bool serialSuspendInput (bool suspend);
 
 #ifdef LINE_BUFFER_SIZE
 char *serialReadLn (void);

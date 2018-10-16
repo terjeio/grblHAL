@@ -30,7 +30,7 @@ status_code_t jog_execute (plan_line_data_t *pl_data, parser_block_t *gc_block)
     pl_data->condition.no_feed_override = On;
     pl_data->line_number = gc_block->values.n;
 
-    if (settings.flags.soft_limit_enable && system_check_travel_limits(gc_block->values.xyz))
+    if (settings.limits.flags.soft_enabled && system_check_travel_limits(gc_block->values.xyz))
         return Status_TravelExceeded;
 
     // Valid jog command. Plan, set state, and execute.

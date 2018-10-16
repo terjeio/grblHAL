@@ -408,7 +408,7 @@ status_code_t gc_execute_block(char *block, char *message)
 
                             case 1: // M1 - program pause
                                 if(hal.driver_cap.program_stop && !hal.system_control_get_state().stop_disable)
-                                    gc_block.modal.program_flow = ProgramFlow_Paused;
+                                    gc_block.modal.program_flow = ProgramFlow_OptionalStop;
                                 break;
 
                             default: // M2, M30 - program end and reset
@@ -449,9 +449,10 @@ status_code_t gc_execute_block(char *block, char *message)
                         }
                         break;
 
-                #ifdef ENABLE_PARKING_OVERRIDE_CONTROL
                     case 56:
-                #endif
+                        if(!settings.parking.flags.enable_override_control) // TODO: check if enabled?
+                            FAIL(Status_GcodeUnsupportedCommand); // [Unsupported M command]
+                        // no break;
                     case 49: case 50: case 51: case 53:
                         word_bit.group = ModalGroup_M9;
                         gc_block.override_command = (override_mode_t)int_value;
@@ -812,11 +813,10 @@ status_code_t gc_execute_block(char *block, char *message)
                 gc_block.modal.override_ctrl.feed_hold_disable = gc_block.values.p == 0.0f;
                 break;
 
-#ifdef ENABLE_PARKING_OVERRIDE_CONTROL
             case 56:
-                gc_block.modal.override_ctrl.parking_disable = gc_block.values.p == 0.0f;
+                if(settings.parking.flags.enable_override_control)
+                    gc_block.modal.override_ctrl.parking_disable = gc_block.values.p == 0.0f;
                 break;
-#endif
 
             default:
                 break;
@@ -927,11 +927,12 @@ status_code_t gc_execute_block(char *block, char *message)
     if(gc_state.modal.scaling_active) {
         idx = N_AXIS;
         do {
-            if (bit_istrue(axis_words, bit(--idx)))
+            if(bit_istrue(axis_words, bit(--idx))) {
                 if(gc_block.modal.distance == DistanceMode_Absolute)
                      gc_block.values.xyz[idx] = (gc_block.values.xyz[idx] - scale_factor.xyz[idx]) * scale_factor.ijk[idx] + scale_factor.xyz[idx];
                 else
                      gc_block.values.xyz[idx] *= scale_factor.ijk[idx];
+            }
         } while(idx);
     }
 
@@ -1880,8 +1881,9 @@ status_code_t gc_execute_block(char *block, char *message)
     if (gc_state.modal.program_flow) {
 
         protocol_buffer_synchronize(); // Sync and finish all remaining buffered motions before moving on.
-        if (gc_state.modal.program_flow == ProgramFlow_Paused) {
-            if (sys.state != STATE_CHECK_MODE) {
+
+        if (sys.state != STATE_CHECK_MODE) {
+            if (gc_state.modal.program_flow == ProgramFlow_Paused || gc_block.modal.program_flow == ProgramFlow_OptionalStop) {
                 system_set_exec_state_flag(EXEC_FEED_HOLD); // Use feed hold for program pause.
                 protocol_execute_realtime(); // Execute suspend.
             }
@@ -1903,20 +1905,16 @@ status_code_t gc_execute_block(char *block, char *message)
             gc_state.modal.coolant.value = 0;
             gc_state.modal.override_ctrl.feed_rate_disable = Off;
             gc_state.modal.override_ctrl.spindle_rpm_disable = Off;
-          #ifdef ENABLE_PARKING_OVERRIDE_CONTROL
-           #ifdef DEACTIVATE_PARKING_UPON_INIT
-            gc_state.modal.override_ctrl.parking_disable = On;
-           #else
-            gc_state.modal.override_ctrl.parking_disable = Off;
-           #endif
-          #endif
+            if(settings.parking.flags.enabled)
+                gc_state.modal.override_ctrl.parking_disable = settings.parking.flags.enable_override_control &&
+                                                                settings.parking.flags.deactivate_upon_init;
             sys.override_ctrl = gc_state.modal.override_ctrl;
 
-          #ifdef RESTORE_OVERRIDES_AFTER_PROGRAM_END
-            sys.f_override = DEFAULT_FEED_OVERRIDE;
-            sys.r_override = DEFAULT_RAPID_OVERRIDE;
-            sys.spindle_rpm_ovr = DEFAULT_SPINDLE_RPM_OVERRIDE;
-          #endif
+            if(settings.flags.restore_overrides) {
+                sys.f_override = DEFAULT_FEED_OVERRIDE;
+                sys.r_override = DEFAULT_RAPID_OVERRIDE;
+                sys.spindle_rpm_ovr = DEFAULT_SPINDLE_RPM_OVERRIDE;
+            }
 
             // Execute coordinate change and spindle/coolant stop.
             if (sys.state != STATE_CHECK_MODE) {

@@ -32,7 +32,10 @@
 #include "eeprom.h"
 #include "serial.h"
 
-//#include "sdcard.h"
+#ifdef SDCARD_SUPPORT
+#include "sdcard.h"
+#endif
+
 //#include "usermcodes.h"
 //#include "keypad.h"
 //#include "atc.h"
@@ -280,7 +283,7 @@ static void driver_delay_ms (uint32_t ms, void (*callback)(void))
 // Enable/disable steppers
 static void stepperEnable (axes_signals_t enable)
 {
-    enable.mask ^= settings.stepper_enable_invert.mask;
+    enable.mask ^= settings.steppers.enable_invert.mask;
 #ifdef CNC_BOOSTERPACK
     GPIOPinWrite(STEPPERS_DISABLE_XY_PORT, STEPPERS_DISABLE_XY_PIN, enable.x ? STEPPERS_DISABLE_XY_PIN : 0);
     GPIOPinWrite(STEPPERS_DISABLE_Z_PORT, STEPPERS_DISABLE_Z_PIN, enable.z ? STEPPERS_DISABLE_Z_PIN : 0);
@@ -296,11 +299,11 @@ static void stepperEnable (axes_signals_t enable)
 // Starts stepper driver ISR timer and forces a stepper driver interrupt callback
 static void stepperWakeUp (void)
 {
-    if(settings.pulse_delay_microseconds) {
-        TimerMatchSet(PULSE_TIMER_BASE, TIMER_A, settings.pulse_delay_microseconds);
-        TimerLoadSet(PULSE_TIMER_BASE, TIMER_A, settings.pulse_microseconds + settings.pulse_delay_microseconds - 1);
+    if(settings.steppers.pulse_delay_microseconds) {
+        TimerMatchSet(PULSE_TIMER_BASE, TIMER_A, settings.steppers.pulse_delay_microseconds);
+        TimerLoadSet(PULSE_TIMER_BASE, TIMER_A, settings.steppers.pulse_microseconds + settings.steppers.pulse_delay_microseconds - 1);
     } else
-        TimerLoadSet(PULSE_TIMER_BASE, TIMER_A, settings.pulse_microseconds - 1);
+        TimerLoadSet(PULSE_TIMER_BASE, TIMER_A, settings.steppers.pulse_microseconds - 1);
 
 #ifdef LASER_PPI
     laser.next_pulse = 0;
@@ -364,7 +367,7 @@ inline static void stepperSetStepOutputs (axes_signals_t step_outbits)
   #if STEP_OUTMODE == GPIO_MAP
     GPIOPinWrite(STEP_PORT, HWSTEP_MASK, step_outmap[step_outbits.value]);
   #else
-    GPIOPinWrite(STEP_PORT, HWSTEP_MASK, (step_outbits.value ^ settings.step_invert.mask) << STEP_OUTMODE);
+    GPIOPinWrite(STEP_PORT, HWSTEP_MASK, (step_outbits.value ^ settings.steppers.step_invert.mask) << STEP_OUTMODE);
   #endif
 #endif
 }
@@ -560,7 +563,7 @@ static void limitsEnable (bool on)
     for(i = INPUT_LIMIT_X; i <= INPUT_LIMIT_Z; i++) {
   #endif
         GPIOIntClear(inputpin[i].port, inputpin[i].pin);     // Clear any pending interrupt
-        if (on && settings.flags.hard_limit_enable)
+        if (on && settings.limits.flags.hard_enabled)
             GPIOIntEnable(inputpin[i].port, inputpin[i].pin);
         else
             GPIOIntDisable(inputpin[i].port, inputpin[i].pin);
@@ -602,8 +605,8 @@ inline static axes_signals_t limitsGetState()
     signals.z = (flags & Z_LIMIT_PIN) != 0;
 #endif
 
-    if (settings.limit_invert.value)
-        signals.value ^= settings.limit_invert.value;
+    if (settings.limits.invert.value)
+        signals.value ^= settings.limits.invert.value;
 
     return signals;
 }
@@ -654,17 +657,17 @@ bool probeGetState (void)
 
 inline static void spindleOff ()
 {
-    GPIOPinWrite(SPINDLE_ENABLE_PORT, SPINDLE_ENABLE_PIN, settings.spindle_invert.on ? SPINDLE_ENABLE_PIN : 0);
+    GPIOPinWrite(SPINDLE_ENABLE_PORT, SPINDLE_ENABLE_PIN, settings.spindle.invert.on ? SPINDLE_ENABLE_PIN : 0);
 }
 
 inline static void spindleOn ()
 {
-    GPIOPinWrite(SPINDLE_ENABLE_PORT, SPINDLE_ENABLE_PIN, settings.spindle_invert.on ? 0 : SPINDLE_ENABLE_PIN);
+    GPIOPinWrite(SPINDLE_ENABLE_PORT, SPINDLE_ENABLE_PIN, settings.spindle.invert.on ? 0 : SPINDLE_ENABLE_PIN);
 }
 
 inline static void spindleDir (bool ccw)
 {
-    GPIOPinWrite(SPINDLE_DIRECTION_PORT, SPINDLE_DIRECTION_PIN, (ccw ^ settings.spindle_invert.ccw) ? SPINDLE_DIRECTION_PIN : 0);
+    GPIOPinWrite(SPINDLE_DIRECTION_PORT, SPINDLE_DIRECTION_PIN, (ccw ^ settings.spindle.invert.ccw) ? SPINDLE_DIRECTION_PIN : 0);
 }
 
 
@@ -684,32 +687,7 @@ static void spindleSetState (spindle_state_t state, float rpm, uint8_t speed_ovr
 // Spindle speed to PWM conversion. Keep routine small and efficient.
 static uint_fast16_t spindleComputePWMValue (float rpm, uint8_t speed_ovr)
 {
-    uint_fast16_t pwm_value;
-
-    rpm *= (0.010f * speed_ovr); // Scale by spindle speed override value.
-    // Calculate PWM register value based on rpm max/min settings and programmed rpm.
-    if ((settings.rpm_min >= settings.rpm_max) || (rpm >= settings.rpm_max)) {
-        // No PWM range possible. Set simple on/off spindle control pin state.
-        sys.spindle_rpm = settings.rpm_max;
-        pwm_value = spindle_pwm.max_value - 1;
-    } else if (rpm <= settings.rpm_min) {
-        if (rpm == 0.0f) { // S0 disables spindle
-            sys.spindle_rpm = 0.0f;
-            pwm_value = spindle_pwm.off_value;
-        } else { // Set minimum PWM output
-            sys.spindle_rpm = settings.rpm_min;
-            pwm_value = spindle_pwm.min_value;
-        }
-    } else {
-        // Compute intermediate PWM value with linear spindle speed model.
-        // NOTE: A nonlinear model could be installed here, if required, but keep it VERY light-weight.
-        sys.spindle_rpm = rpm;
-        pwm_value = (uint_fast16_t)floorf((rpm - settings.rpm_min) * spindle_pwm.pwm_gradient) + spindle_pwm.min_value;
-        if(pwm_value >= spindle_pwm.max_value)
-            pwm_value = spindle_pwm.max_value - 1;
-    }
-
-    return pwm_value;
+    return spindle_compute_pwm_value(&spindle_pwm, rpm, speed_ovr);
 }
 
 // Sets spindle speed
@@ -747,7 +725,7 @@ static uint_fast16_t spindleSetSpeed (uint_fast16_t pwm_value)
 static uint_fast16_t spindleSetSpeed (uint_fast16_t pwm_value)
 {
     if (pwm_value == hal.spindle_pwm_off) {
-        if(settings.flags.spindle_disable_with_zero_speed)
+        if(settings.spindle.disable_with_zero_speed)
             spindleOff();
         TimerLoadSet(SPINDLE_PWM_TIMER_BASE, TIMER_B, spindle_pwm.period + 20000);
         TimerDisable(SPINDLE_PWM_TIMER_BASE, TIMER_B); // Disable PWM. Output voltage is zero.
@@ -806,7 +784,7 @@ static spindle_state_t spindleGetState (void)
 
     state.on = pwmEnabled || GPIOPinRead(SPINDLE_ENABLE_PORT, SPINDLE_ENABLE_PIN) != 0;
     state.ccw = hal.driver_cap.spindle_dir && GPIOPinRead(SPINDLE_DIRECTION_PORT, SPINDLE_DIRECTION_PIN) != 0;
-    state.value ^= settings.spindle_invert.mask;
+    state.value ^= settings.spindle.invert.mask;
 #ifdef PWM_RAMPED
     state.at_speed = pwm_ramp.pwm_current == pwm_ramp.pwm_target;
 #endif
@@ -919,11 +897,7 @@ static void modechange (void)
 // Configures perhipherals when settings are initialized or changed
 static void settings_changed (settings_t *settings)
 {
-    spindle_pwm.period = (uint32_t)(120000000UL / settings->spindle_pwm_freq);
-    spindle_pwm.off_value = (uint32_t)(spindle_pwm.period * settings->spindle_pwm_off_value / 100.0f);
-    spindle_pwm.min_value = (uint32_t)(spindle_pwm.period * settings->spindle_pwm_min_value / 100.0f);
-    spindle_pwm.max_value = (uint32_t)(spindle_pwm.period * settings->spindle_pwm_max_value / 100.0f);
-    spindle_pwm.pwm_gradient = (float)(spindle_pwm.max_value - spindle_pwm.min_value) / (settings->rpm_max - settings->rpm_min);
+    spindle_precompute_pwm_values(&spindle_pwm, 120000000UL);
 
     hal.spindle_pwm_off = spindle_pwm.off_value;
 
@@ -938,7 +912,7 @@ static void settings_changed (settings_t *settings)
 
 #if DIRECTION_OUTMODE == GPIO_MAP
     for(i = 0; i < sizeof(dir_outmap); i++)
-        dir_outmap[i] = c_dir_outmap[i] ^ c_dir_outmap[settings->dir_invert.mask & 0x07];
+        dir_outmap[i] = c_dir_outmap[i] ^ c_dir_outmap[settings->steppers.dir_invert.mask & 0x07];
 #ifdef CNC_BOOSTERPACK2
     for(i = 0; i < sizeof(dir_outmap2); i++)
         dir_outmap2[i] = c_dir_outmap2[i] ^ c_dir_outmap2[settings->dir_invert.mask >> 3];
@@ -947,12 +921,38 @@ static void settings_changed (settings_t *settings)
 
     if(IOInitDone) {
 
-        stepperEnable(settings->stepper_deenergize);
+#ifdef FreeRTOS
+        switch(settings->stream) {
+
+            case StreamSetting_Ethernet:
+                hal.serial_read = TCPStreamGetC;
+                hal.serial_write = TCPStreamPutC;
+                hal.serial_write_string = TCPStreamWriteS;
+                hal.serial_get_rx_buffer_available = TCPStreamRxFree;
+                hal.serial_reset_read_buffer = TCPStreamRxFlush;
+                hal.serial_cancel_read_buffer = TCPStreamRxCancel;
+                TCPStreamSetReceiveCallback(hal.protocol_process_realtime);
+                break;
+
+            case StreamSetting_Serial:
+                hal.serial_read = serialGetC;
+                hal.serial_write = serialPutC;
+                hal.serial_write_string = serialWriteS;
+                hal.serial_get_rx_buffer_available = serialRxFree;
+                hal.serial_reset_read_buffer = serialRxFlush;
+                hal.serial_cancel_read_buffer = serialRxCancel;
+                hal.serial_suspend_read = serialSuspendInput;
+                setSerialReceiveCallback(hal.protocol_process_realtime);
+                break;
+        }
+#endif
+
+        stepperEnable(settings->steppers.deenergize);
 
         if(hal.driver_cap.variable_spindle)
             TimerLoadSet(SPINDLE_PWM_TIMER_BASE, TIMER_A, spindle_pwm.period);
 
-        if(settings->pulse_delay_microseconds) {
+        if(settings->steppers.pulse_delay_microseconds) {
             TimerIntRegister(PULSE_TIMER_BASE, TIMER_A, stepper_pulse_isr_delayed);
             TimerIntEnable(PULSE_TIMER_BASE, TIMER_TIMA_TIMEOUT|TIMER_TIMA_MATCH);
             hal.stepper_pulse_start = stepperPulseStartDelayed;
@@ -982,7 +982,7 @@ static void settings_changed (settings_t *settings)
         control_fei.mask = settings->control_disable_pullup.mask ^ settings->control_invert.mask;
 
         axes_signals_t limit_fei;
-        limit_fei.mask = settings->limit_disable_pullup.mask ^ settings->limit_invert.mask;
+        limit_fei.mask = settings->limits.disable_pullup.mask ^ settings->limits.invert.mask;
 
         do {
             switch(--i) {
@@ -1013,32 +1013,32 @@ static void settings_changed (settings_t *settings)
                     break;
 
                 case INPUT_LIMIT_X:
-                    pullup = !settings->limit_disable_pullup.x;
+                    pullup = !settings->limits.disable_pullup.x;
                     inputpin[i].invert = limit_fei.x;
                     break;
 
                 case INPUT_LIMIT_Y:
-                    pullup = !settings->limit_disable_pullup.y;
+                    pullup = !settings->limits.disable_pullup.y;
                     inputpin[i].invert = limit_fei.y;
                     break;
 
                 case INPUT_LIMIT_Z:
-                    pullup = !settings->limit_disable_pullup.z;
+                    pullup = !settings->limits.disable_pullup.z;
                     inputpin[i].invert = limit_fei.z;
                     break;
 
                 case INPUT_LIMIT_A:
-                    pullup = !settings->limit_disable_pullup.a;
+                    pullup = !settings->limits.disable_pullup.a;
                     inputpin[i].invert = limit_fei.a;
                     break;
 
                 case INPUT_LIMIT_B:
-                    pullup = !settings->limit_disable_pullup.b;
+                    pullup = !settings->limits.disable_pullup.b;
                     inputpin[i].invert = limit_fei.b;
                     break;
 
                 case INPUT_LIMIT_C:
-                    pullup = !settings->limit_disable_pullup.c;
+                    pullup = !settings->limits.disable_pullup.c;
                     inputpin[i].invert = limit_fei.c;
                     break;
 
@@ -1308,14 +1308,12 @@ static bool driver_setup (settings_t *settings)
 
   // Set defaults
 
-    IOInitDone = settings->version == 13;
+    IOInitDone = settings->version == 14;
 
     settings_changed(settings);
 
     setSerialReceiveCallback(hal.protocol_process_realtime);
-#ifdef FreeRTOS
-    TCPStreamSetReceiveCallback(hal.protocol_process_realtime);
-#endif
+
     spindleSetState((spindle_state_t){0}, spindle_pwm.off_value, DEFAULT_SPINDLE_RPM_OVERRIDE);
     coolantSetState((coolant_state_t){0});
     stepperSetDirOutputs((axes_signals_t){0});
@@ -1392,14 +1390,6 @@ bool driver_init (void)
 
     hal.system_control_get_state = systemGetState;
 
-#ifdef FreeRTOS
-    hal.serial_read = TCPStreamGetC;
-    hal.serial_write = TCPStreamPutC;
-    hal.serial_write_string = TCPStreamWriteS;
-    hal.serial_get_rx_buffer_available = TCPStreamRxFree;
-    hal.serial_reset_read_buffer = TCPStreamRxFlush;
-    hal.serial_cancel_read_buffer = TCPStreamRxCancel;
-#else
     hal.serial_read = serialGetC;
     hal.serial_write = serialPutC;
     hal.serial_write_string = serialWriteS;
@@ -1407,7 +1397,6 @@ bool driver_init (void)
     hal.serial_reset_read_buffer = serialRxFlush;
     hal.serial_cancel_read_buffer = serialRxCancel;
     hal.serial_suspend_read = serialSuspendInput;
-#endif
 
     hal.eeprom.type = EEPROM_Physical;
     hal.eeprom.get_byte = eepromGetByte;
@@ -1472,6 +1461,9 @@ bool driver_init (void)
 #ifdef _SDCARD_H_
     hal.driver_cap.sd_card = On;
 #endif
+#ifdef FreeRTOS
+    hal.driver_cap.ethernet = On;
+#endif
 
     // no need to move version check before init - compiler will fail any mismatch for existing entries
     return hal.version == 4;
@@ -1501,14 +1493,14 @@ static void stepper_driver_isr (void)
 static void stepper_pulse_isr (void)
 {
     TimerIntClear(PULSE_TIMER_BASE, TIMER_TIMA_TIMEOUT); // clear interrupt flag
-    stepperSetStepOutputs(settings.step_invert);
+    stepperSetStepOutputs(settings.steppers.step_invert);
 }
 
 static void stepper_pulse_isr_delayed (void)
 {
     uint32_t iflags = TimerIntStatus(PULSE_TIMER_BASE, true);
     TimerIntClear(PULSE_TIMER_BASE, iflags); // clear interrupt flags
-    stepperSetStepOutputs(iflags & TIMER_TIMA_MATCH ? next_step_outbits : settings.step_invert);
+    stepperSetStepOutputs(iflags & TIMER_TIMA_MATCH ? next_step_outbits : settings.steppers.step_invert);
 }
 
 #ifdef LASER_PPI

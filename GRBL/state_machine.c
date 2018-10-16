@@ -32,19 +32,15 @@ static void state_noop (uint_fast16_t rt_exec);
 static void state_await_motion_cancel (uint_fast16_t rt_exec);
 static void state_await_resume (uint_fast16_t rt_exec);
 static void state_await_toolchanged (uint_fast16_t rt_exec);
-#ifdef PARKING_ENABLE
 static void state_await_waypoint_retract (uint_fast16_t rt_exec);
 static void state_restore (uint_fast16_t rt_exec);
 static void state_await_resumed (uint_fast16_t rt_exec);
-#endif
 
 static void (* volatile stateHandler)(uint_fast16_t rt_exec) = state_idle;
 
 static float restore_spindle_rpm;
 static planner_cond_t restore_condition;
 static uint_fast16_t pending_state = STATE_IDLE;
-
-#ifdef PARKING_ENABLE
 
 typedef struct {
     float target[N_AXIS];
@@ -58,51 +54,41 @@ typedef struct {
 // Declare and initialize parking local variables
 static parking_data_t park;
 
-#endif
-
 static void state_restore_conditions (planner_cond_t *condition, float rpm)
 {
+    if(!settings.parking.flags.enabled || !park.restart_retract) {
 
-#ifdef PARKING_ENABLE
-    if(!park.restart_retract) {
-#endif
+        if (gc_state.modal.spindle.on) {
+            if (settings.flags.laser_mode)
+            // When in laser mode, ignore spindle spin-up delay. Set to turn on laser when cycle starts.
+                sys.step_control.update_spindle_rpm = On;
+            else if(spindle_set_state(condition->spindle, rpm)) {
+                if(hal.driver_cap.spindle_at_speed) {
+                    while(!hal.spindle_get_state().at_speed)
+                        delay_sec(0.1f, DelayMode_SysSuspend);
+                } else
+                    delay_sec(SAFETY_DOOR_SPINDLE_DELAY, DelayMode_SysSuspend);
+            }
+        }
 
-    if (gc_state.modal.spindle.on) {
-        if (settings.flags.laser_mode)
-        // When in laser mode, ignore spindle spin-up delay. Set to turn on laser when cycle starts.
-            sys.step_control.update_spindle_rpm = On;
-        else if(spindle_set_state(condition->spindle, rpm)) {
-            if(hal.driver_cap.spindle_at_speed) {
-                while(!hal.spindle_get_state().at_speed)
-                    delay_sec(0.1f, DelayMode_SysSuspend);
-            } else
-                delay_sec(SAFETY_DOOR_SPINDLE_DELAY, DelayMode_SysSuspend);
+        // Block if safety door re-opened during prior restore actions.
+        if (gc_state.modal.coolant.value) {
+            // NOTE: Laser mode will honor this delay. An exhaust system is often controlled by this pin.
+            coolant_set_state(condition->coolant);
+            delay_sec(SAFETY_DOOR_COOLANT_DELAY, DelayMode_SysSuspend);
         }
     }
-
-    // Block if safety door re-opened during prior restore actions.
-    if (gc_state.modal.coolant.value) {
-        // NOTE: Laser mode will honor this delay. An exhaust system is often controlled by this pin.
-        coolant_set_state(condition->coolant);
-        delay_sec(SAFETY_DOOR_COOLANT_DELAY, DelayMode_SysSuspend);
-    }
-
-#ifdef PARKING_ENABLE
-    }
-#endif
-
 }
 
 bool initiate_hold (uint_fast16_t new_state)
 {
-
-#ifdef PARKING_ENABLE
-    memset(&park.plan_data, 0, sizeof(plan_line_data_t));
-    park.retract_waypoint = PARKING_PULLOUT_INCREMENT;
-    park.plan_data.condition.system_motion = On;
-    park.plan_data.condition.no_feed_override = On;
-    park.plan_data.line_number = PARKING_MOTION_LINE_NUMBER;
-#endif
+    if(settings.parking.flags.enabled) {
+        memset(&park.plan_data, 0, sizeof(plan_line_data_t));
+        park.retract_waypoint = settings.parking.pullout_increment;
+        park.plan_data.condition.system_motion = On;
+        park.plan_data.condition.no_feed_override = On;
+        park.plan_data.line_number = PARKING_MOTION_LINE_NUMBER;
+    }
 
     plan_block_t *block = plan_get_current_block();
 
@@ -114,10 +100,9 @@ bool initiate_hold (uint_fast16_t new_state)
         restore_condition = block->condition;
         restore_spindle_rpm = block->spindle.rpm;
     }
-   #ifdef DISABLE_LASER_DURING_HOLD
-    if (settings.flags.laser_mode)
+
+    if(settings.flags.laser_mode && settings.flags.disable_laser_during_hold)
         enqueue_accessory_ovr(CMD_SPINDLE_OVR_STOP);
-   #endif
 
     if(sys.state & (STATE_CYCLE|STATE_JOG)) {
         st_update_plan_block_parameters();  // Notify stepper module to recompute for hold deceleration.
@@ -138,11 +123,8 @@ bool initiate_hold (uint_fast16_t new_state)
 
 bool state_door_reopened (void)
 {
-#ifdef PARKING_ENABLE
-    return park.restart_retract;
-#else
-    return false;
-#endif
+    return settings.parking.flags.enabled && park.restart_retract;
+
 }
 
 void update_state (uint_fast16_t rt_exec)
@@ -163,7 +145,7 @@ void set_state (uint_fast16_t new_state)
             sys.step_control.flags = 0; // Restore step control to normal operation.
             sys.parking_state = Parking_DoorClosed;
             sys.holding_state = Hold_NotHolding;
-            sys.state = new_state;
+            sys.state = pending_state = new_state;
             stateHandler = state_idle;
             break;
 
@@ -327,47 +309,45 @@ static void state_await_hold (uint_fast16_t rt_exec)
                 // Ensure any prior spindle stop override is disabled at start of safety door routine.
                 sys.spindle_stop_ovr.value = 0;
 
-              #ifndef PARKING_ENABLE
+                if(settings.parking.flags.enabled) {
+                    // Get current position and store restore location and spindle retract waypoint.
+                    system_convert_array_steps_to_mpos(park.target, sys_position);
+                    if (!park.restart_retract) {
+                        memcpy(park.restore_target, park.target, sizeof(park.target));
+                        park.retract_waypoint += park.restore_target[settings.parking.axis];
+                        park.retract_waypoint = min(park.retract_waypoint, settings.parking.target);
+                    }
 
-                spindle_stop(); // De-energize
-                hal.coolant_set_state((coolant_state_t){0}); // De-energize
-                sys.parking_state = Parking_DoorAjar;
-
-              #else
-                // Get current position and store restore location and spindle retract waypoint.
-                system_convert_array_steps_to_mpos(park.target, sys_position);
-                if (!park.restart_retract) {
-                    memcpy(park.restore_target, park.target, sizeof(park.target));
-                    park.retract_waypoint += park.restore_target[PARKING_AXIS];
-                    park.retract_waypoint = min(park.retract_waypoint, PARKING_TARGET);
-                }
-
-                // Execute slow pull-out parking retract motion. Parking requires homing enabled, the
-                // current location not exceeding the parking target location, and laser mode disabled.
-                // NOTE: State is will remain DOOR, until the de-energizing and retract is complete.
-                if (settings.flags.homing_enable && (park.target[PARKING_AXIS] < PARKING_TARGET) && !settings.flags.laser_mode && !sys.override_ctrl.parking_disable) {
-                    handler_changed = true;
-                    stateHandler = state_await_waypoint_retract;
-                    // Retract spindle by pullout distance. Ensure retraction motion moves away from
-                    // the workpiece and waypoint motion doesn't exceed the parking target location.
-                    if (park.target[PARKING_AXIS] < park.retract_waypoint) {
-                        park.target[PARKING_AXIS] = park.retract_waypoint;
-                        park.plan_data.feed_rate = PARKING_PULLOUT_RATE;
-                        park.plan_data.condition.coolant = restore_condition.coolant; // Retain coolant state
-                        park.plan_data.condition.spindle = restore_condition.spindle; // Retain spindle state
-                        park.plan_data.spindle.rpm = restore_spindle_rpm;
-                        if(!(park.retracting = mc_parking_motion(park.target, &park.plan_data)))
-                            stateHandler(EXEC_CYCLE_COMPLETE);;
-                    } else
-                        stateHandler(EXEC_CYCLE_COMPLETE);
+                    // Execute slow pull-out parking retract motion. Parking requires homing enabled, the
+                    // current location not exceeding the parking target location, and laser mode disabled.
+                    // NOTE: State is will remain DOOR, until the de-energizing and retract is complete.
+                    if (settings.homing.flags.enabled && (park.target[settings.parking.axis] < settings.parking.target) && !settings.flags.laser_mode && !sys.override_ctrl.parking_disable) {
+                        handler_changed = true;
+                        stateHandler = state_await_waypoint_retract;
+                        // Retract spindle by pullout distance. Ensure retraction motion moves away from
+                        // the workpiece and waypoint motion doesn't exceed the parking target location.
+                        if (park.target[settings.parking.axis] < park.retract_waypoint) {
+                            park.target[settings.parking.axis] = park.retract_waypoint;
+                            park.plan_data.feed_rate = settings.parking.pullout_rate;
+                            park.plan_data.condition.coolant = restore_condition.coolant; // Retain coolant state
+                            park.plan_data.condition.spindle = restore_condition.spindle; // Retain spindle state
+                            park.plan_data.spindle.rpm = restore_spindle_rpm;
+                            if(!(park.retracting = mc_parking_motion(park.target, &park.plan_data)))
+                                stateHandler(EXEC_CYCLE_COMPLETE);;
+                        } else
+                            stateHandler(EXEC_CYCLE_COMPLETE);
+                    } else {
+                        // Parking motion not possible. Just disable the spindle and coolant.
+                        // NOTE: Laser mode does not start a parking motion to ensure the laser stops immediately.
+                        spindle_stop(); // De-energize
+                        hal.coolant_set_state((coolant_state_t){0});     // De-energize
+                        sys.parking_state = Parking_DoorAjar;
+                    }
                 } else {
-                    // Parking motion not possible. Just disable the spindle and coolant.
-                    // NOTE: Laser mode does not start a parking motion to ensure the laser stops immediately.
                     spindle_stop(); // De-energize
-                    hal.coolant_set_state((coolant_state_t){0});     // De-energize
+                    hal.coolant_set_state((coolant_state_t){0}); // De-energize
                     sys.parking_state = Parking_DoorAjar;
                 }
-#endif
                 break;
 
             default:
@@ -394,15 +374,13 @@ static void state_await_hold (uint_fast16_t rt_exec)
 
 static void state_await_resume (uint_fast16_t rt_exec)
 {
-#ifdef PARKING_ENABLE
-    if(rt_exec & EXEC_CYCLE_COMPLETE) {
+    if((rt_exec & EXEC_CYCLE_COMPLETE) && settings.parking.flags.enabled) {
         if(sys.step_control.execute_sys_motion) {
             sys.step_control.execute_sys_motion = Off;
             st_parking_restore_buffer(); // Restore step segment buffer to normal run state.
         }
         sys.parking_state = Parking_DoorAjar;
     }
-#endif
 
     if ((rt_exec & EXEC_CYCLE_START) && !(sys.state == STATE_SAFETY_DOOR && hal.system_control_get_state().safety_door_ajar)) {
 
@@ -419,30 +397,30 @@ static void state_await_resume (uint_fast16_t rt_exec)
             // Resume door state when parking motion has retracted and door has been closed.
             case STATE_SLEEP:
             case STATE_SAFETY_DOOR:
-              #ifdef PARKING_ENABLE
 
-                park.restart_retract = false;
-                sys.parking_state = Parking_Resuming;
+                if(settings.parking.flags.enabled) {
 
-                // Execute fast restore motion to the pull-out position. Parking requires homing enabled.
-                // NOTE: State is will remain DOOR, until the de-energizing and retract is complete.
-                if (park.retracting) {
-                    handler_changed = true;
-                    stateHandler = state_restore;
-                    // Check to ensure the motion doesn't move below pull-out position.
-                    if (park.target[PARKING_AXIS] <= PARKING_TARGET) {
-                        park.target[PARKING_AXIS] = park.retract_waypoint;
-                        park.plan_data.feed_rate = PARKING_RATE;
-                        if(!mc_parking_motion(park.target, &park.plan_data))
+                    park.restart_retract = false;
+                    sys.parking_state = Parking_Resuming;
+
+                    // Execute fast restore motion to the pull-out position. Parking requires homing enabled.
+                    // NOTE: State is will remain DOOR, until the de-energizing and retract is complete.
+                    if (park.retracting) {
+                        handler_changed = true;
+                        stateHandler = state_restore;
+                        // Check to ensure the motion doesn't move below pull-out position.
+                        if (park.target[settings.parking.axis] <= settings.parking.target) {
+                            park.target[settings.parking.axis] = park.retract_waypoint;
+                            park.plan_data.feed_rate = settings.parking.rate;
+                            if(!mc_parking_motion(park.target, &park.plan_data))
+                                stateHandler(EXEC_CYCLE_COMPLETE);
+                        } else // tell next handler to proceed with final step immediately
                             stateHandler(EXEC_CYCLE_COMPLETE);
-                    } else // tell next handler to proceed with final step immediately
-                        stateHandler(EXEC_CYCLE_COMPLETE);
-                }
-              #else
-                // Delayed Tasks: Restart spindle and coolant, delay to power-up, then resume cycle.
-                // Block if safety door re-opened during prior restore actions.
-                state_restore_conditions(&restore_condition, restore_spindle_rpm);
-              #endif
+                    }
+                } else
+                    // Delayed Tasks: Restart spindle and coolant, delay to power-up, then resume cycle.
+                    // Block if safety door re-opened during prior restore actions.
+                    state_restore_conditions(&restore_condition, restore_spindle_rpm);
                 break;
 
             default:
@@ -477,8 +455,6 @@ static void state_await_resume (uint_fast16_t rt_exec)
     }
 }
 
-#ifdef PARKING_ENABLE
-
 static void state_await_waypoint_retract (uint_fast16_t rt_exec)
 {
     if (rt_exec & EXEC_CYCLE_COMPLETE) {
@@ -498,9 +474,9 @@ static void state_await_waypoint_retract (uint_fast16_t rt_exec)
         stateHandler = state_await_resume;
 
         // Execute fast parking retract motion to parking target location.
-        if (park.target[PARKING_AXIS] < PARKING_TARGET) {
-            park.target[PARKING_AXIS] = PARKING_TARGET;
-            park.plan_data.feed_rate = PARKING_RATE;
+        if (park.target[settings.parking.axis] < settings.parking.target) {
+            park.target[settings.parking.axis] = settings.parking.target;
+            park.plan_data.feed_rate = settings.parking.rate;
             if(mc_parking_motion(park.target, &park.plan_data))
                 park.retracting = true;
             else
@@ -551,7 +527,7 @@ static void state_restore (uint_fast16_t rt_exec)
         // Regardless if the retract parking motion was a valid/safe motion or not, the
         // restore parking motion should logically be valid, either by returning to the
         // original position through valid machine space or by not moving at all.
-        park.plan_data.feed_rate = PARKING_PULLOUT_RATE;
+        park.plan_data.feed_rate = settings.parking.pullout_rate;
         park.plan_data.condition.coolant = restore_condition.coolant;
         park.plan_data.condition.spindle = restore_condition.spindle;
         park.plan_data.spindle.rpm = restore_spindle_rpm;
@@ -574,8 +550,6 @@ static void state_await_resumed (uint_fast16_t rt_exec)
         set_state(STATE_CYCLE);
     }
 }
-
-#endif
 
 static void state_noop (uint_fast16_t rt_exec)
 {

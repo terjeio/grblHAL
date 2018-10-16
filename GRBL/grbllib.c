@@ -42,6 +42,13 @@ static bool serial_tx_blocking (void)
     return !(sys_rt_exec_state & EXEC_RESET);
 }
 
+#ifdef DEBUGOUT
+static void debug_out (bool on)
+{
+    // NOOP
+}
+#endif
+
 // main entry point
 
 int grbl_enter (void)
@@ -61,6 +68,9 @@ int grbl_enter (void)
 
 	hal.version = HAL_VERSION; // Update when signatures and/or contract is changed - driver_init() should fail
 
+#ifdef DEBUGOUT
+	hal.debug_out = debug_out; // must be overridden by driver to have any effect
+#endif
 	driver_ok = driver_init();
 
 	hal.limit_interrupt_callback = &limit_interrupt_handler;
@@ -98,20 +108,6 @@ int grbl_enter (void)
     driver_ok = driver_ok & hal.driver_cap.constant_surface_speed;
 #endif
 
-// TODO: settings to be made configurable via $nn=
-
-#ifdef VARIABLE_SPINDLE
-    driver_ok = driver_ok & hal.driver_cap.variable_spindle;
-#else
-    hal.driver_cap.variable_spindle = Off;
-#endif
-
-#ifdef SPINDLE_ENABLE_OFF_WITH_ZERO_SPEED
-    settings.flags.spindle_disable_with_zero_speed = on;
-#endif
-
-// end settings to be made configurable
-
     sys.mpg_mode = false;
     sys.message = NULL;
 
@@ -128,12 +124,7 @@ int grbl_enter (void)
         hal.get_position(&sys_position); // TODO:  restore on abort when returns true?
 
     // Initialize system state.
-  #ifdef FORCE_INITIALIZATION_ALARM
-      // Force Grbl into an ALARM state upon a power-cycle or hard reset.
-    sys.state = STATE_ALARM;
-  #else
-    sys.state = STATE_IDLE;
-  #endif
+    sys.state = settings.flags.force_initialization_alarm ? STATE_ALARM : STATE_IDLE;
 
     // Check for power-up and set system alarm if homing is enabled to force homing cycle
     // by setting Grbl's alarm state. Alarm locks out all g-code commands, including the
@@ -142,10 +133,8 @@ int grbl_enter (void)
     // NOTE: The startup script will run after successful completion of the homing cycle, but
     // not after disabling the alarm locks. Prevents motion startup blocks from crashing into
     // things uncontrollably. Very bad.
-  #ifdef HOMING_INIT_LOCK
-    if (settings.flags.homing_enable)
+    if (settings.homing.flags.enabled && settings.homing.flags.init_lock)
         sys.state = STATE_ALARM;
-  #endif
 
     if(hal.system_control_get_state().reset)
         sys.state = STATE_ALARM;
@@ -165,11 +154,8 @@ int grbl_enter (void)
 		sys.f_override = DEFAULT_FEED_OVERRIDE;  // Set to 100%
 		sys.r_override = DEFAULT_RAPID_OVERRIDE; // Set to 100%
 		sys.spindle_rpm_ovr = DEFAULT_SPINDLE_RPM_OVERRIDE; // Set to 100%
-      #ifdef PARKING_ENABLE
-       #ifdef DEACTIVATE_PARKING_UPON_INIT
-        sys.override_ctrl.parking_disable = on;
-       #endif
-      #endif
+		if(settings.parking.flags.enabled)
+		    sys.override_ctrl.parking_disable = settings.parking.flags.deactivate_upon_init;
 
 		memset(sys_probe_position, 0, sizeof(sys_probe_position)); // Clear probe position.
 		sys_probe_state = Probe_Off;
@@ -181,7 +167,7 @@ int grbl_enter (void)
 		// Reset Grbl primary systems.
 		hal.serial_reset_read_buffer(); // Clear serial read buffer
 		gc_init(); // Set g-code parser to default state
-		hal.limits_enable(settings.flags.hard_limit_enable);
+		hal.limits_enable(settings.limits.flags.hard_enabled);
 		plan_reset(); // Clear block buffer and planner variables
 		st_reset(); // Clear stepper subsystem variables.
 

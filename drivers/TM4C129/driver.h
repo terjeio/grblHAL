@@ -29,6 +29,7 @@
 // Configuration
 
 //#define FreeRTOS                // comment in to enable Ethernet streaming
+//#define SDCARD_SUPPORT          // comment in to enable SD card support
 
 #define CNC_BOOSTERPACK         // comment in if for CNC Boosterpack
 #ifdef CNC_BOOSTERPACK

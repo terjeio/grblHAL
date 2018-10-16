@@ -28,7 +28,7 @@
 
 // Version of the persistent storage data. Will be used to migrate existing data from older versions of Grbl
 // when firmware is upgraded. Always stored in byte 0 of eeprom
-#define SETTINGS_VERSION 13  // NOTE: Check settings_reset() when moving to next version.
+#define SETTINGS_VERSION 14  // NOTE: Check settings_reset() when moving to next version.
 
 // Define settings restore bitflags.
 #define SETTINGS_RESTORE_DEFAULTS bit(0)
@@ -114,6 +114,22 @@ typedef enum {
     Setting_HomingCycle_4  = 47,
     Setting_HomingCycle_5  = 48,
     Setting_HomingCycle_6  = 49,
+// Optional driver implemented settings for jogging
+    Setting_JogStepSpeed = 50,
+    Setting_JogSlowSpeed = 51,
+    Setting_JogFastSpeed = 52,
+    Setting_JogStepDistance = 53,
+    Setting_JogSlowDistance = 54,
+    Setting_JogFastDistance = 55,
+//
+    Setting_RestoreOverrides = 60,
+    Setting_IgnoreDoorWhenIdle = 61,
+    Setting_SleepEnable = 62,
+    Setting_DisableLaserDuringHold = 63,
+    Setting_ForceInitAlarm = 64,
+    Setting_CheckLimitsAtInit = 65,
+    Setting_HomingInitLock = 66,
+    Settings_Stream = 70,
     Setting_AxisSettingsBase = 100, // NOTE: Reserving settings values >= 100 for axis settings. Up to 255.
     Setting_AxisSettingsMax = 255
 } setting_type_t;
@@ -127,17 +143,27 @@ typedef enum {
     AxisSetting_GRBLMaxValue = 4 // NOTE: Always set to highest axis setting parameter set
 } axis_setting_type_t;
 
+typedef enum {
+    StreamSetting_Serial = 0,
+    StreamSetting_Bluetooth,
+    StreamSetting_Ethernet,
+    StreamSetting_WiFi,
+    StreamSetting_SDCard
+} stream_setting_t;
+
 typedef union {
-    uint8_t value;
+    uint16_t value;
     struct {
-        uint8_t report_inches     :1,
-                laser_mode        :1,
-                hard_limit_enable :1,
-                homing_enable     :1,
-                soft_limit_enable :1,
-                invert_probe_pin  :1,
-                spindle_disable_with_zero_speed :1,
-                disable_probe_pullup :1;
+        uint16_t report_inches                  :1,
+                laser_mode                      :1,
+                invert_probe_pin                :1,
+                disable_probe_pullup            :1,
+                restore_overrides               :1,
+                safety_door_ignore_when_idle    :1,
+                sleep_enable                    :1,
+                disable_laser_during_hold       :1,
+                force_initialization_alarm      :1,
+                unassigned                      :7;
     };
 } settingflags_t;
 
@@ -151,9 +177,90 @@ typedef union {
 				pin_state         :1,
 				work_coord_offset :1,
 				overrrides        :1,
-				unassigned        :1;
+				probe_coordinates :1;
     };
 } reportmask_t;
+
+typedef union {
+    uint8_t value;
+    struct {
+        uint8_t enabled                 :1,
+                deactivate_upon_init    :1,
+                enable_override_control :1,
+                unassigned              :5;
+    };
+} parking_setting_flags_t;
+
+typedef struct {
+    parking_setting_flags_t flags;
+    uint8_t axis;               // Define which axis that performs the parking motion
+    float target;               // Parking axis target. In mm, as machine coordinate [-max_travel,0].
+    float rate;                 // Parking fast rate after pull-out in mm/min.
+    float pullout_rate;         // Pull-out/plunge slow feed rate in mm/min.
+    float pullout_increment;    // Spindle pull-out and plunge distance in mm. Incremental distance.
+} parking_settings_t;
+
+typedef struct {
+    float rpm_max;
+    float rpm_min;
+    float pwm_freq;
+    float pwm_period;
+    float pwm_off_value;
+    float pwm_min_value;
+    float pwm_max_value;
+    float P_gain;
+    float I_gain;
+    float D_gain;
+    uint16_t ppr; // Spindle encoder pulses per revolution
+    spindle_state_t invert;
+    bool disable_with_zero_speed;
+} spindle_settings_t;
+
+typedef union {
+    uint8_t value;
+    struct {
+        uint8_t enabled  :1,
+                init_lock     :1,
+                unassigned    :6;
+    };
+} homing_settings_flags_t;
+
+typedef struct {
+    float feed_rate;
+    float seek_rate;
+    float pulloff;
+    uint8_t dir_mask;
+    uint8_t locate_cycles;
+    uint16_t debounce_delay;
+    homing_settings_flags_t flags;
+    uint8_t cycle[N_AXIS];
+} homing_settings_t;
+
+typedef struct {
+    axes_signals_t step_invert;
+    axes_signals_t dir_invert;
+    axes_signals_t enable_invert;
+    axes_signals_t deenergize;
+    uint8_t pulse_microseconds;
+    uint8_t pulse_delay_microseconds;
+    uint8_t idle_lock_time; // If max value 255, steppers do not disable.
+} stepper_settings_t;
+
+typedef union {
+    uint8_t value;
+    struct {
+        uint8_t hard_enabled  :1,
+                soft_enabled  :1,
+                check_at_init :1,
+                unassigned    :5;
+    };
+} limit_settings_flags_t;
+
+typedef struct {
+    limit_settings_flags_t flags;
+    axes_signals_t invert;
+    axes_signals_t disable_pullup;
+} limit_settings_t;
 
 // Global persistent settings (Stored from byte persistent storage_ADDR_GLOBAL onwards)
 typedef struct {
@@ -167,41 +274,19 @@ typedef struct {
     float stepper_current[N_AXIS];
     float junction_deviation;
     float arc_tolerance;
-    float homing_feed_rate;
-    float homing_seek_rate;
-    float homing_pulloff;
-    float rpm_max;
-    float rpm_min;
-    float spindle_pwm_freq;
-    float spindle_pwm_period;
-    float spindle_pwm_off_value;
-    float spindle_pwm_min_value;
-    float spindle_pwm_max_value;
     float g73_retract;
 
-    uint8_t homing_cycle[N_AXIS];
-    uint8_t stepper_idle_lock_time; // If max value 255, steppers do not disable.
     control_signals_t control_invert;
     control_signals_t control_disable_pullup;
-    axes_signals_t limit_invert;
-    axes_signals_t limit_disable_pullup;
-    axes_signals_t step_invert;
-    axes_signals_t dir_invert;
-    axes_signals_t stepper_enable_invert;
-    axes_signals_t stepper_deenergize;
     coolant_state_t coolant_invert;
-    spindle_state_t spindle_invert;
-    uint8_t homing_dir_mask;
-    uint8_t homing_locate_cycles;
-    uint16_t homing_debounce_delay;
-    uint8_t pulse_microseconds;
-    uint8_t pulse_delay_microseconds;
+    spindle_settings_t spindle;
+    stepper_settings_t steppers;
     reportmask_t status_report; // Mask to indicate desired report data.
     settingflags_t flags;  // Contains default boolean settings
-    uint16_t spindle_ppr; // Spindle encoder pulses per revolution
-    float spindle_P_gain;
-    float spindle_I_gain;
-    float spindle_D_gain;
+    stream_setting_t stream;
+    homing_settings_t homing;
+    limit_settings_t limits;
+    parking_settings_t parking;
 } settings_t;
 
 extern settings_t settings;

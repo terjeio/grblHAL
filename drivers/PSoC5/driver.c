@@ -81,23 +81,23 @@ static uint_fast16_t spindleComputePWMValue (float rpm, uint8_t speed_ovr)
 
     rpm *= (0.010f * speed_ovr); // Scale by spindle speed override value.
     // Calculate PWM register value based on rpm max/min settings and programmed rpm.
-    if ((settings.rpm_min >= settings.rpm_max) || (rpm >= settings.rpm_max)) {
+    if ((settings.spindle.rpm_min >= settings.spindle.rpm_max) || (rpm >= settings.spindle.rpm_max)) {
         // No PWM range possible. Set simple on/off spindle control pin state.
-        sys.spindle_rpm = settings.rpm_max;
+        sys.spindle_rpm = settings.spindle.rpm_max;
         pwm_value = spindle_pwm.max_value - 1;
-    } else if (rpm <= settings.rpm_min) {
+    } else if (rpm <= settings.spindle.rpm_min) {
         if (rpm == 0.0f) { // S0 disables spindle
             sys.spindle_rpm = 0.0f;
             pwm_value = spindle_pwm.off_value;
         } else { // Set minimum PWM output
-            sys.spindle_rpm = settings.rpm_min;
+            sys.spindle_rpm = settings.spindle.rpm_min;
             pwm_value = spindle_pwm.min_value;
         }
     } else {
         // Compute intermediate PWM value with linear spindle speed model.
         // NOTE: A nonlinear model could be installed here, if required, but keep it VERY light-weight.
         sys.spindle_rpm = rpm;
-        pwm_value = (uint_fast16_t)floorf((rpm - settings.rpm_min) * spindle_pwm.pwm_gradient) + spindle_pwm.min_value;
+        pwm_value = (uint_fast16_t)floorf((rpm - settings.spindle.rpm_min) * spindle_pwm.pwm_gradient) + spindle_pwm.min_value;
         if(pwm_value >= spindle_pwm.max_value)
         	pwm_value = spindle_pwm.max_value - 1;
     }
@@ -109,7 +109,7 @@ static uint_fast16_t spindleComputePWMValue (float rpm, uint8_t speed_ovr)
 static uint_fast16_t spindleSetSpeed (uint_fast16_t pwm_value)
 {
     if (pwm_value == hal.spindle_pwm_off) {
-        if(settings.flags.spindle_disable_with_zero_speed)
+        if(settings.spindle.disable_with_zero_speed)
             SpindleOutput_Write(SpindleOutput_Read() & 0x02);
     } else {
         if(!(SpindleOutput_Read() & 0x01))
@@ -320,24 +320,24 @@ void settings_changed (settings_t *settings)
     //TODO: disable interrupts while reconfigure?
     if(IOInitDone) {
     
-        StepPulseClock_SetDivider(hal.f_step_timer / 1000000UL * settings->pulse_microseconds);
+        StepPulseClock_SetDivider(hal.f_step_timer / 1000000UL * settings->steppers.pulse_microseconds);
 
-        DirInvert_Write(settings->dir_invert.mask);
-        StepInvert_Write(settings->step_invert.mask);
-        StepperEnableInvert_Write(settings->stepper_enable_invert.x);
-        SpindleInvert_Write(settings->spindle_invert.mask);
+        DirInvert_Write(settings->steppers.dir_invert.mask);
+        StepInvert_Write(settings->steppers.step_invert.mask);
+        StepperEnableInvert_Write(settings->steppers.enable_invert.x);
+        SpindleInvert_Write(settings->spindle.invert.mask);
         CoolantInvert_Write(settings->coolant_invert.mask);
 
-        stepperEnable(settings->stepper_deenergize);
+        stepperEnable(settings->steppers.deenergize);
 
         // Homing (limit) inputs
-        XHome_Write(settings->limit_disable_pullup.x ? 0 : 1);
-        XHome_SetDriveMode(settings->limit_disable_pullup.x ? XHome_DM_RES_DWN : XHome_DM_RES_UP);
-        YHome_Write(settings->limit_disable_pullup.y ? 0 : 1);
-        YHome_SetDriveMode(settings->limit_disable_pullup.y ? YHome_DM_RES_DWN : YHome_DM_RES_UP);
-        ZHome_Write(settings->limit_disable_pullup.z ? 0 : 1);
-        ZHome_SetDriveMode(settings->limit_disable_pullup.z ? ZHome_DM_RES_DWN : ZHome_DM_RES_UP);
-        HomingSignalsInvert_Write(settings->limit_invert.mask);
+        XHome_Write(settings->limits.disable_pullup.x ? 0 : 1);
+        XHome_SetDriveMode(settings->limits.disable_pullup.x ? XHome_DM_RES_DWN : XHome_DM_RES_UP);
+        YHome_Write(settings->limits.disable_pullup.y ? 0 : 1);
+        YHome_SetDriveMode(settings->limits.disable_pullup.y ? YHome_DM_RES_DWN : YHome_DM_RES_UP);
+        ZHome_Write(settings->limits.disable_pullup.z ? 0 : 1);
+        ZHome_SetDriveMode(settings->limits.disable_pullup.z ? ZHome_DM_RES_DWN : ZHome_DM_RES_UP);
+        HomingSignalsInvert_Write(settings->limits.invert.mask);
 
         // Control inputs
         Reset_Write(settings->control_disable_pullup.reset ? 0 : 1);
@@ -355,11 +355,7 @@ void settings_changed (settings_t *settings)
         Probe_SetDriveMode(settings->flags.disable_probe_pullup ? Probe_DM_RES_DWN : Probe_DM_RES_UP);
         Probe_Write(settings->flags.disable_probe_pullup ? 0 : 1);
 
-        spindle_pwm.period = (uint32_t)(hal.f_step_timer / settings->spindle_pwm_freq);
-        spindle_pwm.off_value = (uint32_t)(spindle_pwm.period * settings->spindle_pwm_off_value / 100.0f);
-        spindle_pwm.min_value = (uint32_t)(spindle_pwm.period * settings->spindle_pwm_min_value / 100.0f);
-        spindle_pwm.max_value = (uint32_t)(spindle_pwm.period * settings->spindle_pwm_max_value / 100.0f);
-        spindle_pwm.pwm_gradient = (float)(spindle_pwm.max_value - spindle_pwm.min_value) / (settings->rpm_max - settings->rpm_min);
+        spindle_precompute_pwm_values(&spindle_pwm, hal.f_step_timer);
 
         hal.spindle_pwm_off = spindle_pwm.off_value;
 

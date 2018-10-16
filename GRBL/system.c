@@ -25,7 +25,7 @@
 // only the realtime command execute variable to have the main program execute these when
 // its ready. This works exactly like the character-based realtime commands when picked off
 // directly from the incoming serial data stream.
-void control_interrupt_handler (control_signals_t signals)
+ISR_CODE void control_interrupt_handler (control_signals_t signals)
 {
     if (signals.value) {
         if ((signals.reset || signals.e_stop) && sys.state != STATE_ESTOP)
@@ -37,16 +37,15 @@ void control_interrupt_handler (control_signals_t signals)
         }
         else if (signals.feed_hold)
             bit_true(sys_rt_exec_state, EXEC_FEED_HOLD);
-#ifdef SAFETY_DOOR_IGNORE_WHEN_IDLE
+
 		else if (signals.safety_door_ajar) {
-			if(sys.state != STATE_IDLE && sys.state != STATE_JOG)
-				bit_true(sys_rt_exec_state, EXEC_SAFETY_DOOR);
-			spindle_stop();
-		}
-#else
-		else if (signals.safety_door_ajar)
+		    if(settings.flags.safety_door_ignore_when_idle) {
+                if(sys.state != STATE_IDLE && sys.state != STATE_JOG)
+                    bit_true(sys_rt_exec_state, EXEC_SAFETY_DOOR);
+                spindle_stop();
+		    } else
 			bit_true(sys_rt_exec_state, EXEC_SAFETY_DOOR);
-#endif
+		}
     }
 }
 
@@ -165,7 +164,7 @@ status_code_t system_execute_line (char *line)
                 // Block if e-stop is active.
                 if (control_signals.e_stop)
                     retval = Status_EStop;
-                else if (!settings.flags.homing_enable)
+                else if (!settings.homing.flags.enabled)
                     retval = Status_SettingDisabled;
                 // Block if safety door is ajar.
                 else if (control_signals.safety_door_ajar)
@@ -227,16 +226,14 @@ status_code_t system_execute_line (char *line)
             }
             break;
 
-#ifdef SLEEP_ENABLE
         case 'S' : // Puts Grbl to sleep [IDLE/ALARM]
-            if (!(line[2] == 'L' && line[3] == 'P' && line[4] == '\0'))
-                retval = = Status_InvalidStatement;
+            if(!settings.flags.sleep_enable || !(line[2] == 'L' && line[3] == 'P' && line[4] == '\0'))
+                retval = Status_InvalidStatement;
             else if(!(sys.state == STATE_IDLE || sys.state == STATE_ALARM))
                 retval = Status_IdleError;
             else
                 system_set_exec_state_flag(EXEC_SLEEP); // Set to execute sleep mode immediately
             break;
-#endif
 
         case '#' : // Print Grbl NGC parameters
             if (line[2] != '\0')

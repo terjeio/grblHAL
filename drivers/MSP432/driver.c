@@ -26,8 +26,8 @@
 #include "driver.h"
 #include "serial.h"
 #include "eeprom.h"
-//#include "keypad.h"
-//#include "atc.h"
+#include "keypad.h"
+#include "atc.h"
 
 #include "GRBL\grbl.h"
 
@@ -138,8 +138,8 @@ static inline float pid (pid_t *pid, float position, float error)
         pid->state_integral = pid->integral_min;
 
     pidres += pid->gain_integral * pid->state_integral; // calculate the integral term
-    pidres += pid->gain_derivative * (pid->state_derivative - position);
-    pid->state_derivative = position;
+    pidres += pid->gain_derivative * (error - pid->state_derivative);
+    pid->state_derivative = error;
 
     return pidres;
 }
@@ -157,7 +157,7 @@ static void driver_delay_ms (uint32_t ms, void (*callback)(void))
 // Enable/disable stepper motors
 static void stepperEnable (axes_signals_t enable)
 {
-    enable.value ^= settings.stepper_enable_invert.mask;
+    enable.value ^= settings.steppers.enable_invert.mask;
     BITBAND_PERI(STEPPERS_DISABLE_Z_PORT->OUT, STEPPERS_DISABLE_Z_PIN) = enable.z;
     BITBAND_PERI(STEPPERS_DISABLE_XY_PORT->OUT, STEPPERS_DISABLE_X_PIN) = enable.x;
 }
@@ -307,9 +307,9 @@ static void stepperPulseStartSyncronized (stepper_t *stepper)
                     stepperCyclesPerTick(stepper->exec_segment->cycles_per_tick);
                 }
             }
-
+#ifdef PID_LOG
             spindle_tracker.pos[sys.pid_log.idx] = STEPPER_TIMER->LOAD;
-
+#endif
         }
 
         spindle_tracker.prev_pos = stepper->exec_segment->target_position;
@@ -334,7 +334,7 @@ static void stepperPulseStartDelayed (stepper_t *stepper)
 
 // Enable/disable limit pins interrupt
 static void limitsEnable (bool on) {
-    on = on && settings.flags.hard_limit_enable;
+    on = on && settings.limits.flags.hard_enabled;
 #ifdef CNC_BOOSTERPACK_SHORTS
   #if STEP_OUTMODE == GPIO_BITBAND
     BITBAND_PERI(LIMIT_PORT->IFG, X_LIMIT_PIN) = 0;
@@ -393,8 +393,8 @@ inline static axes_signals_t limitsGetState()
  #endif
 #endif
 
-    if (settings.limit_invert.mask)
-        signals.value ^= settings.limit_invert.mask;
+    if (settings.limits.invert.mask)
+        signals.value ^= settings.limits.invert.mask;
 
     return signals;
 }
@@ -461,19 +461,19 @@ bool probeGetState (void)
 
 inline static void spindleOff (void)
 {
-    BITBAND_PERI(SPINDLE_ENABLE_PORT->OUT, SPINDLE_ENABLE_PIN) = settings.spindle_invert.on;
+    BITBAND_PERI(SPINDLE_ENABLE_PORT->OUT, SPINDLE_ENABLE_PIN) = settings.spindle.invert.on;
 }
 
 inline static void spindleOn (void)
 {
-    BITBAND_PERI(SPINDLE_ENABLE_PORT->OUT, SPINDLE_ENABLE_PIN) = !settings.spindle_invert.on;
+    BITBAND_PERI(SPINDLE_ENABLE_PORT->OUT, SPINDLE_ENABLE_PIN) = !settings.spindle.invert.on;
     spindleDataReset();
 }
 
 inline static void spindleDir (bool ccw)
 {
     if(hal.driver_cap.spindle_dir)
-        BITBAND_PERI(SPINDLE_DIRECTION_PORT->OUT, SPINDLE_DIRECTION_PIN) = ccw ^ settings.spindle_invert.ccw;
+        BITBAND_PERI(SPINDLE_DIRECTION_PORT->OUT, SPINDLE_DIRECTION_PIN) = ccw ^ settings.spindle.invert.ccw;
 }
 
 // Start or stop spindle
@@ -496,23 +496,23 @@ static uint_fast16_t spindleComputePWMValue (float rpm, uint8_t speed_ovr)
 
     rpm *= (0.010f * speed_ovr); // Scale by spindle speed override value.
     // Calculate PWM register value based on rpm max/min settings and programmed rpm.
-    if ((settings.rpm_min >= settings.rpm_max) || (rpm >= settings.rpm_max)) {
+    if ((settings.spindle.rpm_min >= settings.spindle.rpm_max) || (rpm >= settings.spindle.rpm_max)) {
         // No PWM range possible. Set simple on/off spindle control pin state.
-        sys.spindle_rpm = settings.rpm_max;
+        sys.spindle_rpm = settings.spindle.rpm_max;
         pwm_value = spindle_pwm.max_value - 1;
-    } else if (rpm <= settings.rpm_min) {
+    } else if (rpm <= settings.spindle.rpm_min) {
         if (rpm == 0.0f) { // S0 disables spindle
             sys.spindle_rpm = 0.0f;
             pwm_value = spindle_pwm.off_value;
         } else { // Set minimum PWM output
-            sys.spindle_rpm = settings.rpm_min;
+            sys.spindle_rpm = settings.spindle.rpm_min;
             pwm_value = spindle_pwm.min_value;
         }
     } else {
         // Compute intermediate PWM value with linear spindle speed model.
         // NOTE: A nonlinear model could be installed here, if required, but keep it VERY light-weight.
         sys.spindle_rpm = rpm;
-        pwm_value = (uint_fast16_t)floorf((rpm - settings.rpm_min) * spindle_pwm.pwm_gradient) + spindle_pwm.min_value;
+        pwm_value = (uint_fast16_t)floorf((rpm - settings.spindle.rpm_min) * spindle_pwm.pwm_gradient) + spindle_pwm.min_value;
         if(pwm_value >= spindle_pwm.max_value)
             pwm_value = spindle_pwm.max_value - 1;
     }
@@ -525,7 +525,7 @@ static uint_fast16_t spindleSetSpeed (uint_fast16_t pwm_value)
 {
     if (pwm_value == hal.spindle_pwm_off) {
         pwmEnabled = false;
-        if(settings.flags.spindle_disable_with_zero_speed)
+        if(settings.spindle.disable_with_zero_speed)
             spindleOff();
         SPINDLE_PWM_TIMER->CCTL[2] = 0; // Set PWM output low
     } else {
@@ -622,7 +622,7 @@ static spindle_state_t spindleGetState (void)
 
     state.on = pwmEnabled || (SPINDLE_ENABLE_PORT->IN & SPINDLE_ENABLE_BIT) != 0;
     state.ccw = hal.driver_cap.spindle_dir && (SPINDLE_DIRECTION_PORT->IN & SPINDLE_DIRECTION_BIT) != 0;
-    state.value ^= settings.spindle_invert.mask;
+    state.value ^= settings.spindle.invert.mask;
     state.at_speed = rpm >= spindle_data.rpm_low_limit && rpm <= spindle_data.rpm_high_limit;
 
     return state;
@@ -716,12 +716,13 @@ static void modeSelect (bool mpg_mode)
 
     // Report WCO on first status report request from MPG processor
     if(mpg_mode)
-        sys.report_wco_counter = 1;
+        sys.report.wco_counter = 1;
 
     // Force a realtime status report
     hal.protocol_process_realtime('?');
 
     sys.mpg_mode = mpg_mode;
+    sys.report.mpg_mode = true;
 }
 
 static void modechange (void)
@@ -732,25 +733,25 @@ static void modechange (void)
 // Configures perhipherals when settings are initialized or changed
 void settings_changed (settings_t *settings)
 {
-    step_port_invert = settings->step_invert;
-    dir_port_invert = settings->dir_invert;
+    step_port_invert = settings->steppers.step_invert;
+    dir_port_invert = settings->steppers.dir_invert;
 
-    spindle_pwm.period = (uint32_t)(12000000 / settings->spindle_pwm_freq);
-    spindle_pwm.off_value = (uint32_t)(spindle_pwm.period * settings->spindle_pwm_off_value / 100.0f);
-    spindle_pwm.min_value = (uint32_t)(spindle_pwm.period * settings->spindle_pwm_min_value / 100.0f);
-    spindle_pwm.max_value = (uint32_t)(spindle_pwm.period * settings->spindle_pwm_max_value / 100.0f);
-    spindle_pwm.pwm_gradient = (float)(spindle_pwm.max_value - spindle_pwm.min_value) / (settings->rpm_max - settings->rpm_min);
+    spindle_pwm.period = (uint32_t)(12000000 / settings->spindle.pwm_freq);
+    spindle_pwm.off_value = (uint32_t)(spindle_pwm.period * settings->spindle.pwm_off_value / 100.0f);
+    spindle_pwm.min_value = (uint32_t)(spindle_pwm.period * settings->spindle.pwm_min_value / 100.0f);
+    spindle_pwm.max_value = (uint32_t)(spindle_pwm.period * settings->spindle.pwm_max_value / 100.0f);
+    spindle_pwm.pwm_gradient = (float)(spindle_pwm.max_value - spindle_pwm.min_value) / (settings->spindle.rpm_max - settings->spindle.rpm_min);
 
     hal.spindle_pwm_off = spindle_pwm.off_value;
 
-    spindle_tracker.pid.gain_proportional = settings->spindle_P_gain;
-    spindle_tracker.pid.gain_integral = settings->spindle_I_gain;
-    spindle_tracker.pid.gain_derivative = settings->spindle_D_gain;
+    spindle_tracker.pid.gain_proportional = settings->spindle.P_gain;
+    spindle_tracker.pid.gain_integral = settings->spindle.I_gain;
+    spindle_tracker.pid.gain_derivative = settings->spindle.D_gain;
     spindle_tracker.pid.integral_min = -10.0f;
     spindle_tracker.pid.integral_max = 10.0f;
 
-    if(spindle_encoder.ppr != settings->spindle_ppr) {
-        spindle_encoder.ppr = settings->spindle_ppr;
+    if(spindle_encoder.ppr != settings->spindle.ppr) {
+        spindle_encoder.ppr = settings->spindle.ppr;
         spindle_encoder.pulse_counter_trigger = 4;
         spindle_encoder.pulse_distance = 1.0f / spindle_encoder.ppr;
         spindle_encoder.tpp = 0;
@@ -777,7 +778,7 @@ void settings_changed (settings_t *settings)
 
     if(IOInitDone) {
 
-        stepperEnable(settings->stepper_deenergize);
+        stepperEnable(settings->steppers.deenergize);
 
         if(hal.driver_cap.variable_spindle) {
             SPINDLE_PWM_TIMER->CCR[0] = spindle_pwm.period;
@@ -785,7 +786,7 @@ void settings_changed (settings_t *settings)
             SPINDLE_PWM_TIMER->CTL |= TIMER_A_CTL_CLR|TIMER_A_CTL_MC0|TIMER_A_CTL_MC1;  // start PWM timer (with no pulse output)
         }
 
-        if(hal.driver_cap.step_pulse_delay && settings->pulse_delay_microseconds) {
+        if(hal.driver_cap.step_pulse_delay && settings->steppers.pulse_delay_microseconds) {
             hal.stepper_pulse_start = stepperPulseStartDelayed;
             PULSE_TIMER->CCTL[1] |= TIMER_A_CCTLN_CCIE;                   // Enable CCR1 interrupt
         } else {
@@ -793,8 +794,8 @@ void settings_changed (settings_t *settings)
             PULSE_TIMER->CCTL[1] &= ~TIMER_A_CCTLN_CCIE;                  // Disable CCR1 interrupt
         }
 
-        PULSE_TIMER->CCR[0] = settings->pulse_microseconds + settings->pulse_delay_microseconds;
-        PULSE_TIMER->CCR[1] = settings->pulse_delay_microseconds;
+        PULSE_TIMER->CCR[0] = settings->steppers.pulse_microseconds + settings->steppers.pulse_delay_microseconds;
+        PULSE_TIMER->CCR[1] = settings->steppers.pulse_delay_microseconds;
 
         /*************************
          *  Control pins config  *
@@ -874,17 +875,17 @@ void settings_changed (settings_t *settings)
 
         axes_signals_t limit_ies;
 
-        limit_ies.mask = settings->limit_disable_pullup.mask ^ settings->limit_invert.mask;
+        limit_ies.mask = settings->limits.disable_pullup.mask ^ settings->limits.invert.mask;
 #ifdef CNC_BOOSTERPACK_SHORTS
-        BITBAND_PERI(LIMIT_PORT->OUT, X_LIMIT_PIN) = !settings->limit_disable_pullup.x;
+        BITBAND_PERI(LIMIT_PORT->OUT, X_LIMIT_PIN) = !settings->limits.disable_pullup.x;
         BITBAND_PERI(LIMIT_PORT->IES, X_LIMIT_PIN) = limit_ies.x;
         BITBAND_PERI(LIMIT_PORT->REN, X_LIMIT_PIN) = 1;
 
-        BITBAND_PERI(LIMIT_PORT->OUT, Y_LIMIT_PIN) = !settings->limit_disable_pullup.y;
+        BITBAND_PERI(LIMIT_PORT->OUT, Y_LIMIT_PIN) = !settings->limits.disable_pullup.y;
         BITBAND_PERI(LIMIT_PORT->IES, Y_LIMIT_PIN) = limit_ies.y;
         BITBAND_PERI(LIMIT_PORT->REN, Y_LIMIT_PIN) = 1;
 
-        BITBAND_PERI(LIMIT_PORT->OUT, Z_LIMIT_PIN) = !settings->limit_disable_pullup.z;
+        BITBAND_PERI(LIMIT_PORT->OUT, Z_LIMIT_PIN) = !settings->limits.disable_pullup.z;
         BITBAND_PERI(LIMIT_PORT->IES, Z_LIMIT_PIN) = limit_ies.z;
         BITBAND_PERI(LIMIT_PORT->REN, Z_LIMIT_PIN) = 1;
 #else
@@ -1099,6 +1100,7 @@ bool driver_init (void) {
     hal.serial_cancel_read_buffer = serialRxCancel;
     hal.serial_write = serialPutC;
     hal.serial_write_string = serialWriteS;
+    hal.serial_suspend_read = serialSuspendInput;
 
 #ifdef HAS_EEPROM
     hal.eeprom.type = EEPROM_Physical;

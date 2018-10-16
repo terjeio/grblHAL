@@ -188,12 +188,12 @@ void report_grbl_help () {
 void report_grbl_settings() {
 
     // Print Grbl settings.
-    report_util_uint_setting(Setting_PulseMicroseconds, settings.pulse_microseconds);
-    report_util_uint_setting(Setting_StepperIdleLockTime, settings.stepper_idle_lock_time);
-    report_util_uint_setting(Setting_StepInvertMask, settings.step_invert.mask);
-    report_util_uint_setting(Setting_DirInvertMask, settings.dir_invert.mask);
-    report_util_uint_setting(Setting_InvertStepperEnable, settings.stepper_enable_invert.mask);
-    report_util_uint_setting(Setting_LimitPinsInvertMask, settings.limit_invert.mask);
+    report_util_uint_setting(Setting_PulseMicroseconds, settings.steppers.pulse_microseconds);
+    report_util_uint_setting(Setting_StepperIdleLockTime, settings.steppers.idle_lock_time);
+    report_util_uint_setting(Setting_StepInvertMask, settings.steppers.step_invert.mask);
+    report_util_uint_setting(Setting_DirInvertMask, settings.steppers.dir_invert.mask);
+    report_util_uint_setting(Setting_InvertStepperEnable, settings.steppers.enable_invert.mask);
+    report_util_uint_setting(Setting_LimitPinsInvertMask, settings.limits.invert.mask);
     report_util_uint_setting(Setting_InvertProbePin, settings.flags.invert_probe_pin);
     report_util_uint_setting(Setting_StatusReportMask, settings.status_report.mask);
     report_util_float_setting(Setting_JunctionDeviation, settings.junction_deviation, N_DECIMAL_SETTINGVALUE);
@@ -201,40 +201,50 @@ void report_grbl_settings() {
     report_util_uint_setting(Setting_ReportInches, settings.flags.report_inches);
     report_util_uint_setting(Setting_ControlInvertMask, settings.control_invert.mask);
     report_util_uint_setting(Setting_CoolantInvertMask, settings.coolant_invert.mask);
-    report_util_uint_setting(Setting_SpindleInvertMask, settings.spindle_invert.mask);
+    report_util_uint_setting(Setting_SpindleInvertMask, settings.spindle.invert.mask);
     report_util_uint_setting(Setting_ControlPullUpDisableMask, settings.control_disable_pullup.mask);
-    report_util_uint_setting(Setting_LimitPullUpDisableMask, settings.limit_disable_pullup.mask);
+    report_util_uint_setting(Setting_LimitPullUpDisableMask, settings.limits.disable_pullup.mask);
     report_util_uint_setting(Setting_ProbePullUpDisable, settings.flags.disable_probe_pullup);
-    report_util_uint_setting(Setting_SoftLimitsEnable, settings.flags.soft_limit_enable);
-    report_util_uint_setting(Setting_HardLimitsEnable, settings.flags.hard_limit_enable);
-    report_util_uint_setting(Setting_HomingEnable, settings.flags.homing_enable);
-    report_util_uint_setting(Setting_HomingDirMask, settings.homing_dir_mask);
-    report_util_float_setting(Setting_HomingFeedRate, settings.homing_feed_rate, N_DECIMAL_SETTINGVALUE);
-    report_util_float_setting(Setting_HomingSeekRate, settings.homing_seek_rate, N_DECIMAL_SETTINGVALUE);
-    report_util_uint_setting(Setting_HomingDebounceDelay, settings.homing_debounce_delay);
-    report_util_float_setting(Setting_HomingPulloff, settings.homing_pulloff, N_DECIMAL_SETTINGVALUE);
+    report_util_uint_setting(Setting_SoftLimitsEnable, settings.limits.flags.soft_enabled);
+    report_util_uint_setting(Setting_HardLimitsEnable, settings.limits.flags.hard_enabled);
+    report_util_uint_setting(Setting_HomingEnable, settings.homing.flags.enabled);
+    report_util_uint_setting(Setting_HomingDirMask, settings.homing.dir_mask);
+    report_util_float_setting(Setting_HomingFeedRate, settings.homing.feed_rate, N_DECIMAL_SETTINGVALUE);
+    report_util_float_setting(Setting_HomingSeekRate, settings.homing.seek_rate, N_DECIMAL_SETTINGVALUE);
+    report_util_uint_setting(Setting_HomingDebounceDelay, settings.homing.debounce_delay);
+    report_util_float_setting(Setting_HomingPulloff, settings.homing.pulloff, N_DECIMAL_SETTINGVALUE);
     report_util_float_setting(Setting_G73Retract, settings.g73_retract, N_DECIMAL_SETTINGVALUE);
-    report_util_uint_setting(Setting_PulseDelayMicroseconds, settings.pulse_delay_microseconds);
-    report_util_float_setting(Setting_RpmMax, settings.rpm_max, N_DECIMAL_RPMVALUE);
-    report_util_float_setting(Setting_RpmMin, settings.rpm_min, N_DECIMAL_RPMVALUE);
+    report_util_uint_setting(Setting_PulseDelayMicroseconds, settings.steppers.pulse_delay_microseconds);
+    report_util_float_setting(Setting_RpmMax, settings.spindle.rpm_max, N_DECIMAL_RPMVALUE);
+    report_util_float_setting(Setting_RpmMin, settings.spindle.rpm_min, N_DECIMAL_RPMVALUE);
     report_util_uint_setting(Setting_LaserMode, hal.driver_cap.variable_spindle ? settings.flags.laser_mode : 0);
-    report_util_float_setting(Setting_PWMFreq, settings.spindle_pwm_freq, N_DECIMAL_SETTINGVALUE);
-    report_util_float_setting(Setting_PWMOffValue, settings.spindle_pwm_off_value, N_DECIMAL_SETTINGVALUE);
-    report_util_float_setting(Setting_PWMMinValue, settings.spindle_pwm_min_value, N_DECIMAL_SETTINGVALUE);
-    report_util_float_setting(Setting_PWMMaxValue, settings.spindle_pwm_max_value, N_DECIMAL_SETTINGVALUE);
-    report_util_uint_setting(Setting_StepperDeenergizeMask, settings.stepper_deenergize.mask);
+    report_util_float_setting(Setting_PWMFreq, settings.spindle.pwm_freq, N_DECIMAL_SETTINGVALUE);
+    report_util_float_setting(Setting_PWMOffValue, settings.spindle.pwm_off_value, N_DECIMAL_SETTINGVALUE);
+    report_util_float_setting(Setting_PWMMinValue, settings.spindle.pwm_min_value, N_DECIMAL_SETTINGVALUE);
+    report_util_float_setting(Setting_PWMMaxValue, settings.spindle.pwm_max_value, N_DECIMAL_SETTINGVALUE);
+    report_util_uint_setting(Setting_StepperDeenergizeMask, settings.steppers.deenergize.mask);
     if(hal.driver_cap.spindle_sync) {
-        report_util_uint_setting(Setting_SpindlePPR, settings.spindle_ppr);
-        report_util_float_setting(Setting_SpindlePGain, settings.spindle_P_gain, N_DECIMAL_SETTINGVALUE);
-        report_util_float_setting(Setting_SpindleIGain, settings.spindle_I_gain, N_DECIMAL_SETTINGVALUE);
-        report_util_float_setting(Setting_SpindleDGain, settings.spindle_D_gain, N_DECIMAL_SETTINGVALUE);
+        report_util_uint_setting(Setting_SpindlePPR, settings.spindle.ppr);
+        report_util_float_setting(Setting_SpindlePGain, settings.spindle.P_gain, N_DECIMAL_SETTINGVALUE);
+        report_util_float_setting(Setting_SpindleIGain, settings.spindle.I_gain, N_DECIMAL_SETTINGVALUE);
+        report_util_float_setting(Setting_SpindleDGain, settings.spindle.D_gain, N_DECIMAL_SETTINGVALUE);
     }
-    report_util_uint_setting(Setting_HomingLocateCycles, settings.homing_locate_cycles);
+    report_util_uint_setting(Setting_HomingLocateCycles, settings.homing.locate_cycles);
 
     uint_fast8_t idx;
 
     for(idx = 0 ; idx < N_AXIS ; idx++)
-        report_util_uint_setting((setting_type_t)(Setting_HomingCycle_1 + idx), settings.homing_cycle[idx]);
+        report_util_uint_setting((setting_type_t)(Setting_HomingCycle_1 + idx), settings.homing.cycle[idx]);
+
+    report_util_uint_setting(Setting_RestoreOverrides, settings.flags.restore_overrides);
+    report_util_uint_setting(Setting_IgnoreDoorWhenIdle, settings.flags.safety_door_ignore_when_idle);
+    report_util_uint_setting(Setting_SleepEnable, settings.flags.sleep_enable);
+    report_util_uint_setting(Setting_DisableLaserDuringHold, settings.flags.disable_laser_during_hold);
+    report_util_uint_setting(Setting_ForceInitAlarm, settings.flags.force_initialization_alarm);
+    report_util_uint_setting(Setting_CheckLimitsAtInit, settings.limits.flags.check_at_init);
+    report_util_uint_setting(Setting_HomingInitLock, settings.homing.flags.init_lock);
+
+    report_util_uint_setting(Settings_Stream, (uint32_t)settings.stream);
 
     if(hal.driver_settings_report)
         hal.driver_settings_report(false);
@@ -414,9 +424,9 @@ void report_gcode_modes ()
                 hal.serial_write('0');
                 break;
 
-  /*            case PROGRAM_FLOW_OPTIONAL_STOP: // M1 is ignored and not supported.
+            case ProgramFlow_OptionalStop:
                 hal.serial_write('1');
-                break; */
+                break;
 
             case ProgramFlow_CompletedM2:
             case ProgramFlow_CompletedM30:
@@ -465,12 +475,10 @@ void report_gcode_modes ()
         hal.serial_write_string("53");
     }
 
-#ifdef ENABLE_PARKING_OVERRIDE_CONTROL
-    if (sys.override_ctrl.parking_disable) {
+    if (settings.parking.flags.enable_override_control && sys.override_ctrl.parking_disable) {
         report_util_gcode_modes_M();
         hal.serial_write_string("56");
     }
-#endif
 
     hal.serial_write_string(" T");
     print_uint8_base10(gc_state.tool->tool);
@@ -520,9 +528,8 @@ void report_build_info(char *line)
   #ifdef COREXY
     hal.serial_write('C');
   #endif
-  #ifdef PARKING_ENABLE
-    hal.serial_write('P');
-  #endif
+    if(settings.parking.flags.enabled)
+        hal.serial_write('P');
   #ifdef HOMING_FORCE_SET_ORIGIN
     hal.serial_write('Z');
   #endif
@@ -535,24 +542,28 @@ void report_build_info(char *line)
   #ifdef ALLOW_FEED_OVERRIDE_DURING_PROBE_CYCLES
     hal.serial_write('A');
   #endif
-  #ifdef SPINDLE_ENABLE_OFF_WITH_ZERO_SPEED
-    hal.serial_write('0');
-  #endif
+
+    if(settings.spindle.disable_with_zero_speed)
+        hal.serial_write('0');
+
     if(hal.driver_cap.sd_card)
         hal.serial_write('S');
+
     if(hal.driver_cap.bluetooth)
         hal.serial_write('B');
+
     if(hal.driver_cap.software_debounce)
         hal.serial_write('D');
-  #ifdef ENABLE_PARKING_OVERRIDE_CONTROL
-    hal.serial_write('R');
-  #endif
-  #ifndef HOMING_INIT_LOCK
-    hal.serial_write('L');
-  #endif
-  #ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
-    hal.serial_write('+');
-  #endif
+
+    if(settings.parking.flags.enable_override_control)
+        hal.serial_write('R');
+
+    if(!settings.homing.flags.init_lock)
+        hal.serial_write('L');
+
+    if(hal.driver_cap.safety_door)
+        hal.serial_write('+');
+
   #ifndef ENABLE_RESTORE_EEPROM_WIPE_ALL // NOTE: Shown when disabled.
     hal.serial_write('*');
   #endif

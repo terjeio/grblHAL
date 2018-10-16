@@ -210,7 +210,7 @@ typedef enum {
 typedef enum {
     ProgramFlow_Running = 0,        // (Default: Must be zero)
     ProgramFlow_Paused  = 3,        // M0
-    ProgramFlow_OptionalStop = 1,   // M1 NOTE: Not supported, but valid and ignored.
+    ProgramFlow_OptionalStop = 1,   // M1
     ProgramFlow_CompletedM2 = 2,    // M2 (Do not alter value)
     ProgramFlow_CompletedM30 = 30   // M30 (Do not alter value)
 } program_flow_t;
@@ -424,6 +424,7 @@ typedef struct {
     bool is_laser_ppi_mode;
     bool is_rpm_rate_adjusted;
     bool tool_change;
+    status_code_t last_error;           // last return value from parser
 } parser_state_t;
 
 typedef struct {

@@ -95,12 +95,10 @@ typedef struct {
     float steps_per_mm;
     float req_mm_increment;
 
-  #ifdef PARKING_ENABLE
     st_block_t *last_st_block;
     uint32_t last_steps_remaining;
     float last_steps_per_mm;
     float last_dt_remainder;
-  #endif
 
     ramp_type_t ramp_type;  // Current segment ramp state
     float mm_complete;      // End of velocity profile from end of current planner block in (mm).
@@ -161,7 +159,7 @@ static st_prep_t prep;
 void st_deenergize ()
 {
     if(sys.steppers_deenergize) {
-        hal.stepper_enable(settings.stepper_deenergize);
+        hal.stepper_enable(settings.steppers.deenergize);
         sys.steppers_deenergize = false;
     }
 }
@@ -182,20 +180,20 @@ void st_wake_up ()
 
 
 // Stepper shutdown
-void st_go_idle ()
+ISR_CODE void st_go_idle ()
 {
     // Disable Stepper Driver Interrupt. Allow Stepper Port Reset Interrupt to finish, if active.
 
     hal.stepper_go_idle();
 
     // Set stepper driver idle state, disabled or enabled, depending on settings and circumstances.
-    if (((settings.stepper_idle_lock_time != 0xff) || sys_rt_exec_alarm || sys.state == STATE_SLEEP) && sys.state != STATE_HOMING) {
+    if (((settings.steppers.idle_lock_time != 0xff) || sys_rt_exec_alarm || sys.state == STATE_SLEEP) && sys.state != STATE_HOMING) {
         // Force stepper dwell to lock axes for a defined amount of time to ensure the axes come to a complete
         // stop and not drift from residual inertial forces at the end of the last movement.
         sys.steppers_deenergize = true;
-        hal.delay_ms(settings.stepper_idle_lock_time, st_deenergize);
+        hal.delay_ms(settings.steppers.idle_lock_time, st_deenergize);
     } else
-        hal.stepper_enable(settings.stepper_deenergize);
+        hal.stepper_enable(settings.steppers.deenergize);
 }
 
 
@@ -244,19 +242,13 @@ void st_go_idle ()
    ISR is 5usec typical and 25usec maximum, well below requirement.
    NOTE: This ISR expects at least one step to be executed per segment.
 */
-// TODO: Replace direct updating of the int32 position counters in the ISR somehow. Perhaps use smaller
-// int8 variables and update position counters only when a segment completes. This can get complicated
-// with probing and homing cycles that require true real-time positions.
-void stepper_driver_interrupt_handler (void)
+ISR_CODE void stepper_driver_interrupt_handler (void)
 {
-#ifdef DEBUGOUT
-//  debugout(1);
-#endif
     // Set the direction pins a couple of nanoseconds before we step the steppers
 
     // Then pulse the stepping pins and
     // Enable step pulse reset timer so that The Stepper Port Reset Interrupt can reset the signal after
-    // exactly settings.pulse_microseconds microseconds, independent of the main Timer1 prescaler.
+    // exactly settings.pulse_microseconds, independent of the main Timer1 prescaler.
 
     if(st.step_outbits.value) //TODO: remove this test? must do for PPI mode? results in strange stepping for Tiva, others too?
         hal.stepper_pulse_start(&st);
@@ -330,10 +322,6 @@ void stepper_driver_interrupt_handler (void)
                 st.spindle_pwm = hal.spindle_set_speed(hal.spindle_pwm_off);
 
             system_set_exec_state_flag(EXEC_CYCLE_COMPLETE); // Flag main program for cycle complete
-
-            #ifdef DEBUGOUT
-            //  debugout(0);
-            #endif
 
             return; // Nothing to do but exit.
         }
@@ -413,9 +401,6 @@ void stepper_driver_interrupt_handler (void)
         st.exec_segment = NULL;
         segment_buffer_tail = segment_buffer_tail == (SEGMENT_BUFFER_SIZE - 1) ? 0 : segment_buffer_tail + 1;
     }
-#ifdef DEBUGOUT
-//  debugout(0);
-#endif
 }
 
 // Reset and clear stepper subsystem variables
@@ -475,42 +460,40 @@ void st_update_plan_block_parameters ()
     }
 }
 
-#ifdef PARKING_ENABLE
-  // Changes the run state of the step segment buffer to execute the special parking motion.
-  void st_parking_setup_buffer()
-  {
+// Changes the run state of the step segment buffer to execute the special parking motion.
+void st_parking_setup_buffer()
+{
     // Store step execution data of partially completed block, if necessary.
     if (prep.recalculate.hold_partial_block) {
-      prep.last_st_block = st_prep_block;
-      prep.last_steps_remaining = prep.steps_remaining;
-      prep.last_dt_remainder = prep.dt_remainder;
-      prep.last_steps_per_mm = prep.steps_per_mm;
+        prep.last_st_block = st_prep_block;
+        prep.last_steps_remaining = prep.steps_remaining;
+        prep.last_dt_remainder = prep.dt_remainder;
+        prep.last_steps_per_mm = prep.steps_per_mm;
     }
     // Set flags to execute a parking motion
     prep.recalculate.parking = On;
     prep.recalculate.recalculate = Off;
     pl_block = NULL; // Always reset parking motion to reload new block.
-  }
+}
 
 
-  // Restores the step segment buffer to the normal run state after a parking motion.
-  void st_parking_restore_buffer()
-  {
+// Restores the step segment buffer to the normal run state after a parking motion.
+void st_parking_restore_buffer()
+{
     // Restore step execution data and flags of partially completed block, if necessary.
     if (prep.recalculate.hold_partial_block) {
-      st_prep_block = prep.last_st_block;
-      prep.steps_remaining = prep.last_steps_remaining;
-      prep.dt_remainder = prep.last_dt_remainder;
-      prep.steps_per_mm = prep.last_steps_per_mm;
-      prep.recalculate.flags = 0;
-      prep.recalculate.hold_partial_block = prep.recalculate.recalculate = On;
-      prep.req_mm_increment = REQ_MM_INCREMENT_SCALAR / prep.steps_per_mm; // Recompute this value.
+        st_prep_block = prep.last_st_block;
+        prep.steps_remaining = prep.last_steps_remaining;
+        prep.dt_remainder = prep.last_dt_remainder;
+        prep.steps_per_mm = prep.last_steps_per_mm;
+        prep.recalculate.flags = 0;
+        prep.recalculate.hold_partial_block = prep.recalculate.recalculate = On;
+        prep.req_mm_increment = REQ_MM_INCREMENT_SCALAR / prep.steps_per_mm; // Recompute this value.
     } else
-      prep.recalculate.flags = 0;
-    pl_block = NULL; // Set to reload next block.
-  }
-#endif
+        prep.recalculate.flags = 0;
 
+    pl_block = NULL; // Set to reload next block.
+}
 
 /* Prepares step segment buffer. Continuously called from main program.
 
@@ -532,9 +515,7 @@ void st_prep_buffer()
         return;
 
     while (segment_buffer_tail != segment_next_head) { // Check if we need to fill the buffer.
-#ifdef DEBUGOUT
-    debugout(1);
-#endif
+
         // Determine if we need to load a new planner block or if the block needs to be recomputed.
         if (pl_block == NULL) {
 
@@ -547,14 +528,13 @@ void st_prep_buffer()
 
             // Check if we need to only recompute the velocity profile or load a new block.
             if (prep.recalculate.recalculate) {
-                #ifdef PARKING_ENABLE
-                  if (prep.recalculate.parking)
-                      prep.recalculate.recalculate = Off;
-                  else
-                      prep.recalculate.flags = 0;
-                #else
-                  prep.recalculate.flags = 0;
-                #endif
+                if(settings.parking.flags.enabled) {
+                    if (prep.recalculate.parking)
+                        prep.recalculate.recalculate = Off;
+                    else
+                        prep.recalculate.flags = 0;
+                } else
+                    prep.recalculate.flags = 0;
             } else {
 
                 // Prepare and copy Bresenham algorithm segment data from the new planner block, so that
@@ -864,10 +844,8 @@ void st_prep_buffer()
             // Less than one step to decelerate to zero speed, but already very close. AMASS
             // requires full steps to execute. So, just bail.
             sys.step_control.end_motion = On;
-          #ifdef PARKING_ENABLE
-            if (!prep.recalculate.parking)
+            if (settings.parking.flags.enabled && prep.recalculate.parking)
                 prep.recalculate.hold_partial_block = On;
-          #endif
             return; // Segment not generated, but current step data still retained.
         }
 
@@ -924,10 +902,8 @@ void st_prep_buffer()
                 // the segment queue, where realtime protocol will set new state upon receiving the
                 // cycle stop flag from the ISR. Prep_segment is blocked until then.
                 sys.step_control.end_motion = On;
-              #ifdef PARKING_ENABLE
-                if (!prep.recalculate.parking)
+                if (settings.parking.flags.enabled && !prep.recalculate.parking)
                     prep.recalculate.hold_partial_block = On;
-              #endif
                 return; // Bail!
             } else { // End of planner block
                 // The planner block is complete. All steps are set to be executed in the segment buffer.
@@ -939,9 +915,6 @@ void st_prep_buffer()
                 plan_discard_current_block();
             }
         }
-#ifdef DEBUGOUT
-debugout(0);
-#endif
     }
 }
 

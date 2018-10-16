@@ -74,3 +74,48 @@ void spindle_sync (spindle_state_t state, float rpm)
         }
     }
 }
+
+//
+// The following functions are not called by the core, may be called by driver code.
+//
+
+// Precomute PWM values for faster conversion.
+void spindle_precompute_pwm_values (spindle_pwm_t *pwm_data, uint32_t clock_hz)
+{
+    pwm_data->period = (uint32_t)((float)clock_hz / settings.spindle.pwm_freq);
+    pwm_data->off_value = (uint32_t)(pwm_data->period * settings.spindle.pwm_off_value / 100.0f);
+    pwm_data->min_value = (uint32_t)(pwm_data->period * settings.spindle.pwm_min_value / 100.0f);
+    pwm_data->max_value = (uint32_t)(pwm_data->period * settings.spindle.pwm_max_value / 100.0f);
+    pwm_data->pwm_gradient = (float)(pwm_data->max_value - pwm_data->min_value) / (settings.spindle.rpm_max - settings.spindle.rpm_min);
+}
+
+// Spindle speed to PWM conversion.
+uint_fast16_t spindle_compute_pwm_value (spindle_pwm_t *pwm_data, float rpm, uint8_t speed_ovr)
+{
+    uint_fast16_t pwm_value;
+
+    rpm *= 0.010f * speed_ovr; // Scale by spindle speed override value.
+
+    // Calculate PWM register value based on rpm max/min settings and programmed rpm.
+    if ((settings.spindle.rpm_min >= settings.spindle.rpm_max) || (rpm >= settings.spindle.rpm_max)) {
+        // No PWM range possible. Set simple on/off spindle control pin state.
+        sys.spindle_rpm = settings.spindle.rpm_max;
+        pwm_value = pwm_data->max_value - 1;
+    } else if (rpm <= settings.spindle.rpm_min) {
+        if (rpm == 0.0f) { // S0 disables spindle
+            sys.spindle_rpm = 0.0f;
+            pwm_value = pwm_data->off_value;
+        } else { // Set minimum PWM output
+            sys.spindle_rpm = settings.spindle.rpm_min;
+            pwm_value = pwm_data->min_value;
+        }
+    } else {
+        // Compute intermediate PWM value with linear spindle speed model.
+        sys.spindle_rpm = rpm;
+        pwm_value = (uint_fast16_t)floorf((rpm - settings.spindle.rpm_min) * pwm_data->pwm_gradient) + pwm_data->min_value;
+        if(pwm_value >= pwm_data->max_value)
+            pwm_value = pwm_data->max_value - 1;
+    }
+
+    return pwm_value;
+}
