@@ -74,6 +74,19 @@ void system_execute_startup (char *line)
 status_code_t system_execute_line (char *line)
 {
     status_code_t retval = Status_OK;
+    char c, *org = line, *lcline = line + (LINE_BUFFER_SIZE / 2);
+
+    if(strlen(line) >= ((LINE_BUFFER_SIZE / 2) - 1))
+        return Status_Overflow;
+
+    // Uppercase original and copy original out in the buffer
+    do {
+        c = *org;
+        *org++ = CAPS(c);
+        *lcline++ = c;
+    } while(c);
+
+    lcline = line + (LINE_BUFFER_SIZE / 2);
 
     switch (line[1]) {
 
@@ -253,7 +266,7 @@ status_code_t system_execute_line (char *line)
             }
           #ifdef ENABLE_BUILD_INFO_WRITE_COMMAND
             else if (line[2] == '=' && strlen(&line[3]) < (MAX_STORED_LINE_LENGTH - 1))
-                settings_write_build_info(&line[3]);
+                settings_write_build_info(&lcline[3]);
           #endif
             else
                 retval = Status_InvalidStatement;
@@ -338,7 +351,7 @@ status_code_t system_execute_line (char *line)
 
             // Let user code have a peek at system commands before check for global setting
             if(hal.userdefined_sys_command_execute)
-                retval = hal.userdefined_sys_command_execute(sys.state, line);
+                retval = hal.userdefined_sys_command_execute(sys.state, line, lcline);
 
             if (retval == Status_Unhandled) {
                 // Check for global setting, store if so

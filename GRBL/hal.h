@@ -115,7 +115,7 @@ typedef struct HAL {
     void (*userdefined_mcode_execute)(uint_fast16_t state, parser_block_t *gc_block);
     void (*userdefined_rt_command_execute)(uint8_t cmd);
     void (*userdefined_rt_report)(void);
-    status_code_t (*userdefined_sys_command_execute)(uint_fast16_t state, char *line); // return Status_Unhandled
+    status_code_t (*userdefined_sys_command_execute)(uint_fast16_t state, char *line, char *lcline); // return Status_Unhandled
     bool (*get_position)(int32_t (*position)[N_AXIS]);
     void (*tool_select)(tool_data_t *tool);
     void (*tool_change)(parser_state_t *gc_state);

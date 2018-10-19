@@ -107,6 +107,7 @@ bool protocol_main_loop()
 
     int32_t c;
     line_flags_t line_flags = {0};
+    bool nocaps = false;
 
     xcommand[0] = '\0';
     user_message.show = false;
@@ -120,7 +121,7 @@ bool protocol_main_loop()
             if(c == CMD_RESET) {
 
                 xcommand[0] = '\0';
-                user_message.show = false;
+                nocaps = user_message.show = false;
                 char_counter = line_flags.value = 0;
 
                 if (sys.state == STATE_JOG) // Block all other states from invoking motion cancel.
@@ -152,10 +153,10 @@ bool protocol_main_loop()
                 report_status_message(gc_state.last_error);
 
                 // Reset tracking data for next line.
-                user_message.show = false;
+                nocaps = user_message.show = false;
                 char_counter = line_flags.value = 0;
 
-            } else if (c <= ' ' || line_flags.value) {
+            } else if (c <= (nocaps ? ' ' - 1 : ' ') || line_flags.value) {
                 // Throw away all whitepace, control characters, comment characters and overflow characters.
                 if(c >=  ' ' && line_flags.comment_parentheses) {
                     if(user_message.tracker == 5)
@@ -170,10 +171,12 @@ bool protocol_main_loop()
                         user_message.show = user_message.show || user_message.tracker == 5;
                     }
                 }
-            } else if (c == '/' && char_counter == 0) {
-                // Block delete. Ignore character.
-                // NOTE: If supported, would simply need to check the system if block delete is enabled.
+            } else if (char_counter == 0 && c == '/') {
                 line_flags.block_delete = sys.block_delete_enabled;
+            } else if (char_counter == 0 && c == '$') {
+               // Do not uppercase system commands here - will destroy passwords etc...
+                nocaps = On;
+                line[char_counter++] = c;
             } else if (c == '(') {
                 // Enable comments flag and ignore all characters until ')' or EOL unless it is a message.
                 // NOTE: This doesn't follow the NIST definition exactly, but is good enough for now.
@@ -196,7 +199,7 @@ bool protocol_main_loop()
                 // Detect line buffer overflow and set flag.
                 line_flags.overflow = On;
             } else
-                line[char_counter++] = CAPS(c); // Upcase lowercase
+                line[char_counter++] = nocaps ? c : CAPS(c);
         }
 
         // Handle extra command (internal stream)
