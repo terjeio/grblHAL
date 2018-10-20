@@ -1,7 +1,7 @@
 /*
-  mainc.c - An embedded CNC Controller with rs274/ngc (g-code) support
+  wifi.h - An embedded CNC Controller with rs274/ngc (g-code) support
 
-  Startup entry point for ESP32
+  WiFi comms
 
   Part of Grbl
 
@@ -21,34 +21,12 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-/*
- * IMPORTANT:
- *
- * GRBL/config.h changes needed for this driver
- *
- * Add: #include "esp_attr.h"
- * Change: #define ISR_CODE to #define ISR_CODE IRAM_ATTR
- *
- */
+#ifndef _grbl_wifi_h_
+#define _grbl_wifi_h_
 
-// idf.py app-flash -p COM23
+#define STREAM_POLL_INTERVAL 20 // Poll interval in milliseconds
 
-#include <stdint.h>
-#include <stdbool.h>
+bool wifi_init (char *ssid, char *passwd);
 
-#include "GRBL/grbllib.h"
+#endif
 
-/* Scheduler includes. */
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "sdkconfig.h"
-
-static void vGrblTask (void *pvParameters)
-{
-    grbl_enter();
-}
-
-void app_main(void)
-{
-	xTaskCreatePinnedToCore(vGrblTask, "Grbl", 3000, NULL, 0, NULL, 1);
-}

@@ -58,7 +58,7 @@ uint32_t uartAvailableForWrite (void);
 int16_t uartRead (void);
 bool uartSuspendInput (bool suspend);
 
-bool uartWrite (const char c);
+bool uartPutC (const char c);
 void uartWriteS (const char *data);
 
 void uartFlush (void);

@@ -36,7 +36,19 @@
 #include "serial.h"
 #include "nvs.h"
 
-//#include "TCPStream.h"
+#ifdef WIFI_COMMS
+#include "wifi.h"
+#include "TCPSTream.h"
+#endif
+
+#ifdef BT_COMMS
+#include "bluetooth.h"
+#endif
+
+#ifdef SDCARD_SUPPORT
+#include "sdcard.h"
+#endif
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/timers.h"
@@ -144,6 +156,78 @@ static void gpio_isr (void *arg);
 static TimerHandle_t xDelayTimer = NULL, debounceTimer = NULL;
 static TaskHandle_t xStepperTask = NULL;
 
+#ifdef BT_COMMS
+bool btStreamPutC (const char c)
+{
+	BTStreamPutC(c);
+	uartPutC(c);
+
+    return true;
+}
+
+void btStreamWriteS (const char *data)
+{
+	BTStreamWriteS(data);
+	uartWriteS(data);
+}
+#endif
+
+#ifdef WIFI_COMMS
+bool wifiStreamPutC (const char c)
+{
+	TCPStreamPutC(c);
+	uartPutC(c);
+
+    return true;
+}
+
+void wifiStreamWriteS (const char *data)
+{
+	TCPStreamWriteS(data);
+	uartWriteS(data);
+}
+#endif
+
+void selectStream (stream_setting_t stream)
+{
+    switch(stream) {
+#ifdef BT_COMMS
+        case StreamSetting_Bluetooth:
+            hal.serial_read = BTStreamGetC;
+            hal.serial_write = btStreamPutC;
+            hal.serial_write_string = btStreamWriteS;
+            hal.serial_get_rx_buffer_available = BTStreamRXFree;
+            hal.serial_reset_read_buffer = BTStreamFlush;
+            hal.serial_cancel_read_buffer = BTStreamCancel;
+            setBTReceiveCallback(hal.protocol_process_realtime);
+            break;
+#endif
+#ifdef WIFI_COMMS
+        case StreamSetting_WiFi:
+            hal.serial_read = TCPStreamGetC;
+            hal.serial_write = wifiStreamPutC;
+            hal.serial_write_string = wifiStreamWriteS;
+            hal.serial_get_rx_buffer_available = TCPStreamRxFree;
+            hal.serial_reset_read_buffer = TCPStreamRxFlush;
+            hal.serial_cancel_read_buffer = TCPStreamRxCancel;
+            TCPStreamSetReceiveCallback(hal.protocol_process_realtime);
+            break;
+#endif
+        case StreamSetting_Serial:
+            hal.serial_read = uartRead;
+            hal.serial_write = uartPutC;
+            hal.serial_write_string = uartWriteS;
+            hal.serial_get_rx_buffer_available = uartRXFree;
+            hal.serial_reset_read_buffer = uartFlush;
+            hal.serial_cancel_read_buffer = uartCancel;
+            hal.serial_suspend_read = uartSuspendInput;
+            setUARTReceiveCallback(hal.protocol_process_realtime);
+            break;
+
+        default:
+        	break;
+    }
+}
 
 void initRMT (settings_t *settings)
 {
@@ -585,32 +669,54 @@ static void settings_changed (settings_t *settings)
 
     if(IOInitDone) {
 
-        switch(settings->stream) {
-/*
-            case StreamSetting_Ethernet:
-                hal.serial_read = TCPStreamGetC;
-                hal.serial_write = TCPStreamPutC;
-                hal.serial_write_string = TCPStreamWriteS;
-                hal.serial_get_rx_buffer_available = TCPStreamRxFree;
-                hal.serial_reset_read_buffer = TCPStreamRxFlush;
-                hal.serial_cancel_read_buffer = TCPStreamRxCancel;
-                TCPStreamSetReceiveCallback(hal.protocol_process_realtime);
-                break;
-*/
-            case StreamSetting_Serial:
-                hal.serial_read = uartRead;
-                hal.serial_write = uartWrite;
-                hal.serial_write_string = uartWriteS;
-                hal.serial_get_rx_buffer_available = uartRXFree;
-                hal.serial_reset_read_buffer = uartFlush;
-                hal.serial_cancel_read_buffer = uartCancel;
-//                hal.serial_suspend_read = serialSuspendInput;
-                setUARTReceiveCallback(hal.protocol_process_realtime);
-                break;
+    	// NOTE: some interfaces may defer actual stream switch until stack is operational
+    	switch(settings->stream) {
 
-            default:
-            	break;
-        }
+    		case StreamSetting_Serial:
+    			selectStream(StreamSetting_Serial);
+    			break;
+
+#ifdef WIFI_COMMS
+    		case StreamSetting_WiFi:;
+				static bool wifi_ok = false;
+				if(!wifi_ok) {
+
+					char ssid[80], *passwd = ssid;
+
+					settings_read_build_info(ssid);
+
+					while(!(*passwd == '\0' || *passwd == '|'))
+						passwd++;
+
+					if(*passwd == '|')
+						*passwd++ = '\0';
+
+					wifi_ok = wifi_init(ssid, passwd);
+				}
+				break;
+#endif
+
+#ifdef BT_COMMS
+    		case StreamSetting_Bluetooth:;
+    			static bool bluetooth_ok = false;
+    			if(!bluetooth_ok) {
+
+					char ssid[80], *passwd = ssid;
+
+					settings_read_build_info(ssid);
+
+					while(!(*passwd == '\0' || *passwd == '|'))
+						passwd++;
+
+					if(*passwd == '|')
+						*passwd++ = '\0';
+
+					bluetooth_ok = bluetooth_init(ssid, passwd);
+				}
+#endif
+    		default:
+    			break;
+    	}
 
         stepperEnable(settings->steppers.deenergize);
 
@@ -636,7 +742,9 @@ static void settings_changed (settings_t *settings)
         uint32_t i = sizeof(inputpin) / sizeof(state_signal_t);
 
         do {
-            switch(--i) {
+        	ie = false;
+
+        	switch(--i) {
 
                 case INPUT_RESET:
                 	ie = true;
@@ -786,16 +894,16 @@ static bool driver_setup (settings_t *settings)
     } else
         hal.spindle_set_state = &spindleSetState;
 
+#ifdef SDCARD_SUPPORT
+    sdcard_init();
+#endif
+
   // Set defaults
 
     IOInitDone = settings->version == 14;
 
     settings_changed(settings);
 
-    setUARTReceiveCallback(hal.protocol_process_realtime);
-#ifdef FreeRTOS
-    TCPStreamSetReceiveCallback(hal.protocol_process_realtime);
-#endif
     spindleSetState((spindle_state_t){0}, spindle_pwm.off_value, DEFAULT_SPINDLE_RPM_OVERRIDE);
     coolantSetState((coolant_state_t){0});
     stepperSetDirOutputs((axes_signals_t){0});
@@ -844,13 +952,7 @@ bool driver_init (void)
 
     hal.system_control_get_state = systemGetState;
 
-    hal.serial_read = uartRead;
-    hal.serial_write = uartWrite;
-    hal.serial_write_string = uartWriteS;
-    hal.serial_get_rx_buffer_available = uartRXFree;
-    hal.serial_reset_read_buffer = uartFlush;
-    hal.serial_cancel_read_buffer = uartCancel;
-    hal.serial_suspend_read = uartSuspendInput;
+    selectStream(StreamSetting_Serial);
 
     if(nvsInit()) {
         hal.eeprom.type = EEPROM_Physical;
@@ -869,6 +971,11 @@ bool driver_init (void)
 #ifdef DEBUGOUT
     hal.debug_out = debug_out;
 #endif
+
+#ifdef SDCARD_SUPPORT
+    hal.driver_reset = sdcard_reset;
+#endif
+
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
 
     hal.driver_cap.spindle_dir = On;
@@ -883,6 +990,15 @@ bool driver_init (void)
     hal.driver_cap.control_pull_up = On;
     hal.driver_cap.limits_pull_up = On;
     hal.driver_cap.probe_pull_up = On;
+#ifdef SDCARD_SUPPORT
+    hal.driver_cap.sd_card = On;
+#endif
+#ifdef BT_COMMS
+    hal.driver_cap.bluetooth = On;
+#endif
+#ifdef WIFI_COMMS
+    hal.driver_cap.wifi = On;
+#endif
 
    // no need to move version check before init - compiler will fail any mismatch for existing entries
     return hal.version == 4;

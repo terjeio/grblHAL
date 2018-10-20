@@ -23,8 +23,6 @@ Bug in queue - LF & CR get eaten most of the time, or is the OS interfering in o
 
  */
 
-#include "esp32-hal-uart.h"
-//#include "esp32-hal.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -40,6 +38,7 @@ Bug in queue - LF & CR get eaten most of the time, or is the OS interfering in o
 #include "esp_intr_alloc.h"
 
 #include "serial.h"
+#include "esp32-hal-uart.h"
 #include "GRBL/grbl.h"
 
 #define UART_REG_BASE(u)    ((u==0)?DR_REG_UART_BASE:(      (u==1)?DR_REG_UART1_BASE:(    (u==2)?DR_REG_UART2_BASE:0)))
@@ -289,7 +288,7 @@ int16_t uartRead (void)
     return data;
 }
 
-bool uartWrite (const char c)
+bool uartPutC (const char c)
 {
     UART_MUTEX_LOCK();
     while(port->dev->status.txfifo_cnt == 0x7F);
@@ -304,7 +303,7 @@ void uartWriteS (const char *data)
     char c, *ptr = (char *)data;
 
     while((c = *ptr++) != '\0')
-    	uartWrite(c);
+    	uartPutC(c);
 }
 
 void uartFlush (void)

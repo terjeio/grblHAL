@@ -1,7 +1,7 @@
 /*
-  mainc.c - An embedded CNC Controller with rs274/ngc (g-code) support
+  bluetooth.h - An embedded CNC Controller with rs274/ngc (g-code) support
 
-  Startup entry point for ESP32
+  Bluetooth comms
 
   Part of Grbl
 
@@ -21,34 +21,23 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-/*
- * IMPORTANT:
- *
- * GRBL/config.h changes needed for this driver
- *
- * Add: #include "esp_attr.h"
- * Change: #define ISR_CODE to #define ISR_CODE IRAM_ATTR
- *
- */
+#ifndef _grbl_bluetooth_h_
+#define _grbl_bluetooth_h_
 
-// idf.py app-flash -p COM23
+bool bluetooth_init (char *sn, char *sv);
 
-#include <stdint.h>
-#include <stdbool.h>
+uint32_t BTStreamAvailable (void);
+uint16_t BTStreamRXFree (void);
+int16_t BTStreamGetC (void);
+bool BTStreamSuspendInput (bool suspend);
 
-#include "GRBL/grbllib.h"
+bool BTStreamPutC (const char c);
+void BTStreamWriteS (const char *data);
 
-/* Scheduler includes. */
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "sdkconfig.h"
+void BTStreamFlush (void);
+void BTStreamCancel (void);
 
-static void vGrblTask (void *pvParameters)
-{
-    grbl_enter();
-}
+//void setBTBlockingCallback (bool (*fn)(void));
+void setBTReceiveCallback (bool (*fn)(char));
 
-void app_main(void)
-{
-	xTaskCreatePinnedToCore(vGrblTask, "Grbl", 3000, NULL, 0, NULL, 1);
-}
+#endif

@@ -32,11 +32,16 @@
 #include "driver/ledc.h"
 #include "driver/rmt.h"
 
+#include "GRBL/grbl.h"
+
 // Configuration
 
 //#define HAS_KEYPAD // uncomment to enable I2C keypad for jogging etc. NOTE: not yet ready
 //#define PWM_RAMPED // uncomment to enable ramped spindle PWM.
 //#define PROBE_ISR // uncomment to catch probe state change by interrupt TODO: needs verification!
+//#define WIFI_COMMS
+//#define BT_COMMS
+#define SDCARD_SUPPORT
 
 // End configuration
 
@@ -86,5 +91,7 @@
 
 // Define probe switch input pin.
 #define PROBE_PIN       GPIO_NUM_32
+
+void selectStream (stream_setting_t stream);
 
 #endif

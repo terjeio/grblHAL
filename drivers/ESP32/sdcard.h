@@ -1,7 +1,7 @@
 /*
-  mainc.c - An embedded CNC Controller with rs274/ngc (g-code) support
+  sdcard.h - An embedded CNC Controller with rs274/ngc (g-code) support
 
-  Startup entry point for ESP32
+  Driver code for Texas Instruments Tiva C (TM4C123GH6PM) ARM processor
 
   Part of Grbl
 
@@ -21,34 +21,10 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-/*
- * IMPORTANT:
- *
- * GRBL/config.h changes needed for this driver
- *
- * Add: #include "esp_attr.h"
- * Change: #define ISR_CODE to #define ISR_CODE IRAM_ATTR
- *
- */
+#ifndef _SDCARD_H_
+#define _SDCARD_H_
 
-// idf.py app-flash -p COM23
+void sdcard_init (void);
+void sdcard_reset (void);
 
-#include <stdint.h>
-#include <stdbool.h>
-
-#include "GRBL/grbllib.h"
-
-/* Scheduler includes. */
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "sdkconfig.h"
-
-static void vGrblTask (void *pvParameters)
-{
-    grbl_enter();
-}
-
-void app_main(void)
-{
-	xTaskCreatePinnedToCore(vGrblTask, "Grbl", 3000, NULL, 0, NULL, 1);
-}
+#endif
