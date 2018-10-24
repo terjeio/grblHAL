@@ -57,6 +57,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "lwip/priv/tcp_priv.h"
 #include "lwip/timeouts.h"
 
+#include "driver.h"
 #include "serial.h"
 #include "TCPStream.h"
 
@@ -367,6 +368,8 @@ static err_t streamReceive (void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_
 
             streamSession->pcbConnect = NULL;
             streamSession->state = TCPState_Listen;
+
+            selectStream(StreamSetting_Serial);
         }
     }
 
@@ -412,6 +415,9 @@ static err_t TCPStreamAccept (void *arg, struct tcp_pcb *pcb, err_t err)
     tcp_err(pcb, streamError);
     tcp_poll(pcb, streamPoll, 1000 / TCP_SLOW_INTERVAL);
     tcp_sent(pcb, streamSent);
+
+    selectStream(StreamSetting_WiFi);
+	hal.serial_write_string("[MSG:WIFI CONNECTED]\r\n");
 
     return ERR_OK;
 }

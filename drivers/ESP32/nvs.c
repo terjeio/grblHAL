@@ -21,62 +21,38 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-// NOTE: use with eeprom emulation enabled in order to avoid excessive write cycles
-
 #include "esp_partition.h"
+#include "esp_log.h"
 
+#include "nvs.h"
 #include "GRBL/grbl.h"
 
-static const esp_partition_t *grblNVS;
-static uint8_t grbl_settings[GRBL_EEPROM_SIZE];
-static bool dirty = false;
+#ifndef EMULATE_EEPROM
+#error EMULATE_EPROM must be enabled to use flash for settings storage
+#endif
 
-static bool commit (void)
+static const esp_partition_t *grblNVS = NULL;
+
+bool nvsRead (uint8_t *dest)
 {
-	if(dirty &&
-	    esp_partition_erase_range(grblNVS, 0, SPI_FLASH_SEC_SIZE) == ESP_OK &&
-		 esp_partition_write(grblNVS, 0, &grbl_settings, GRBL_EEPROM_SIZE) == ESP_OK)
-		dirty = false;
+	bool ok;
 
-	return !dirty;
+	if(!(ok = grblNVS && esp_partition_read(grblNVS, 0, (void *)dest, GRBL_NVS_SIZE) == ESP_OK))
+		grblNVS = NULL;
+
+	return ok;
 }
 
-uint8_t nvsGetByte (uint32_t addr)
+bool nvsWrite (uint8_t *source)
 {
-    return grbl_settings[addr];
-}
-
-void nvsPutByte (uint32_t addr, uint8_t new_value)
-{
-	dirty = dirty || grbl_settings[addr] != new_value;
-	grbl_settings[addr] = new_value;
-	commit();
-}
-
-void nvsWriteBlockWithChecksum (uint32_t destination, uint8_t *source, uint32_t size)
-{
-	dirty = dirty || memcmp(grbl_settings + destination, source, size);
-
-	memcpy(grbl_settings + destination, source, size);
-
-	grbl_settings[destination + size] = calc_checksum(source, size);
-
-	commit();
-}
-
-bool nvsReadBlockWithChecksum (uint8_t *destination, uint32_t source, uint32_t size)
-{
-	memcpy(destination, grbl_settings + source, size);
-
-    return calc_checksum(destination, size) == nvsGetByte(source + size);
+	return grblNVS &&
+			esp_partition_erase_range(grblNVS, 0, SPI_FLASH_SEC_SIZE) == ESP_OK &&
+			 esp_partition_write(grblNVS, 0, (void *)source, GRBL_NVS_SIZE) == ESP_OK;
 }
 
 bool nvsInit (void)
 {
 	grblNVS = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "grbl");
-
-	if(grblNVS && !esp_partition_read(grblNVS, 0, (void *)grbl_settings, GRBL_EEPROM_SIZE) == ESP_OK)
-		grblNVS = NULL;
 
 	return grblNVS != NULL;
 }

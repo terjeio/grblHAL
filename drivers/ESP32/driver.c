@@ -29,24 +29,29 @@
 #include <stdbool.h>
 
 #include "GRBL/grbl.h"
+#include "GRBL/report.h"
 
 #include "driver.h"
-#include "eeprom.h"
+//#include "eeprom.h"
 #include "esp32-hal-uart.h"
 #include "serial.h"
 #include "nvs.h"
-
-#ifdef WIFI_COMMS
+#include "esp_log.h"
+#ifdef WIFI_ENABLE
 #include "wifi.h"
 #include "TCPSTream.h"
 #endif
 
-#ifdef BT_COMMS
+#ifdef BLUETOOTH_ENABLE
 #include "bluetooth.h"
 #endif
 
-#ifdef SDCARD_SUPPORT
+#ifdef SDCARD_ENABLE
 #include "sdcard.h"
+#endif
+
+#ifdef IOEXPAND_ENABLE
+#include "ioexpand.h"
 #endif
 
 #include "freertos/FreeRTOS.h"
@@ -71,6 +76,8 @@ typedef struct {
 
 static pwm_ramp_t pwm_ramp;
 #endif
+
+static driver_settings_t driver_settings;
 
 typedef struct {
     uint8_t pin;
@@ -129,6 +136,11 @@ static spindle_pwm_t spindle_pwm;
 
 // Inverts the probe pin state depending on user settings and probing cycle mode.
 static uint8_t probe_invert;
+
+#ifdef IOEXPAND_ENABLE
+static ioexpand_t iopins = {0};
+#endif
+
 static uint_fast16_t spindleSetSpeed (uint_fast16_t pwm_value);
 
 static portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
@@ -156,7 +168,7 @@ static void gpio_isr (void *arg);
 static TimerHandle_t xDelayTimer = NULL, debounceTimer = NULL;
 static TaskHandle_t xStepperTask = NULL;
 
-#ifdef BT_COMMS
+#ifdef BLUETOOTH_ENABLE
 bool btStreamPutC (const char c)
 {
 	BTStreamPutC(c);
@@ -172,7 +184,7 @@ void btStreamWriteS (const char *data)
 }
 #endif
 
-#ifdef WIFI_COMMS
+#ifdef WIFI_ENABLE
 bool wifiStreamPutC (const char c)
 {
 	TCPStreamPutC(c);
@@ -190,8 +202,9 @@ void wifiStreamWriteS (const char *data)
 
 void selectStream (stream_setting_t stream)
 {
+	//
     switch(stream) {
-#ifdef BT_COMMS
+#ifdef BLUETOOTH_ENABLE
         case StreamSetting_Bluetooth:
             hal.serial_read = BTStreamGetC;
             hal.serial_write = btStreamPutC;
@@ -202,7 +215,7 @@ void selectStream (stream_setting_t stream)
             setBTReceiveCallback(hal.protocol_process_realtime);
             break;
 #endif
-#ifdef WIFI_COMMS
+#ifdef WIFI_ENABLE
         case StreamSetting_WiFi:
             hal.serial_read = TCPStreamGetC;
             hal.serial_write = wifiStreamPutC;
@@ -211,6 +224,7 @@ void selectStream (stream_setting_t stream)
             hal.serial_reset_read_buffer = TCPStreamRxFlush;
             hal.serial_cancel_read_buffer = TCPStreamRxCancel;
             TCPStreamSetReceiveCallback(hal.protocol_process_realtime);
+        	hal.serial_write_string("[MSG:WIFI RUNNING]\r\n");
             break;
 #endif
         case StreamSetting_Serial:
@@ -319,7 +333,13 @@ static void debug_out (bool enable)
 static void stepperEnable (axes_signals_t enable)
 {
     enable.mask ^= settings.steppers.enable_invert.mask;
+#ifdef IOEXPAND_ENABLE // TODO: read from expander?
+    iopins.stepper_enable_x = enable.x;
+    iopins.stepper_enable_y = enable.y;
+    iopins.stepper_enable_z = enable.z;
+#else
     gpio_set_level(STEPPERS_DISABLE_PIN, enable.x);
+#endif
 }
 
 // Starts stepper driver ISR timer and forces a stepper driver interrupt callback
@@ -486,17 +506,32 @@ bool probeGetState (void)
 // Static spindle (off, on cw & on ccw)
 inline static void spindleOff ()
 {
+#ifdef IOEXPAND_ENABLE
+	iopins.spindle_on = settings.spindle.invert.on ? On : Off;
+	ioexpand_out(iopins);
+#else
 //    gpio_set_level(SPINDLE_ENABLE_PIN, settings.spindle.invert.on ? 1 : 0);
+#endif
 }
 
 inline static void spindleOn ()
 {
+#ifdef IOEXPAND_ENABLE
+	iopins.spindle_on = settings.spindle.invert.on ? Off : On;
+	ioexpand_out(iopins);
+#else
 //   gpio_set_level(SPINDLE_ENABLE_PIN, settings.spindle.invert.on ? 0 : 1);
+#endif
 }
 
 inline static void spindleDir (bool ccw)
 {
+#ifdef IOEXPAND_ENABLE
+	iopins.spindle_dir = (ccw ^ settings.spindle.invert.ccw) ? On : Off;
+	ioexpand_out(iopins);
+#else
 //   gpio_set_level(SPINDLE_DIRECTION_PIN, (ccw ^ settings.spindle.invert.ccw) ? 1 : 0);
+#endif
 }
 
 
@@ -566,9 +601,16 @@ static spindle_state_t spindleGetState (void)
 {
     spindle_state_t state = {0};
 
-//    state.on = pwmEnabled || gpio_get_level(SPINDLE_ENABLE_PIN) != 0;
+#ifdef IOEXPAND_ENABLE // TODO: read from expander?
+	state.on = iopins.spindle_on;
+	state.ccw = hal.driver_cap.spindle_dir && iopins.spindle_dir;
+#else
+//    state.on = gpio_get_level(SPINDLE_ENABLE_PIN) != 0;
 //    state.ccw = hal.driver_cap.spindle_dir && gpio_get_level(SPINDLE_DIRECTION_PIN) != 0;
+#endif
     state.value ^= settings.spindle.invert.mask;
+    state.on |= pwmEnabled;
+
 #ifdef PWM_RAMPED
     state.at_speed = ledc_get_duty(ledConfig.speed_mode, ledConfig.channel) == pwm_ramp.pwm_target;
 #endif
@@ -581,8 +623,14 @@ static spindle_state_t spindleGetState (void)
 static void coolantSetState (coolant_state_t mode)
 {
     mode.value ^= settings.coolant_invert.mask;
+#ifdef IOEXPAND_ENABLE
+	iopins.flood_on = mode.flood;
+	iopins.mist_on = mode.mist;
+	ioexpand_out(iopins);
+#else
 //    gpio_set_level(COOLANT_FLOOD_PIN, mode.flood ? 1 : 0);
 //    gpio_set_level(COOLANT_MIST_PIN, mode.mist ? 1 : 0);
+#endif
 }
 
 // Returns coolant state in a coolant_state_t variable
@@ -590,8 +638,14 @@ static coolant_state_t coolantGetState (void)
 {
     coolant_state_t state = {0};
 
+#ifdef IOEXPAND_ENABLE // TODO: read from expander?
+	state.flood = iopins.flood_on;
+	state.mist = iopins.mist_on;
+#else
 //    state.flood = gpio_get_level(COOLANT_FLOOD_PIN);
 //    state.mist  = gpio_get_level(COOLANT_MIST_PIN);
+#endif
+
     state.value ^= settings.coolant_invert.mask;
 
     return state;
@@ -652,6 +706,30 @@ void debounceTimerCallback (TimerHandle_t xTimer)
 		  hal.control_interrupt_callback(systemGetState());
 }
 
+#ifdef I2C_PORT
+void i2c_init (void)
+{
+	static bool init_ok = false;
+
+	if(!init_ok) {
+
+		init_ok = true;
+
+		i2c_config_t i2c_config = {
+			.mode = I2C_MODE_MASTER,
+			.sda_io_num = I2C_SDA,
+			.scl_io_num = I2C_SCL,
+			.sda_pullup_en = GPIO_PULLUP_ENABLE,
+			.scl_pullup_en = GPIO_PULLUP_ENABLE,
+			.master.clk_speed = I2C_CLOCK
+		};
+
+		i2c_param_config(I2C_PORT, &i2c_config);
+		i2c_driver_install(I2C_PORT, i2c_config.mode, 0, 0, 0);
+	}
+}
+#endif
+
 // Configures perhipherals when settings are initialized or changed
 static void settings_changed (settings_t *settings)
 {
@@ -669,6 +747,11 @@ static void settings_changed (settings_t *settings)
 
     if(IOInitDone) {
 
+    	// Validate stream setting, switch to serial if not supported
+    	if((settings->stream == StreamSetting_WiFi && !hal.driver_cap.wifi) ||
+        	(settings->stream == StreamSetting_Bluetooth && !hal.driver_cap.bluetooth))
+    		settings->stream = StreamSetting_Serial;
+
     	// NOTE: some interfaces may defer actual stream switch until stack is operational
     	switch(settings->stream) {
 
@@ -676,43 +759,21 @@ static void settings_changed (settings_t *settings)
     			selectStream(StreamSetting_Serial);
     			break;
 
-#ifdef WIFI_COMMS
+#ifdef WIFI_ENABLE
     		case StreamSetting_WiFi:;
 				static bool wifi_ok = false;
-				if(!wifi_ok) {
-
-					char ssid[80], *passwd = ssid;
-
-					settings_read_build_info(ssid);
-
-					while(!(*passwd == '\0' || *passwd == '|'))
-						passwd++;
-
-					if(*passwd == '|')
-						*passwd++ = '\0';
-
-					wifi_ok = wifi_init(ssid, passwd);
-				}
+				if(!wifi_ok && driver_settings.wifi.ssid[0] != '\0')
+					wifi_ok = wifi_init(&driver_settings.wifi);
+					// else report error?
 				break;
 #endif
 
-#ifdef BT_COMMS
+#ifdef BLUETOOTH_ENABLE
     		case StreamSetting_Bluetooth:;
     			static bool bluetooth_ok = false;
-    			if(!bluetooth_ok) {
-
-					char ssid[80], *passwd = ssid;
-
-					settings_read_build_info(ssid);
-
-					while(!(*passwd == '\0' || *passwd == '|'))
-						passwd++;
-
-					if(*passwd == '|')
-						*passwd++ = '\0';
-
-					bluetooth_ok = bluetooth_init(ssid, passwd);
-				}
+    			if(!bluetooth_ok && driver_settings.bluetooth.device_name[0] != '\0')
+					bluetooth_ok = bluetooth_init(&driver_settings.bluetooth);
+				// else report error?
 #endif
     		default:
     			break;
@@ -826,6 +887,16 @@ void vStepperTask (void *pvParameters)
 // Initializes MCU peripherals for Grbl use
 static bool driver_setup (settings_t *settings)
 {
+
+	/********************************************************
+	 * Read driver specific setting from persistent storage *
+	 ********************************************************/
+
+	if(hal.eeprom.type != EEPROM_None) {
+		if(!hal.eeprom.memcpy_from_with_checksum((uint8_t *)&driver_settings, hal.eeprom.driver_area.address, sizeof(driver_settings)))
+			hal.driver_settings_restore(SETTINGS_RESTORE_DRIVER_PARAMETERS);
+	}
+
     /******************
      *  Stepper init  *
      ******************/
@@ -861,7 +932,7 @@ static bool driver_setup (settings_t *settings)
 		.mode = GPIO_MODE_OUTPUT,
 		.pull_up_en = GPIO_PULLUP_DISABLE,
 		.pull_down_en = GPIO_PULLDOWN_DISABLE,
-		.intr_type =  GPIO_INTR_DISABLE
+		.intr_type = GPIO_INTR_DISABLE
     };
 
     gpio_config(&gpioConfig);
@@ -894,8 +965,12 @@ static bool driver_setup (settings_t *settings)
     } else
         hal.spindle_set_state = &spindleSetState;
 
-#ifdef SDCARD_SUPPORT
+#ifdef SDCARD_ENABLE
     sdcard_init();
+#endif
+
+#ifdef IOEXPAND_ENABLE
+    ioexpand_init();
 #endif
 
   // Set defaults
@@ -909,6 +984,80 @@ static bool driver_setup (settings_t *settings)
     stepperSetDirOutputs((axes_signals_t){0});
 
     return IOInitDone;
+}
+
+static bool user_defined_setting (uint_fast16_t param, float value, char *svalue)
+{
+	bool claimed = false;
+
+	if(svalue) switch(param) {
+
+		case 71:
+			claimed = strlcpy(driver_settings.wifi.ssid, svalue, sizeof(driver_settings.wifi.ssid)) <= sizeof(driver_settings.wifi.ssid);
+			break;
+
+		case 72:
+			claimed = strlcpy(driver_settings.wifi.password, svalue, sizeof(driver_settings.wifi.password)) <= sizeof(driver_settings.wifi.password);
+			break;
+
+		case 73:
+			if((claimed = (value != NAN && value > 0.0f && value < 65536.0f)))
+				driver_settings.wifi.port = (uint16_t)value;
+			break;
+
+		case 74:
+			claimed = strlcpy(driver_settings.bluetooth.device_name, svalue, sizeof(driver_settings.bluetooth.device_name)) <= sizeof(driver_settings.bluetooth.device_name);
+			break;
+
+		case 75:
+			claimed = strlcpy(driver_settings.bluetooth.service_name, svalue, sizeof(driver_settings.bluetooth.service_name)) <= sizeof(driver_settings.bluetooth.service_name);
+			break;
+	}
+
+	if(claimed) {
+		hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
+#ifdef EMULATE_EEPROM
+	  if(hal.eeprom.type == EEPROM_Emulated)
+		  settings_dirty.driver_settings = settings_dirty.is_dirty = true;
+#endif
+	}
+    return claimed;
+}
+
+static void report_string_setting (uint8_t setting, char *value)
+{
+    hal.serial_write('$');
+    print_uint8_base10(setting);
+    hal.serial_write('=');
+    hal.serial_write_string(value);
+    hal.serial_write_string("\r\n");
+}
+
+static void driver_settings_report (bool axis_settings)
+{
+    if(!axis_settings) {
+#ifdef WIFI_ENABLE
+		report_string_setting(71, driver_settings.wifi.ssid);
+		report_string_setting(72, driver_settings.wifi.password);
+		report_util_uint_setting(73, driver_settings.wifi.port);
+#endif
+#ifdef BLUETOOTH_ENABLE
+		report_string_setting(74, driver_settings.bluetooth.device_name);
+		report_string_setting(75, driver_settings.bluetooth.service_name);
+#endif
+    }
+}
+
+void driver_settings_restore (uint8_t restore_flag)
+{
+    if(restore_flag & SETTINGS_RESTORE_DRIVER_PARAMETERS) {
+    	driver_settings.wifi.ssid[0] = '\0';
+    	driver_settings.wifi.password[0] = '\0';
+    	driver_settings.wifi.port = 23;
+    	strcpy(driver_settings.bluetooth.device_name, "GRBL");
+    	strcpy(driver_settings.bluetooth.service_name, "GRBL Serial Port");
+    	hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
+    }
 }
 
 // Initialize HAL pointers, setup serial comms and enable EEPROM
@@ -954,14 +1103,28 @@ bool driver_init (void)
 
     selectStream(StreamSetting_Serial);
 
+#ifdef HAS_EEPROM
+    eeprom_init();
+    hal.eeprom.type = EEPROM_Physical;
+    hal.eeprom.get_byte = eepromGetByte;
+    hal.eeprom.put_byte = eepromPutByte;
+    hal.eeprom.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
+    hal.eeprom.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
+#else
     if(nvsInit()) {
-        hal.eeprom.type = EEPROM_Physical;
-		hal.eeprom.get_byte = nvsGetByte;
-		hal.eeprom.put_byte = nvsPutByte;
-		hal.eeprom.memcpy_to_with_checksum = nvsWriteBlockWithChecksum;
-		hal.eeprom.memcpy_from_with_checksum = nvsReadBlockWithChecksum;
+        hal.eeprom.type = EEPROM_Emulated;
+        hal.eeprom.size = GRBL_NVS_SIZE;
+        hal.eeprom.memcpy_from_flash = nvsRead;
+        hal.eeprom.memcpy_to_flash = nvsWrite;
+		hal.eeprom.driver_area.address = GRBL_EEPROM_SIZE;
+		hal.eeprom.driver_area.size = sizeof(driver_settings); // Add assert?
 	} else
 	    hal.eeprom.type = EEPROM_None;
+#endif
+
+    hal.driver_setting = user_defined_setting;
+    hal.driver_settings_report = driver_settings_report;
+    hal.driver_settings_restore = driver_settings_restore;
 
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
@@ -972,7 +1135,7 @@ bool driver_init (void)
     hal.debug_out = debug_out;
 #endif
 
-#ifdef SDCARD_SUPPORT
+#ifdef SDCARD_ENABLE
     hal.driver_reset = sdcard_reset;
 #endif
 
@@ -990,13 +1153,13 @@ bool driver_init (void)
     hal.driver_cap.control_pull_up = On;
     hal.driver_cap.limits_pull_up = On;
     hal.driver_cap.probe_pull_up = On;
-#ifdef SDCARD_SUPPORT
+#ifdef SDCARD_ENABLE
     hal.driver_cap.sd_card = On;
 #endif
-#ifdef BT_COMMS
+#ifdef BLUETOOTH_ENABLE
     hal.driver_cap.bluetooth = On;
 #endif
-#ifdef WIFI_COMMS
+#ifdef WIFI_ENABLE
     hal.driver_cap.wifi = On;
 #endif
 

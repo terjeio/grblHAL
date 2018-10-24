@@ -1,11 +1,12 @@
 /*
-  sdcard.h - An embedded CNC Controller with rs274/ngc (g-code) support
 
-  Run GCode stored on SD card
+  eeprom.h - driver code for Espressif ESP32 processor
+
+  for 2K EEPROM on CNC Boosterpack (Microchip 24LC16B)
 
   Part of Grbl
 
-  Copyright (c) 2018 Terje Io
+  Copyright (c) 2017-2018 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -19,12 +20,19 @@
 
   You should have received a copy of the GNU General Public License
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
+
 */
 
-#ifndef _SDCARD_H_
-#define _SDCARD_H_
+#ifndef _EEPROM_H_
+#define _EEPROM_H_
 
-void sdcard_init (void);
-void sdcard_reset (void);
+#define HAS_EEPROM
+
+void eeprom_init (void);
+uint8_t eepromGetByte (uint32_t addr);
+void eepromPutByte (uint32_t addr, uint8_t new_value);
+void eepromWriteBlockWithChecksum (uint32_t destination, uint8_t *source, uint32_t size);
+bool eepromReadBlockWithChecksum (uint8_t *destination, uint32_t source, uint32_t size);
 
 #endif
+

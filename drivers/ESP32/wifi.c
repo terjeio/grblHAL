@@ -7,7 +7,7 @@
 
   Copyright (c) 2018 Terje Io
 
-  Some parts of the code is based on example code by Expressif, in the public domain
+  Some parts of the code is based on example code by Espressif, in the public domain
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -46,6 +46,8 @@ static EventGroupHandle_t wifi_event_group;
 /* The event group allows multiple bits for each event,
    but we only care about one event - are we connected
    to the AP with an IP? */
+
+static uint16_t port;
 const static int CONNECTED_BIT = BIT0;
 
 const static char *TAG = "grbl wifi";
@@ -65,12 +67,11 @@ static esp_err_t wifi_event_handler (void *ctx, system_event_t *event)
 			break;
 
     	case SYSTEM_EVENT_STA_GOT_IP:
-    		hal.serial_write_string("[MSG:WIFI CONNECTED]\r\n");
+    		hal.serial_write_string("[MSG:WIFI ACTIVE]\r\n");
 			xEventGroupSetBits(wifi_event_group, CONNECTED_BIT);
 		    TCPStreamInit();
-		    TCPStreamListen(23);
-		    selectStream(StreamSetting_WiFi);
-            hal.serial_write_string("[MSG:WIFI OK]\r\n");
+		    TCPStreamListen(port);
+//			ESP_LOGI(TAG, "got ip:%s\n",	ip4addr_ntoa(&event->event_info.got_ip.ip_info.ip));
     	    sys_timeout(STREAM_POLL_INTERVAL, lwIPHostTimerHandler, NULL);
 			break;
 
@@ -91,7 +92,7 @@ static esp_err_t wifi_event_handler (void *ctx, system_event_t *event)
     return ESP_OK;
 }
 
-bool wifi_init (char *ssid, char *passwd)
+bool wifi_init (wifi_settings_t *settings)
 {
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -122,8 +123,12 @@ bool wifi_init (char *ssid, char *passwd)
 
     wifi_config_t wifi_config;
     memset(&wifi_config, 0, sizeof(wifi_config));
-    strcpy((char *)&wifi_config.sta.ssid, ssid);
-    strcpy((char *)&wifi_config.sta.password, passwd);
+
+    if(strlcpy((char *)wifi_config.sta.ssid, settings->ssid, sizeof(wifi_config.sta.ssid)) >= sizeof(wifi_config.sta.ssid))
+    	return false;
+
+    if(strlcpy((char *)wifi_config.sta.password, settings->password, sizeof(wifi_config.sta.password)) >= sizeof(wifi_config.sta.password))
+    	return false;
 
     if((ret = esp_wifi_set_mode(WIFI_MODE_STA)) != ESP_OK)
     	return false;
@@ -131,10 +136,12 @@ bool wifi_init (char *ssid, char *passwd)
     if((ret = esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config)) != ESP_OK)
     	return false;
 
-    ESP_LOGI(TAG, "start the WIFI SSID:[%s] password:[%s]\n", wifi_config.sta.ssid,  wifi_config.sta.password);
+    ESP_LOGI(TAG, "start the WIFI SSID:[%s] password:[%s]\n", wifi_config.sta.ssid, wifi_config.sta.password);
 
     if((ret = esp_wifi_start()) != ESP_OK)
     	return false;
+
+    port = settings->port == 0 ? 23 : settings->port;
 
     return true;
 }

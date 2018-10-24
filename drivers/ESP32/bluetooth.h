@@ -24,7 +24,9 @@
 #ifndef _grbl_bluetooth_h_
 #define _grbl_bluetooth_h_
 
-bool bluetooth_init (char *sn, char *sv);
+#include "GRBL/grbl.h"
+
+bool bluetooth_init (bluetooth_settings_t *settings);
 
 uint32_t BTStreamAvailable (void);
 uint16_t BTStreamRXFree (void);

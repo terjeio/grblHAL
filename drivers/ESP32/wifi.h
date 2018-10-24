@@ -24,9 +24,11 @@
 #ifndef _grbl_wifi_h_
 #define _grbl_wifi_h_
 
+#include "GRBL/grbl.h"
+
 #define STREAM_POLL_INTERVAL 20 // Poll interval in milliseconds
 
-bool wifi_init (char *ssid, char *passwd);
+bool wifi_init (wifi_settings_t *settings);
 
 #endif
 

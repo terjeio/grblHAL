@@ -7,7 +7,7 @@
 
   Copyright (c) 2018 Terje Io
 
-  Some parts of the code is based on example code by Expressif, in the public domain
+  Some parts of the code is based on example code by Espressif, in the public domain
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -55,10 +55,9 @@ typedef struct {
 #define BT_MUTEX_TXUNLOCK()  xSemaphoreGive(txbuffer_send->lock)
 
 #define SPP_TAG "SPP_ACCEPTOR_DEMO"
-#define SPP_SERVER_NAME "SPP_SERVER"
-#define EXCAMPLE_DEVICE_NAME "ESP_SPP_ACCEPTOR"
 
 static uint32_t connection = 0;
+static bluetooth_settings_t *bt_settings;
 static xSemaphoreHandle lock = NULL;
 
 static serial_rx_buffer_t rxbuffer = {
@@ -180,9 +179,9 @@ static void esp_spp_cb (esp_spp_cb_event_t event, esp_spp_cb_param_t *param)
 
     	case ESP_SPP_INIT_EVT:
 
-			esp_bt_dev_set_device_name(EXCAMPLE_DEVICE_NAME);
+			esp_bt_dev_set_device_name(bt_settings->device_name);
 			esp_bt_gap_set_scan_mode(ESP_BT_SCAN_MODE_CONNECTABLE_DISCOVERABLE);
-			esp_spp_start_srv(ESP_SPP_SEC_AUTHENTICATE, ESP_SPP_ROLE_SLAVE, 0, SPP_SERVER_NAME);
+			esp_spp_start_srv(ESP_SPP_SEC_AUTHENTICATE, ESP_SPP_ROLE_SLAVE, 0, bt_settings->service_name);
 			break;
 
 		case ESP_SPP_SRV_OPEN_EVT:
@@ -289,8 +288,10 @@ void esp_bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param)
     }
 }
 
-bool bluetooth_init (char *sn, char *sv)
+bool bluetooth_init (bluetooth_settings_t *settings)
 {
+	bt_settings = settings;
+
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         if((ret = nvs_flash_erase()) == ESP_OK)

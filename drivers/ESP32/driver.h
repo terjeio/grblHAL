@@ -31,17 +31,24 @@
 #include "driver/timer.h"
 #include "driver/ledc.h"
 #include "driver/rmt.h"
+#include "driver/i2c.h"
 
 #include "GRBL/grbl.h"
 
+typedef struct {
+	wifi_settings_t wifi;
+	bluetooth_settings_t bluetooth;
+} driver_settings_t;
+
 // Configuration
 
-//#define HAS_KEYPAD // uncomment to enable I2C keypad for jogging etc. NOTE: not yet ready
 //#define PWM_RAMPED // uncomment to enable ramped spindle PWM.
 //#define PROBE_ISR // uncomment to catch probe state change by interrupt TODO: needs verification!
-//#define WIFI_COMMS
-//#define BT_COMMS
-#define SDCARD_SUPPORT
+//#define KEYPAD_ENABLE // uncomment to enable I2C keypad for jogging etc. NOTE: not yet ready
+#define WIFI_ENABLE // uncomment to enable serial communications over WiFi.
+//#define BLUETOOTH_ENABLE // uncomment to enable serial communications over Bluetooth.
+//#define SDCARD_ENABLE // uncomment to run jobs from SD card.
+//#define IOEXPAND_ENABLE // uncomment to enable I2C IO expander for some output signals.
 
 // End configuration
 
@@ -92,6 +99,14 @@
 // Define probe switch input pin.
 #define PROBE_PIN       GPIO_NUM_32
 
-void selectStream (stream_setting_t stream);
+// Define I2C port/pins
+#define I2C_PORT I2C_NUM_1 // Comment out to not enable I2C
+#define I2C_SDA  GPIO_NUM_21
+#define I2C_SCL  GPIO_NUM_22
+#define I2C_CLOCK 100000
 
+void selectStream (stream_setting_t stream);
+#ifdef I2C_PORT
+void i2c_init (void);
+#endif
 #endif

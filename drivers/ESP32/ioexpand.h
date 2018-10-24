@@ -1,7 +1,8 @@
 /*
-  mainc.c - An embedded CNC Controller with rs274/ngc (g-code) support
 
-  Startup entry point for ESP32
+  ioexpand.h - driver code for Espressif ESP32 processor
+
+  I2C I/O expander
 
   Part of Grbl
 
@@ -19,36 +20,30 @@
 
   You should have received a copy of the GNU General Public License
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
+
 */
 
-/*
- * IMPORTANT:
- *
- * GRBL/config.h changes needed for this driver
- *
- * Add: #include "esp_attr.h"
- * Change: #define ISR_CODE to #define ISR_CODE IRAM_ATTR
- *
- */
-
-// idf.py app-flash -p COM23
+#ifndef _IOEXPAND_H_
+#define _IOEXPAND_H_
 
 #include <stdint.h>
-#include <stdbool.h>
 
-#include "GRBL/grbllib.h"
+typedef union {
+	uint8_t mask;
+	struct {
+		uint8_t spindle_on       :1,
+				spindle_dir      :1,
+				mist_on          :1,
+				flood_on         :1,
+				stepper_enable_z :1,
+				stepper_enable_x :1,
+				stepper_enable_y :1,
+				reserved		 :1;
+	};
+} ioexpand_t;
 
-/* Scheduler includes. */
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "sdkconfig.h"
+void ioexpand_init (void);
+void ioexpand_out (ioexpand_t pins);
+ioexpand_t ioexpand_in (void);
 
-static void vGrblTask (void *pvParameters)
-{
-    grbl_enter();
-}
-
-void app_main(void)
-{
-	xTaskCreatePinnedToCore(vGrblTask, "Grbl", 3200, NULL, 0, NULL, 1);
-}
+#endif

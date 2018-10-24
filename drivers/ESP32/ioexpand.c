@@ -1,7 +1,8 @@
 /*
-  mainc.c - An embedded CNC Controller with rs274/ngc (g-code) support
 
-  Startup entry point for ESP32
+  ioexpand.c - driver code for Espressif ESP32 processor
+
+  I2C I/O expander
 
   Part of Grbl
 
@@ -19,36 +20,30 @@
 
   You should have received a copy of the GNU General Public License
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
+
 */
 
-/*
- * IMPORTANT:
- *
- * GRBL/config.h changes needed for this driver
- *
- * Add: #include "esp_attr.h"
- * Change: #define ISR_CODE to #define ISR_CODE IRAM_ATTR
- *
- */
+#include "ioexpand.h"
+#include "driver.h"
 
-// idf.py app-flash -p COM23
-
-#include <stdint.h>
-#include <stdbool.h>
-
-#include "GRBL/grbllib.h"
-
-/* Scheduler includes. */
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "sdkconfig.h"
-
-static void vGrblTask (void *pvParameters)
+void ioexpand_init (void)
 {
-    grbl_enter();
+	i2c_init();
 }
 
-void app_main(void)
+void ioexpand_out (ioexpand_t pins)
 {
-	xTaskCreatePinnedToCore(vGrblTask, "Grbl", 3200, NULL, 0, NULL, 1);
+//mutex!! I2C is used by keypad and eeprom too
+	/*
+   i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+   i2c_master_start(cmd);
+   i2c_master_write_byte(cmd, (0x20 << 1) | 0x01, I2C_MASTER_ACK);
+   */
+}
+
+ioexpand_t ioexpand_in (void)
+{
+	ioexpand_t pins = {0};
+
+	return pins;
 }
