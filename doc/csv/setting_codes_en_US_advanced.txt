@@ -1,4 +1,4 @@
-$-Code	Setting	Units	Datatype	Data format	Setting Description	Min	Max
+$-Code	 Setting	 Units	Datatype	Data format	Setting Description	Min	Max
 0	Step pulse time	microseconds	integer	#9	Sets time length per step. Minimum 3 microseconds.	3	
 1	Step idle delay	milliseconds	integer	##9	Sets a short hold delay when stopping to let dynamics settle before disabling steppers. Value 255 keeps motors enabled.		255
 2	Step pulse invert	mask	bitfield	axes	Inverts the step signals (active low).		
@@ -6,7 +6,7 @@ $-Code	Setting	Units	Datatype	Data format	Setting Description	Min	Max
 4	Invert step enable pin	boolean	bitfield	axes	Inverts the stepper driver enable signals  (active low). If the stepper drivers shares the same enable signal only X is used.		
 5	Invert limit pins	mask	bitfield	axes	Inverts the axis limit input signals. 		
 6	Invert probe pin	boolean	bool		Inverts the probe input pin signal.		
-10	Status report options	mask	bitfield	Position type,Buffer state,Line numbers,Feed & speed,Pin state,Work coordinate offset,Overrides	Specifies optional data included in status reports.		
+10	Status report options	mask	bitfield	Position type,Buffer state,Line numbers,Feed & speed,Pin state,Work coordinate offset,Overrides,Probe coordinates	Specifies optional data included in status reports.		
 11	Junction deviation	mm	float	#####0.000	Sets how fast Grbl travels through consecutive motions. Lower value slows it down.		
 12	Arc tolerance	mm	float	#####0.000	Sets the G2 and G3 arc tracing accuracy based on radial error. Beware: A very small value may effect performance.		
 13	Report in inches	boolean	bool		Enables inch units when returning any position and rate value that is not a settings value.		
@@ -35,21 +35,56 @@ $-Code	Setting	Units	Datatype	Data format	Setting Description	Min	Max
 36	Spindle PWM max value	percent	float	##0.0	Spindle PWM max value in percent (duty cycle).		100
 37	Steppers deenergize 	mask	bitfield	axes	Specifies which steppers not to disable when stopped.		
 38	Spindle PPR	pulses	integer	###0	Spindle encoder pulses per revolution		
+39	Spindle P-gain		decimal	###0.000			
+40	Spindle I-gain		decimal	###0.000			
+41	Spindle D-gain		decimal	###0.000			
+43	Homing passes		integer	##9	Number of homing passes. Minimum 1, maximum 128.	1	128
+44	Axes homing, first pass	mask	bitfield	axes	Axes to home in first pass		
+45	Axes homing, second pass	mask	bitfield	axes	Axes to home in second pass		
+46	Axes homing,third pass	mask	bitfield	axes	Axes to home in third pass		
+47	Axes homing, fourth pass	mask	bitfield	axes	Axes to home in fourth pass		
+48	Axes homing, fifthpass	mask	bitfield	axes	Axes to home in fifth pass		
+49	Axes homing, sixth pass	mask	bitfield	axes	Axes to home in sixth pass		
 50	Step jog speed 	mm/min	float	###0.0	Step jogging speed in millimeters per minute		
 51	Slow jog speed	mm/min	float	###0.0	Slow jogging speed in millimeters per minute		
 52	Fast jog speed 	mm/min	float	###0.0	Fast jogging speed in millimeters per minute		
-53	Step jog distance	mm	float	#0.000	Jog distance for single step jogging		
+53	Step jog distance	mm	float	###0.0	Jog distance for single step jogging		
 54	Slow jog distance	mm	float	###0.0	Jog distance before automatic stop		
-55	Fast jog distance	mm	float	###0.0	Jog distance before automatic stop		
+55	Fast jog distance	mm	float	#0.000	Jog distance before automatic stop		
+60	Restore overrides		bool		Restore overrides to default values at program end		
+61	Ignore door when idle		bool		Enable this if it is desirable to open the safety door when in IDLE mode (eg. for jogging)		
+62	Sleep enable		bool		Enable sleep mode. 		
+63	Disable laser		bool		Disable laser during hold. 		
+64	Force init alarm		bool		Starts Grbl in alarm mode after a cold reset.		
+65	Check limits at init		bool		If limit switches are engaged after reset this forces Grbl to start in alarm mode.		
+66	Homing init lock		bool		If homing is enabled, homing init lock sets Grbl into an alarm state upon power up. Clear by performing a homing cycle.		
+70	Stream		integer	9	Input stream source: 0 - serial, 1 - bluetooth, 2 - ethernet, 3 - WiFi	0	3
+71	WiFi SSID		string	x(64)	WiFi SSID.
+72	WiFi Password		string	x(32)	WiFi Password.
+73	WiFi Port		integer	####9	WiFi Port Number listening for incoming connections.	1	65535
+74	Bluetooth device		string	x(32)	Bluetooth device name.
+75	Bluetooth service		string	x(32)	Bluetooth service name.
 100	X-axis travel resolution	step/mm	float	#####0.000	X-axis travel resolution in steps per millimeter.		
 101	Y-axis travel resolution	step/mm	float	#####0.000	Y-axis travel resolution in steps per millimeter.		
 102	Z-axis travel resolution	step/mm	float	#####0.000	Z-axis travel resolution in steps per millimeter.		
+103	A-axis travel resolution	step/mm	float	#####0.000	A-axis travel resolution in steps per millimeter.		
+104	B-axis travel resolution	step/mm	float	#####0.000	B-axis travel resolution in steps per millimeter.		
+105	C-axis travel resolution	step/mm	float	#####0.000	C-axis travel resolution in steps per millimeter.		
 110	X-axis maximum rate	mm/min	float	#####0.000	X-axis maximum rate. Used as G0 rapid rate.		
 111	Y-axis maximum rate	mm/min	float	#####0.000	Y-axis maximum rate. Used as G0 rapid rate.		
 112	Z-axis maximum rate	mm/min	float	#####0.000	Z-axis maximum rate. Used as G0 rapid rate.		
+113	A-axis maximum rate	mm/min	float	#####0.000	A-axis maximum rate. Used as G0 rapid rate.		
+114	B-axis maximum rate	mm/min	float	#####0.000	B-axis maximum rate. Used as G0 rapid rate.		
+115	C-axis maximum rate	mm/min	float	#####0.000	C-axis maximum rate. Used as G0 rapid rate.		
 120	X-axis acceleration	mm/sec^2	float	#####0.000	X-axis acceleration. Used for motion planning to not exceed motor torque and lose steps.		
 121	Y-axis acceleration	mm/sec^2	float	#####0.000	Y-axis acceleration. Used for motion planning to not exceed motor torque and lose steps.		
 122	Z-axis acceleration	mm/sec^2	float	#####0.000	Z-axis acceleration. Used for motion planning to not exceed motor torque and lose steps.		
+123	A-axis acceleration	mm/sec^2	float	#####0.000	A-axis acceleration. Used for motion planning to not exceed motor torque and lose steps.		
+124	B-axis acceleration	mm/sec^2	float	#####0.000	B-axis acceleration. Used for motion planning to not exceed motor torque and lose steps.		
+125	C-axis acceleration	mm/sec^2	float	#####0.000	C-axis acceleration. Used for motion planning to not exceed motor torque and lose steps.		
 130	X-axis maximum travel	mm	float	#####0.000	Maximum X-axis travel distance from homing switch. Determines valid machine space for soft-limits and homing search distances.		
 131	Y-axis maximum travel	mm	float	#####0.000	Maximum Y-axis travel distance from homing switch. Determines valid machine space for soft-limits and homing search distances.		
 132	Z-axis maximum travel	mm	float	#####0.000	Maximum Z-axis travel distance from homing switch. Determines valid machine space for soft-limits and homing search distances.		
+133	A-axis maximum travel	mm	float	#####0.000	Maximum A-axis travel distance from homing switch. Determines valid machine space for soft-limits and homing search distances.		
+134	B-axis maximum travel	mm	float	#####0.000	Maximum B-axis travel distance from homing switch. Determines valid machine space for soft-limits and homing search distances.		
+135	C-axis maximum travel	mm	float	#####0.000	Maximum B-axis travel distance from homing switch. Determines valid machine space for soft-limits and homing search distances.		
