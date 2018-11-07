@@ -4,6 +4,18 @@ A GrblHAL driver for the ESP32 processor.
 
 *** Preview version ***
 
+---
+
+__Update 2018-11-07:__ RMT seems to be usable - pulse delay jitter is in the region of 100-200nS, pulse length jitter none. Pulse inversion ok as is pulse delay and length configurations. Running jobs from SD card ok, with M6 support for manual tool change \(allows jogging\).
+
+One worry remains about ESP32 - what happens when there is a cache fault and code needs to be loaded from \(serial\) flash? CPUs suspended? It may take a long time \(I've seen 300uS mentioned\), but I have not found any documentation regarding this. Espressif documentation is not in the same class as for the other MCUs I am accustomed to...
+
+Next step is to get I2C working, first for a keypad - then for an 8-bit IO-expander I jave in order.
+
+Updated code will be published later, changes in the core Grbl code related to reporting/streaming has to be verified first. 
+
+---
+
 Work in progress, I do not currently have access to the hardware I need for complete testing so this is just a code preview.
 Parts of the code is commented out as I only have a TTGO WROOM module with less GPIO pins available than the target board\(s\).
 
