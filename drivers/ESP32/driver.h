@@ -33,24 +33,44 @@
 #include "driver/rmt.h"
 #include "driver/i2c.h"
 
-#include "GRBL/grbl.h"
+#include "freertos/queue.h"
 
-typedef struct {
-	wifi_settings_t wifi;
-	bluetooth_settings_t bluetooth;
-} driver_settings_t;
+#include "keypad.h"
+
+#include "GRBL/grbl.h"
 
 // Configuration
 
 //#define PWM_RAMPED // uncomment to enable ramped spindle PWM.
 //#define PROBE_ISR // uncomment to catch probe state change by interrupt TODO: needs verification!
 //#define KEYPAD_ENABLE // uncomment to enable I2C keypad for jogging etc. NOTE: not yet ready
-#define WIFI_ENABLE // uncomment to enable serial communications over WiFi.
+//#define WIFI_ENABLE // uncomment to enable serial communications over WiFi.
 //#define BLUETOOTH_ENABLE // uncomment to enable serial communications over Bluetooth.
 //#define SDCARD_ENABLE // uncomment to run jobs from SD card.
 //#define IOEXPAND_ENABLE // uncomment to enable I2C IO expander for some output signals.
 
 // End configuration
+
+
+#ifdef SDCARD_ENABLE
+
+// Pin mapping when using SPI mode.
+// With this mapping, SD card can be used both in SPI and 1-line SD mode.
+// Note that a pull-up on CS line is required in SD mode.
+#define PIN_NUM_MISO 19
+#define PIN_NUM_MOSI 18
+#define PIN_NUM_CLK  5
+#define PIN_NUM_CS   21
+
+#endif // SDCARD_ENABLE
+
+typedef struct {
+	wifi_settings_t wifi;
+	bluetooth_settings_t bluetooth;
+	jog_config_t jog_config;
+} driver_settings_t;
+
+extern driver_settings_t driver_settings;
 
 // timer definitions
 #define STEP_TIMER_GROUP TIMER_GROUP_0
@@ -99,14 +119,19 @@ typedef struct {
 // Define probe switch input pin.
 #define PROBE_PIN       GPIO_NUM_32
 
+#ifdef KEYPAD_ENABLE
+#define KEYPAD_STROBE_PIN	GPIO_NUM_21 //33
+#endif
+
 // Define I2C port/pins
 #define I2C_PORT I2C_NUM_1 // Comment out to not enable I2C
-#define I2C_SDA  GPIO_NUM_21
+#define I2C_SDA  GPIO_NUM_23
 #define I2C_SCL  GPIO_NUM_22
 #define I2C_CLOCK 100000
 
 void selectStream (stream_setting_t stream);
 #ifdef I2C_PORT
+extern QueueHandle_t i2cQueue;
 void i2c_init (void);
 #endif
 #endif

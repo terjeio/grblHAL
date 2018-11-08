@@ -40,6 +40,7 @@
 
 #include "driver.h"
 #include "serial.h"
+#include "GRBL/grbl.h"
 
 typedef struct {
     volatile uint16_t head;
@@ -71,16 +72,6 @@ static serial_rx_buffer_t rxbuffer = {
 static serial_rx_buffer_t rxbackup;
 
 static bt_tx_buffer_t tx_buffers[2], *txbuffer, *txbuffer_send;
-
-static bool (*btReceiveCallback)(char) = 0;
-
-//
-// btReceiveCallback - called before data is inserted into the buffer, return false to drop
-//
-void setBTReceiveCallback (bool (*fn)(char))
-{
-    btReceiveCallback = fn;
-}
 
 uint32_t BTStreamAvailable (void)
 {
@@ -166,7 +157,7 @@ bool BTStreamSuspendInput (bool suspend)
 {
     BT_MUTEX_LOCK();
     if(suspend)
-        hal.serial_read = BTStreamGetNull;
+        hal.stream_read = BTStreamGetNull;
     else if(rxbuffer.backup)
         memcpy(&rxbuffer, &rxbackup, sizeof(serial_rx_buffer_t));
     UART_MUTEX_UNLOCK();
@@ -187,10 +178,10 @@ static void esp_spp_cb (esp_spp_cb_event_t event, esp_spp_cb_param_t *param)
 		case ESP_SPP_SRV_OPEN_EVT:
 			ESP_LOGI(SPP_TAG, "ESP_SPP_OPEN_EVT");
 			connection = param->open.handle;
-			hal.serial_write_string("[MSG:BT OK]\r\n");
 		    tx_buffers[0].head = tx_buffers[1].head = 0;
 			txbuffer = txbuffer_send = &tx_buffers[0];
 			selectStream(StreamSetting_Bluetooth);
+			hal.stream_write_all("[MSG:BT OK]\r\n");
 			break;
 
 		case ESP_SPP_CLOSE_EVT:
@@ -209,9 +200,9 @@ static void esp_spp_cb (esp_spp_cb_event_t event, esp_spp_cb_param_t *param)
 					memcpy(&rxbackup, &rxbuffer, sizeof(serial_rx_buffer_t));
 					rxbuffer.backup = true;
 					rxbuffer.tail = rxbuffer.head;
-					hal.serial_read = BTStreamGetC; // restore normal input
+					hal.stream_read = BTStreamGetC; // restore normal input
 
-				} else if(btReceiveCallback && btReceiveCallback(c)) {
+				} else if(hal.protocol_process_realtime && hal.protocol_process_realtime(c)) {
 
 					uint32_t bptr = (rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1);  // Get next head pointer
 

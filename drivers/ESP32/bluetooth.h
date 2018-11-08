@@ -39,7 +39,4 @@ void BTStreamWriteS (const char *data);
 void BTStreamFlush (void);
 void BTStreamCancel (void);
 
-//void setBTBlockingCallback (bool (*fn)(void));
-void setBTReceiveCallback (bool (*fn)(char));
-
 #endif

@@ -39,8 +39,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
-
-//#include "driverlib/debug.h"
+#include "GRBL/grbl.h"
 
 #include "lwipopts.h"
 #include "lwip/sys.h"
@@ -124,27 +123,6 @@ static volatile uint16_t rx_head = 0, rx_tail = 0, rx_overflow = 0;
 static volatile uint16_t tx_head = 0, tx_tail = 0;
 static SessionData_t streamSession;
 
-static bool (*streamReceiveCallback)(char) = NULL;
-static bool (*streamBlockingCallback)(void) = NULL;
-
-static bool streamBlockingCallbackDummy (void)
-{
-    return true;
-}
-
-void TCPStreamSetBlockingCallback (bool (*fn)(void))
-{
-    streamBlockingCallback = fn == NULL ? streamBlockingCallbackDummy : fn;
-}
-//
-// streamReceiveCallback - called before data is inserted into the buffer, return false to drop
-//
-
-void TCPStreamSetReceiveCallback (bool (*fn)(char))
-{
-    streamReceiveCallback = fn;
-}
-
 void TCPStreamInit (void)
 {
     memcpy(&streamSession, &defaultSettings, sizeof(SessionData_t));
@@ -205,7 +183,7 @@ bool TCPStreamPutC (const char c) {
     uint32_t next_head = (tx_head + 1) & (TX_BUFFER_SIZE - 1);  // Get and update head pointer
 
     while(tx_tail == next_head) {                               // Buffer full, block until space is available...
-        if(!streamBlockingCallback())
+        if(!hal.stream_blocking_callback())
             return false;
     }
 
@@ -267,7 +245,7 @@ static void streamBufferRX (char c) {
     if(bptr == rx_tail) {                           // If buffer full TODO: remove this check?
         rx_overflow = 1;                            // flag overlow
     } else {
-        if(!streamReceiveCallback || streamReceiveCallback(c)) {
+        if(!hal.protocol_process_realtime || hal.protocol_process_realtime(c)) {
             rxbuf[rx_head] = c;   // Add data to buffer
             rx_head = bptr;                         // and update pointer
         }
@@ -417,7 +395,7 @@ static err_t TCPStreamAccept (void *arg, struct tcp_pcb *pcb, err_t err)
     tcp_sent(pcb, streamSent);
 
     selectStream(StreamSetting_WiFi);
-	hal.serial_write_string("[MSG:WIFI CONNECTED]\r\n");
+	hal.stream_write_all("[MSG:WIFI CONNECTED]\r\n");
 
     return ERR_OK;
 }

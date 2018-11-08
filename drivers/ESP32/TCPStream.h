@@ -54,7 +54,5 @@ uint16_t TCPStreamRxCount(void);
 uint16_t TCPStreamRxFree(void);
 void TCPStreamRxFlush(void);
 void TCPStreamRxCancel(void);
-void TCPStreamSetReceiveCallback (bool (*fn)(char));
-void TCPStreamSetBlockingCallback (bool (*fn)(void));
 
 #endif

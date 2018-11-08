@@ -64,9 +64,6 @@ void uartWriteS (const char *data);
 void uartFlush (void);
 void uartCancel (void);
 
-void setUARTBlockingCallback (bool (*fn)(void));
-void setUARTReceiveCallback (bool (*fn)(char));
-
 #ifdef __cplusplus
 }
 #endif

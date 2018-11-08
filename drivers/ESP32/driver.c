@@ -77,7 +77,7 @@ typedef struct {
 static pwm_ramp_t pwm_ramp;
 #endif
 
-static driver_settings_t driver_settings;
+driver_settings_t driver_settings;
 
 typedef struct {
     uint8_t pin;
@@ -92,6 +92,8 @@ typedef struct {
 #define INPUT_GROUP_CONTROL 1
 #define INPUT_GROUP_PROBE   2
 #define INPUT_GROUP_LIMIT   4
+#define INPUT_GROUP_KEYPAD  8
+
 /*
 #define INPUT_RESET         0
 #define INPUT_FEED_HOLD     1
@@ -101,6 +103,7 @@ typedef struct {
 #define INPUT_LIMIT_X       5
 #define INPUT_LIMIT_Y       6
 #define INPUT_LIMIT_Z       7
+#define INPUT_KEYPAD  		8
 
 state_signal_t inputpin[] = {
     { .pin = RESET_PIN, .group = INPUT_GROUP_CONTROL },
@@ -110,24 +113,29 @@ state_signal_t inputpin[] = {
     { .pin = PROBE_PIN, .group = INPUT_GROUP_PROBE },
     { .pin = X_LIMIT_PIN, .group = INPUT_GROUP_LIMIT },
     { .pin = Y_LIMIT_PIN, .group = INPUT_GROUP_LIMIT },
-    { .pin = Z_LIMIT_PIN, .group = INPUT_GROUP_LIMIT }
+    { .pin = Z_LIMIT_PIN, .group = INPUT_GROUP_LIMIT },
+    { .pin = KEYPAD_STROBE_PIN .group = INPUT_GROUP_KEYPAD }
 };
 */
 
 #define INPUT_FEED_HOLD     0
 #define INPUT_CYCLE_START   1
 #define INPUT_LIMIT_Y       2
+#define INPUT_KEYPAD  		3
 
-#define INPUT_RESET         3
+#define INPUT_RESET         8
 #define INPUT_SAFETY_DOOR   4
 #define INPUT_PROBE         5
 #define INPUT_LIMIT_X       6
 #define INPUT_LIMIT_Z       7
 
 state_signal_t inputpin[] = {
-		{ .pin = FEED_HOLD_PIN, .group = INPUT_GROUP_CONTROL },
-	    { .pin = CYCLE_START_PIN, .group = INPUT_GROUP_CONTROL },
+	{ .pin = FEED_HOLD_PIN, .group = INPUT_GROUP_CONTROL },
+	{ .pin = CYCLE_START_PIN, .group = INPUT_GROUP_CONTROL },
     { .pin = Y_LIMIT_PIN, .group = INPUT_GROUP_LIMIT }
+#ifdef KEYPAD_ENABLE
+  , { .pin = KEYPAD_STROBE_PIN, .group = INPUT_GROUP_KEYPAD }
+#endif
 };
 
 static volatile uint32_t ms_count = 1; // NOTE: initial value 1 is for "resetting" systick timer
@@ -168,15 +176,9 @@ static void gpio_isr (void *arg);
 static TimerHandle_t xDelayTimer = NULL, debounceTimer = NULL;
 static TaskHandle_t xStepperTask = NULL;
 
+QueueHandle_t i2cQueue = NULL;
+
 #ifdef BLUETOOTH_ENABLE
-bool btStreamPutC (const char c)
-{
-	BTStreamPutC(c);
-	uartPutC(c);
-
-    return true;
-}
-
 void btStreamWriteS (const char *data)
 {
 	BTStreamWriteS(data);
@@ -185,14 +187,6 @@ void btStreamWriteS (const char *data)
 #endif
 
 #ifdef WIFI_ENABLE
-bool wifiStreamPutC (const char c)
-{
-	TCPStreamPutC(c);
-	uartPutC(c);
-
-    return true;
-}
-
 void wifiStreamWriteS (const char *data)
 {
 	TCPStreamWriteS(data);
@@ -206,36 +200,34 @@ void selectStream (stream_setting_t stream)
     switch(stream) {
 #ifdef BLUETOOTH_ENABLE
         case StreamSetting_Bluetooth:
-            hal.serial_read = BTStreamGetC;
-            hal.serial_write = btStreamPutC;
-            hal.serial_write_string = btStreamWriteS;
-            hal.serial_get_rx_buffer_available = BTStreamRXFree;
-            hal.serial_reset_read_buffer = BTStreamFlush;
-            hal.serial_cancel_read_buffer = BTStreamCancel;
+            hal.stream_read = BTStreamGetC;
+            hal.stream_write = BTStreamWriteS;
+            hal.stream_write_all = btStreamWriteS;
+            hal.stream_get_rx_buffer_available = BTStreamRXFree;
+            hal.stream_reset_read_buffer = BTStreamFlush;
+            hal.stream_cancel_read_buffer = BTStreamCancel;
             setBTReceiveCallback(hal.protocol_process_realtime);
             break;
 #endif
 #ifdef WIFI_ENABLE
         case StreamSetting_WiFi:
-            hal.serial_read = TCPStreamGetC;
-            hal.serial_write = wifiStreamPutC;
-            hal.serial_write_string = wifiStreamWriteS;
-            hal.serial_get_rx_buffer_available = TCPStreamRxFree;
-            hal.serial_reset_read_buffer = TCPStreamRxFlush;
-            hal.serial_cancel_read_buffer = TCPStreamRxCancel;
-            TCPStreamSetReceiveCallback(hal.protocol_process_realtime);
-        	hal.serial_write_string("[MSG:WIFI RUNNING]\r\n");
+            hal.stream_read = TCPStreamGetC;
+            hal.stream_write = wifiStreamWriteS;
+            hal.stream_write_all = TCPStreamWriteS;
+            hal.stream_get_rx_buffer_available = TCPStreamRxFree;
+            hal.stream_reset_read_buffer = TCPStreamRxFlush;
+            hal.stream_cancel_read_buffer = TCPStreamRxCancel;
+        	hal.stream_write_all("[MSG:WIFI RUNNING]\r\n");
             break;
 #endif
         case StreamSetting_Serial:
-            hal.serial_read = uartRead;
-            hal.serial_write = uartPutC;
-            hal.serial_write_string = uartWriteS;
-            hal.serial_get_rx_buffer_available = uartRXFree;
-            hal.serial_reset_read_buffer = uartFlush;
-            hal.serial_cancel_read_buffer = uartCancel;
-            hal.serial_suspend_read = uartSuspendInput;
-            setUARTReceiveCallback(hal.protocol_process_realtime);
+            hal.stream_read = uartRead;
+            hal.stream_write = uartWriteS;
+            hal.stream_write_all = uartWriteS;
+            hal.stream_get_rx_buffer_available = uartRXFree;
+            hal.stream_reset_read_buffer = uartFlush;
+            hal.stream_cancel_read_buffer = uartCancel;
+            hal.stream_suspend_read = uartSuspendInput;
             break;
 
         default:
@@ -249,7 +241,7 @@ void initRMT (settings_t *settings)
 
     rmt_config_t rmtConfig = {
         .rmt_mode = RMT_MODE_TX,
-        .clk_div = 40,
+        .clk_div = 20,
         .mem_block_num = 2,
         .tx_config.loop_en = false,
 		.tx_config.carrier_en = false,
@@ -259,8 +251,8 @@ void initRMT (settings_t *settings)
 		.tx_config.idle_output_en = true
     };
 
-    rmtItem[0].duration0 = settings->steppers.pulse_delay_microseconds ? 1 : 2 * settings->steppers.pulse_delay_microseconds;
-    rmtItem[0].duration1 = 2 * settings->steppers.pulse_microseconds;
+    rmtItem[0].duration0 = settings->steppers.pulse_delay_microseconds ? 4 * settings->steppers.pulse_delay_microseconds : 1;
+    rmtItem[0].duration1 = 4 * settings->steppers.pulse_microseconds;
     rmtItem[1].duration0 = 0;
     rmtItem[1].duration1 = 0;
 
@@ -369,7 +361,7 @@ IRAM_ATTR static void stepperGoIdle (void)
 // Sets up stepper driver interrupt timeout
 IRAM_ATTR static void stepperCyclesPerTick (uint32_t cycles_per_tick)
 {
-#ifdef DEBUGOUT
+#ifdef xDEBUGOUT
 	if(cycles_per_tick > 1500000UL)
 	    hal.debug_out(true);
 #endif
@@ -380,14 +372,14 @@ IRAM_ATTR static void stepperCyclesPerTick (uint32_t cycles_per_tick)
 // Set stepper pulse output pins
 inline IRAM_ATTR static void stepperSetStepOutputs (axes_signals_t step_outbits)
 {
-    step_outbits.value ^= settings.steppers.step_invert.mask;
+//    step_outbits.value ^= settings.steppers.step_invert.mask;
 
-	//  REG_SET_BIT(RMT_CH1CONF1_REG, RMT_TX_START_CH1)
+	if(step_outbits.value)
+    	hal.debug_out(true);
 
     if(step_outbits.x) {
         RMT.conf_ch[0].conf1.mem_rd_rst = 1;
         RMT.conf_ch[0].conf1.tx_start = 1;
-   // 	rmt_tx_start(0, true) != ESP_OK);
     }
 
     if(step_outbits.y) {
@@ -411,8 +403,8 @@ inline IRAM_ATTR static void stepperSetStepOutputs (axes_signals_t step_outbits)
 inline IRAM_ATTR static void stepperSetDirOutputs (axes_signals_t dir_outbits)
 {
     dir_outbits.value ^= settings.steppers.dir_invert.mask;
-    /*
     gpio_set_level(X_DIRECTION_PIN, dir_outbits.x);
+    /*
     gpio_set_level(Y_DIRECTION_PIN, dir_outbits.y);
     gpio_set_level(Z_DIRECTION_PIN, dir_outbits.z);
     */
@@ -432,6 +424,8 @@ IRAM_ATTR static void stepperPulseStart (stepper_t *stepper)
     }
 
     stepperSetStepOutputs(stepper->step_outbits);
+
+	hal.debug_out(false);
 }
 
 // Enable/disable limit pins interrupt
@@ -653,9 +647,9 @@ static coolant_state_t coolantGetState (void)
 
 static void showMessage (const char *msg)
 {
-    hal.serial_write_string("[MSG:");
-    hal.serial_write_string(msg);
-    hal.serial_write_string("]\r\n");
+    hal.stream_write("[MSG:");
+    hal.stream_write(msg);
+    hal.stream_write("]\r\n");
 }
 
 // Helper functions for setting/clearing/inverting individual bits atomically (uninterruptable)
@@ -707,6 +701,34 @@ void debounceTimerCallback (TimerHandle_t xTimer)
 }
 
 #ifdef I2C_PORT
+
+#define WRITE_BIT I2C_MASTER_WRITE              /*!< I2C master write */
+#define READ_BIT I2C_MASTER_READ                /*!< I2C master read */
+#define ACK_CHECK_EN 0x1                        /*!< I2C master will check ack from slave*/
+#define ACK_CHECK_DIS 0x0                       /*!< I2C master will not check ack from slave */
+#define ACK_VAL 0x0                             /*!< I2C ack value */
+#define NACK_VAL 0x1                            /*!< I2C nack value */
+
+void I2CTask (void *pvParameters)
+{
+	uint8_t action;
+
+	while(xQueueReceive((QueueHandle_t)pvParameters, &action, portMAX_DELAY) == pdPASS) {
+#ifdef KEYPAD_ENABLE
+		if(action == 1) { // Read keypad character and add to input buffer
+		    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+		    i2c_master_start(cmd);
+		    i2c_master_write_byte(cmd, (KEYPAD_I2CADDR << 1) | READ_BIT, ACK_CHECK_EN);
+		    i2c_master_read_byte(cmd, &action, NACK_VAL);
+		    i2c_master_stop(cmd);
+		    if(i2c_master_cmd_begin(I2C_PORT, cmd, 1000 / portTICK_RATE_MS) == ESP_OK)
+		    	keypad_enqueue_keycode(action);
+		    i2c_cmd_link_delete(cmd);
+		}
+#endif
+	}
+}
+
 void i2c_init (void)
 {
 	static bool init_ok = false;
@@ -726,8 +748,15 @@ void i2c_init (void)
 
 		i2c_param_config(I2C_PORT, &i2c_config);
 		i2c_driver_install(I2C_PORT, i2c_config.mode, 0, 0, 0);
+
+		i2cQueue = xQueueCreate(5, sizeof(uint8_t));
+
+		TaskHandle_t I2CTaskHandle;
+
+		xTaskCreatePinnedToCore(I2CTask, "I2C", 2048, (void *)i2cQueue, configMAX_PRIORITIES, &I2CTaskHandle, 1);
 	}
 }
+
 #endif
 
 // Configures perhipherals when settings are initialized or changed
@@ -791,7 +820,7 @@ static void settings_changed (settings_t *settings)
          *  Control, limit & probe pins config  *
          ****************************************/
 
-        bool pullup = true, ie = false;
+        bool pullup = true;
         control_signals_t control_fei;
         gpio_config_t config;
 
@@ -803,32 +832,33 @@ static void settings_changed (settings_t *settings)
         uint32_t i = sizeof(inputpin) / sizeof(state_signal_t);
 
         do {
-        	ie = false;
+
+            config.intr_type = GPIO_INTR_DISABLE;
 
         	switch(--i) {
 
                 case INPUT_RESET:
-                	ie = true;
                     pullup = !settings->control_disable_pullup.reset;
                     inputpin[i].invert = control_fei.reset;
+                    config.intr_type = inputpin[i].invert ? GPIO_INTR_NEGEDGE : GPIO_INTR_POSEDGE;
                     break;
 
                 case INPUT_FEED_HOLD:
-                	ie = true;
                     pullup = !settings->control_disable_pullup.feed_hold;
                     inputpin[i].invert = control_fei.feed_hold;
+                    config.intr_type = inputpin[i].invert ? GPIO_INTR_NEGEDGE : GPIO_INTR_POSEDGE;
                     break;
 
                 case INPUT_CYCLE_START:
-                	ie = true;
                     pullup = !settings->control_disable_pullup.cycle_start;
                     inputpin[i].invert = control_fei.cycle_start;
+                    config.intr_type = inputpin[i].invert ? GPIO_INTR_NEGEDGE : GPIO_INTR_POSEDGE;
                     break;
 
                 case INPUT_SAFETY_DOOR:
-                	ie = true;
                     pullup = !settings->control_disable_pullup.safety_door_ajar;
                     inputpin[i].invert = control_fei.safety_door_ajar;
+                    config.intr_type = inputpin[i].invert ? GPIO_INTR_NEGEDGE : GPIO_INTR_POSEDGE;
                     break;
 
                 case INPUT_PROBE:
@@ -850,6 +880,14 @@ static void settings_changed (settings_t *settings)
                     pullup = !settings->limits.disable_pullup.z;
                     inputpin[i].invert = limit_fei.z;
                     break;
+
+#ifdef KEYPAD_ENABLE
+                case INPUT_KEYPAD:
+                    pullup = true;
+                    inputpin[i].invert = false;
+                    config.intr_type = GPIO_INTR_ANYEDGE;
+                    break;
+#endif
             }
 
             pullup = pullup && inputpin[i].pin < 34;
@@ -860,17 +898,16 @@ static void settings_changed (settings_t *settings)
             config.mode = GPIO_MODE_INPUT;
             config.pull_up_en = pullup ? GPIO_PULLUP_ENABLE : GPIO_PULLUP_DISABLE;
             config.pull_down_en = pullup ? GPIO_PULLDOWN_DISABLE : GPIO_PULLDOWN_ENABLE;
-            config.intr_type = ie ? (inputpin[i].invert ? GPIO_INTR_NEGEDGE : GPIO_INTR_POSEDGE) : GPIO_INTR_DISABLE;
 
             inputpin[i].offset = config.pin_bit_mask > (1ULL << 31) ? 1 : 0;
             inputpin[i].mask = inputpin[i].offset == 0 ? (uint32_t)config.pin_bit_mask : (uint32_t)(config.pin_bit_mask >> 32);
 
-//            printf("IN %d - %d -%d : %x\n", inputpin[i].pin,  inputpin[i].offset, inputpin[i].mask, inputpin[i].invert);
+//            printf("IN %d - %d - %d : %x\n", inputpin[i].pin,  inputpin[i].offset, inputpin[i].mask, inputpin[i].invert);
 
             gpio_config(&config);
 
             inputpin[i].active   = gpio_get_level(inputpin[i].pin) == (inputpin[i].invert ? 0 : 1);
-            inputpin[i].debounce = hal.driver_cap.software_debounce;
+            inputpin[i].debounce = hal.driver_cap.software_debounce && !(inputpin[i].group == INPUT_GROUP_PROBE || inputpin[i].group == INPUT_GROUP_KEYPAD);
 
         } while(i);
     }
@@ -928,7 +965,7 @@ static bool driver_setup (settings_t *settings)
     // .pin_bit_mask = (1ULL << STEPPERS_DISABLE_PIN); //HWSTEP_MASK|HWDIRECTION_MASK|(1ULL << STEPPERS_DISABLE_PIN)|HWSPINDLE_MASK|HWCOOLANT_MASK;
 
     gpio_config_t gpioConfig = {
-		.pin_bit_mask = 1ULL << 13,
+		.pin_bit_mask = (1ULL << 13)|(1ULL << X_DIRECTION_PIN)|(1ULL << Z_STEP_PIN),
 		.mode = GPIO_MODE_OUTPUT,
 		.pull_up_en = GPIO_PULLUP_DISABLE,
 		.pull_down_en = GPIO_PULLDOWN_DISABLE,
@@ -973,6 +1010,10 @@ static bool driver_setup (settings_t *settings)
     ioexpand_init();
 #endif
 
+#ifdef KEYPAD_ENABLE
+    keypad_init();
+#endif
+
   // Set defaults
 
     IOInitDone = settings->version == 14;
@@ -1014,32 +1055,33 @@ static bool user_defined_setting (uint_fast16_t param, float value, char *svalue
 			break;
 	}
 
-	if(claimed) {
-		hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
-#ifdef EMULATE_EEPROM
-	  if(hal.eeprom.type == EEPROM_Emulated)
-		  settings_dirty.driver_settings = settings_dirty.is_dirty = true;
+#ifdef KEYPAD_ENABLE
+	if(!claimed)
+		claimed = keypad_setting(param, value, svalue);
 #endif
-	}
+
     return claimed;
 }
 
 static void report_string_setting (uint8_t setting, char *value)
 {
-    hal.serial_write('$');
-    print_uint8_base10(setting);
-    hal.serial_write('=');
-    hal.serial_write_string(value);
-    hal.serial_write_string("\r\n");
+    hal.stream_write("$");
+    hal.stream_write(uitoa((uint32_t)setting));
+    hal.stream_write("=");
+    hal.stream_write(value);
+    hal.stream_write("\r\n");
 }
 
 static void driver_settings_report (bool axis_settings)
 {
     if(!axis_settings) {
+#ifdef KEYPAD_ENABLE
+    	keypad_settings_report(axis_settings);
+#endif
 #ifdef WIFI_ENABLE
 		report_string_setting(71, driver_settings.wifi.ssid);
 		report_string_setting(72, driver_settings.wifi.password);
-		report_util_uint_setting(73, driver_settings.wifi.port);
+		report_uint_setting(73, driver_settings.wifi.port);
 #endif
 #ifdef BLUETOOTH_ENABLE
 		report_string_setting(74, driver_settings.bluetooth.device_name);
@@ -1056,6 +1098,9 @@ void driver_settings_restore (uint8_t restore_flag)
     	driver_settings.wifi.port = 23;
     	strcpy(driver_settings.bluetooth.device_name, "GRBL");
     	strcpy(driver_settings.bluetooth.service_name, "GRBL Serial Port");
+#ifdef KEYPAD_ENABLE
+    	keypad_settings_restore(restore_flag);
+#endif
     	hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
     }
 }
@@ -1067,8 +1112,6 @@ bool driver_init (void)
     // Enable EEPROM and serial port here for Grbl to be able to configure itself and report any errors
 
     uartInit();
-
-    setUARTBlockingCallback(hal.serial_blocking_callback);
 
     hal.info = "ESP32";
     hal.driver_setup = driver_setup;
@@ -1131,8 +1174,13 @@ bool driver_init (void)
     hal.set_value_atomic = valueSetAtomic;
 
     hal.show_message = showMessage;
+
 #ifdef DEBUGOUT
     hal.debug_out = debug_out;
+#endif
+
+#ifdef KEYPAD_ENABLE
+    hal.execute_realtime = keypad_process_keypress;
 #endif
 
 #ifdef SDCARD_ENABLE
@@ -1210,12 +1258,11 @@ IRAM_ATTR static void gpio_isr (void *arg)
   do {
       i--;
 	  if(intr_status[inputpin[i].offset] & inputpin[i].mask) {
-		  if(inputpin[i].group == INPUT_GROUP_PROBE) // no debounce!
-			  inputpin[i].active = true;
-		  else if(inputpin[i].debounce)
-    		  debounce = inputpin[i].active = true;
-    	  else
-    		  grp |= inputpin[i].group;
+		  inputpin[i].active = true;
+		  if(inputpin[i].debounce)
+			  debounce = true;
+		  else
+			  grp |= inputpin[i].group;
       }
   } while(i);
 
@@ -1229,4 +1276,9 @@ IRAM_ATTR static void gpio_isr (void *arg)
 
   if(grp & INPUT_GROUP_CONTROL)
 	  hal.control_interrupt_callback(systemGetState());
+
+#ifdef KEYPAD_ENABLE
+  if(grp & INPUT_GROUP_KEYPAD)
+	  keypad_keyclick_handler(gpio_get_level(inputpin[INPUT_KEYPAD].pin));
+#endif
 }
