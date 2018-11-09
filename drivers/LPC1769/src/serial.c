@@ -26,6 +26,7 @@
 
 #include "driver.h"
 #include "serial.h"
+#include "grbl/grbl.h"
 #include "VCOM_lib/usbSerial.h"
 
 #define BUFCOUNT(head, tail, size) ((head >= tail) ? (head - tail) : (size - tail + head))
@@ -39,8 +40,6 @@
 
 static char rxbuf[RX_BUFFER_SIZE];
 static volatile uint16_t rx_head = 0, rx_tail = 0, rx_overflow = 0;
-static bool (*serialReceiveCallback)(char) = 0;
-static bool (*serialBlockingCallback)(void) = 0;
 
 static char txbuf[TX_BUFFER_SIZE];
 static volatile uint16_t tx_head = 0, tx_tail = 0;
@@ -52,19 +51,6 @@ static volatile uint16_t tx_head = 0, tx_tail = 0;
 #ifdef ENABLE_XONXOFF
   static volatile uint8_t flow_ctrl = XON_SENT; // Flow control state variable
 #endif
-
-static bool serialBlockingCallbackDummy (void)
-{
-    return true;
-}
-
-void setSerialBlockingCallback (bool (*fn)(void)) {
-    serialBlockingCallback = fn == 0 ? serialBlockingCallbackDummy : fn;
-}
-
-void setSerialReceiveCallback (bool (*fn)(char)) {
-    serialReceiveCallback = fn;
-}
 
 void USB_StateCallback(bool dtr, bool rts)
 {
@@ -86,7 +72,7 @@ void USB_ReadCallback(const char* data, unsigned len)
                                     // and do dummy read to clear interrupt;
         } else {
             rxdata = *data++;
-            if(!serialReceiveCallback || serialReceiveCallback(rxdata)) {
+            if(!hal.protocol_process_realtime || hal.protocol_process_realtime(rxdata)) {
                 rxbuf[rx_head] = rxdata;            	// Add data to buffer
                 rx_head = bptr;                         // and update pointer
             }

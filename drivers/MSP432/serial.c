@@ -75,19 +75,6 @@ static volatile uint16_t rx2_head = 0, rx2_tail = 0, rx2_overflow = 0;
   static volatile uint8_t flow_ctrl = XON_SENT; // Flow control state variable
 #endif
 
-static bool serialBlockingCallbackDummy (void)
-{
-    return true;
-}
-
-void setSerialBlockingCallback (bool (*fn)(void)) {
-    serialBlockingCallback = fn == 0 ? serialBlockingCallbackDummy : fn;
-}
-
-void setSerialReceiveCallback (bool (*fn)(char)) {
-    serialReceiveCallback = fn;
-}
-
 void serialInit (void)
 {
     SERIAL_MODULE->CTLW0 = EUSCI_A_CTLW0_SWRST|EUSCI_A_CTLW0_SSEL__SMCLK;
@@ -114,9 +101,6 @@ void serialInit (void)
 
     SERIAL2_PORT->SEL0 = SERIAL_RX|SERIAL_TX;    // set 2-UART pins as second function
 #endif
-
-	setSerialBlockingCallback(0);
-
 	__enable_interrupts();
 
 #ifdef RTS_PORT
@@ -276,7 +260,7 @@ static int16_t serialGetNull (void)
 bool serialSuspendInput (bool suspend)
 {
     if(suspend)
-        hal.serial_read = serialGetNull;
+        hal.stream_read = serialGetNull;
     else if(rxbuffer.backup)
         memcpy(&rxbuffer, &rxbackup, sizeof(serial_buffer_t));
 
@@ -307,7 +291,7 @@ void SERIAL_IRQHandler (void)
                 memcpy(&rxbackup, &rxbuffer, sizeof(serial_buffer_t));
                 rxbuffer.backup = true;
                 rxbuffer.tail = rxbuffer.head;
-                hal.serial_read = serialGetC; // restore normal input
+                hal.stream_read = serialGetC; // restore normal input
 
             } else if(!serialReceiveCallback || serialReceiveCallback(data)) {
 
@@ -398,7 +382,7 @@ void SERIAL2_IRQHandler (void)
             if(bptr == rx2_tail) {                                   // If buffer full
                 rx2_overflow = 1;                                    // flag overflow
             } else {
-                if(!serialReceiveCallback || serialReceiveCallback(data)) {
+                if(!hal.protocol_process_realtime|| hal.protocol_process_realtime(data)) {
                     rx2buf[rx2_head] = data;                          // Add data to buffer
                     rx2_head = bptr;                                 // and update pointer
                 }

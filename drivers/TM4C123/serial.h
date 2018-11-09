@@ -68,16 +68,10 @@ void serialWriteS(const char *data);
 void serialWriteLn(const char *data);
 void serialWrite(const char *data, unsigned int length);
 
-#ifdef LINE_BUFFER_SIZE
-char *serialReadLn (void);
-#endif
-
 #ifdef RX_BUFFER_SIZE
 uint16_t serialTxCount(void);
 uint16_t serialRxCount(void);
 uint16_t serialRxFree(void);
 void serialRxFlush(void);
 void serialRxCancel(void);
-void setSerialReceiveCallback (bool (*fn)(char));
-void setSerialBlockingCallback (bool (*fn)(void));
 #endif

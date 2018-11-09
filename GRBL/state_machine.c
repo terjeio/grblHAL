@@ -102,7 +102,7 @@ bool initiate_hold (uint_fast16_t new_state)
     }
 
     if(settings.flags.laser_mode && settings.flags.disable_laser_during_hold)
-        enqueue_accessory_ovr(CMD_SPINDLE_OVR_STOP);
+        enqueue_accessory_override(CMD_OVERRIDE_SPINDLE_STOP);
 
     if(sys.state & (STATE_CYCLE|STATE_JOG)) {
         st_update_plan_block_parameters();  // Notify stepper module to recompute for hold deceleration.
@@ -186,7 +186,7 @@ void set_state (uint_fast16_t new_state)
             break;
 
         case STATE_HOLD:
-            if(!((sys.state & STATE_JOG) || sys.override_ctrl.feed_hold_disable)) {
+            if(!((sys.state & STATE_JOG) || sys.override.control.feed_hold_disable)) {
                 if(!initiate_hold(new_state)) {
                     sys.holding_state = Hold_Complete;
                     stateHandler = state_await_resume;
@@ -230,7 +230,7 @@ static void state_idle (uint_fast16_t rt_exec)
         set_state(STATE_HOLD);
 
     if ((rt_exec & EXEC_TOOL_CHANGE)) {
-        hal.serial_suspend_read(true); // Block reading from serial input until tool change state is acknowledged
+        hal.stream_suspend_read(true); // Block reading from input stream until tool change state is acknowledged
         set_state(STATE_TOOL_CHANGE);
     }
 }
@@ -238,7 +238,7 @@ static void state_idle (uint_fast16_t rt_exec)
 static void state_cycle (uint_fast16_t rt_exec)
 {
     if ((rt_exec & EXEC_TOOL_CHANGE))
-        hal.serial_suspend_read(true); // Block reading from serial input until tool change state is acknowledged
+        hal.stream_suspend_read(true); // Block reading from input stream until tool change state is acknowledged
 
     if (rt_exec & EXEC_CYCLE_COMPLETE)
         set_state(gc_state.tool_change ? STATE_TOOL_CHANGE : STATE_IDLE);
@@ -257,8 +257,8 @@ static void state_cycle (uint_fast16_t rt_exec)
 static void state_await_toolchanged (uint_fast16_t rt_exec)
 {
     if ((rt_exec & EXEC_CYCLE_START) && !gc_state.tool_change) {
-        // Tool change complete, restore "normal" serial input
-        if(hal.serial_suspend_read && hal.serial_suspend_read(false)) {
+        // Tool change complete, restore "normal" stream input
+        if(hal.stream_suspend_read && hal.stream_suspend_read(false)) {
             sys.state = STATE_CYCLE;    // Force a running state realtime report
             report_realtime_status();   // to get the streaming going again
         }
@@ -307,7 +307,7 @@ static void state_await_hold (uint_fast16_t rt_exec)
 
                 // Handles retraction motions and de-energizing.
                 // Ensure any prior spindle stop override is disabled at start of safety door routine.
-                sys.spindle_stop_ovr.value = 0;
+                sys.override.spindle_stop.value = 0;
 
                 if(settings.parking.flags.enabled) {
                     // Get current position and store restore location and spindle retract waypoint.
@@ -321,7 +321,7 @@ static void state_await_hold (uint_fast16_t rt_exec)
                     // Execute slow pull-out parking retract motion. Parking requires homing enabled, the
                     // current location not exceeding the parking target location, and laser mode disabled.
                     // NOTE: State is will remain DOOR, until the de-energizing and retract is complete.
-                    if (settings.homing.flags.enabled && (park.target[settings.parking.axis] < settings.parking.target) && !settings.flags.laser_mode && !sys.override_ctrl.parking_disable) {
+                    if (settings.homing.flags.enabled && (park.target[settings.parking.axis] < settings.parking.target) && !settings.flags.laser_mode && !sys.override.control.parking_disable) {
                         handler_changed = true;
                         stateHandler = state_await_waypoint_retract;
                         // Retract spindle by pullout distance. Ensure retraction motion moves away from
@@ -333,7 +333,7 @@ static void state_await_hold (uint_fast16_t rt_exec)
                             park.plan_data.condition.spindle = restore_condition.spindle; // Retain spindle state
                             park.plan_data.spindle.rpm = restore_spindle_rpm;
                             if(!(park.retracting = mc_parking_motion(park.target, &park.plan_data)))
-                                stateHandler(EXEC_CYCLE_COMPLETE);;
+                                stateHandler(EXEC_CYCLE_COMPLETE);
                         } else
                             stateHandler(EXEC_CYCLE_COMPLETE);
                     } else {
@@ -354,11 +354,11 @@ static void state_await_hold (uint_fast16_t rt_exec)
                 // Feed hold manager. Controls spindle stop override states.
                 // NOTE: Hold ensured as completed by condition check at the beginning of suspend routine.
                 // Handles beginning of spindle stop
-                if (sys.spindle_stop_ovr.initiate) {
-                    sys.spindle_stop_ovr.value = 0; // Clear stop override state
+                if (sys.override.spindle_stop.initiate) {
+                    sys.override.spindle_stop.value = 0; // Clear stop override state
                     if (gc_state.modal.spindle.on) {
                         spindle_stop(); // De-energize
-                        sys.spindle_stop_ovr.enabled = On; // Set stop override state to enabled, if de-energized.
+                        sys.override.spindle_stop.enabled = On; // Set stop override state to enabled, if de-energized.
                     }
                 }
                 break;
@@ -386,8 +386,8 @@ static void state_await_resume (uint_fast16_t rt_exec)
 
         bool handler_changed = false;
 
-        if(sys.state == STATE_HOLD && !sys.spindle_stop_ovr.value)
-            sys.spindle_stop_ovr.restore_cycle = On;
+        if(sys.state == STATE_HOLD && !sys.override.spindle_stop.value)
+            sys.override.spindle_stop.restore_cycle = On;
 
         switch (sys.state) {
 
@@ -426,9 +426,9 @@ static void state_await_resume (uint_fast16_t rt_exec)
             default:
                 // Feed hold manager. Controls spindle stop override states.
                 // NOTE: Hold ensured as completed by condition check at the beginning of suspend routine.
-                if (sys.spindle_stop_ovr.value) {
+                if (sys.override.spindle_stop.value) {
                     // Handles restoring of spindle state
-                    if (sys.spindle_stop_ovr.restore || sys.spindle_stop_ovr.restore_cycle) {
+                    if (sys.override.spindle_stop.restore || sys.override.spindle_stop.restore_cycle) {
                         if (gc_state.modal.spindle.on) {
                             report_feedback_message(Message_SpindleRestore);
                             if (settings.flags.laser_mode) // When in laser mode, ignore spindle spin-up delay. Set to turn on laser when cycle starts.
@@ -436,7 +436,7 @@ static void state_await_resume (uint_fast16_t rt_exec)
                             else
                                 spindle_set_state(restore_condition.spindle, restore_spindle_rpm);
                         }
-                        sys.spindle_stop_ovr.value = 0; // Clear stop override state
+                        sys.override.spindle_stop.value = 0; // Clear stop override state
                     }
                 } else if (sys.step_control.update_spindle_rpm) {
                     // Handles spindle state during hold. NOTE: Spindle speed overrides may be altered during hold state.

@@ -64,6 +64,4 @@ uint16_t serialRxCount(void);
 uint16_t serialRxFree(void);
 void serialRxFlush(void);
 void serialRxCancel(void);
-void setSerialReceiveCallback (bool (*fn)(char));
-void setSerialBlockingCallback (bool (*fn)(void));
 #endif

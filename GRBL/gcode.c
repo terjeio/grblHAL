@@ -58,7 +58,9 @@ inline float hypot_f (float x, float y)
 
 static void set_scaling (float factor)
 {
-    uint_fast8_t idx = N_AXIS, state = gc_get_g51_state();
+    uint_fast8_t idx = N_AXIS;
+    axes_signals_t state = gc_get_g51_state();
+
     do {
         scale_factor.ijk[--idx] = factor;
 #ifdef MACH3_SCALING
@@ -68,21 +70,28 @@ static void set_scaling (float factor)
 
     gc_state.modal.scaling_active = factor != 1.0f;
 
-    if(state != gc_get_g51_state())
+    if(state.value != gc_get_g51_state().value)
         sys.report.scaling = true;
 }
 
-uint8_t gc_get_g51_state ()
+float *gc_get_scaling (void)
 {
-    uint_fast8_t idx = N_AXIS, scaled = 0;
+    return scale_factor.ijk;
+}
+
+axes_signals_t gc_get_g51_state ()
+{
+    uint_fast8_t idx = N_AXIS;
+    axes_signals_t scaled = {0};
+
     do {
-        scaled <<= 1;
+        scaled.value <<= 1;
         if(scale_factor.ijk[--idx] != 1.0f)
-            scaled |= 0x01;
+            scaled.value |= 0x01;
 
     } while(idx);
 
-    return (uint8_t)scaled;
+    return scaled;
 }
 
 void gc_init()
@@ -97,7 +106,7 @@ void gc_init()
 #endif
 
     // Load default override status
-    gc_state.modal.override_ctrl = sys.override_ctrl;
+    gc_state.modal.override_ctrl = sys.override.control;
 
   #ifdef CONSTANT_SURFACE_SPEED_OPTION
     gc_state.spindle.max_rpm = settings.rpm_max;
@@ -107,7 +116,7 @@ void gc_init()
 
     // Load default G54 coordinate system.
     if (!settings_read_coord_data(gc_state.modal.coord_system.idx, &gc_state.modal.coord_system.xyz))
-        report_status_message(Status_SettingReadFail);
+        hal.report_status_message(Status_SettingReadFail);
 
 }
 
@@ -245,7 +254,11 @@ status_code_t gc_execute_block(char *block, char *message)
                             FAIL(Status_GcodeUnsupportedCommand); // [G33 not supported]
                         // No break. Continues to next line.
 
-                    case 0: case 1: case 2: case 3: case 38:
+                    case 38:
+                        if(!hal.probe_get_state)
+                            FAIL(Status_GcodeUnsupportedCommand); // [G38 not supported by driver]
+                        //  No break. Continues to next line.
+                    case 0: case 1: case 2: case 3:
                         // Check for G0/1/2/3/38 being called with G10/28/30/92 on same block.
                         // * G43.1 is also an axis command but is not explicitly defined this way.
                         if (axis_command)
@@ -283,7 +296,7 @@ status_code_t gc_execute_block(char *block, char *message)
                     case 90: case 91:
                         if (mantissa == 0) {
                             word_bit.group = ModalGroup_G3;
-                            gc_block.modal.distance = (distance_mode_t)(int_value - 90);
+                            gc_block.modal.distance_incremental = int_value == 91;
                         } else {
                             word_bit.group = ModalGroup_G4;
                             if ((mantissa != 10) || (int_value == 90))
@@ -308,7 +321,7 @@ status_code_t gc_execute_block(char *block, char *message)
 
                     case 20: case 21:
                         word_bit.group = ModalGroup_G6;
-                        gc_block.modal.units = (units_mode_t)(21 - int_value);
+                        gc_block.modal.units_imperial = int_value == 20;
                         break;
 
                     case 40:
@@ -423,7 +436,7 @@ status_code_t gc_execute_block(char *block, char *message)
                         break;
 #ifndef N_TOOLS
                     case 6:
-                        if(hal.serial_suspend_read)
+                        if(hal.stream_suspend_read)
                             word_bit.group = ModalGroup_M6;
                         else
                             FAIL(Status_GcodeUnsupportedCommand); // [Unsupported M command]
@@ -707,7 +720,7 @@ status_code_t gc_execute_block(char *block, char *message)
         if(bit_isfalse(value_words, bit(Word_F)))
             FAIL(Status_GcodeUndefinedFeedRate);
 
-        if (gc_block.modal.units == UnitsMode_Inches)
+        if (gc_block.modal.units_imperial)
             gc_block.values.f *= MM_PER_INCH;
 
     } else if(gc_block.modal.motion == MotionMode_SpindleSynchronized) {
@@ -716,7 +729,7 @@ status_code_t gc_execute_block(char *block, char *message)
             gc_block.values.k = gc_state.distance_per_rev;
         } else {
             bit_false(value_words, bit(Word_K));
-            gc_block.values.k = gc_block.modal.units == UnitsMode_Inches ? gc_block.values.ijk[Z_AXIS] *= MM_PER_INCH : gc_block.values.ijk[Z_AXIS];
+            gc_block.values.k = gc_block.modal.units_imperial ? gc_block.values.ijk[Z_AXIS] *= MM_PER_INCH : gc_block.values.ijk[Z_AXIS];
         }
 
     } else if (gc_block.modal.feed_mode == FeedMode_InverseTime) { // = G93
@@ -747,7 +760,7 @@ status_code_t gc_execute_block(char *block, char *message)
                 gc_block.values.f = gc_state.feed_rate; // Push last state feed rate
             else
                 FAIL(Status_GcodeUndefinedFeedRate); // [F word missing]
-        } else if (gc_block.modal.units == UnitsMode_Inches)
+        } else if (gc_block.modal.units_imperial)
             gc_block.values.f *= MM_PER_INCH;
     } // else, switching to G94 from G93, so don't push last state feed rate. Its undefined or the passed F word value.
 
@@ -758,7 +771,7 @@ status_code_t gc_execute_block(char *block, char *message)
     if (bit_isfalse(value_words, bit(Word_S)))
         gc_block.values.s = gc_state.modal.spindle_rpm_mode == SpindleSpeedMode_RPM ? gc_state.spindle.rpm : gc_state.spindle.surface_speed;
     else if(gc_state.modal.spindle_rpm_mode == SpindleSpeedMode_CSS) {
-        gc_block.values.s *= (gc_block.modal.units == UnitsMode_Inches ? MM_PER_INCH * 12.0f : 1000.0f); // mm/min
+        gc_block.values.s *= (gc_block.modal.units_imperial ? MM_PER_INCH * 12.0f : 1000.0f); // mm/min
         if (bit_istrue(command_words, bit(ModalGroup_G14)) && bit_istrue(value_words, bit(Word_D))) {
             gc_state.spindle.max_rpm = min(gc_block.values.d, settings.rpm_max);
             bit_false(value_words, bit(Word_D));
@@ -854,7 +867,7 @@ status_code_t gc_execute_block(char *block, char *message)
     // [12. Set length units ]: N/A
     // Pre-convert XYZ coordinate values to millimeters, if applicable.
     uint_fast8_t idx = N_AXIS;
-    if (gc_block.modal.units == UnitsMode_Inches) do { // Axes indices are consistent, so loop may be used.
+    if (gc_block.modal.units_imperial) do { // Axes indices are consistent, so loop may be used.
         if (bit_istrue(axis_words, bit(--idx)))
             gc_block.values.xyz[idx] *= MM_PER_INCH;
     } while(idx);
@@ -928,10 +941,10 @@ status_code_t gc_execute_block(char *block, char *message)
         idx = N_AXIS;
         do {
             if(bit_istrue(axis_words, bit(--idx))) {
-                if(gc_block.modal.distance == DistanceMode_Absolute)
-                     gc_block.values.xyz[idx] = (gc_block.values.xyz[idx] - scale_factor.xyz[idx]) * scale_factor.ijk[idx] + scale_factor.xyz[idx];
-                else
+                if(gc_block.modal.distance_incremental)
                      gc_block.values.xyz[idx] *= scale_factor.ijk[idx];
+                else
+                     gc_block.values.xyz[idx] = (gc_block.values.xyz[idx] - scale_factor.xyz[idx]) * scale_factor.ijk[idx] + scale_factor.xyz[idx];
             }
         } while(idx);
     }
@@ -1118,10 +1131,10 @@ status_code_t gc_execute_block(char *block, char *message)
                         // Update specified value according to distance mode or ignore if absolute override is active.
                         // NOTE: G53 is never active with G28/30 since they are in the same modal group.
                         // Apply coordinate offsets based on distance mode.
-                        if (gc_block.modal.distance == DistanceMode_Absolute)
-                            gc_block.values.xyz[idx] += gc_block.modal.coord_system.xyz[idx] + gc_state.g92_coord_offset[idx] + gc_state.tool_length_offset[idx];
-                        else  // Incremental mode
+                        if (gc_block.modal.distance_incremental)
                             gc_block.values.xyz[idx] += gc_state.position[idx];
+                        else  // Absolute mode
+                            gc_block.values.xyz[idx] += gc_block.modal.coord_system.xyz[idx] + gc_state.g92_coord_offset[idx] + gc_state.tool_length_offset[idx];
                     }
                 } while(idx);
             }
@@ -1233,7 +1246,7 @@ status_code_t gc_execute_block(char *block, char *message)
 
                 if (bit_istrue(value_words, bit(Word_R))) {
                     gc_state.canned.retract_position = gc_block.values.r;
-                    if(gc_state.modal.distance == DistanceMode_Incremental)
+                    if(gc_state.modal.distance_incremental)
                         gc_state.canned.retract_position += gc_state.position[plane.axis_linear];
                     gc_state.canned.retract_position = gc_block.modal.coord_system.xyz[plane.axis_linear] + gc_state.canned.retract_position;
                 }
@@ -1334,7 +1347,7 @@ status_code_t gc_execute_block(char *block, char *message)
                             FAIL(Status_GcodeInvalidTarget); // [Invalid target]
 
                         // Convert radius value to proper units.
-                        if (gc_block.modal.units == UnitsMode_Inches)
+                        if (gc_block.modal.units_imperial)
                             gc_block.values.r *= MM_PER_INCH;
 
                         if(gc_state.modal.scaling_active)
@@ -1439,7 +1452,7 @@ status_code_t gc_execute_block(char *block, char *message)
                         bit_false(value_words, (bit(Word_I)|bit(Word_J)|bit(Word_K)));
 
                         // Convert IJK values to proper units.
-                        if (gc_block.modal.units == UnitsMode_Inches) {
+                        if (gc_block.modal.units_imperial) {
                             idx = 3;
                             do { // Axes indices are consistent, so loop may be used to save flash space.
                                 if (ijk_words & bit(--idx))
@@ -1546,7 +1559,7 @@ status_code_t gc_execute_block(char *block, char *message)
         plan_data.condition.coolant = gc_state.modal.coolant;
         plan_data.condition.is_rpm_rate_adjusted = gc_state.is_rpm_rate_adjusted;
 
-        if ((status_code_t)(int_value = (uint8_t)jog_execute(&plan_data, &gc_block)) == Status_OK)
+        if ((status_code_t)(int_value = (uint_fast8_t)mc_jog_execute(&plan_data, &gc_block)) == Status_OK)
             memcpy(gc_state.position, gc_block.values.xyz, sizeof(gc_state.position));
 
         return (status_code_t)int_value;
@@ -1688,7 +1701,7 @@ status_code_t gc_execute_block(char *block, char *message)
     gc_state.modal.plane_select = gc_block.modal.plane_select;
 
     // [12. Set length units ]:
-    gc_state.modal.units = gc_block.modal.units;
+    gc_state.modal.units_imperial = gc_block.modal.units_imperial;
 
     // [13. Cutter radius compensation ]: G41/42 NOT SUPPORTED
     // gc_state.modal.cutter_comp = gc_block.modal.cutter_comp; // NOTE: Not needed since always disabled.
@@ -1730,7 +1743,7 @@ status_code_t gc_execute_block(char *block, char *message)
     // gc_state.modal.control = gc_block.modal.control; // NOTE: Always default.
 
     // [17. Set distance mode ]:
-    gc_state.modal.distance = gc_block.modal.distance;
+    gc_state.modal.distance_incremental = gc_block.modal.distance_incremental;
 
     // [18. Set retract mode ]: NOT N/A
 
@@ -1849,13 +1862,17 @@ status_code_t gc_execute_block(char *block, char *message)
                     mc_canned_drill(gc_state.modal.motion, gc_block.values.xyz, &plan_data, gc_state.position, plane, gc_block.values.l, &gc_state.canned);
                     break;
 
-                default:
+                case MotionMode_ProbeToward:
+                case MotionMode_ProbeTowardNoError:
+                case MotionMode_ProbeAway:
+                case MotionMode_ProbeAwayNoError:
                     // NOTE: gc_block.values.xyz is returned from mc_probe_cycle with the updated position value. So
                     // upon a successful probing cycle, the machine position and the returned value should be the same.
-                  #ifndef ALLOW_FEED_OVERRIDE_DURING_PROBE_CYCLES
-                    plan_data.condition.no_feed_override = On;
-                  #endif
+                    plan_data.condition.no_feed_override = !settings.flags.allow_probing_feed_override;
                     gc_update_pos = (pos_update_t)mc_probe_cycle(gc_block.values.xyz, &plan_data, gc_parser_flags);
+                    break;
+
+                default:
                     break;
             }
 
@@ -1896,7 +1913,7 @@ status_code_t gc_execute_block(char *block, char *message)
             gc_state.modal.motion = MotionMode_Linear;
             gc_block.modal.canned_cycle_active = false;
             gc_state.modal.plane_select = PlaneSelect_XY;
-            gc_state.modal.distance = DistanceMode_Absolute;
+            gc_state.modal.distance_incremental = false;
             gc_state.modal.feed_mode = FeedMode_UnitsPerMin;
 // TODO: check           gc_state.distance_per_rev = 0.0f;
             // gc_state.modal.cutter_comp = CUTTER_COMP_DISABLE; // Not supported.
@@ -1908,12 +1925,12 @@ status_code_t gc_execute_block(char *block, char *message)
             if(settings.parking.flags.enabled)
                 gc_state.modal.override_ctrl.parking_disable = settings.parking.flags.enable_override_control &&
                                                                 settings.parking.flags.deactivate_upon_init;
-            sys.override_ctrl = gc_state.modal.override_ctrl;
+            sys.override.control = gc_state.modal.override_ctrl;
 
             if(settings.flags.restore_overrides) {
-                sys.f_override = DEFAULT_FEED_OVERRIDE;
-                sys.r_override = DEFAULT_RAPID_OVERRIDE;
-                sys.spindle_rpm_ovr = DEFAULT_SPINDLE_RPM_OVERRIDE;
+                sys.override.feed_rate = DEFAULT_FEED_OVERRIDE;
+                sys.override.rapid_rate = DEFAULT_RAPID_OVERRIDE;
+                sys.override.spindle_rpm = DEFAULT_SPINDLE_RPM_OVERRIDE;
             }
 
             // Execute coordinate change and spindle/coolant stop.

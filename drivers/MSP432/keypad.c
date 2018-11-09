@@ -66,14 +66,10 @@ void keypad_write_settings (void)
     if (hal.eeprom.type != EEPROM_None) {
         claim_eeprom();
         hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&jog_config, hal.eeprom.driver_area.size);
-      #ifdef EMULATE_EEPROM
-        if(hal.eeprom.type == EEPROM_Emulated)
-            settings_dirty.driver_settings = settings_dirty.is_dirty = true;
-      #endif
     }
 }
 
-bool driver_setting (uint_fast16_t setting, float value)
+bool driver_setting (uint_fast16_t setting, float value, char *svalue)
 {
     bool ok = false;
 
@@ -130,15 +126,15 @@ void driver_settings_restore (uint8_t restore_flag)
     }
 }
 
-void driver_settings_report (bool axis_settings)
+void driver_settings_report (bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx)
 {
     if(!axis_settings) {
-        report_util_float_setting(Setting_JogStepSpeed, jog_config.step_speed, 0);
-        report_util_float_setting(Setting_JogSlowSpeed, jog_config.slow_speed, 0);
-        report_util_float_setting(Setting_JogFastSpeed, jog_config.fast_speed, 0);
-        report_util_float_setting(Setting_JogStepDistance, jog_config.step_distance, N_DECIMAL_SETTINGVALUE);
-        report_util_float_setting(Setting_JogSlowDistance, jog_config.slow_distance, 0);
-        report_util_float_setting(Setting_JogFastDistance, jog_config.fast_distance, 0);
+        report_float_setting(Setting_JogStepSpeed, jog_config.step_speed, 0);
+        report_float_setting(Setting_JogSlowSpeed, jog_config.slow_speed, 0);
+        report_float_setting(Setting_JogFastSpeed, jog_config.fast_speed, 0);
+        report_float_setting(Setting_JogStepDistance, jog_config.step_distance, N_DECIMAL_SETTINGVALUE);
+        report_float_setting(Setting_JogSlowDistance, jog_config.slow_distance, 0);
+        report_float_setting(Setting_JogFastDistance, jog_config.fast_distance, 0);
     }
 }
 
@@ -220,11 +216,11 @@ void process_keypress (uint8_t state)
       switch(keycode) {
 
         case 'M':                                   // Mist override
-            enqueue_accessory_ovr(CMD_COOLANT_MIST_OVR_TOGGLE);
+            enqueue_accessory_override(CMD_OVERRIDE_COOLANT_MIST_TOGGLE);
             break;
 
         case 'C':                                   // Coolant override
-            enqueue_accessory_ovr(CMD_COOLANT_FLOOD_OVR_TOGGLE);
+            enqueue_accessory_override(CMD_OVERRIDE_COOLANT_FLOOD_TOGGLE);
             break;
 
         case CMD_FEED_HOLD:                         // Feed hold

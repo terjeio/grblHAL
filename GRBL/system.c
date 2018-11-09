@@ -24,28 +24,29 @@
 // Pin change interrupt for pin-out commands, i.e. cycle start, feed hold, and reset. Sets
 // only the realtime command execute variable to have the main program execute these when
 // its ready. This works exactly like the character-based realtime commands when picked off
-// directly from the incoming serial data stream.
+// directly from the incoming data stream.
 ISR_CODE void control_interrupt_handler (control_signals_t signals)
 {
     if (signals.value) {
         if ((signals.reset || signals.e_stop) && sys.state != STATE_ESTOP)
             mc_reset();
-        else if (signals.cycle_start) {
-            // Cancel any pending tool change
-            gc_state.tool_change = false;
-            bit_true(sys_rt_exec_state, EXEC_CYCLE_START);
+        else {
+    		if (signals.safety_door_ajar) {
+    		    if(settings.flags.safety_door_ignore_when_idle) {
+    		        // Only stop the spindle (laser off) when idle or jogging,
+    		        // this to allow positioning the controlled point (spindle) when door is open.
+    		        // NOTE: at least for lasers there should be an external interlock blocking laser power.
+                    if(sys.state != STATE_IDLE && sys.state != STATE_JOG)
+                        bit_true(sys_rt_exec_state, EXEC_SAFETY_DOOR);
+                    spindle_stop(); // TODO: stop spindle in laser mode only?
+    		    } else
+    		    	bit_true(sys_rt_exec_state, EXEC_SAFETY_DOOR);
+    		}
+    		if (signals.feed_hold)
+                bit_true(sys_rt_exec_state, EXEC_FEED_HOLD);
+            else if (signals.cycle_start)
+				bit_true(sys_rt_exec_state, EXEC_CYCLE_START);
         }
-        else if (signals.feed_hold)
-            bit_true(sys_rt_exec_state, EXEC_FEED_HOLD);
-
-		else if (signals.safety_door_ajar) {
-		    if(settings.flags.safety_door_ignore_when_idle) {
-                if(sys.state != STATE_IDLE && sys.state != STATE_JOG)
-                    bit_true(sys_rt_exec_state, EXEC_SAFETY_DOOR);
-                spindle_stop();
-		    } else
-			bit_true(sys_rt_exec_state, EXEC_SAFETY_DOOR);
-		}
     }
 }
 
@@ -74,15 +75,17 @@ void system_execute_startup (char *line)
 status_code_t system_execute_line (char *line)
 {
     status_code_t retval = Status_OK;
-    char c, *org = line, *lcline = line + (LINE_BUFFER_SIZE / 2);
+    char c, *org = line, *ucline = line, *lcline = line + (LINE_BUFFER_SIZE / 2);
 
     if(strlen(line) >= ((LINE_BUFFER_SIZE / 2) - 1))
         return Status_Overflow;
 
     // Uppercase original and copy original out in the buffer
+    // TODO: create a common function for stripping down uppercase version?
     do {
-        c = *org;
-        *org++ = CAPS(c);
+        c = *org++;
+        if(c != ' ') // Remove spaces from uppercase version
+            *ucline++ = CAPS(c);
         *lcline++ = c;
     } while(c);
 
@@ -193,8 +196,8 @@ status_code_t system_execute_line (char *line)
 
                 if (line[2] == '\0')
                     mc_homing_cycle(0); // Home axes according to configuration
-#ifdef HOMING_SINGLE_AXIS_COMMANDS
-                else if (line[3] == '\0') {
+
+                else if (settings.flags.homing_single_axis_commands && line[3] == '\0') {
 
                     switch (line[2]) {
                         case 'X':
@@ -225,9 +228,7 @@ status_code_t system_execute_line (char *line)
                           retval = Status_InvalidStatement;
                           break;
                     }
-                }
-#endif
-                else
+                } else
                     retval = Status_InvalidStatement;
             }
 
@@ -320,7 +321,7 @@ status_code_t system_execute_line (char *line)
                 uint_fast8_t counter;
                 for (counter = 0; counter < N_STARTUP_LINE; counter++) {
                     if (!(settings_read_startup_line(counter, line)))
-                        report_status_message(Status_SettingReadFail);
+                        hal.report_status_message(Status_SettingReadFail);
                     else
                         report_startup_line(counter, line);
                 }
@@ -346,6 +347,15 @@ status_code_t system_execute_line (char *line)
                 retval = Status_IdleError;
             break;
 
+#ifdef DEBUGOUT
+        case 'Q':
+            hal.stream_write(uitoa((uint32_t)sizeof(settings_t)));
+            hal.stream_write(" ");
+            hal.stream_write(uitoa((uint32_t)sizeof(coord_data_t) + 1));
+            hal.stream_write("\r\n");
+            break;
+#endif
+
         default :
             retval = Status_Unhandled;
 
@@ -357,19 +367,17 @@ status_code_t system_execute_line (char *line)
                 // Check for global setting, store if so
                 if(sys.state == STATE_IDLE || (sys.state & (STATE_ALARM|STATE_ESTOP))) {
                     uint_fast8_t counter = 1;
-                    float parameter, value;
+                    float parameter;
                     if(!read_float(line, &counter, &parameter))
                         retval = Status_BadNumberFormat;
                     else if(line[counter++] != '=' || parameter - truncf(parameter) != 0.0f)
                         retval = Status_InvalidStatement;
-                    else if(!read_float(line, &counter, &value))
-                        retval = Status_BadNumberFormat;
-                    else if(line[counter] != '\0' || (uint_fast16_t)parameter > Setting_AxisSettingsMax)
+                    else if((uint_fast16_t)parameter > Setting_AxisSettingsMax)
                         retval = Status_InvalidStatement;
                     else
-                        retval = settings_store_global_setting((uint_fast16_t)parameter, value);
+                        retval = settings_store_global_setting((uint_fast16_t)parameter, &lcline[counter]);
                 } else
-                    return Status_IdleError;
+                    retval = Status_IdleError;
             }
     }
 
@@ -378,9 +386,9 @@ status_code_t system_execute_line (char *line)
 
 void system_flag_wco_change ()
 {
-  #ifdef FORCE_BUFFER_SYNC_DURING_WCO_CHANGE
-    protocol_buffer_synchronize();
-  #endif
+    if(!settings.flags.force_buffer_sync_on_wco_change)
+        protocol_buffer_synchronize();
+
     sys.report.wco_counter = 0;
 }
 
@@ -428,18 +436,19 @@ bool system_check_travel_limits(float *target)
     bool failed = false;
     uint_fast8_t idx = N_AXIS;
 
-    do {
-        idx--;
-    #ifdef HOMING_FORCE_SET_ORIGIN
-    // When homing forced set origin is enabled, soft limits checks need to account for directionality.
     // NOTE: max_travel is stored as negative
-        failed = bit_istrue(settings.homing_dir.mask, bit(idx))
-                  ? (target[idx] < 0.0f || target[idx] > -settings.max_travel[idx])
-                  : (target[idx] > 0.0f || target[idx] < settings.max_travel[idx]);
-    #else
-        // NOTE: max_travel is stored as negative
+
+    if(settings.flags.homing_force_set_origin) {
+        do {
+            idx--;
+        // When homing forced set origin is enabled, soft limits checks need to account for directionality.
+            failed = bit_istrue(settings.homing.dir_mask, bit(idx))
+                      ? (target[idx] < 0.0f || target[idx] > -settings.max_travel[idx])
+                      : (target[idx] > 0.0f || target[idx] < settings.max_travel[idx]);
+        } while(!failed && idx);
+    } else do {
+        idx--;
         failed = target[idx] > 0.0f || target[idx] < settings.max_travel[idx];
-    #endif
     } while(!failed && idx);
 
   return failed;

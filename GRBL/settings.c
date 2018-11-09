@@ -40,6 +40,11 @@ const settings_t defaults = {
     .flags.disable_laser_during_hold = DEFAULT_DISABLE_LASER_DURING_HOLD,
     .flags.force_initialization_alarm = DEFAULT_FORCE_INITIALIZATION_ALARM,
     .flags.disable_probe_pullup = DISABLE_PROBE_PIN_PULL_UP,
+    .flags.allow_probing_feed_override = ALLOW_FEED_OVERRIDE_DURING_PROBE_CYCLES,
+    .flags.limits_two_switches_on_axes = LIMITS_TWO_SWITCHES_ON_AXES,
+    .flags.homing_single_axis_commands = HOMING_SINGLE_AXIS_COMMANDS,
+    .flags.homing_force_set_origin = HOMING_FORCE_SET_ORIGIN,
+    .flags.force_buffer_sync_on_wco_change = FORCE_BUFFER_SYNC_DURING_WCO_CHANGE,
 
     .steppers.pulse_microseconds = DEFAULT_STEP_PULSE_MICROSECONDS,
     .steppers.pulse_delay_microseconds = DEFAULT_STEP_PULSE_DELAY,
@@ -138,13 +143,8 @@ const settings_t defaults = {
 // Write build info to persistent storage
 void settings_write_build_info (char *line)
 {
-    if(hal.eeprom.type != EEPROM_None) {
+    if(hal.eeprom.type != EEPROM_None)
         hal.eeprom.memcpy_to_with_checksum(EEPROM_ADDR_BUILD_INFO, (uint8_t *)line, MAX_STORED_LINE_LENGTH);
-      #ifdef EMULATE_EEPROM
-        if(hal.eeprom.type == EEPROM_Emulated)
-            settings_dirty.build_info = settings_dirty.is_dirty = true;
-      #endif
-    }
 }
 
 // Read build info from persistent storage.
@@ -168,15 +168,8 @@ void settings_write_startup_line (uint8_t idx, char *line)
     protocol_buffer_synchronize(); // A startup line may contain a motion and be executing.
 #endif
 
-    if(hal.eeprom.type != EEPROM_None) {
+    if(hal.eeprom.type != EEPROM_None)
         hal.eeprom.memcpy_to_with_checksum(EEPROM_ADDR_STARTUP_BLOCK + idx * (MAX_STORED_LINE_LENGTH + 1), (uint8_t *)line, MAX_STORED_LINE_LENGTH);
-      #ifdef EMULATE_EEPROM
-        if(hal.eeprom.type == EEPROM_Emulated) {
-            bit_true(settings_dirty.startup_lines, bit(idx));
-            settings_dirty.is_dirty = true;
-        }
-      #endif
-    }
 }
 
 // Read startup line to persistent storage.
@@ -202,15 +195,8 @@ void settings_write_coord_data (uint8_t idx, float (*coord_data)[N_AXIS])
     protocol_buffer_synchronize();
 #endif
 
-    if(hal.eeprom.type != EEPROM_None) {
+    if(hal.eeprom.type != EEPROM_None)
         hal.eeprom.memcpy_to_with_checksum(EEPROM_ADDR_PARAMETERS + idx * (sizeof(coord_data_t) + 1), (uint8_t *)coord_data, sizeof(coord_data_t));
-      #ifdef EMULATE_EEPROM
-        if(hal.eeprom.type == EEPROM_Emulated) {
-            bit_true(settings_dirty.coord_data, bit(idx));
-            settings_dirty.is_dirty = true;
-        }
-      #endif
-    }
 }
 
 // Read selected coordinate data from persistent storage.
@@ -237,13 +223,6 @@ bool settings_write_tool_data (uint8_t idx, tool_data_t *tool_data)
     idx--;
     if(hal.eeprom.type != EEPROM_None) {
         hal.eeprom.memcpy_to_with_checksum(EEPROM_ADDR_TOOL_TABLE + idx * (sizeof(tool_data_t) + 1), (uint8_t *)tool_data, sizeof(tool_data_t));
- #ifdef EMULATE_EEPROM
-        if(hal.eeprom.type == EEPROM_Emulated) {
-            bit_true(settings_dirty.tool_data, bit(idx));
-            settings_dirty.is_dirty = true;
-        }
- #endif
-    }
 
     return true;
 #else
@@ -280,10 +259,6 @@ void write_global_settings ()
     if(hal.eeprom.type != EEPROM_None) {
         hal.eeprom.put_byte(0, SETTINGS_VERSION);
         hal.eeprom.memcpy_to_with_checksum(EEPROM_ADDR_GLOBAL, (uint8_t *)&settings, sizeof(settings_t));
-      #ifdef EMULATE_EEPROM
-        if(hal.eeprom.type == EEPROM_Emulated)
-            settings_dirty.global_settings = settings_dirty.is_dirty = true;
-      #endif
     }
 }
 
@@ -333,7 +308,16 @@ void settings_restore (uint8_t restore_flag) {
 }
 
 // A helper method to set settings from command line
-status_code_t settings_store_global_setting (uint_fast16_t parameter, float value) {
+status_code_t settings_store_global_setting (uint_fast16_t parameter, char *svalue)
+{
+    uint_fast8_t set_idx = 0;
+    float value;
+
+    if (!read_float(svalue, &set_idx, &value))
+        return hal.driver_setting && hal.driver_setting(parameter, NAN, svalue) ? Status_OK : Status_BadNumberFormat;
+
+    if (svalue[set_idx] != '\0')
+        return Status_InvalidStatement;
 
     if (value < 0.0f)
         return Status_NegativeValue;
@@ -341,56 +325,47 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, float valu
     if ((setting_type_t)parameter >= Setting_AxisSettingsBase && (setting_type_t)parameter <= Setting_AxisSettingsMax) {
         // Store axis configuration. Axis numbering sequence set by AXIS_SETTING defines.
         // NOTE: Ensure the setting index corresponds to the report.c settings printout.
-        uint_fast8_t set_idx = 0, axis_idx = (uint_fast8_t)parameter - (uint_fast8_t)Setting_AxisSettingsBase;
+        bool found = false;
+        uint_fast16_t base_idx = (uint_fast16_t)parameter - (uint_fast16_t)Setting_AxisSettingsBase;
+        uint_fast8_t axis_idx = base_idx % AXIS_SETTINGS_INCREMENT;
 
-        while (set_idx < AXIS_N_SETTINGS) {
+        if(axis_idx < N_AXIS) switch((base_idx - axis_idx) / AXIS_SETTINGS_INCREMENT) {
 
-            if (axis_idx < N_AXIS) {
-            // Valid axis setting found.
-                switch ((axis_setting_type_t)set_idx) {
+            case AxisSetting_StepsPerMM:
+                #ifdef MAX_STEP_RATE_HZ
+                if (value * settings.max_rate[axis_idx] > (MAX_STEP_RATE_HZ * 60.0f))
+                    return Status_MaxStepRateExceeded;
+                #endif
+                found = true;
+                settings.steps_per_mm[axis_idx] = value;
+                break;
 
-                    case AxisSetting_StepsPerMM:
-                        #ifdef MAX_STEP_RATE_HZ
-                        if (value * settings.max_rate[axis_idx] > (MAX_STEP_RATE_HZ * 60.0f))
-                            return Status_MaxStepRateExceeded;
-                        #endif
-                        settings.steps_per_mm[axis_idx] = value;
-                        break;
+            case AxisSetting_MaxRate:
+                #ifdef MAX_STEP_RATE_HZ
+                if (value * settings.steps_per_mm[axis_idx] > (MAX_STEP_RATE_HZ * 60.0f))
+                    return Status_MaxStepRateExceeded;
+                #endif
+                found = true;
+                settings.max_rate[axis_idx] = value;
+                break;
 
-                    case AxisSetting_MaxRate:
-                        #ifdef MAX_STEP_RATE_HZ
-                        if (value * settings.steps_per_mm[axis_idx] > (MAX_STEP_RATE_HZ * 60.0f))
-                            return Status_MaxStepRateExceeded;
-                        #endif
-                        settings.max_rate[axis_idx] = value;
-                        break;
+            case AxisSetting_Acceleration:
+                found = true;
+                settings.acceleration[axis_idx] = value * 60.0f * 60.0f; // Convert to mm/min^2 for grbl internal use.
+                break;
 
-                    case AxisSetting_Acceleration:
-                        settings.acceleration[axis_idx] = value * 60.0f * 60.0f; // Convert to mm/min^2 for grbl internal use.
-                        break;
+            case AxisSetting_MaxTravel:
+                found = true;
+                settings.max_travel[axis_idx] = -value; // Store as negative for grbl internal use.
+                break;
 
-                    case AxisSetting_MaxTravel:
-                        settings.max_travel[axis_idx] = -value; // Store as negative for grbl internal use.
-                        break;
-
-                    default: // for stopping compiler warning
-                        break;
-
-                }
-                break; // Exit while-loop after setting has been configured and proceed to the EEPROM write call.
-
-            } else {
-                set_idx++;
-                // If axis index greater than N_AXIS or setting index greater than number of axis settings, error out.
-                if ((axis_idx < AXIS_SETTINGS_INCREMENT) || (set_idx == AXIS_N_SETTINGS)) {
-                    if(hal.driver_setting && hal.driver_setting(parameter, value))
-                        return Status_OK;
-                    else
-                        return Status_InvalidStatement;
-                }
-                axis_idx -= AXIS_SETTINGS_INCREMENT;
-            }
+            default: // for stopping compiler warning
+                break;
         }
+
+        if(!(found || (hal.driver_setting && hal.driver_setting(parameter, value, svalue))))
+            return Status_InvalidStatement;
+
     } else {
         // Store non-axis Grbl settings
         uint8_t int_value = (uint8_t)truncf(value);
@@ -644,7 +619,7 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, float valu
                 break;
 
             default:
-                if(hal.driver_setting && hal.driver_setting(parameter, value))
+                if(hal.driver_setting && hal.driver_setting(parameter, value, svalue))
                     return Status_OK;
                 else
                     return Status_InvalidStatement;
@@ -660,7 +635,7 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, float valu
 // Initialize the config subsystem
 void settings_init() {
     if(!read_global_settings()) {
-        report_status_message(Status_SettingReadFail);
+        hal.report_status_message(Status_SettingReadFail);
         settings_restore(SETTINGS_RESTORE_ALL); // Force restore all EEPROM data.
         report_grbl_settings();
     } else {

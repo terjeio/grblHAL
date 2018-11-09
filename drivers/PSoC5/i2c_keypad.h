@@ -5,7 +5,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2017 Terje Io
+  Copyright (c) 2017-2018 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -21,7 +21,13 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#ifndef _KEYPAD_H_
+#define _KEYPAD_H_
+
+#include <stdbool.h>
 #include <stdint.h>
+
+#include "grbl.h"
 
 #define KEYBUF_SIZE 16
 #define KEYPAD_I2CADDR 0x49
@@ -35,3 +41,9 @@ typedef enum {
 void I2C_keypad_setup (void);
 void process_keypress (uint8_t state);
 void I2C_ISR_ExitCallback(void);
+
+bool driver_setting (uint_fast16_t setting, float value, char *svalue);
+void driver_settings_restore (uint8_t restore_flag);
+void driver_settings_report (bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx);
+
+#endif

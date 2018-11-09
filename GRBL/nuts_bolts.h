@@ -100,6 +100,9 @@ typedef union {
 #define MM_PER_INCH (25.40f)
 #define INCH_PER_MM (0.0393701f)
 
+#define MAX_INT_DIGITS 8 // Maximum number of digits in int32 (and float)
+#define STRLEN_COORDVALUE (MAX_INT_DIGITS + N_DECIMAL_COORDVALUE_INCH + 1) // 8.4 format - excluding terminating null
+
 typedef enum {
     DelayMode_Dwell = 0,
     DelayMode_SysSuspend
@@ -121,6 +124,12 @@ typedef enum {
 
 #define bit_istrue(x,mask) ((x & mask) != 0)
 #define bit_isfalse(x,mask) ((x & mask) == 0)
+
+// Converts an uint32 variable to string.
+char *uitoa (uint32_t n);
+
+// Converts a float variable to string with the specified number of decimal places.
+char *ftoa (float n, uint8_t decimal_places);
 
 // Read a floating point value from a string. Line points to the input buffer, char_counter
 // is the indexer pointing to the current character of the line, while float_ptr is

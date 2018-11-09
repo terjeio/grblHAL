@@ -372,9 +372,9 @@ static coolant_state_t coolantGetState (void)
 
 static void showMessage (const char *msg)
 {
-    hal.serial_write_string("[MSG:");
-    hal.serial_write_string(msg);
-    hal.serial_write_string("]\r\n");
+    hal.stream_write("[MSG:");
+    hal.stream_write(msg);
+    hal.stream_write("]\r\n");
 }
 
 // Helper functions for setting/clearing/inverting individual bits atomically (uninterruptable)
@@ -643,7 +643,6 @@ static bool driver_setup (settings_t *settings)
 
     settings_changed(settings);
 
-    setSerialReceiveCallback(hal.protocol_process_realtime);
     spindleSetState((spindle_state_t){0}, spindle_pwm.off_value, DEFAULT_SPINDLE_RPM_OVERRIDE);
     coolantSetState((coolant_state_t){0});
     stepperSetDirOutputs((axes_signals_t){0});
@@ -700,12 +699,12 @@ bool driver_init (void)
 
     hal.system_control_get_state = systemGetState;
 
-    hal.serial_read = serialGetC;
-    hal.serial_write = serialPutC;
-    hal.serial_write_string = serialWriteS;
-    hal.serial_get_rx_buffer_available = serialRxFree;
-    hal.serial_reset_read_buffer = serialRxFlush;
-    hal.serial_cancel_read_buffer = serialRxCancel;
+    hal.stream_read = serialGetC;
+    hal.stream_write = serialWriteS;
+    hal.stream_write_all = serialWriteS;
+    hal.stream_get_rx_buffer_available = serialRxFree;
+    hal.stream_reset_read_buffer = serialRxFlush;
+    hal.stream_cancel_read_buffer = serialRxCancel;
 
     hal.show_message = showMessage;
 

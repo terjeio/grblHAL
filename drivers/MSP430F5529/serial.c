@@ -40,7 +40,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <msp430.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include "grbl\serial.h"
+#include "GRBL\serial.h"
+#include "GRBL\grbl.h"
 
 #include "serial.h"
 
@@ -50,7 +51,6 @@ static char txbuf[TX_BUFFER_SIZE];
 static char rxbuf[RX_BUFFER_SIZE];
 
 const char eol[] = "\r\n";
-static bool (*serialReceiveCallback)(char) = 0;
 static volatile uint16_t tx_head = 0, tx_tail = 0, rx_head = 0, rx_tail = 0, rx_overflow = 0;
 
 #ifdef XONXOFF
@@ -61,14 +61,6 @@ inline void setUCA1BR (uint16_t prescaler)
 {
 	UCA1BR0 = prescaler & 0xFF; // LSB
 	UCA1BR1 = prescaler >> 8;	// MSB
-}
-
-//
-// serialReceiveCallback - called before data is inserted into the buffer, return false to drop
-//
-
-void setSerialReceiveCallback (bool (*fn)(char)) {
-    serialReceiveCallback = fn;
 }
 
 void serialInit (void)
@@ -213,7 +205,7 @@ __interrupt void USCI1RX_ISR(void)
             next_head = UCA1RXBUF; 				// and do dummy read to clear interrupt
         } else {
             char data = UCA1RXBUF;
-            if(!serialReceiveCallback || serialReceiveCallback(data)) {
+            if(!hal.protocol_process_realtime || hal.protocol_process_realtime(data)) {
                 rxbuf[rx_head] = data;                  // Add data to buffer
                 rx_head = next_head;                    // and update pointer
             }

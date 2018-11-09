@@ -805,10 +805,10 @@ void st_prep_buffer()
                 // but this would be instantaneous only and during a motion. May not matter at all.
                 prep.current_spindle_pwm = hal.spindle_compute_pwm_value(st_prep_block->is_rpm_rate_adjusted && !pl_block->condition.is_laser_ppi_mode
                                                                           ? pl_block->spindle.rpm * prep.current_speed * prep.inv_feedrate
-                                                                          : pl_block->spindle.rpm, sys.spindle_rpm_ovr);
+                                                                          : pl_block->spindle.rpm, sys.override.spindle_rpm);
               #ifdef CONSTANT_SURFACE_SPEED_OPTION
                 if(pl_block->condition.is_rpm_pos_adjusted)
-                    st_prep_block->pwm_adjust = ((float)hal.spindle_compute_pwm_value(pl_block->spindle.target_rpm, sys.spindle_rpm_ovr) -
+                    st_prep_block->pwm_adjust = ((float)hal.spindle_compute_pwm_value(pl_block->spindle.target_rpm, sys.override.spindle_rpm) -
                                                   (float)prep.current_spindle_pwm) / (float)pl_block->steps[pl_block->spindle.axis];
                 else
                     st_prep_block->pwm_adjust = 0.0f;

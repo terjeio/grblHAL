@@ -37,6 +37,7 @@ typedef struct {
 
 typedef struct {
     eeprom_type type;
+    uint16_t size;
     eeprom_driver_area_t driver_area;
     uint8_t (*get_byte)(uint32_t addr);
     void (*put_byte)(uint32_t addr, uint8_t new_value);

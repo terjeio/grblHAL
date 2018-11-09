@@ -82,5 +82,4 @@ bool serialPutC (const char data);
 void serialWriteS (const char *data);
 void serialWriteLn (const char *data);
 void serialWrite (const char *data, uint16_t length);
-void setSerialReceiveCallback (bool (*fn)(char));
 

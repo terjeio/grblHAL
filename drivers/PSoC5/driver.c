@@ -52,7 +52,8 @@ static void limit_isr (void);
 static void control_isr (void);
 static void systick_isr (void);
 
-static void driver_delay_ms (uint32_t ms, void (*callback)(void)) {
+static void driver_delay_ms (uint32_t ms, void (*callback)(void))
+{
     if((ms_count = ms) > 0) {
 		DelayTimer_Start();
 		if(!(delayCallback = callback))
@@ -168,12 +169,14 @@ static void stepperWakeUp ()
 }
 
 // Disables stepper driver interrups, called from st_go_idle()
-static void stepperGoIdle (void) {
+static void stepperGoIdle (void)
+{
     StepperTimer_Stop();
 }
 
 // Sets up stepper driver interrupt timeout, called from stepper_driver_interrupt_handler()
-static void stepperCyclesPerTick (uint32_t cycles_per_tick) {
+static void stepperCyclesPerTick (uint32_t cycles_per_tick)
+{
 //        StepperTimer_Stop();
 //        StepperTimer_WriteCounter(cycles_per_tick < (1UL << 24) /*< 65536 (4.1ms @ 16MHz)*/ ? cycles_per_tick : 0xFFFFFF /*Just set the slowest speed possible.*/);
         StepperTimer_WritePeriod(cycles_per_tick < (1UL << 24) /*< 65536 (4.1ms @ 16MHz)*/ ? cycles_per_tick : 0xFFFFFF /*Just set the slowest speed possible.*/);
@@ -247,7 +250,8 @@ static void probeConfigureInvertMask(bool is_probe_away)
 }
 
 // Returns the probe pin state. Triggered = true. Called by gcode parser and probe state monitor.
-bool probeGetState (void) {
+bool probeGetState (void)
+{
     return ProbeSignal_Read() != 0;
 }
 
@@ -262,11 +266,13 @@ static coolant_state_t coolantGetState (void)
     return (coolant_state_t)CoolantOutput_Read();
 }
 
-void eepromPutByte (uint32_t addr, uint8_t new_value) {
+void eepromPutByte (uint32_t addr, uint8_t new_value)
+{
     EEPROM_WriteByte(new_value, addr); 
 }
 
-static void eepromWriteBlockWithChecksum (uint32_t destination, uint8_t *source, uint32_t size) {
+static void eepromWriteBlockWithChecksum (uint32_t destination, uint8_t *source, uint32_t size)
+{
   unsigned char checksum = 0;
   for(; size > 0; size--) { 
     checksum = (checksum << 1) || (checksum >> 7);
@@ -276,7 +282,8 @@ static void eepromWriteBlockWithChecksum (uint32_t destination, uint8_t *source,
   EEPROM_WriteByte(checksum, destination);
 }
 
-bool eepromReadBlockWithChecksum (uint8_t *destination, uint32_t source, uint32_t size) {
+bool eepromReadBlockWithChecksum (uint8_t *destination, uint32_t source, uint32_t size)
+{
   unsigned char data, checksum = 0;
   for(; size > 0; size--) { 
     data = EEPROM_ReadByte(source++);
@@ -424,8 +431,8 @@ static bool driver_setup (settings_t *settings)
 
 // Initialize HAL pointers
 // NOTE: Grbl is not yet (configured from EEPROM data), driver_setup() will be called when done
-bool driver_init (void) {
-
+bool driver_init (void)
+{
     serialInit();
     EEPROM_Start();
     
@@ -460,12 +467,12 @@ bool driver_init (void) {
 
 	hal.system_control_get_state = systemGetState;
 
-    hal.serial_read = serialGetC;
-    hal.serial_write = serialPutC;
-    hal.serial_write_string = serialWriteS;
-    hal.serial_get_rx_buffer_available = serialRxFree;
-    hal.serial_reset_read_buffer = serialRxFlush;
-    hal.serial_cancel_read_buffer = serialRxCancel;
+    hal.stream_read = serialGetC;
+    hal.stream_write = serialWriteS;
+    hal.stream_write_all = serialWriteS;
+    hal.stream_get_rx_buffer_available = serialRxFree;
+    hal.stream_reset_read_buffer = serialRxFlush;
+    hal.stream_cancel_read_buffer = serialRxCancel;
 
     hal.eeprom.type = EEPROM_Physical;
 	hal.eeprom.get_byte = (uint8_t (*)(uint32_t))&EEPROM_ReadByte;
@@ -479,6 +486,9 @@ bool driver_init (void) {
 
 #ifdef HAS_KEYPAD
     hal.execute_realtime = process_keypress;
+    hal.driver_setting = driver_setting;
+    hal.driver_settings_restore = driver_settings_restore;
+    hal.driver_settings_report = driver_settings_report;
 #endif
 
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
@@ -500,20 +510,19 @@ bool driver_init (void) {
 /* interrupt handlers */
 
 // Main stepper driver
-static void stepper_driver_isr (void) {
-
+static void stepper_driver_isr (void)
+{
     StepperTimer_ReadStatusRegister(); // Clear interrupt
 
 	hal.stepper_interrupt_callback();
-
 }
 
 // This interrupt is enabled when Grbl sets the motor port bits to execute
 // a step. This ISR resets the motor port after a short period (settings.pulse_microseconds)
 // completing one step cycle.
 // NOTE: TivaC has a shared interrupt for match and timeout
-static void stepper_pulse_isr (void) {
-
+static void stepper_pulse_isr (void)
+{
     //Stepper_Timer_ReadStatusRegister();
 
 #ifdef STEP_PULSE_DELAY
@@ -531,12 +540,14 @@ static void limit_isr (void)
     hal.limit_interrupt_callback((axes_signals_t)HomingSignals_Read());
 }
 
-static void control_isr (void) {
+static void control_isr (void)
+{
     hal.control_interrupt_callback((control_signals_t)ControlSignals_Read());
 }
 
 // Interrupt handler for 1 ms interval timer
-static void systick_isr (void) {
+static void systick_isr (void)
+{
     DelayTimer_ReadStatusRegister();
 	if(!(--ms_count)) {
 		DelayTimer_Stop();

@@ -90,7 +90,7 @@ void keypad_settings_restore (uint8_t restore_flag)
     }
 }
 
-void keypad_settings_report (bool axis_settings)
+void keypad_settings_report (bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx)
 {
     if(!axis_settings) {
         report_float_setting(Setting_JogStepSpeed, driver_settings.jog_config.step_speed, 0);

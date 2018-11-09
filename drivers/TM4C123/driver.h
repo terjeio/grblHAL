@@ -26,6 +26,10 @@
 #ifndef __DRIVER_H__
 #define __DRIVER_H__
 
+#include "tiva.h"
+
+#include "GRBL/grbl.h"
+
 // Configuration
 
 #define CNC_BOOSTERPACK         // comment in if for CNC Boosterpack

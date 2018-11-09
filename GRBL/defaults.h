@@ -35,6 +35,13 @@
 // #define DISABLE_CONTROL_PINS_PULL_UP_MASK (SIGNAL_SAFETYDOOR|SIGNAL_RESET)
 // #define DISABLE_PROBE_PIN_PULL_UP
 
+// By default, Grbl disables feed rate overrides for all G38.x probe cycle commands. Although this
+// may be different than some pro-class machine control, it's arguable that it should be this way.
+// Most probe sensors produce different levels of error that is dependent on rate of speed. By
+// keeping probing cycles to their programmed feed rates, the probe sensor should be a lot more
+// repeatable. If needed, you can disable this behavior by uncommenting the define below.
+//#define ALLOW_FEED_OVERRIDE_DURING_PROBE_CYCLES 1 // Default disabled. Uncomment to enable.
+
 // Inverts logic of the stepper enable signal(s).
 // NOTE: Not universally available for individual axes - check driver documentation.
 //       Specify at least X_AXIS_BIT if a common enable signal is used.
@@ -246,6 +253,10 @@
 
 #ifndef DISABLE_CONTROL_PINS_PULL_UP_MASK
 #define DISABLE_CONTROL_PINS_PULL_UP_MASK 0
+#endif
+
+#ifndef ALLOW_FEED_OVERRIDE_DURING_PROBE_CYCLES
+#define ALLOW_FEED_OVERRIDE_DURING_PROBE_CYCLES 0
 #endif
 
 #endif

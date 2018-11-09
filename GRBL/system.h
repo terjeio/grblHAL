@@ -167,11 +167,19 @@ typedef struct {
 #endif
 
 typedef struct {
-    int8_t ovr_counter;                 // Tracks when to add override data to status reports.
+    int8_t override_counter;                 // Tracks when to add override data to status reports.
     uint8_t wco_counter;                // Tracks when to add work coordinate offset data to status reports.
     bool mpg_mode;
     bool scaling;                       // Tracks when to add scaling info to status reports.
 } report_tracking_t;
+
+typedef struct {
+    uint8_t feed_rate;              // Feed rate override value in percent
+    uint8_t rapid_rate;             // Rapids override value in percent
+    uint8_t spindle_rpm;            // Spindle speed override value in percent
+    spindle_stop_t spindle_stop;    // Tracks spindle stop override states
+    gc_override_flags_t control;    // Tracks override control states.
+} overrides_t;
 
 // Define global system variables
 typedef struct {
@@ -180,7 +188,7 @@ typedef struct {
     bool abort;                         // System abort flag. Forces exit back to main loop for reset.
     bool exit;				            // System exit flag. Used in combination with abort to terminate main loop.
     bool cancel;                        // System cancel flag.
-    bool mpg_mode;                      // MPG mode flag. Set when switched to secondary serial input stream.
+    bool mpg_mode;                      // MPG mode flag. Set when switched to secondary input stream.
     bool soft_limit;                    // Tracks soft limit errors for the state machine. (boolean)
     bool block_delete_enabled;          // Set to true to enable block delete
     volatile bool steppers_deenergize;	// Set to true to deenergize stepperes
@@ -189,12 +197,8 @@ typedef struct {
     bool block_input_stream;            // Input stream block flag. Set to true to discard all characters except real-time commands.
     step_control_t step_control;        // Governs the step segment generator depending on system state.
     axes_signals_t homing_axis_lock;    // Locks axes when limits engage. Used as an axis motion mask in the stepper ISR.
-    uint8_t f_override;                 // Feed rate override value in percent
-    uint8_t r_override;                 // Rapids override value in percent
-    uint8_t spindle_rpm_ovr;            // Spindle speed value in percent
-    spindle_stop_t spindle_stop_ovr;    // Tracks spindle stop override states
+    overrides_t override;               // Override values & states
     report_tracking_t report;           // Tracks when to add data to status reports.
-    gc_override_flags_t override_ctrl;  // Tracks override control states.
     parking_state_t parking_state;      // Tracks parking state
     hold_state_t holding_state;         // Tracks holding state
     float spindle_rpm;

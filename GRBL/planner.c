@@ -270,10 +270,10 @@ float plan_compute_profile_nominal_speed (plan_block_t *block)
     float nominal_speed = block->condition.spindle.synchronized ? block->programmed_rate * hal.spindle_get_data(SpindleData_RPM).rpm : block->programmed_rate;
 
     if (block->condition.rapid_motion)
-        nominal_speed *= (0.01f * sys.r_override);
+        nominal_speed *= (0.01f * sys.override.rapid_rate);
     else {
         if (!block->condition.no_feed_override)
-            nominal_speed *= (0.01f * sys.f_override);
+            nominal_speed *= (0.01f * sys.override.feed_rate);
         if (nominal_speed > block->rapid_rate)
             nominal_speed = block->rapid_rate;
     }
@@ -550,15 +550,15 @@ void plan_cycle_reinitialize ()
 // Set feed overrides
 void plan_feed_override (uint_fast8_t feed_override, uint_fast8_t rapid_override)
 {
-    if(sys.override_ctrl.feed_rate_disable)
+    if(sys.override.control.feed_rate_disable)
         return;
 
     feed_override = max(min(feed_override, MAX_FEED_RATE_OVERRIDE), MIN_FEED_RATE_OVERRIDE);
 
-	if ((feed_override != sys.f_override) || (rapid_override != sys.r_override)) {
-	  sys.f_override = (uint8_t)feed_override;
-	  sys.r_override = (uint8_t)rapid_override;
-	  sys.report.ovr_counter = 0; // Set to report change immediately
+	if ((feed_override != sys.override.feed_rate) || (rapid_override != sys.override.rapid_rate)) {
+	  sys.override.feed_rate = (uint8_t)feed_override;
+	  sys.override.rapid_rate = (uint8_t)rapid_override;
+	  sys.report.override_counter = 0; // Set to report change immediately
 	  plan_update_velocity_profile_parameters();
 	  plan_cycle_reinitialize();
 	}

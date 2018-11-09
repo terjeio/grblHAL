@@ -72,7 +72,16 @@ typedef enum {
     Status_GcodeIllegalToolTableEntry = 39,
     Status_GcodeToolChangePending = 40,
     Status_EStop = 41,
-    Status_Unhandled = 42 // For internal use only
+    Status_Unhandled = 42, // For internal use only
+
+// Some error codes as defined in bdring's ESP32 port
+    Status_SDMountError = 60,
+    Status_SDReadError = 61,
+    Status_SDFailedOpenDir = 62,
+    Status_SDDirNotFound = 63,
+    Status_SDFileEmpty = 64,
+
+    Status_BTInitError = 70
 } status_code_t;
 
 
@@ -197,12 +206,6 @@ typedef enum {
     PlaneSelect_YZ = 2  // G19 (Do not alter value)
 } plane_select_t;
 
-// Modal Group G3: Distance mode
-typedef enum {
-    DistanceMode_Absolute    = 0,   // G90 (Default: Must be zero)
-    DistanceMode_Incremental = 1    // G91 (Do not alter value)
-} distance_mode_t;
-
 // Modal Group G4: Arc IJK distance mode
 //#define DISTANCE_ARC_MODE_INCREMENTAL 0 // G91.1 (Default: Must be zero)
 
@@ -221,12 +224,6 @@ typedef enum {
     FeedMode_InverseTime = 1,   // G93 (Do not alter value)
     FeedMode_UnitsPerRev = 2    // G95 (Do not alter value)
 } feed_mode_t;
-
-// Modal Group G6: Units mode
-typedef enum {
-    UnitsMode_MM = 0,       // G21 (Default: Must be zero)
-    UnitsMode_Inches = 1    // G20 (Do not alter value)
-} units_mode_t;
 
 // Modal Group G10: Canned cycle return mode
 typedef enum {
@@ -345,8 +342,8 @@ typedef struct {
 typedef struct {
     motion_mode_t motion;                // {G0,G1,G2,G3,G38.2,G80}
     feed_mode_t feed_mode;               // {G93,G94}
-    units_mode_t units;                  // {G20,G21}
-    distance_mode_t distance;            // {G90,G91}
+    bool units_imperial;                 // {G20,G21}
+    bool distance_incremental;           // {G90,G91}
     // uint8_t distance_arc;             // {G91.1} NOTE: Don't track. Only default supported.
     plane_select_t plane_select;         // {G17,G18,G19}
     // uint8_t cutter_comp;              // {G40} NOTE: Don't track. Only default supported.
@@ -459,6 +456,9 @@ status_code_t gc_execute_block(char *block, char *message);
 #define gc_sync_position() system_convert_array_steps_to_mpos (gc_state.position, sys_position)
 
 void gc_set_laser_ppimode (bool on);
-uint8_t gc_get_g51_state ();
+
+// Gets axes scaling state.
+axes_signals_t gc_get_g51_state (void);
+float *gc_get_scaling (void);
 
 #endif

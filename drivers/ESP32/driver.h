@@ -35,9 +35,9 @@
 
 #include "freertos/queue.h"
 
-#include "keypad.h"
-
 #include "GRBL/grbl.h"
+
+#include "keypad.h"
 
 // Configuration
 

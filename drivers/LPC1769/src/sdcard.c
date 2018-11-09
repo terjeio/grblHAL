@@ -63,6 +63,7 @@ typedef struct
     FIL *handle;
     size_t size;
     size_t pos;
+    uint32_t line;
     uint8_t eol;
 } file_t;
 
@@ -70,6 +71,7 @@ static file_t file = {
     .fs = NULL,
     .handle = NULL,
     .size = 0,
+	.line = 0,
     .pos = 0
 };
 
@@ -145,8 +147,8 @@ static FRESULT scan_dir (char *path, uint_fast8_t depth, char *buf)
                     break;
             }
         } else if((status = allowed(get_name(&fno), true)) != Filename_Filtered) { // It is a file
-            sprintf(buf, "[FILE:%s/%s|SIZE:%ld%s]\r\n", path, get_name(&fno), fno.fsize, status == Filename_Invalid ? "|UNUSABLE" : "");
-            hal.serial_write_string(buf);
+            sprintf(buf, "[FILE:%s/%s|SIZE:%lu%s]\r\n", path, get_name(&fno), fno.fsize, status == Filename_Invalid ? "|UNUSABLE" : "");
+            hal.stream_write(buf);
         }
     }
 //    f_closedir(&dir); // requires never version?
@@ -171,6 +173,7 @@ static bool file_open (char *filename)
         file.handle = &cncfile;
         file.size = f_size(file.handle);
         file.pos = 0;
+        file.line = 0;
         file.eol = false;
     }
 
@@ -212,18 +215,41 @@ static status_code_t sdcard_ls (char *buf)
 {
     char path[MAX_PATHLEN] = ""; // NB! also used as work area when recursing directories
 
-    return scan_dir(path, 10, buf) == FR_OK ? Status_OK : Status_InvalidStatement;;
+    return scan_dir(path, 10, buf) == FR_OK ? Status_OK : Status_SDFailedOpenDir;
+}
+
+static void sdcard_end_job (void)
+{
+    file_close();
+    hal.stream_reset_read_buffer();
+    hal.stream_read = readfn;
+    hal.stream_suspend_read = suspend_readfn;
+    hal.userdefined_rt_report = NULL;
+    hal.report_status_message = report_status_message;
+    sys.block_input_stream = false;
+}
+
+void trap_status_report (status_code_t status_code)
+{
+    if(status_code != Status_OK) { // TODO: all errors should terminate job?
+        char buf[50]; // TODO: check if extended error reports are permissible
+        sprintf(buf, "error:%d in SD file at line %lu\r\n", (uint8_t)status_code, file.line);
+        hal.stream_write(buf);
+
+        sdcard_end_job();
+    }
+    // else
+    //     file.line++; ??
 }
 
 static int16_t sdcard_read (void)
 {
     int16_t c = -1;
 
-    // Terminate job if last line returned error
-    if(file.eol == 1 && gc_state.last_error != Status_OK)
-        sdcard_reset();
+    if(file.eol == 1)
+        file.line++;
 
-    else if(file.handle) {
+    if(file.handle) {
 
         if(sys.state == STATE_IDLE || (sys.state & (STATE_CYCLE|STATE_HOLD)))
             c = file_read();
@@ -234,37 +260,36 @@ static int16_t sdcard_read (void)
                 c = '\n';
         }
 
-    } else if(sys.state == STATE_IDLE) { // file closed, waiting for job to finish TODO: terminate on other states too?
-        hal.serial_reset_read_buffer();
-        hal.serial_read = readfn;
-        hal.serial_suspend_read = suspend_readfn;
-        hal.userdefined_rt_report = NULL;
-        sys.block_input_stream = false;
-    }
+    } else if(sys.state == STATE_IDLE) // TODO: end on ok count match line count?
+        sdcard_end_job();
 
     return c;
 }
 
-static void sdcard_report (void)
+static void sdcard_report (stream_write_ptr stream_write)
 {
-    hal.serial_write_string("|SD:");
-    hal.serial_write_string(ftoa((float)file.pos / (float)file.size * 100.0f, 1));
+    stream_write("|SD:");
+    stream_write(ftoa((float)file.pos / (float)file.size * 100.0f, 1));
 }
 
 static bool sdcard_suspend (bool suspend)
 {
     sys.block_input_stream = !suspend;
     if(suspend) {
-        hal.serial_reset_read_buffer();
-        hal.serial_read = readfn; // Restore serial input for tool change (jog etc);
-    } else
-        hal.serial_read = sdcard_read; // Resume reading from SD card
+        hal.stream_reset_read_buffer();
+        hal.stream_read = readfn;                           // Restore serial input for tool change (jog etc)
+        hal.report_status_message = report_status_message;  // as well as normal status messages reporting
+    } else {
+        hal.stream_read = sdcard_read;                      // Resume reading from SD card
+        hal.report_status_message = trap_status_report;     // and redirect status messages back to us
+    }
 
     return true;
 }
 
-static status_code_t sdcard_parse (uint_fast16_t state, char *line)
+static status_code_t sdcard_parse (uint_fast16_t state, char *line, char *lcline)
 {
+	lcline = lcline;
     status_code_t retval = Status_Unhandled;
 
     if(line[1] == 'F') switch(line[2]) {
@@ -274,7 +299,7 @@ static status_code_t sdcard_parse (uint_fast16_t state, char *line)
             break;
 
         case 'M':
-            retval = sdcard_mount() ? Status_OK : Status_InvalidStatement;
+            retval = sdcard_mount() ? Status_OK : Status_SDMountError;
             break;
 
         case '=':
@@ -282,16 +307,18 @@ static status_code_t sdcard_parse (uint_fast16_t state, char *line)
                 retval = Status_SystemGClock;
             else {
                 if(file_open(&line[3])) {
-                    gc_state.last_error = Status_OK;            // Start with no errors
-                    readfn = hal.serial_read;                   // Save serial read fn
-                    suspend_readfn = hal.serial_suspend_read;   // and suspend fn pointers
-                    hal.serial_read = sdcard_read;              // then redirect to read from SD card instead
-                    hal.serial_suspend_read = sdcard_suspend;   // ...
-                    hal.userdefined_rt_report = sdcard_report;  // Sdd percent complete to real time report
-                    sys.block_input_stream = true;              // Block serial input other than real time commands TODO: remove?
+                    gc_state.last_error = Status_OK;                // Start with no errors
+                    hal.report_status_message(Status_OK);           // and confirm command to originator
+                    readfn = hal.stream_read;                       // Save serial read fn
+                    suspend_readfn = hal.stream_suspend_read;       // and suspend fn pointers
+                    hal.stream_read = sdcard_read;                  // then redirect to read from SD card instead
+                    hal.stream_suspend_read = sdcard_suspend;       // ...
+                    hal.userdefined_rt_report = sdcard_report;      // Sdd percent complete to real time report
+                    hal.report_status_message = trap_status_report; // Redirect status message reports here
+                    sys.block_input_stream = true;                  // Block serial input other than real time commands TODO: remove?
                     retval = Status_OK;
                 } else
-                    retval = Status_InvalidStatement;
+                    retval = Status_SDReadError;
             }
             break;
 
@@ -305,14 +332,12 @@ static status_code_t sdcard_parse (uint_fast16_t state, char *line)
 
 void sdcard_reset (void)
 {
-    if(hal.serial_read == sdcard_read) {
-        file_close();
-        hal.serial_reset_read_buffer();
-        hal.serial_read = readfn;
-        hal.serial_suspend_read = suspend_readfn;
-        hal.userdefined_rt_report = NULL;
-        sys.block_input_stream = false;
-    }
+	if(hal.stream_read == sdcard_read) {
+		char buf[70];
+		sprintf(buf, "[MSG:Reset during streaming of SD file at line: %lu]\r\n", file.line);
+		hal.stream_write_all(buf);
+		sdcard_end_job();
+	}
 }
 
 void sdcard_init (void)

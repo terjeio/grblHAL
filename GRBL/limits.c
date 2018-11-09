@@ -46,7 +46,7 @@ ISR_CODE void limit_interrupt_handler (axes_signals_t state) // DEFAULT: Limit p
 {
     // Ignore limit switches if already in an alarm state or in-process of executing an alarm.
     // When in the alarm state, Grbl should have been reset or will force a reset, so any pending
-    // moves in the planner and serial buffers are all cleared and newly sent blocks will be
+    // moves in the planner and stream input buffers are all cleared and newly sent blocks will be
     // locked out until a homing cycle or a kill lock command. Allows the user to disable the hard
     // limit setting if their limits are constantly triggering after a reset and move their axes.
 
@@ -244,38 +244,55 @@ void limits_go_home (uint8_t cycle_mask)
     // set up pull-off maneuver from axes limit switches that have been homed. This provides
     // some initial clearance off the switches and should also help prevent them from falsely
     // triggering when hard limits are enabled or when more than one axes shares a limit pin.
-    int32_t set_axis_position;
-    // Set machine positions for homed limit switches. Don't update non-homed axes.
 
     idx = N_AXIS;
-    do {
 
-        // NOTE: settings.max_travel[] is stored as a negative value.
-        if (cycle_mask & bit(--idx)) {
-          #ifdef HOMING_FORCE_SET_ORIGIN
-            set_axis_position = 0;
-          #else
-            set_axis_position = bit_istrue(settings.homing.dir_mask, bit(idx))
+    // Set machine positions for homed limit switches. Don't update non-homed axes.
+    // NOTE: settings.max_travel[] is stored as a negative value.
+#ifdef COREXY
+    if(settings.flags.homing_force_set_origin) {
+        do {
+            if (idx == X_AXIS) {
+                sys_position[A_MOTOR] = system_convert_corexy_to_y_axis_steps(sys_position);
+                sys_position[B_MOTOR] = - sys_position[A_MOTOR];
+            } else if (idx == Y_AXIS) {
+                sys_position[A_MOTOR] = system_convert_corexy_to_x_axis_steps(sys_position);
+                sys_position[B_MOTOR] = sys_position[A_MOTOR];
+            } else
+                sys_position[idx] = 0;
+        } while(idx);
+    } else do {
+         if (cycle_mask & bit(--idx)) {
+             int32_t set_axis_position = bit_istrue(settings.homing.dir_mask, bit(idx))
+                                          ? lroundf((settings.max_travel[idx] + settings.homing.pulloff) * settings.steps_per_mm[idx])
+                                          : lroundf(-settings.homing.pulloff * settings.steps_per_mm[idx]);
+             if (idx==X_AXIS) {
+                 int32_t off_axis_position = system_convert_corexy_to_y_axis_steps(sys_position);
+                 sys_position[A_MOTOR] = set_axis_position + off_axis_position;
+                 sys_position[B_MOTOR] = set_axis_position - off_axis_position;
+             } else if (idx==Y_AXIS) {
+                 int32_t off_axis_position = system_convert_corexy_to_x_axis_steps(sys_position);
+                 sys_position[A_MOTOR] = off_axis_position + set_axis_position;
+                 sys_position[B_MOTOR] = off_axis_position - set_axis_position;
+             } else
+                 sys_position[idx] = set_axis_position;
+         }
+    } while(idx);
+#else
+    idx = N_AXIS;
+    if(settings.flags.homing_force_set_origin) {
+        do {
+            if (cycle_mask & bit(--idx))
+                sys_position[idx] = 0;
+        } while(idx);
+    } else do {
+        if (cycle_mask & bit(--idx))
+            sys_position[idx] = bit_istrue(settings.homing.dir_mask, bit(idx))
                                  ? lroundf((settings.max_travel[idx] + settings.homing.pulloff) * settings.steps_per_mm[idx])
                                  : lroundf(-settings.homing.pulloff * settings.steps_per_mm[idx]);
-          #endif
 
-          #ifdef COREXY
-            if (idx==X_AXIS) {
-                int32_t off_axis_position = system_convert_corexy_to_y_axis_steps(sys_position);
-                sys_position[A_MOTOR] = set_axis_position + off_axis_position;
-                sys_position[B_MOTOR] = set_axis_position - off_axis_position;
-            } else if (idx==Y_AXIS) {
-                int32_t off_axis_position = system_convert_corexy_to_x_axis_steps(sys_position);
-                sys_position[A_MOTOR] = off_axis_position + set_axis_position;
-                sys_position[B_MOTOR] = off_axis_position - set_axis_position;
-            } else
-                sys_position[idx] = set_axis_position;
-          #else
-            sys_position[idx] = set_axis_position;
-          #endif
-        }
     } while(idx);
+#endif
 
     sys.step_control.flags = 0; // Return step control to normal operation.
 }

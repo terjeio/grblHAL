@@ -23,7 +23,6 @@
 #ifndef motion_control_h
 #define motion_control_h
 
-
 // System motion commands must have a line number of zero.
 #define HOMING_CYCLE_LINE_NUMBER 0
 #define PARKING_MOTION_LINE_NUMBER 0
@@ -32,7 +31,6 @@
 #define HOMING_CYCLE_X    bit(X_AXIS)
 #define HOMING_CYCLE_Y    bit(Y_AXIS)
 #define HOMING_CYCLE_Z    bit(Z_AXIS)
-
 
 // Execute linear motion in absolute millimeter coordinates. Feed rate given in millimeters/second
 // unless invert_feed_rate is true. Then the feed_rate means that the motion should be completed in
@@ -48,6 +46,9 @@ void mc_arc(float *target, plan_line_data_t *pl_data, float *position, float *of
 
 // Execute canned cycle (drill)
 void mc_canned_drill (motion_mode_t motion, float *target, plan_line_data_t *pl_data, float *position, plane_t plane, uint32_t repeats, gc_canned_t *canned);
+
+// Sets up valid jog motion received from g-code parser, checks for soft-limits, and executes the jog.
+status_code_t mc_jog_execute(plan_line_data_t *pl_data, parser_block_t *gc_block);
 
 // Dwell for a specific number of seconds
 void mc_dwell(float seconds);

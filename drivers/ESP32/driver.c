@@ -1027,7 +1027,7 @@ static bool driver_setup (settings_t *settings)
     return IOInitDone;
 }
 
-static bool user_defined_setting (uint_fast16_t param, float value, char *svalue)
+static bool driver_setting (uint_fast16_t param, float value, char *svalue)
 {
 	bool claimed = false;
 
@@ -1060,6 +1060,9 @@ static bool user_defined_setting (uint_fast16_t param, float value, char *svalue
 		claimed = keypad_setting(param, value, svalue);
 #endif
 
+	if(claimed)
+		hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
+
     return claimed;
 }
 
@@ -1072,11 +1075,11 @@ static void report_string_setting (uint8_t setting, char *value)
     hal.stream_write("\r\n");
 }
 
-static void driver_settings_report (bool axis_settings)
+static void driver_settings_report (bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx)
 {
     if(!axis_settings) {
 #ifdef KEYPAD_ENABLE
-    	keypad_settings_report(axis_settings);
+    	keypad_settings_report(axis_setting, setting_type, axis_idx);
 #endif
 #ifdef WIFI_ENABLE
 		report_string_setting(71, driver_settings.wifi.ssid);
@@ -1165,7 +1168,7 @@ bool driver_init (void)
 	    hal.eeprom.type = EEPROM_None;
 #endif
 
-    hal.driver_setting = user_defined_setting;
+    hal.driver_setting = driver_setting;
     hal.driver_settings_report = driver_settings_report;
     hal.driver_settings_restore = driver_settings_restore;
 

@@ -18,56 +18,56 @@
   You should have received a copy of the GNU General Public License
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
+
 #ifndef report_h
 #define report_h
 
 #include "system.h"
 
-void report_util_uint8_setting (setting_type_t n, int val);
-void report_util_float_setting (setting_type_t n, float val, uint8_t n_decimal);
-
 // Prints system status messages.
-void report_status_message(status_code_t status_code);
+void report_status_message (status_code_t status_code);
 
 // Prints system alarm messages.
-void report_alarm_message(alarm_code_t alarm_code);
+void report_alarm_message (alarm_code_t alarm_code);
 
 // Prints miscellaneous feedback messages.
-void report_feedback_message(message_code_t message_code);
+void report_feedback_message (message_code_t message_code);
 
-// Prints welcome message
-void report_init_message();
+// Prints welcome message.
+void report_init_message (void);
 
-// Prints Grbl help and current global settings
+// Prints Grbl help.
 void report_grbl_help();
 
-// Prints Grbl global settings
-void report_grbl_settings();
+// Prints Grbl setting(s)
+void report_grbl_settings (void);
+void report_uint_setting (setting_type_t n, uint32_t val);
+void report_float_setting (setting_type_t n, float val, uint8_t n_decimal);
 
 // Prints an echo of the pre-parsed line received right before execution.
-void report_echo_line_received(char *line);
+void report_echo_line_received (char *line);
 
-// Prints realtime status report
-void report_realtime_status();
+// Prints realtime status report.
+void report_realtime_status (void);
 
-// Prints recorded probe position
-void report_probe_parameters();
+// Prints recorded probe position.
+void report_probe_parameters (void);
 
-// Prints Grbl NGC parameters (coordinate offsets, probe)
-void report_ngc_parameters();
+// Prints Grbl NGC parameters (coordinate offsets, probe).
+void report_ngc_parameters (void);
 
-// Prints current g-code parser mode state
-void report_gcode_modes();
+// Prints current g-code parser mode state.
+void report_gcode_modes (void);
 
 // Prints startup line when requested and executed.
-void report_startup_line(uint8_t n, char *line);
-void report_execute_startup_message(char *line, status_code_t status_code);
+void report_startup_line (uint8_t n, char *line);
+void report_execute_startup_message (char *line, status_code_t status_code);
 
-// Prints build info and user info
-void report_build_info(char *line);
+// Prints build info and user info.
+void report_build_info (char *line);
 
 #ifdef PID_LOG
-// Prints current PID log
+// Prints current PID log.
 void report_pid_log (void);
 #endif
 

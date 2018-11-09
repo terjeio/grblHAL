@@ -21,9 +21,98 @@
 
 #include "grbl.h"
 
+#define MAX_PRECISION 10
 
-#define MAX_INT_DIGITS 8 // Maximum number of digits in int32 (and float)
+static char buf[STRLEN_COORDVALUE + 1];
 
+static const float froundvalues[MAX_PRECISION + 1] =
+{
+    0.5,                // 0
+    0.05,               // 1
+    0.005,              // 2
+    0.0005,             // 3
+    0.00005,            // 4
+    0.000005,           // 5
+    0.0000005,          // 6
+    0.00000005,         // 7
+    0.000000005,        // 8
+    0.0000000005,       // 9
+    0.00000000005       // 10
+};
+
+// Converts an uint32 variable to string.
+char *uitoa (uint32_t n)
+{
+    char *bptr = buf + sizeof(buf);
+
+    *--bptr = '\0';
+
+    if (n == 0)
+        *--bptr = '0';
+    else while (n) {
+        *--bptr = '0' + (n % 10);
+        n /= 10;
+    }
+
+    return bptr;
+}
+
+// Convert float to string by immediately converting to integers.
+// Number of decimal places, which are tracked by a counter, must be set by the user.
+// The integers is then efficiently converted to a string.
+char *ftoa (float n, uint8_t decimal_places)
+{
+    bool isNegative;
+    char *bptr = buf + sizeof(buf);
+
+    *--bptr = '\0';
+
+    if ((isNegative = n < 0.0f))
+        n = -n;
+
+    n += froundvalues[decimal_places];
+
+    uint32_t a = (uint32_t)n;
+
+    if (decimal_places) {
+
+        n -= (float)a;
+
+        uint_fast8_t decimals = decimal_places;
+        while (decimals >= 2) { // Quickly convert values expected to be E0 to E-4.
+            n *= 100.0f;
+            decimals -= 2;
+        }
+
+        if (decimals)
+            n *= 10.0f;
+
+        uint32_t b = (uint32_t)n;
+
+        while(decimal_places--) {
+            if(b) {
+                *--bptr = (b % 10) + '0'; // Get digit
+                b /= 10;
+            } else
+                *--bptr = '0';
+        }
+    }
+
+    *--bptr = '.'; // Always add decimal point (TODO: is this really needed?)
+
+    if(a == 0)
+        *--bptr = '0';
+
+    else while(a) {
+        *--bptr = (a % 10) + '0'; // Get digit
+        a /= 10;
+    }
+
+    if(isNegative)
+        *--bptr = '-';
+
+    return bptr;
+}
 
 // Extracts a floating point value from a string. The following code is based loosely on
 // the avr-libc strtod() function by Michael Stumpf and Dmitry Xmelkov and many freely

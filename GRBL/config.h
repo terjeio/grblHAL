@@ -63,25 +63,28 @@
 #define CMD_SAFETY_DOOR 0x84
 #define CMD_JOG_CANCEL  0x85
 //#define CMD_DEBUG_REPORT 0x86 // Only when DEBUG enabled, sends debug report in '{}' braces.
-#define CMD_FEED_OVR_RESET 0x90         // Restores feed override value to 100%.
-#define CMD_FEED_OVR_COARSE_PLUS 0x91
-#define CMD_FEED_OVR_COARSE_MINUS 0x92
-#define CMD_FEED_OVR_FINE_PLUS 0x93
-#define CMD_FEED_OVR_FINE_MINUS 0x94
-#define CMD_RAPID_OVR_RESET 0x95        // Restores rapid override value to 100%.
-#define CMD_RAPID_OVR_MEDIUM 0x96
-#define CMD_RAPID_OVR_LOW 0x97
-// #define CMD_RAPID_OVR_EXTRA_LOW 0x98 // *NOT SUPPORTED*
-#define CMD_SPINDLE_OVR_RESET 0x99      // Restores spindle override value to 100%.
-#define CMD_SPINDLE_OVR_COARSE_PLUS 0x9A
-#define CMD_SPINDLE_OVR_COARSE_MINUS 0x9B
-#define CMD_SPINDLE_OVR_FINE_PLUS 0x9C
-#define CMD_SPINDLE_OVR_FINE_MINUS 0x9D
-#define CMD_SPINDLE_OVR_STOP 0x9E
-#define CMD_COOLANT_FLOOD_OVR_TOGGLE 0xA0
-#define CMD_COOLANT_MIST_OVR_TOGGLE 0xA1
+#define CMD_OVERRIDE_FEED_RESET 0x90         // Restores feed override value to 100%.
+#define CMD_OVERRIDE_FEED_COARSE_PLUS 0x91
+#define CMD_OVERRIDE_FEED_COARSE_MINUS 0x92
+#define CMD_OVERRIDE_FEED_FINE_PLUS 0x93
+#define CMD_OVERRIDE_FEED_FINE_MINUS 0x94
+#define CMD_OVERRIDE_RAPID_RESET 0x95        // Restores rapid override value to 100%.
+#define CMD_OVERRIDE_RAPID_MEDIUM 0x96
+#define CMD_OVERRIDE_RAPID_LOW 0x97
+// #define CMD_OVERRIDE_RAPID_EXTRA_LOW 0x98 // *NOT SUPPORTED*
+#define CMD_OVERRIDE_SPINDLE_RESET 0x99      // Restores spindle override value to 100%.
+#define CMD_OVERRIDE_SPINDLE_COARSE_PLUS 0x9A
+#define CMD_OVERRIDE_SPINDLE_COARSE_MINUS 0x9B
+#define CMD_OVERRIDE_SPINDLE_FINE_PLUS 0x9C
+#define CMD_OVERRIDE_SPINDLE_FINE_MINUS 0x9D
+#define CMD_OVERRIDE_SPINDLE_STOP 0x9E
+#define CMD_OVERRIDE_COOLANT_FLOOD_TOGGLE 0xA0
+#define CMD_OVERRIDE_COOLANT_MIST_TOGGLE 0xA1
 #define CMD_PID_REPORT 0xA2
 #define CMD_TOOL_ACK 0xA3
+
+// System motion line numbers must be zero.
+#define JOG_LINE_NUMBER 0
 
 // Number of axes supported: minimum 3, maximum 6
 // If more than 3 axes are required a compliant driver must be provided
@@ -91,10 +94,16 @@
 // A compliant HAL driver is required as the final RPM calculations are left to the driver to handle.
 // #define CONSTANT_SURFACE_SPEED_OPTION // Uncomment to enable
 
+// Enables single axis homing commands. $HX, $HY, and $HZ for X, Y, and Z-axis homing. The full homing
+// cycle is still invoked by the $H command. This is disabled by default. It's here only to address
+// users that need to switch between a two-axis and three-axis machine. This is actually very rare.
+// If you have a two-axis machine, DON'T USE THIS. Instead, just alter the homing cycle for two-axes.
+#define HOMING_SINGLE_AXIS_COMMANDS 0 // Default 0 (disabled). Set to 1 to enable.
+
 // After homing, Grbl will set by default the entire machine space into negative space, as is typical
-// for professional CNC machines, regardless of where the limit switches are located. Uncomment this
-// define to force Grbl to always set the machine origin at the homed location despite switch orientation.
-// #define HOMING_FORCE_SET_ORIGIN // Uncomment to enable.
+// for professional CNC machines, regardless of where the limit switches are located. Set this
+// define to 1 to force Grbl to always set the machine origin at the homed location despite switch orientation.
+#define HOMING_FORCE_SET_ORIGIN 0 // Default 0 (disabled). Set to 1 to enable.
 
 // Number of blocks Grbl executes upon startup. These blocks are stored in EEPROM, where the size
 // and addresses are defined in settings.h. With the current settings, up to 2 startup blocks may
@@ -102,8 +111,8 @@
 // parser state depending on user preferences.
 #define N_STARTUP_LINE 2 // Integer (1-2)
 
-// Number of floating decimal points printed by Grbl for certain value types. These settings are
-// determined by realistic and commonly observed values in CNC machines. For example, position
+// Number of decimal places (scale) output by Grbl for certain value types. These settings
+// are determined by realistic and commonly observed values in CNC machines. For example, position
 // values cannot be less than 0.001mm or 0.0001in, because machines can not be physically more
 // precise this. So, there is likely no need to change these, but you can if you need to here.
 // NOTE: Must be an integer value from 0 to ~4. More than 4 may exhibit round-off errors.
@@ -111,9 +120,9 @@
 #define N_DECIMAL_COORDVALUE_MM   3 // Coordinate or position value in mm
 #define N_DECIMAL_RATEVALUE_INCH  1 // Rate or velocity value in in/min
 #define N_DECIMAL_RATEVALUE_MM    0 // Rate or velocity value in mm/min
-#define N_DECIMAL_SETTINGVALUE    3 // Decimals for floating point setting values
-#define N_DECIMAL_RPMVALUE        0 // RPM value in rotations per min.
-#define N_DECIMAL_PIDVALUE        3 // PID value.
+#define N_DECIMAL_SETTINGVALUE    3 // Floating point setting values
+#define N_DECIMAL_RPMVALUE        0 // RPM value in rotations per min
+#define N_DECIMAL_PIDVALUE        3 // PID value
 
 // If your machine has two limits switches wired in parallel to one axis, you will need to enable
 // this feature. Since the two switches are sharing a single pin, there is no way for Grbl to tell
@@ -121,7 +130,7 @@
 // alarm out and force the user to manually disengage the limit switch. Otherwise, if you have one
 // limit switch for each axis, don't enable this option. By keeping it disabled, you can perform a
 // homing cycle while on the limit switch and not have to move the machine off of it.
-// #define LIMITS_TWO_SWITCHES_ON_AXES
+#define LIMITS_TWO_SWITCHES_ON_AXES 0 // Default 0 (disabled), set to 1 to enable
 
 // After the safety door switch has been toggled and restored, this setting sets the power-up delay
 // between restoring the spindle and coolant and resuming the cycle.
@@ -171,11 +180,11 @@
 // and agressive streaming. There is also a busy and an idle refresh count, which sets up Grbl to send
 // refreshes more often when its not doing anything important. With a good GUI, this data doesn't need
 // to be refreshed very often, on the order of a several seconds.
-// NOTE: WCO refresh must be 2 or greater. OVR refresh must be 1 or greater.
-#define REPORT_OVR_REFRESH_BUSY_COUNT 20  // (1-255)
-#define REPORT_OVR_REFRESH_IDLE_COUNT 10  // (1-255) Must be less than or equal to the busy count
-#define REPORT_WCO_REFRESH_BUSY_COUNT 30  // (2-255)
-#define REPORT_WCO_REFRESH_IDLE_COUNT 10  // (2-255) Must be less than or equal to the busy count
+// NOTE: WCO refresh must be 2 or greater. OVERRIDE refresh must be 1 or greater.
+#define REPORT_OVERRIDE_REFRESH_BUSY_COUNT 20   // (1-255)
+#define REPORT_OVERRIDE_REFRESH_IDLE_COUNT 10   // (1-255) Must be less than or equal to the busy count
+#define REPORT_WCO_REFRESH_BUSY_COUNT 30        // (2-255)
+#define REPORT_WCO_REFRESH_IDLE_COUNT 10        // (2-255) Must be less than or equal to the busy count
 
 // The temporal resolution of the acceleration management subsystem. A higher number gives smoother
 // acceleration, particularly noticeable on machines that run at very high feedrates, but may negatively
@@ -337,14 +346,7 @@
 // motion whenever there is a command that alters the work coordinate offsets `G10,G43.1,G92,G54-59`.
 // This is the simplest way to ensure `WPos:` is always correct. Fortunately, it's exceedingly rare
 // that any of these commands are used need continuous motions through them.
-#define FORCE_BUFFER_SYNC_DURING_WCO_CHANGE // Default enabled. Comment to disable.
-
-// By default, Grbl disables feed rate overrides for all G38.x probe cycle commands. Although this
-// may be different than some pro-class machine control, it's arguable that it should be this way.
-// Most probe sensors produce different levels of error that is dependent on rate of speed. By
-// keeping probing cycles to their programmed feed rates, the probe sensor should be a lot more
-// repeatable. If needed, you can disable this behavior by uncommenting the define below.
-// #define ALLOW_FEED_OVERRIDE_DURING_PROBE_CYCLES // Default disabled. Uncomment to enable.
+#define FORCE_BUFFER_SYNC_DURING_WCO_CHANGE 1 // Default 1 (enabled). Set to 0 to disable.
 
 // Used if sleep mode is enabled
 #define SLEEP_DURATION 5.0f // Float (0.25 - 61.0) seconds before sleep mode is executed.

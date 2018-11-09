@@ -24,13 +24,13 @@
 #ifndef __OVERRIDE_H__
 #define __OVERRIDE_H__
 
-#define FEED_OVR_BUFSIZE 16         // must be a power of 2
-#define ACCESSORY_OVR_BUFSIZE 16    // must be a power of 2
+#define FEED_OVERRIDE_BUFSIZE 16         // must be a power of 2
+#define ACCESSORY_OVERRIDE_BUFSIZE 16    // must be a power of 2
 
 void flush_override_buffers ();
-void enqueue_feed_ovr (uint8_t cmd);
-uint8_t get_feed_ovr (void);
-void enqueue_accessory_ovr (uint8_t cmd);
-uint8_t get_accessory_ovr (void);
+void enqueue_feed_override (uint8_t cmd);
+uint8_t get_feed_override (void);
+void enqueue_accessory_override (uint8_t cmd);
+uint8_t get_accessory_override (void);
 
 #endif

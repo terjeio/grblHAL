@@ -24,17 +24,17 @@
 
 // Set spindle speed override
 // NOTE: Unlike motion overrides, spindle overrides do not require a planner reinitialization.
-void spindle_set_override (uint_fast8_t speed_ovr)
+void spindle_set_override (uint_fast8_t speed_override)
 {
-    if(sys.override_ctrl.spindle_rpm_disable)
+    if(sys.override.control.spindle_rpm_disable)
         return;
 
-    speed_ovr = max(min(speed_ovr, MAX_SPINDLE_RPM_OVERRIDE), MIN_SPINDLE_RPM_OVERRIDE);
+    speed_override = max(min(speed_override, MAX_SPINDLE_RPM_OVERRIDE), MIN_SPINDLE_RPM_OVERRIDE);
 
-    if ((uint8_t)speed_ovr != sys.spindle_rpm_ovr) {
+    if ((uint8_t)speed_override != sys.override.spindle_rpm) {
         sys.step_control.update_spindle_rpm = On;
-        sys.spindle_rpm_ovr = (uint8_t)speed_ovr;
-        sys.report.ovr_counter = 0; // Set to report change immediately
+        sys.override.spindle_rpm = (uint8_t)speed_override;
+        sys.report.override_counter = 0; // Set to report change immediately
     }
 }
 
@@ -54,9 +54,9 @@ bool spindle_set_state (spindle_state_t state, float rpm)
             if (settings.flags.laser_mode && state.ccw)
                 rpm = 0.0f; // TODO: May need to be rpm_min*(100/MAX_SPINDLE_RPM_OVERRIDE);
 
-            hal.spindle_set_state(state, rpm, sys.spindle_rpm_ovr);
+            hal.spindle_set_state(state, rpm, sys.override.spindle_rpm);
         }
-        sys.report.ovr_counter = -1; // Set to report change immediately
+        sys.report.override_counter = -1; // Set to report change immediately
     }
 
     return !sys.abort;
@@ -69,7 +69,7 @@ void spindle_sync (spindle_state_t state, float rpm)
     if (sys.state != STATE_CHECK_MODE) {
         protocol_buffer_synchronize(); // Empty planner buffer to ensure spindle is set when programmed.
         if(spindle_set_state(state, rpm) && hal.driver_cap.spindle_at_speed) {
-            while(!hal.spindle_get_state().at_speed)
+            while(!hal.spindle_get_state().at_speed) // TODO: add timeout with alarm?
                 delay_sec(0.1f, DelayMode_Dwell);
         }
     }
@@ -90,11 +90,11 @@ void spindle_precompute_pwm_values (spindle_pwm_t *pwm_data, uint32_t clock_hz)
 }
 
 // Spindle speed to PWM conversion.
-uint_fast16_t spindle_compute_pwm_value (spindle_pwm_t *pwm_data, float rpm, uint8_t speed_ovr)
+uint_fast16_t spindle_compute_pwm_value (spindle_pwm_t *pwm_data, float rpm, uint8_t speed_override)
 {
     uint_fast16_t pwm_value;
 
-    rpm *= 0.010f * speed_ovr; // Scale by spindle speed override value.
+    rpm *= 0.010f * speed_override; // Scale by spindle speed override value.
 
     // Calculate PWM register value based on rpm max/min settings and programmed rpm.
     if ((settings.spindle.rpm_min >= settings.spindle.rpm_max) || (rpm >= settings.spindle.rpm_max)) {

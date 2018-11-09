@@ -24,7 +24,7 @@
 
 // Grbl versioning system
 #define GRBL_VERSION "1.1f"
-#define GRBL_VERSION_BUILD "20180705"
+#define GRBL_VERSION_BUILD "20181103"
 
 // Define standard libraries used by Grbl.
 #include <math.h>
@@ -50,14 +50,12 @@
 #include "limits.h"
 #include "planner.h"
 #include "motion_control.h"
-#include "print.h"
 #include "protocol.h"
 #include "state_machine.h"
 #include "report.h"
 #include "serial.h"
 #include "spindle_control.h"
 #include "stepper.h"
-#include "jog.h"
 #include "system.h"
 #include "override.h"
 #include "sleep.h"
@@ -80,13 +78,13 @@
 #if (REPORT_WCO_REFRESH_BUSY_COUNT < REPORT_WCO_REFRESH_IDLE_COUNT)
   #error "WCO busy refresh is less than idle refresh."
 #endif
-#if (REPORT_OVR_REFRESH_BUSY_COUNT < REPORT_OVR_REFRESH_IDLE_COUNT)
+#if (REPORT_OVERRIDE_REFRESH_BUSY_COUNT < REPORT_OVERRIDE_REFRESH_IDLE_COUNT)
   #error "Override busy refresh is less than idle refresh."
 #endif
 #if (REPORT_WCO_REFRESH_IDLE_COUNT < 2)
   #error "WCO refresh must be greater than one."
 #endif
-#if (REPORT_OVR_REFRESH_IDLE_COUNT < 1)
+#if (REPORT_OVERRIDE_REFRESH_IDLE_COUNT < 1)
   #error "Override refresh must be greater than zero."
 #endif
 

@@ -29,8 +29,6 @@
 #include "keypad.h"
 #include "atc.h"
 
-#include "GRBL\grbl.h"
-
 typedef struct {
     float state_integral;
     float state_derivative;
@@ -679,9 +677,9 @@ static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t 
 static void showMessage (const char *msg)
 {
 //    if(sys.mpg_mode) {
-        hal.serial_write_string("[MSG:");
-        hal.serial_write_string(msg);
-        hal.serial_write_string("]\r\n");
+        hal.stream_write("[MSG:");
+        hal.stream_write(msg);
+        hal.stream_write("]\r\n");
 //    }
 }
 
@@ -701,18 +699,18 @@ static void modeSelect (bool mpg_mode)
     serialSelect(mpg_mode);
 
     if(mpg_mode) {
-        hal.serial_read = serial2GetC;
-        hal.serial_get_rx_buffer_available = serial2RxFree;
-        hal.serial_cancel_read_buffer = serial2RxCancel;
-        hal.serial_reset_read_buffer = serial2RxFlush;
+        hal.stream_read = serial2GetC;
+        hal.stream_get_rx_buffer_available = serial2RxFree;
+        hal.stream_cancel_read_buffer = serial2RxCancel;
+        hal.stream_reset_read_buffer = serial2RxFlush;
     } else {
-        hal.serial_read = serialGetC;
-        hal.serial_get_rx_buffer_available = serialRxFree;
-        hal.serial_cancel_read_buffer = serialRxCancel;
-        hal.serial_reset_read_buffer = serialRxFlush;
+        hal.stream_read = serialGetC;
+        hal.stream_get_rx_buffer_available = serialRxFree;
+        hal.stream_cancel_read_buffer = serialRxCancel;
+        hal.stream_reset_read_buffer = serialRxFlush;
     }
 
-    hal.serial_reset_read_buffer();
+    hal.stream_reset_read_buffer();
 
     // Report WCO on first status report request from MPG processor
     if(mpg_mode)
@@ -1024,7 +1022,6 @@ static bool driver_setup (settings_t *settings)
 
     settings_changed(settings);
 
-    setSerialReceiveCallback(hal.protocol_process_realtime);
     spindleSetState((spindle_state_t){0}, spindle_pwm.off_value, DEFAULT_SPINDLE_RPM_OVERRIDE);
     coolantSetState((coolant_state_t){0});
     stepperSetDirOutputs((axes_signals_t){0});
@@ -1056,9 +1053,6 @@ bool driver_init (void) {
 #ifdef HAS_EEPROM
     eepromInit();
 #endif
-
-    setSerialBlockingCallback(hal.serial_blocking_callback);
-
     hal.info = "MSP432";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = SystemCoreClock;
@@ -1094,13 +1088,13 @@ bool driver_init (void) {
 
     hal.show_message = showMessage;
 
-    hal.serial_read = serialGetC;
-    hal.serial_get_rx_buffer_available = serialRxFree;
-    hal.serial_reset_read_buffer = serialRxFlush;
-    hal.serial_cancel_read_buffer = serialRxCancel;
-    hal.serial_write = serialPutC;
-    hal.serial_write_string = serialWriteS;
-    hal.serial_suspend_read = serialSuspendInput;
+    hal.stream_read = serialGetC;
+    hal.stream_get_rx_buffer_available = serialRxFree;
+    hal.stream_reset_read_buffer = serialRxFlush;
+    hal.stream_cancel_read_buffer = serialRxCancel;
+    hal.stream_write = serialWriteS;
+    hal.stream_write_all = serialWriteS;
+    hal.stream_suspend_read = serialSuspendInput;
 
 #ifdef HAS_EEPROM
     hal.eeprom.type = EEPROM_Physical;

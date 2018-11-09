@@ -5,7 +5,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2017 Terje Io
+  Copyright (c) 2017-2018 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,20 +23,132 @@
 
 #include "project.h"
 #include "i2c_keypad.h"
-#include "grbl.h"
 
 #define KEYBUF_SIZE 16
+
+typedef struct {
+    float fast_speed;
+    float slow_speed;
+    float step_speed;
+    float fast_distance;
+    float slow_distance;
+    float step_distance;
+} jog_config_t;
 
 static bool jogging = false, keyreleased = true;
 static uint8 keycode;
 static char keybuf_buf[16];
 static jogmode_t jogMode = JogMode_Fast;
+static jog_config_t jog_config;
 static volatile uint32_t keybuf_head = 0, keybuf_tail = 0;
 
 static void keyclick_int_handler (void);
+static void claim_eeprom (void)
+{
+    if(hal.eeprom.driver_area.size == 0) {
+        assert(EEPROM_ADDR_TOOL_TABLE - (sizeof(jog_config_t) + 2) > EEPROM_ADDR_GLOBAL + sizeof(settings_t) + 1);
+
+        hal.eeprom.driver_area.address = EEPROM_ADDR_TOOL_TABLE - (sizeof(jog_config_t) + 2);
+        hal.eeprom.driver_area.size = sizeof(jog_config_t);
+    }
+}
+
+// Read selected coordinate data from persistent storage.
+bool keypad_read_settings (void)
+{
+    return hal.eeprom.type != EEPROM_None && hal.eeprom.memcpy_from_with_checksum((uint8_t *)&jog_config, hal.eeprom.driver_area.address, hal.eeprom.driver_area.size);
+}
+
+// Read jog configuration data from persistent storage.
+void keypad_write_settings (void)
+{
+    if (hal.eeprom.type != EEPROM_None) {
+        claim_eeprom();
+        hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&jog_config, hal.eeprom.driver_area.size);
+      #ifdef EMULATE_EEPROM
+        if(hal.eeprom.type == EEPROM_Emulated)
+            settings_dirty.driver_settings = settings_dirty.is_dirty = true;
+      #endif
+    }
+}
+
+bool driver_setting (uint_fast16_t setting, float value, char *svalue)
+{
+    bool ok = false;
+
+    switch(setting) {
+
+        case Setting_JogStepSpeed:
+            jog_config.step_speed = value;
+            ok = true;
+            break;
+
+        case Setting_JogSlowSpeed:
+            jog_config.slow_speed = value;
+            ok = true;
+            break;
+
+        case Setting_JogFastSpeed:
+            jog_config.fast_speed = value;
+            ok = true;
+            break;
+
+        case Setting_JogStepDistance:
+            jog_config.step_distance = value;
+            ok = true;
+            break;
+
+        case Setting_JogSlowDistance:
+            jog_config.slow_distance = value;
+            ok = true;
+            break;
+
+        case Setting_JogFastDistance:
+            jog_config.fast_distance = value;
+            ok = true;
+            break;
+    }
+
+    if(ok)
+        keypad_write_settings();
+
+    return ok;
+}
+
+void driver_settings_restore (uint8_t restore_flag)
+{
+    if(restore_flag & SETTINGS_RESTORE_DRIVER_PARAMETERS) {
+        jog_config.step_speed    = 100.0f;
+        jog_config.slow_speed    = 600.0f;
+        jog_config.fast_speed    = 3000.0f;
+        jog_config.step_distance = 0.25f;
+        jog_config.slow_distance = 500.0f;
+        jog_config.fast_distance = 3000.0f;
+
+        keypad_write_settings();
+    }
+}
+
+void driver_settings_report (bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx)
+{
+    if(!axis_settings) {
+        report_float_setting(Setting_JogStepSpeed, jog_config.step_speed, 0);
+        report_float_setting(Setting_JogSlowSpeed, jog_config.slow_speed, 0);
+        report_float_setting(Setting_JogFastSpeed, jog_config.fast_speed, 0);
+        report_float_setting(Setting_JogStepDistance, jog_config.step_distance, N_DECIMAL_SETTINGVALUE);
+        report_float_setting(Setting_JogSlowDistance, jog_config.slow_distance, N_DECIMAL_SETTINGVALUE);
+        report_float_setting(Setting_JogFastDistance, jog_config.fast_distance, N_DECIMAL_SETTINGVALUE);
+    }
+}
+
 
 void I2C_keypad_setup (void)
 {
+    claim_eeprom();
+
+    if(!keypad_read_settings())
+        driver_settings_restore(SETTINGS_RESTORE_DRIVER_PARAMETERS);
+
     I2C_Start();
     KeyPadInterrupt_StartEx(keyclick_int_handler); 
 }
@@ -100,11 +212,11 @@ void process_keypress (uint8_t state) {
 	  switch(keycode) {
 
 		case 'A':									// Mist override
-			enqueue_accessory_ovr(CMD_COOLANT_MIST_OVR_TOGGLE);
+			enqueue_accessory_override(CMD_OVERRIDE_COOLANT_MIST_TOGGLE);
 			break;
 
 		case 'E':									// Coolant override
-			enqueue_accessory_ovr(CMD_COOLANT_FLOOD_OVR_TOGGLE);
+			enqueue_accessory_override(CMD_OVERRIDE_COOLANT_FLOOD_TOGGLE);
 			break;
 
 		case 'h':									// "toggle" jog mode
@@ -164,20 +276,19 @@ void process_keypress (uint8_t state) {
 			switch(jogMode) {
 
 			case JogMode_Slow:
-				strrepl(command, '?', "500");
-				strcat(command, "100");
+				strrepl(command, '?', ftoa(jog_config.slow_distance, 0));
+				strcat(command, ftoa(jog_config.slow_speed, 0));
 				break;
 
 			case JogMode_Step:
-				strrepl(command, '?', "0.25");
-				strcat(command, "600");
+				strrepl(command, '?', ftoa(jog_config.step_distance, 3));
+				strcat(command, ftoa(jog_config.step_speed, 0));
 				break;
 
 			default:
-				strrepl(command, '?', "500");
-				strcat(command, "3000");
+				strrepl(command, '?', ftoa(jog_config.fast_distance, 0));
+				strcat(command, ftoa(jog_config.fast_speed, 0));
 				break;
-
 		}
 
 		if(!(jogCommand && keyreleased)) { // key still pressed? - do not execute jog command if released!
@@ -185,7 +296,6 @@ void process_keypress (uint8_t state) {
 			jogging = jogging || (jogCommand && addedGcode);
 		}
 	}
-
 }
 
 static void driver_keyclick_handler (bool keydown) {

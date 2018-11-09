@@ -26,15 +26,20 @@
 #ifndef __DRIVER_H__
 #define __DRIVER_H__
 
+#include "../GRBL/grbl.h"
+
+#include "tiva.h"
+
 // Configuration
 
-//#define FreeRTOS                // comment in to enable Ethernet streaming
-//#define SDCARD_SUPPORT          // comment in to enable SD card support
+//#define FreeRTOS                // remove comment to enable Ethernet streaming
+//#define SDCARD_SUPPORT          // remove comment to enable SD card support
+//#define ENABLE_TRINAMIC         // remove comment to enable Trinamic TMC2130 support NOTE: work in progress)
 
-#define CNC_BOOSTERPACK         // comment in if for CNC Boosterpack
+#define CNC_BOOSTERPACK         // remove comment if for CNC Boosterpack
 #ifdef CNC_BOOSTERPACK
-#define CNC_BOOSTERPACK_SHORTS  // comment in if for CNC Boosterpack with shorts
-#define CNC_BOOSTERPACK_A4998   // comment in if used with Polulu A4998 drivers - for suppying VDD via GPIO (PE5)
+#define CNC_BOOSTERPACK_SHORTS  // remove comment if for CNC Boosterpack with shorts
+#define CNC_BOOSTERPACK_A4998   // remove comment if used with Polulu A4998 drivers - for suppying VDD via GPIO (PE5)
 #if N_AXIS > 3
 #define CNC_BOOSTERPACK2
 #endif
@@ -43,6 +48,18 @@
 //#define HAS_KEYPAD //uncomment to enable I2C keypad for jogging etc.
 //#define PWM_RAMPED
 //#define LASER_PPI
+
+#ifdef ENABLE_TRINAMIC
+
+#include "trinamic.h"
+
+typedef struct {
+    motor_settings_t motor_setting[N_AXIS];
+} driver_settings_t;
+
+extern driver_settings_t driver_settings;
+
+#endif
 
 // End configuration
 
@@ -268,5 +285,7 @@ extern laser_ppi_t laser;
 void laser_ppi_mode (bool on);
 
 #endif
+
+void selectStream (stream_setting_t stream);
 
 #endif

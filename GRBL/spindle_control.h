@@ -68,7 +68,7 @@ typedef enum {
 // Called by spindle_init(), spindle_set_speed(), spindle_set_state(), and mc_reset().
 #define spindle_stop() hal.spindle_set_state((spindle_state_t){0}, 0.0f, 0)
 
-void spindle_set_override (uint_fast8_t speed_ovr);
+void spindle_set_override (uint_fast8_t speed_override);
 
 // Called by g-code parser when setting spindle state and requires a buffer sync.
 // Immediately sets spindle running state with direction and spindle RPM, if enabled.
@@ -88,6 +88,6 @@ bool spindle_set_state (spindle_state_t state, float rpm);
 void spindle_precompute_pwm_values (spindle_pwm_t *pwm_data, uint32_t clock_hz);
 
 // Spindle speed to PWM conversion.
-uint_fast16_t spindle_compute_pwm_value (spindle_pwm_t *pwm_data, float rpm, uint8_t speed_ovr);
+uint_fast16_t spindle_compute_pwm_value (spindle_pwm_t *pwm_data, float rpm, uint8_t speed_override);
 
 #endif

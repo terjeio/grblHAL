@@ -34,9 +34,9 @@ volatile uint_fast16_t sys_rt_exec_alarm;   // Global realtime executor bitflag 
 
 HAL hal;
 
-// called from serial driver while serial tx is blocking, return false to terminate
+// called from stream drivers while tx is blocking, return false to terminate
 
-static bool serial_tx_blocking (void)
+static bool stream_tx_blocking (void)
 {
     // TODO: Restructure st_prep_buffer() calls to be executed here during a long print.
     return !(sys_rt_exec_state & EXEC_RESET);
@@ -67,18 +67,18 @@ int grbl_enter (void)
 	memset(&hal, 0, sizeof(HAL));  // Clear...
 
 	hal.version = HAL_VERSION; // Update when signatures and/or contract is changed - driver_init() should fail
+	hal.limit_interrupt_callback = limit_interrupt_handler;
+	hal.control_interrupt_callback = control_interrupt_handler;
+	hal.stepper_interrupt_callback = stepper_driver_interrupt_handler;
+	hal.protocol_process_realtime = protocol_process_realtime;
+	hal.stream_blocking_callback = stream_tx_blocking;
+	hal.protocol_enqueue_gcode = protocol_enqueue_gcode;
+    hal.report_status_message = report_status_message;
 
 #ifdef DEBUGOUT
 	hal.debug_out = debug_out; // must be overridden by driver to have any effect
 #endif
 	driver_ok = driver_init();
-
-	hal.limit_interrupt_callback = &limit_interrupt_handler;
-	hal.control_interrupt_callback = &control_interrupt_handler;
-	hal.stepper_interrupt_callback = &stepper_driver_interrupt_handler;
-	hal.protocol_process_realtime = &protocol_process_realtime;
-	hal.serial_blocking_callback = &serial_tx_blocking;
-	hal.protocol_enqueue_gcode = &protocol_enqueue_gcode;
 
   #ifdef EMULATE_EEPROM
 	eeprom_emu_init();
@@ -114,7 +114,7 @@ int grbl_enter (void)
     driver_ok = driver_ok && hal.driver_setup(&settings);
 
     if(!driver_ok) {
-        hal.serial_write_string("GrblHAL: incompatible driver\r\n");
+        hal.stream_write("GrblHAL: incompatible driver\r\n");
         while(true);
     }
 
@@ -143,6 +143,9 @@ int grbl_enter (void)
     // will return to this loop to be cleanly re-initialized.
     while(looping) {
 
+        // Reset entry points
+        hal.report_status_message = report_status_message;
+
 		// Reset system variables.
 		uint_fast16_t prior_state = sys.state;
 
@@ -151,11 +154,12 @@ int grbl_enter (void)
 
 		memset(&sys, 0, sizeof(system_t)); // Clear system struct variable.
 		set_state(prior_state);
-		sys.f_override = DEFAULT_FEED_OVERRIDE;  // Set to 100%
-		sys.r_override = DEFAULT_RAPID_OVERRIDE; // Set to 100%
-		sys.spindle_rpm_ovr = DEFAULT_SPINDLE_RPM_OVERRIDE; // Set to 100%
+        sys.override.feed_rate = DEFAULT_FEED_OVERRIDE;          // Set to 100%
+        sys.override.rapid_rate = DEFAULT_RAPID_OVERRIDE;       // Set to 100%
+        sys.override.spindle_rpm = DEFAULT_SPINDLE_RPM_OVERRIDE; // Set to 100%
+
 		if(settings.parking.flags.enabled)
-		    sys.override_ctrl.parking_disable = settings.parking.flags.deactivate_upon_init;
+		    sys.override.control.parking_disable = settings.parking.flags.deactivate_upon_init;
 
 		memset(sys_probe_position, 0, sizeof(sys_probe_position)); // Clear probe position.
 		sys_probe_state = Probe_Off;
@@ -165,7 +169,7 @@ int grbl_enter (void)
 		flush_override_buffers();
 
 		// Reset Grbl primary systems.
-		hal.serial_reset_read_buffer(); // Clear serial read buffer
+		hal.stream_reset_read_buffer(); // Clear input stream buffer
 		gc_init(); // Set g-code parser to default state
 		hal.limits_enable(settings.limits.flags.hard_enabled);
 		plan_reset(); // Clear block buffer and planner variables

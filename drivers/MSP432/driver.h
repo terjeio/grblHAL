@@ -41,6 +41,8 @@
 
 #include "msp.h"
 
+#include "GRBL\grbl.h"
+
 #define port(p) portI(p)
 #define portI(p) P ## p
 #define portGpio(p) portG(p)

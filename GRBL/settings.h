@@ -62,7 +62,6 @@
 #define SETTING_INDEX_G92    N_COORDINATE_SYSTEM+2  // Coordinate offset
 
 // Define Grbl axis settings numbering scheme. Starts at Setting_AxisSettingsBase, every INCREMENT, over N_SETTINGS.
-// change AXIS_N_SETTINGS to 5 to enable stepper current settings
 #define AXIS_N_SETTINGS          4
 #define AXIS_SETTINGS_INCREMENT  10  // Must be greater than the number of axis settings
 
@@ -102,7 +101,6 @@ typedef enum {
     Setting_PWMMinValue = 35,
     Setting_PWMMaxValue = 36,
     Setting_StepperDeenergizeMask = 37,
-    Setting_GRBLMaxValue = 37, // NOTE: Always set to highest non-axis setting parameter
     Setting_SpindlePPR  = 38,
     Setting_SpindlePGain  = 39,
     Setting_SpindleIGain  = 40,
@@ -140,7 +138,7 @@ typedef enum {
     AxisSetting_Acceleration = 2,
     AxisSetting_MaxTravel = 3,
     AxisSetting_StepperCurrent = 4,
-    AxisSetting_GRBLMaxValue = 4 // NOTE: Always set to highest axis setting parameter set
+    AxisSetting_MicroSteps = 5
 } axis_setting_type_t;
 
 typedef enum {
@@ -163,14 +161,20 @@ typedef union {
                 sleep_enable                    :1,
                 disable_laser_during_hold       :1,
                 force_initialization_alarm      :1,
-                unassigned                      :7;
+                wifi_ap_mode                    :1,
+                allow_probing_feed_override     :1,
+                homing_single_axis_commands     :1,
+                homing_force_set_origin         :1,
+                limits_two_switches_on_axes     :1,
+                force_buffer_sync_on_wco_change :1,
+                unassigned                      :1;
     };
 } settingflags_t;
 
 typedef union {
     uint8_t mask;
     struct {
-        uint8_t position_type     :1,
+        uint8_t machine_position  :1,
                 buffer_state      :1,
 				line_numbers      :1,
 				feed_speed        :1,
@@ -219,9 +223,9 @@ typedef struct {
 typedef union {
     uint8_t value;
     struct {
-        uint8_t enabled  :1,
-                init_lock     :1,
-                unassigned    :6;
+        uint8_t enabled    :1,
+                init_lock  :1,
+                unassigned :6;
     };
 } homing_settings_flags_t;
 
@@ -271,7 +275,6 @@ typedef struct {
     float max_rate[N_AXIS];
     float acceleration[N_AXIS];
     float max_travel[N_AXIS];
-    float stepper_current[N_AXIS];
     float junction_deviation;
     float arc_tolerance;
     float g73_retract;
@@ -289,6 +292,21 @@ typedef struct {
     parking_settings_t parking;
 } settings_t;
 
+// Setting structs that may be used by driver
+
+typedef struct {
+    char ssid[65];
+    char password[33];
+    uint16_t port;
+} wifi_settings_t;
+
+typedef struct {
+    char device_name[33];
+    char service_name[33];
+} bluetooth_settings_t;
+
+// End setting structs that may be used by driver
+
 extern settings_t settings;
 
 // Initialize the configuration subsystem (load settings from persistent storage)
@@ -298,7 +316,7 @@ void settings_init();
 void settings_restore(uint8_t restore_flag);
 
 // A helper method to set new settings from command line
-status_code_t settings_store_global_setting(uint_fast16_t parameter, float value);
+status_code_t settings_store_global_setting(uint_fast16_t parameter, char *svalue);
 
 // Writes the protocol line variable as a startup line in persistent storage
 void settings_write_startup_line(uint8_t idx, char *line);

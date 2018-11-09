@@ -45,7 +45,7 @@
 
 #define XONOK (XON|0x80)
 #define XOFFOK (XOFF|0x80)
-#define TX_BUFFER_SIZE 128      // must be a power of 2
+#define TX_BUFFER_SIZE 256      // must be a power of 2
 #define RX_BUFFER_SIZE 1024     // must be a power of 2
 #define RX_BUFFER_HWM 900
 #define RX_BUFFER_LWM 300
@@ -83,19 +83,11 @@ void serialWriteLn(const char *s);
 void serialWrite(const char *s, uint16_t length);
 bool serialSuspendInput (bool suspend);
 
-#ifdef LINE_BUFFER_SIZE
-char *serialReadLn (void);
-#endif
-
-#ifdef RX_BUFFER_SIZE
 uint16_t serialTxCount(void);
 uint16_t serialRxCount(void);
 uint16_t serialRxFree(void);
 void serialRxFlush(void);
 void serialRxCancel(void);
-void setSerialReceiveCallback (bool (*fn)(char));
-void setSerialBlockingCallback (bool (*fn)(void));
-#endif
 
 #ifdef SERIAL2_MOD
 uint16_t serial2RxFree (void);

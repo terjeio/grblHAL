@@ -23,7 +23,7 @@
 | Laser PPI mode<sup>7</sup>          | no     | yes    | no      | no          | no     | no    | no      |
 | Trinamic support<sup>8</sup>        | no     | no     | no      | no          | no     | no    | no      |
 
-<br><sup>1</sup> Not complete an untested, for someone else to finish? Compiles ok.
+<br><sup>1</sup> Not complete and untested, for someone else to finish? Compiles ok.
 <br><sup>2</sup> Should be fairly easy to extend.
 <br><sup>3</sup> In combination with ramped spindle, signals end of ramp - not programmed speed obtained.
 <br><sup>4</sup> To be completed, work in good progress.

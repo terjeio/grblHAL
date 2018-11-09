@@ -261,7 +261,7 @@ void mc_canned_drill (motion_mode_t motion, float *target, plan_line_data_t *pl_
         }
 
        // rapid move to next position if incremental mode
-        if(repeats && gc_state.modal.distance == DistanceMode_Incremental) {
+        if(repeats && gc_state.modal.distance_incremental) {
             position[plane.axis_0] += canned->xyz[plane.axis_0];
             position[plane.axis_1] += canned->xyz[plane.axis_1];
             position[plane.axis_linear] = canned->prev_position;
@@ -278,6 +278,30 @@ void mc_canned_drill (motion_mode_t motion, float *target, plan_line_data_t *pl_
         if(!mc_line(target, pl_data))
             return;
     }
+}
+
+
+// Sets up valid jog motion received from g-code parser, checks for soft-limits, and executes the jog.
+status_code_t mc_jog_execute (plan_line_data_t *pl_data, parser_block_t *gc_block)
+{
+    // Initialize planner data struct for jogging motions.
+    // NOTE: Spindle and coolant are allowed to fully function with overrides during a jog.
+    pl_data->feed_rate = gc_block->values.f;
+    pl_data->condition.no_feed_override = On;
+    pl_data->line_number = gc_block->values.n;
+
+    if (settings.limits.flags.soft_enabled && system_check_travel_limits(gc_block->values.xyz))
+        return Status_TravelExceeded;
+
+    // Valid jog command. Plan, set state, and execute.
+    mc_line(gc_block->values.xyz, pl_data);
+    if ((sys.state == STATE_IDLE || sys.state == STATE_TOOL_CHANGE) && plan_get_current_block() != NULL) { // Check if there is a block to execute.
+        set_state(STATE_JOG);
+        st_prep_buffer();
+        st_wake_up();  // NOTE: Manual start. No state machine required.
+    }
+
+    return Status_OK;
 }
 
 // Execute dwell in seconds.
@@ -298,13 +322,11 @@ void mc_homing_cycle (uint8_t cycle_mask)
     // Check and abort homing cycle, if hard limits are already enabled. Helps prevent problems
     // with machines with limits wired on both ends of travel to one limit pin.
     // TODO: Move the pin-specific LIMIT_PIN call to limits.c as a function.
-  #ifdef LIMITS_TWO_SWITCHES_ON_AXES
-    if (hal.limits_get_state().value) {
+    if (settings.flags.limits_two_switches_on_axes && hal.limits_get_state().value) {
         mc_reset(); // Issue system reset and ensure spindle and coolant are shutdown.
         system_set_exec_alarm(Alarm_HardLimit);
         return;
     }
-  #endif
 
     hal.limits_enable(false); // Disable hard limits pin change register for cycle duration
 
@@ -440,7 +462,7 @@ void mc_override_ctrl_update (gc_override_flags_t override_state)
 // Finish all queued commands before altering override control state
     protocol_buffer_synchronize();
     if (!sys.abort)
-        sys.override_ctrl = override_state;
+        sys.override.control = override_state;
 }
 
 // Method to ready the system to reset by setting the realtime reset command and killing any
@@ -462,8 +484,8 @@ ISR_CODE void mc_reset ()
         if(hal.driver_reset)
             hal.driver_reset();
 
-        if(hal.serial_suspend_read)
-            hal.serial_suspend_read(false);
+        if(hal.stream_suspend_read)
+            hal.stream_suspend_read(false);
 
         // Kill steppers only if in any motion state, i.e. cycle, actively holding, or homing.
         // NOTE: If steppers are kept enabled via the step idle delay setting, this also keeps

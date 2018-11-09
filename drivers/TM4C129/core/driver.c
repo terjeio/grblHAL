@@ -25,7 +25,7 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "GRBL/grbl.h"
+#include "../GRBL/grbl.h"
 
 #include "tiva.h"
 #include "driver.h"
@@ -41,6 +41,7 @@
 //#include "atc.h"
 
 #ifdef FreeRTOS
+#include "enet.h"
 #include "TCPStream.h"
 #include "FreeRTOS.h"
 #include "task.h"
@@ -89,6 +90,12 @@ typedef struct {                     // Set when last encoder pulse count did no
 } spindle_sync_t;
 
 static void stepperPulseStartSyncronized (stepper_t *stepper);
+
+#endif
+
+#ifdef ENABLE_TRINAMIC
+
+driver_settings_t driver_settings;
 
 #endif
 
@@ -193,6 +200,43 @@ static uint8_t probe_invert;
 
 #endif
 
+#ifdef FreeRTOS
+static void enetStreamWriteS (const char *data)
+{
+    TCPStreamWriteS(data);
+    serialWriteS(data);
+}
+#endif
+
+void selectStream (stream_setting_t stream)
+{
+    switch(stream) {
+
+#ifdef FreeRTOS
+        case StreamSetting_Ethernet:
+            hal.stream_read = TCPStreamGetC;
+            hal.stream_write = TCPStreamWriteS;
+            hal.stream_write_all = enetStreamWriteS;
+            hal.stream_get_rx_buffer_available = TCPStreamRxFree;
+            hal.stream_reset_read_buffer = TCPStreamRxFlush;
+            hal.stream_cancel_read_buffer = TCPStreamRxCancel;
+            break;
+#endif
+        case StreamSetting_Serial:
+            hal.stream_read = serialGetC;
+            hal.stream_write = serialWriteS;
+            hal.stream_write_all = serialWriteS;
+            hal.stream_get_rx_buffer_available = serialRxFree;
+            hal.stream_reset_read_buffer = serialRxFlush;
+            hal.stream_cancel_read_buffer = serialRxCancel;
+            hal.stream_suspend_read = serialSuspendInput;
+            break;
+
+        default:
+            break;
+    }
+}
+
 static uint_fast16_t spindleSetSpeed (uint_fast16_t pwm_value);
 
 // Interrupt handler prototypes
@@ -221,6 +265,13 @@ static void limit_debounced_isr (void);
 static void control_isr (void);
 static void control_isr_sd (void);
 static void software_debounce_isr (void);
+
+#ifdef DEBUGOUT
+static void debug_out (bool enable)
+{
+    GPIOPinWrite(SPINDLE_DIRECTION_PORT, SPINDLE_DIRECTION_PIN, enable ? SPINDLE_DIRECTION_PIN : 0);
+}
+#endif
 
 #ifdef FreeRTOS
 
@@ -819,9 +870,9 @@ static coolant_state_t coolantGetState (void)
 
 static void showMessage (const char *msg)
 {
-    hal.serial_write_string("[MSG:");
-    hal.serial_write_string(msg);
-    hal.serial_write_string("]\r\n");
+    hal.stream_write("[MSG:");
+    hal.stream_write(msg);
+    hal.stream_write("]\r\n");
 }
 
 // Helper functions for setting/clearing/inverting individual bits atomically (uninterruptable)
@@ -863,18 +914,18 @@ static void modeSelect (bool mpg_mode)
     serialSelect(mpg_mode);
 
     if(mpg_mode) {
-        hal.serial_read = serial2GetC;
-        hal.serial_get_rx_buffer_available = serial2RxFree;
-        hal.serial_cancel_read_buffer = serial2RxCancel;
-        hal.serial_reset_read_buffer = serial2RxFlush;
+        hal.stream_read = serial2GetC;
+        hal.stream_get_rx_buffer_available = serial2RxFree;
+        hal.stream_cancel_read_buffer = serial2RxCancel;
+        hal.stream_reset_read_buffer = serial2RxFlush;
     } else {
-        hal.serial_read = serialGetC;
-        hal.serial_get_rx_buffer_available = serialRxFree;
-        hal.serial_cancel_read_buffer = serialRxCancel;
-        hal.serial_reset_read_buffer = serialRxFlush;
+        hal.stream_read = serialGetC;
+        hal.stream_get_rx_buffer_available = serialRxFree;
+        hal.stream_cancel_read_buffer = serialRxCancel;
+        hal.stream_reset_read_buffer = serialRxFlush;
     }
 
-    hal.serial_reset_read_buffer();
+    hal.stream_reset_read_buffer();
 
     // Report WCO on first status report request from MPG processor
     if(mpg_mode)
@@ -921,31 +972,23 @@ static void settings_changed (settings_t *settings)
 
     if(IOInitDone) {
 
-#ifdef FreeRTOS
+        // NOTE: some interfaces may defer actual stream switch until stack is operational
         switch(settings->stream) {
 
-            case StreamSetting_Ethernet:
-                hal.serial_read = TCPStreamGetC;
-                hal.serial_write = TCPStreamPutC;
-                hal.serial_write_string = TCPStreamWriteS;
-                hal.serial_get_rx_buffer_available = TCPStreamRxFree;
-                hal.serial_reset_read_buffer = TCPStreamRxFlush;
-                hal.serial_cancel_read_buffer = TCPStreamRxCancel;
-                TCPStreamSetReceiveCallback(hal.protocol_process_realtime);
+            case StreamSetting_Serial:
+                selectStream(StreamSetting_Serial);
                 break;
 
-            case StreamSetting_Serial:
-                hal.serial_read = serialGetC;
-                hal.serial_write = serialPutC;
-                hal.serial_write_string = serialWriteS;
-                hal.serial_get_rx_buffer_available = serialRxFree;
-                hal.serial_reset_read_buffer = serialRxFlush;
-                hal.serial_cancel_read_buffer = serialRxCancel;
-                hal.serial_suspend_read = serialSuspendInput;
-                setSerialReceiveCallback(hal.protocol_process_realtime);
+#ifdef FreeRTOS
+            case StreamSetting_Ethernet:;
+                static bool enet_ok = false;
+                if(!enet_ok)
+                    enet_ok = enet_init();
+                break;
+#endif
+            default:
                 break;
         }
-#endif
 
         stepperEnable(settings->steppers.deenergize);
 
@@ -965,6 +1008,10 @@ static void settings_changed (settings_t *settings)
             hal.stepper_pulse_start = stepperPulseStart;
           #endif
         }
+
+      #ifdef ENABLE_TRINAMIC
+        trinamic_configure();
+      #endif
 
       #ifdef LASER_PPI
         if(!settings->flags.laser_mode)
@@ -1093,6 +1140,17 @@ static bool driver_setup (settings_t *settings)
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPION);
 
     SysCtlDelay(26); // wait a bit for peripherals to wake up
+
+    /********************************************************
+     * Read driver specific setting from persistent storage *
+     ********************************************************/
+
+#if defined(ENABLE_TRINAMIC)
+    if(hal.eeprom.driver_area.address != 0) {
+        if(!hal.eeprom.memcpy_from_with_checksum((uint8_t *)&driver_settings, hal.eeprom.driver_area.address, sizeof(driver_settings)))
+            hal.driver_settings_restore(SETTINGS_RESTORE_DRIVER_PARAMETERS);
+    }
+#endif
 
     /******************
      *  Stepper init  *
@@ -1297,6 +1355,10 @@ static bool driver_setup (settings_t *settings)
     sdcard_init();
 #endif
 
+#ifdef ENABLE_TRINAMIC
+    trinamic_init();
+#endif
+
     /*********************
      * Mode select input *
      *********************/
@@ -1312,8 +1374,6 @@ static bool driver_setup (settings_t *settings)
 
     settings_changed(settings);
 
-    setSerialReceiveCallback(hal.protocol_process_realtime);
-
     spindleSetState((spindle_state_t){0}, spindle_pwm.off_value, DEFAULT_SPINDLE_RPM_OVERRIDE);
     coolantSetState((coolant_state_t){0});
     stepperSetDirOutputs((axes_signals_t){0});
@@ -1321,10 +1381,43 @@ static bool driver_setup (settings_t *settings)
     return IOInitDone;
 }
 
-bool user_defined_setting (uint_fast16_t param, float val)
+#if defined(ENABLE_TRINAMIC)
+
+static bool driver_setting (uint_fast16_t param, float value, char *svalue)
 {
-    return param < 400;
+    bool claimed = false;
+
+#ifdef ENABLE_TRINAMIC
+    if(!claimed)
+        claimed = trinamic_setting(param, value, svalue);
+#endif
+
+    if(claimed)
+        hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
+
+    return claimed;
 }
+
+static void driver_settings_report (bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx)
+{
+    if(axis_settings) {
+#ifdef ENABLE_TRINAMIC
+        trinamic_settings_report(axis_settings, setting_type, axis_idx);
+#endif
+    }
+}
+
+void driver_settings_restore (uint8_t restore_flag)
+{
+    if(restore_flag & SETTINGS_RESTORE_DRIVER_PARAMETERS) {
+#ifdef ENABLE_TRINAMIC
+        trinamic_settings_restore(restore_flag);
+#endif
+        hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
+    }
+}
+
+#endif
 
 // Initialize HAL pointers, setup serial comms and enable EEPROM
 // NOTE: Grbl is not yet configured (from EEPROM data), driver_setup() will be called when done
@@ -1350,7 +1443,6 @@ bool driver_init (void)
 
     serialInit();
 
-    setSerialBlockingCallback(hal.serial_blocking_callback);
 #ifdef FreeRTOS
     hal.info = "TM4C1294NCPDT FreeRTOS";
 #else
@@ -1390,19 +1482,24 @@ bool driver_init (void)
 
     hal.system_control_get_state = systemGetState;
 
-    hal.serial_read = serialGetC;
-    hal.serial_write = serialPutC;
-    hal.serial_write_string = serialWriteS;
-    hal.serial_get_rx_buffer_available = serialRxFree;
-    hal.serial_reset_read_buffer = serialRxFlush;
-    hal.serial_cancel_read_buffer = serialRxCancel;
-    hal.serial_suspend_read = serialSuspendInput;
+    selectStream(StreamSetting_Serial);
 
     hal.eeprom.type = EEPROM_Physical;
     hal.eeprom.get_byte = eepromGetByte;
     hal.eeprom.put_byte = eepromPutByte;
     hal.eeprom.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
     hal.eeprom.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
+
+#if defined(ENABLE_TRINAMIC)
+    assert(EEPROM_ADDR_TOOL_TABLE - (sizeof(driver_settings_t) + 2) > EEPROM_ADDR_GLOBAL + sizeof(settings_t) + 1);
+
+    hal.eeprom.driver_area.address = EEPROM_ADDR_TOOL_TABLE - (sizeof(driver_settings_t) + 2);
+    hal.eeprom.driver_area.size = sizeof(driver_settings_t);
+
+    hal.driver_setting = driver_setting;
+    hal.driver_settings_report = driver_settings_report;
+    hal.driver_settings_restore = driver_settings_restore;
+#endif
 
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
@@ -1416,7 +1513,9 @@ bool driver_init (void)
 
     hal.show_message = showMessage;
 
-    hal.driver_setting = user_defined_setting;
+#ifdef DEBUGOUT
+    hal.debug_out = debug_out;
+#endif
 
 #ifdef _KEYPAD_H_
     hal.execute_realtime = process_keypress;

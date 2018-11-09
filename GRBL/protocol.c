@@ -55,7 +55,7 @@ typedef struct {
     plan_line_data_t plan_data;
 } parking_data_t;
 
-// add gcode to execute not originating from serial stream
+// add gcode to execute not originating from normal input stream
 bool protocol_enqueue_gcode (char *gcode)
 {
     bool ok = xcommand[0] == '\0' &&
@@ -105,7 +105,8 @@ bool protocol_main_loop()
     // This is also where Grbl idles while waiting for something to do.
     // ---------------------------------------------------------------------------------
 
-    int32_t c;
+    int16_t c;
+    char eol = '\0';
     line_flags_t line_flags = {0};
     bool nocaps = false;
 
@@ -114,13 +115,13 @@ bool protocol_main_loop()
 
     for (;;) {
 
-        // Process one line of incoming serial data, as the data becomes available. Performs an
+        // Process one line of incoming stream data, as the data becomes available. Performs an
         // initial filtering by removing spaces and comments and capitalizing all letters.
-        while((c = hal.serial_read()) != SERIAL_NO_DATA) {
+        while((c = hal.stream_read()) != SERIAL_NO_DATA) {
 
             if(c == CMD_RESET) {
 
-                xcommand[0] = '\0';
+                eol = xcommand[0] = '\0';
                 nocaps = user_message.show = false;
                 char_counter = line_flags.value = 0;
 
@@ -128,6 +129,14 @@ bool protocol_main_loop()
                     system_set_exec_state_flag(EXEC_MOTION_CANCEL);
 
             } else if ((c == '\n') || (c == '\r')) { // End of line reached
+
+                // Check for possible secondary end of line character, do not process as empty line
+                // if part of crlf (or lfcr pair) as this produces a possibly unwanted double response
+                if(char_counter == 0 && eol && eol != c) {
+                    eol = '\0';
+                    continue;
+                } else
+                    eol = (char)c;
 
                 if(!protocol_execute_realtime()) // Runtime command check point.
                     return !sys.exit;            // Bail to calling function upon system abort
@@ -150,7 +159,7 @@ bool protocol_main_loop()
                 else  // Parse and execute g-code block.
                     gc_state.last_error = gc_execute_block(line, user_message.show ? user_message.message : NULL);
 
-                report_status_message(gc_state.last_error);
+                hal.report_status_message(gc_state.last_error);
 
                 // Reset tracking data for next line.
                 nocaps = user_message.show = false;
@@ -208,14 +217,14 @@ bool protocol_main_loop()
             if (xcommand[0] == '$') // Grbl '$' system command
                 system_execute_line(xcommand);
             else if (sys.state & (STATE_ALARM|STATE_ESTOP|STATE_JOG)) // Everything else is gcode. Block if in alarm, eStop or jog state.
-                report_status_message(Status_SystemGClock);
+                hal.report_status_message(Status_SystemGClock);
             else // Parse and execute g-code block.
                 gc_execute_block(xcommand, NULL);
 
             xcommand[0] = '\0';
         }
 
-        // If there are no more characters in the serial read buffer to be processed and executed,
+        // If there are no more characters in the input stream buffer to be processed and executed,
         // this indicates that g-code streaming has either filled the planner buffer or has
         // completed. In either case, auto-cycle start, if enabled, any queued moves.
         protocol_auto_cycle_start();
@@ -260,7 +269,7 @@ void protocol_auto_cycle_start ()
 // handles them, removing the need to define more computationally-expensive volatile variables. This
 // also provides a controlled way to execute certain tasks without having two or more instances of
 // the same task, such as the planner recalculating the buffer upon a feedhold or overrides.
-// NOTE: The sys_rt_exec_state variable flags are set by any process, step or serial interrupts, pinouts,
+// NOTE: The sys_rt_exec_state variable flags are set by any process, step or input strea events, pinouts,
 // limit switches, or the main program.
 // Returns false if aborted
 bool protocol_execute_realtime ()
@@ -357,8 +366,8 @@ bool protocol_exec_rt_system ()
             if(hal.driver_reset)
                 hal.driver_reset();
 
-            if(hal.serial_suspend_read && hal.serial_suspend_read(false))
-                hal.serial_cancel_read_buffer(); // flush pending blocks (after M6)
+            if(hal.stream_suspend_read && hal.stream_suspend_read(false))
+                hal.stream_cancel_read_buffer(); // flush pending blocks (after M6)
 
             plan_reset();
             st_reset();
@@ -368,12 +377,12 @@ bool protocol_exec_rt_system ()
             set_state(STATE_IDLE);
         }
 
-        // Execute and serial print status
+        // Execute and print status to output stream
         if (rt_exec & EXEC_STATUS_REPORT)
             report_realtime_status();
 
 #ifdef PID_LOG
-        // Execute and serial print PID log
+        // Execute and print PID log to output stream
         if (rt_exec & EXEC_PID_REPORT)
             report_pid_log();
 #endif
@@ -388,93 +397,93 @@ bool protocol_exec_rt_system ()
 
     // Execute overrides.
 
-    if((rt_exec = get_feed_ovr())) {
+    if((rt_exec = get_feed_override())) {
 
-        uint_fast8_t new_f_override = sys.f_override, new_r_override = sys.r_override;
+        uint_fast8_t new_f_override = sys.override.feed_rate, new_r_override = sys.override.rapid_rate;
 
         do {
 
           switch(rt_exec) {
 
-              case CMD_FEED_OVR_RESET:
+              case CMD_OVERRIDE_FEED_RESET:
                   new_f_override = DEFAULT_FEED_OVERRIDE;
                   break;
 
-              case CMD_FEED_OVR_COARSE_PLUS:
+              case CMD_OVERRIDE_FEED_COARSE_PLUS:
                   new_f_override += FEED_OVERRIDE_COARSE_INCREMENT;
                   break;
 
-              case CMD_FEED_OVR_COARSE_MINUS:
+              case CMD_OVERRIDE_FEED_COARSE_MINUS:
                   new_f_override -= FEED_OVERRIDE_COARSE_INCREMENT;
                   break;
 
-              case CMD_FEED_OVR_FINE_PLUS:
+              case CMD_OVERRIDE_FEED_FINE_PLUS:
                   new_f_override += FEED_OVERRIDE_FINE_INCREMENT;
                   break;
 
-              case CMD_FEED_OVR_FINE_MINUS:
+              case CMD_OVERRIDE_FEED_FINE_MINUS:
                   new_f_override -= FEED_OVERRIDE_FINE_INCREMENT;
                   break;
 
-              case CMD_RAPID_OVR_RESET:
+              case CMD_OVERRIDE_RAPID_RESET:
                   new_r_override = DEFAULT_RAPID_OVERRIDE;
                   break;
 
-              case CMD_RAPID_OVR_MEDIUM:
+              case CMD_OVERRIDE_RAPID_MEDIUM:
                   new_r_override = RAPID_OVERRIDE_MEDIUM;
                   break;
 
-              case CMD_RAPID_OVR_LOW:
+              case CMD_OVERRIDE_RAPID_LOW:
                   new_r_override = RAPID_OVERRIDE_LOW;
                   break;
           }
 
-        } while((rt_exec = get_feed_ovr()));
+        } while((rt_exec = get_feed_override()));
 
         plan_feed_override(new_f_override, new_r_override);
     }
 
-    if((rt_exec = get_accessory_ovr())) {
+    if((rt_exec = get_accessory_override())) {
 
         bool spindle_stop = false;
-        uint_fast8_t last_s_override = sys.spindle_rpm_ovr;
+        uint_fast8_t last_s_override = sys.override.spindle_rpm;
         coolant_state_t coolant_state = gc_state.modal.coolant;
 
         do {
 
           switch(rt_exec) {
 
-              case CMD_SPINDLE_OVR_RESET:
+              case CMD_OVERRIDE_SPINDLE_RESET:
                   last_s_override = DEFAULT_SPINDLE_RPM_OVERRIDE;
                   break;
 
-              case CMD_SPINDLE_OVR_COARSE_PLUS:
+              case CMD_OVERRIDE_SPINDLE_COARSE_PLUS:
                   last_s_override += SPINDLE_OVERRIDE_COARSE_INCREMENT;
                   break;
 
-              case CMD_SPINDLE_OVR_COARSE_MINUS:
+              case CMD_OVERRIDE_SPINDLE_COARSE_MINUS:
                   last_s_override -= SPINDLE_OVERRIDE_COARSE_INCREMENT;
                   break;
 
-              case CMD_SPINDLE_OVR_FINE_PLUS:
+              case CMD_OVERRIDE_SPINDLE_FINE_PLUS:
                   last_s_override += SPINDLE_OVERRIDE_FINE_INCREMENT;
                   break;
 
-              case CMD_SPINDLE_OVR_FINE_MINUS:
+              case CMD_OVERRIDE_SPINDLE_FINE_MINUS:
                   last_s_override -= SPINDLE_OVERRIDE_FINE_INCREMENT;
                   break;
 
-              case CMD_SPINDLE_OVR_STOP:
+              case CMD_OVERRIDE_SPINDLE_STOP:
                   spindle_stop = !spindle_stop;
                   break;
 
-              case CMD_COOLANT_MIST_OVR_TOGGLE:
+              case CMD_OVERRIDE_COOLANT_MIST_TOGGLE:
                   if (hal.driver_cap.mist_control && ((sys.state == STATE_IDLE) || (sys.state & (STATE_CYCLE | STATE_HOLD)))) {
                       coolant_state.mist = !coolant_state.mist;
                   }
                   break;
 
-              case CMD_COOLANT_FLOOD_OVR_TOGGLE:
+              case CMD_OVERRIDE_COOLANT_FLOOD_TOGGLE:
                   if ((sys.state == STATE_IDLE) || (sys.state & (STATE_CYCLE | STATE_HOLD))) {
                       coolant_state.flood = !coolant_state.flood;
                   }
@@ -486,7 +495,7 @@ bool protocol_exec_rt_system ()
                       break;
               }
 
-        } while((rt_exec = get_accessory_ovr()));
+        } while((rt_exec = get_accessory_override()));
 
         spindle_set_override(last_s_override);
 
@@ -500,10 +509,10 @@ bool protocol_exec_rt_system ()
         if (spindle_stop && sys.state == STATE_HOLD) {
             // Spindle stop override allowed only while in HOLD state.
             // NOTE: Report counters are set in spindle_set_state() when spindle stop is executed.
-            if (!sys.spindle_stop_ovr.value)
-                sys.spindle_stop_ovr.initiate = On;
-            else if (sys.spindle_stop_ovr.enabled)
-                sys.spindle_stop_ovr.restore = On;
+            if (!sys.override.spindle_stop.value)
+                sys.override.spindle_stop.initiate = On;
+            else if (sys.override.spindle_stop.enabled)
+                sys.override.spindle_stop.restore = On;
         }
     }
 
@@ -544,17 +553,26 @@ static void protocol_exec_rt_suspend ()
 }
 
 // Checks for and process real-time commands in input stream.
-// Called from serial input interrupt handler.
+// Called from input stream interrupt handler.
 ISR_CODE bool protocol_process_realtime (char c)
 {
     bool add = !sys.block_input_stream;
+/*
+    static bool syscmd = false;
 
+    if(syscmd) {
+        if(c == '\r' || c == '\n')
+            syscmd = false;
+        return true;
+    } else
+        syscmd = c == '$';
+*/
     switch ((unsigned char)c) {
 
         case CMD_STOP: // Set as true
             system_set_exec_state_flag(EXEC_STOP);
             char_counter = 0;
-            hal.serial_cancel_read_buffer();
+            hal.stream_cancel_read_buffer();
             add = false;
             break;
 
@@ -599,23 +617,23 @@ ISR_CODE bool protocol_process_realtime (char c)
 
         case CMD_JOG_CANCEL: // Cancel jogging
             char_counter = 0;
-            hal.serial_cancel_read_buffer();
+            hal.stream_cancel_read_buffer();
             break;
 
-        case CMD_FEED_OVR_RESET:
-        case CMD_FEED_OVR_COARSE_PLUS:
-        case CMD_FEED_OVR_COARSE_MINUS:
-        case CMD_FEED_OVR_FINE_PLUS:
-        case CMD_FEED_OVR_FINE_MINUS:
-        case CMD_RAPID_OVR_RESET:
-        case CMD_RAPID_OVR_MEDIUM:
-        case CMD_RAPID_OVR_LOW:
-            enqueue_feed_ovr(c);
+        case CMD_OVERRIDE_FEED_RESET:
+        case CMD_OVERRIDE_FEED_COARSE_PLUS:
+        case CMD_OVERRIDE_FEED_COARSE_MINUS:
+        case CMD_OVERRIDE_FEED_FINE_PLUS:
+        case CMD_OVERRIDE_FEED_FINE_MINUS:
+        case CMD_OVERRIDE_RAPID_RESET:
+        case CMD_OVERRIDE_RAPID_MEDIUM:
+        case CMD_OVERRIDE_RAPID_LOW:
+            enqueue_feed_override(c);
             break;
 
         default:
             if((unsigned char)c > 0x7F)
-                enqueue_accessory_ovr((uint8_t)c);
+                enqueue_accessory_override((uint8_t)c);
             break;
     }
 

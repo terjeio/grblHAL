@@ -61,6 +61,25 @@ typedef union {
     };
 } driver_cap_t;
 
+typedef void (*stream_write_ptr)(const char *s);
+
+/* TODO: add to HAL so that a different formatting (xml, json etc) of reports may be implemented by driver? */
+typedef struct {
+    void (*report_status_message)(status_code_t status_code);
+    void (*report_alarm_message)(alarm_code_t alarm_code);
+    void (*report_feedback_message)(message_code_t message_code);
+    void (*report_init_message)(void);
+    void (*report_grbl_help)(void);
+    void (*report_grbl_settings)(void);
+    void (*report_echo_line_received)(char *line);
+    void (*report_realtime_status)(void);
+    void (*report_probe_parameters)(void);
+    void (*report_ngc_parameters)(void);
+    void (*report_gcode_modes)(void);
+    void (*report_startup_line)(uint8_t n, char *line);
+    void (*report_execute_startup_message)(char *line, status_code_t status_code);
+} HAL_report_t;
+
 typedef struct HAL {
     uint32_t version;
     char *info;
@@ -76,13 +95,10 @@ typedef struct HAL {
     coolant_state_t (*coolant_get_state)(void);
     void (*delay_ms)(uint32_t ms, void (*callback)(void));
 
-    bool (*probe_get_state)(void);
-    void (*probe_configure_invert_mask)(bool is_probe_away);
-
-    void (*spindle_set_state)(spindle_state_t state, float rpm, uint8_t spindle_rpm_ovr);
+    void (*spindle_set_state)(spindle_state_t state, float rpm, uint8_t rpm_override);
     spindle_state_t (*spindle_get_state)(void);
     uint_fast16_t (*spindle_set_speed)(uint_fast16_t pwm_value);
-    uint_fast16_t (*spindle_compute_pwm_value)(float rpm, uint8_t spindle_rpm_ovr);
+    uint_fast16_t (*spindle_compute_pwm_value)(float rpm, uint8_t rpm_override);
     control_signals_t (*system_control_get_state)(void);
 
     void (*stepper_wake_up)(void);
@@ -93,13 +109,14 @@ typedef struct HAL {
     void (*stepper_cycles_per_tick)(uint32_t cycles_per_tick);
     void (*stepper_pulse_start)(stepper_t *stepper);
 
-    uint16_t (*serial_get_rx_buffer_available)(void);
-    bool (*serial_write)(char c);
-    void (*serial_write_string)(const char *s);
-    int16_t (*serial_read)(void);
-    void (*serial_reset_read_buffer)(void);
-    void (*serial_cancel_read_buffer)(void);
-    bool (*serial_suspend_read)(bool await);
+    uint16_t (*stream_get_rx_buffer_available)(void);
+//    bool (*stream_write)(char c);
+    stream_write_ptr stream_write; // write to current IO stream only
+    stream_write_ptr stream_write_all; // write to all ative output streams
+    int16_t (*stream_read)(void);
+    void (*stream_reset_read_buffer)(void);
+    void (*stream_cancel_read_buffer)(void);
+    bool (*stream_suspend_read)(bool await);
 
     void (*set_bits_atomic)(volatile uint_fast16_t *value, uint_fast16_t bits);
     uint_fast16_t (*clear_bits_atomic)(volatile uint_fast16_t *value, uint_fast16_t bits);
@@ -109,21 +126,24 @@ typedef struct HAL {
 
     // optional entry points, may be unassigned (null)
     bool (*driver_release)(void);
+    bool (*probe_get_state)(void);
+    void (*probe_configure_invert_mask)(bool is_probe_away);
     void (*execute_realtime)(uint8_t state);
     uint8_t (*userdefined_mcode_check)(uint8_t mcode);
     status_code_t (*userdefined_mcode_validate)(parser_block_t *gc_block, uint32_t *value_words);
     void (*userdefined_mcode_execute)(uint_fast16_t state, parser_block_t *gc_block);
     void (*userdefined_rt_command_execute)(uint8_t cmd);
-    void (*userdefined_rt_report)(void);
+    void (*userdefined_rt_report)(stream_write_ptr stream_write);
+    void (*userdefined_feedback_message)(stream_write_ptr stream_write);
     status_code_t (*userdefined_sys_command_execute)(uint_fast16_t state, char *line, char *lcline); // return Status_Unhandled
     bool (*get_position)(int32_t (*position)[N_AXIS]);
     void (*tool_select)(tool_data_t *tool);
     void (*tool_change)(parser_state_t *gc_state);
     void (*show_message)(const char *msg);
     void (*driver_reset)(void);
-    bool (*driver_setting)(uint_fast16_t setting, float value);
+    bool (*driver_setting)(uint_fast16_t setting, float value, char *svalue);
     void (*driver_settings_restore)(uint8_t restore_flag);
-    void (*driver_settings_report)(bool axis_settings);
+    void (*driver_settings_report)(bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx);
     spindle_data_t (*spindle_get_data)(spindle_data_request_t request);
     void (*spindle_reset_data)(void);
 #ifdef DEBUGOUT
@@ -131,10 +151,14 @@ typedef struct HAL {
 #endif
     eeprom_io_t eeprom;
 
+    // entry points set by grbl at reset
+
+    void (*report_status_message)(status_code_t status_code);
+
     // callbacks - set up by grbl before MCU init
     bool (*protocol_enqueue_gcode)(char *data);
     bool (*protocol_process_realtime)(char data);
-    bool (*serial_blocking_callback)(void);
+    bool (*stream_blocking_callback)(void);
     void (*stepper_interrupt_callback)(void);
     void (*limit_interrupt_callback)(axes_signals_t state);
     void (*control_interrupt_callback)(control_signals_t signals);

@@ -61,7 +61,7 @@ void keypad_init (void);
 
 bool keypad_setting (uint_fast16_t setting, float value, char *svalue);
 void keypad_settings_restore (uint8_t restore_flag);
-void keypad_settings_report (bool axis_settings);
+void keypad_settings_report (bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx);
 
 void keypad_keyclick_handler (bool keydown);
 void keypad_enqueue_keycode (char cmd);

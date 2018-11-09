@@ -24,6 +24,8 @@
 #ifndef _KEYPAD_H_
 #define _KEYPAD_H_
 
+#include "driver.h"
+
 #define KEYBUF_SIZE 16
 #define KEYPAD_I2CADDR 0x49
 
@@ -54,8 +56,8 @@ typedef enum {
 void keypad_setup (void);
 void process_keypress (uint8_t state);
 
-bool driver_setting (uint_fast16_t setting, float value);
+bool driver_setting (uint_fast16_t setting, float value, char *svalue);
 void driver_settings_restore (uint8_t restore_flag);
-void driver_settings_report (bool axis_settings);
+void driver_settings_report (bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx);
 
 #endif

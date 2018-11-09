@@ -35,12 +35,12 @@ static void sleep_execute()
     slumber = true;
     hal.delay_ms((uint32_t)(SLEEP_DURATION * 1000.0f), fall_asleep);
 
-    // Fetch current number of buffered characters in serial RX buffer.
-    uint16_t rx_initial = hal.serial_get_rx_buffer_available();
+    // Fetch current number of buffered characters in input stream buffer.
+    uint16_t rx_initial = hal.stream_get_rx_buffer_available();
 
     do {
-        // Monitor for any new RX serial data or external events (queries, buttons, alarms) to exit.
-        if ((hal.serial_get_rx_buffer_available() != rx_initial) || sys_rt_exec_state || sys_rt_exec_alarm ) {
+        // Monitor for any new input stream data or external events (queries, buttons, alarms) to exit.
+        if ((hal.stream_get_rx_buffer_available() != rx_initial) || sys_rt_exec_state || sys_rt_exec_alarm ) {
             // Disable sleep timeout and return to normal operation.
             hal.delay_ms(0, 0);
             return;
