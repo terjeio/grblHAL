@@ -360,8 +360,8 @@ status_code_t system_execute_line (char *line)
             retval = Status_Unhandled;
 
             // Let user code have a peek at system commands before check for global setting
-            if(hal.userdefined_sys_command_execute)
-                retval = hal.userdefined_sys_command_execute(sys.state, line, lcline);
+            if(hal.driver_sys_command_execute)
+                retval = hal.driver_sys_command_execute(sys.state, line, lcline);
 
             if (retval == Status_Unhandled) {
                 // Check for global setting, store if so

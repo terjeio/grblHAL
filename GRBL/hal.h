@@ -128,14 +128,14 @@ typedef struct HAL {
     bool (*driver_release)(void);
     bool (*probe_get_state)(void);
     void (*probe_configure_invert_mask)(bool is_probe_away);
-    void (*execute_realtime)(uint8_t state);
-    uint8_t (*userdefined_mcode_check)(uint8_t mcode);
-    status_code_t (*userdefined_mcode_validate)(parser_block_t *gc_block, uint32_t *value_words);
-    void (*userdefined_mcode_execute)(uint_fast16_t state, parser_block_t *gc_block);
-    void (*userdefined_rt_command_execute)(uint8_t cmd);
-    void (*userdefined_rt_report)(stream_write_ptr stream_write);
-    void (*userdefined_feedback_message)(stream_write_ptr stream_write);
-    status_code_t (*userdefined_sys_command_execute)(uint_fast16_t state, char *line, char *lcline); // return Status_Unhandled
+    void (*execute_realtime)(uint_fast16_t state);
+    uint_fast16_t (*driver_mcode_check)(uint_fast16_t mcode);
+    status_code_t (*driver_mcode_validate)(parser_block_t *gc_block, uint32_t *value_words);
+    void (*driver_mcode_execute)(uint_fast16_t state, parser_block_t *gc_block);
+    void (*driver_rt_command_execute)(uint8_t cmd);
+    void (*driver_rt_report)(stream_write_ptr stream_write);
+    void (*driver_feedback_message)(stream_write_ptr stream_write);
+    status_code_t (*driver_sys_command_execute)(uint_fast16_t state, char *line, char *lcline); // return Status_Unhandled
     bool (*get_position)(int32_t (*position)[N_AXIS]);
     void (*tool_select)(tool_data_t *tool);
     void (*tool_change)(parser_state_t *gc_state);

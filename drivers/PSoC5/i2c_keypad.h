@@ -39,7 +39,7 @@ typedef enum {
 } jogmode_t;
 
 void I2C_keypad_setup (void);
-void process_keypress (uint8_t state);
+void process_keypress (uint_fast16_t state);
 void I2C_ISR_ExitCallback(void);
 
 bool driver_setting (uint_fast16_t setting, float value, char *svalue);

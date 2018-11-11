@@ -189,7 +189,7 @@ status_code_t gc_execute_block(char *block, char *message)
     uint_fast8_t char_counter = gc_parser_flags.jog_motion ? 3 /* Start parsing after `$J=` */ : 0;
     char letter;
     float value;
-    uint_fast8_t int_value = 0;
+    uint_fast16_t int_value = 0;
     uint_fast16_t mantissa = 0;
 
     while ((letter = block[char_counter++]) != '\0') { // Loop until no more g-code words in block.
@@ -208,7 +208,7 @@ status_code_t gc_execute_block(char *block, char *message)
         // a good enough comprimise and catch most all non-integer errors. To make it compliant,
         // we would simply need to change the mantissa to int16, but this add compiled flash space.
         // Maybe update this later.
-        int_value = (uint_fast8_t)truncf(value);
+        int_value = (uint_fast16_t)truncf(value);
         mantissa = (uint_fast16_t)roundf(100.0f * (value - int_value)); // Compute mantissa for Gxx.x commands.
         // NOTE: Rounding must be used to catch small floating point errors.
 
@@ -472,7 +472,7 @@ status_code_t gc_execute_block(char *block, char *message)
                         break;
 
                     default:
-                        if(hal.userdefined_mcode_check && (gc_block.user_defined_mcode = hal.userdefined_mcode_check(int_value))) {
+                        if(hal.driver_mcode_check && (gc_block.driver_mcode = hal.driver_mcode_check(int_value))) {
                             if(int_value == 6) // M6
                                 word_bit.group = ModalGroup_M6;
                             else
@@ -1179,8 +1179,9 @@ status_code_t gc_execute_block(char *block, char *message)
                     break;
 
                 case NonModal_UserDefinedMCode:
-                    if((int_value = (uint_fast8_t)hal.userdefined_mcode_validate(&gc_block, &value_words)))
+                    if((int_value = (uint_fast8_t)hal.driver_mcode_validate(&gc_block, &value_words)))
                         FAIL((status_code_t)int_value);
+                    axis_words = ijk_words = 0;
                     break;
 
                 default:
@@ -1953,10 +1954,10 @@ status_code_t gc_execute_block(char *block, char *message)
 
     if(gc_block.non_modal_command == NonModal_UserDefinedMCode && sys.state != STATE_CHECK_MODE) {
 
-        if(gc_block.user_defined_mcode_sync)
+        if(gc_block.driver_mcode_sync)
             protocol_buffer_synchronize(); // Ensure user defined mcode is executed when specified in program.
 
-        hal.userdefined_mcode_execute(sys.state, &gc_block);
+        hal.driver_mcode_execute(sys.state, &gc_block);
 
     }
 

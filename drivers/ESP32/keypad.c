@@ -144,7 +144,7 @@ static char *strrepl (char *str, int c, char *str3)
 	return str;
 }
 
-void keypad_process_keypress (uint8_t state)
+void keypad_process_keypress (uint_fast16_t state)
 {
 	bool addedGcode, jogCommand = false;
 	char command[30] = "", keycode = keypad_get_keycode();

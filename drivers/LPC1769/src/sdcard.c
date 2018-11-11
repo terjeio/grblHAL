@@ -224,7 +224,7 @@ static void sdcard_end_job (void)
     hal.stream_reset_read_buffer();
     hal.stream_read = readfn;
     hal.stream_suspend_read = suspend_readfn;
-    hal.userdefined_rt_report = NULL;
+    hal.driver_rt_report = NULL;
     hal.report_status_message = report_status_message;
     sys.block_input_stream = false;
 }
@@ -313,7 +313,7 @@ static status_code_t sdcard_parse (uint_fast16_t state, char *line, char *lcline
                     suspend_readfn = hal.stream_suspend_read;       // and suspend fn pointers
                     hal.stream_read = sdcard_read;                  // then redirect to read from SD card instead
                     hal.stream_suspend_read = sdcard_suspend;       // ...
-                    hal.userdefined_rt_report = sdcard_report;      // Sdd percent complete to real time report
+                    hal.driver_rt_report = sdcard_report;      // Sdd percent complete to real time report
                     hal.report_status_message = trap_status_report; // Redirect status message reports here
                     sys.block_input_stream = true;                  // Block serial input other than real time commands TODO: remove?
                     retval = Status_OK;
@@ -342,7 +342,7 @@ void sdcard_reset (void)
 
 void sdcard_init (void)
 {
-    hal.userdefined_sys_command_execute = sdcard_parse;
+    hal.driver_sys_command_execute = sdcard_parse;
 }
 
 #endif

@@ -50,7 +50,7 @@ status_code_t userMCodeValidate (parser_block_t *gc_block, uint_fast16_t *value_
 
     status_code_t state = Status_GcodeValueWordMissing;
 
-    switch(gc_block->user_defined_mcode) {
+    switch(gc_block->driver_mcode) {
 
 #ifdef N_TOOLS
         case 6:
@@ -75,7 +75,7 @@ status_code_t userMCodeValidate (parser_block_t *gc_block, uint_fast16_t *value_
         case 101:
             if(bit_istrue(*value_words, bit(Word_P))) {
                 state = Status_OK;
-                gc_block->user_defined_mcode_sync = true;
+                gc_block->driver_mcode_sync = true;
                 bit_false(*value_words, bit(Word_P));
             }
             break;
@@ -83,7 +83,7 @@ status_code_t userMCodeValidate (parser_block_t *gc_block, uint_fast16_t *value_
         case 123:
             if(bit_istrue(*value_words, bit(Word_P))) {
                 state = Status_OK;
-                gc_block->user_defined_mcode_sync = true;
+                gc_block->driver_mcode_sync = true;
                 bit_false(*value_words, bit(Word_P));
             }
             break;
@@ -91,7 +91,7 @@ status_code_t userMCodeValidate (parser_block_t *gc_block, uint_fast16_t *value_
         case 124:
             if(bit_istrue(*value_words, bit(Word_P))) {
                 state = Status_OK;
-                gc_block->user_defined_mcode_sync = true;
+                gc_block->driver_mcode_sync = true;
                 bit_false(*value_words, bit(Word_P));
             }
             break;
@@ -106,7 +106,7 @@ status_code_t userMCodeValidate (parser_block_t *gc_block, uint_fast16_t *value_
 
 void userMCodeExecute (uint8_t state, parser_block_t *gc_block) {
 
-    switch(gc_block->user_defined_mcode) {
+    switch(gc_block->driver_mcode) {
 
         case 61:
             atc_tool_select((uint8_t)truncf(gc_block->values.q));

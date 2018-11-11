@@ -439,8 +439,8 @@ extern tool_data_t tool_table;
 typedef struct {
     non_modal_t non_modal_command;
     override_mode_t override_command; // TODO: add to non_modal above?
-    uint8_t user_defined_mcode;
-    bool user_defined_mcode_sync;
+    uint_fast16_t driver_mcode;
+    bool driver_mcode_sync;
     gc_modal_t modal;
     gc_values_t values;
 } parser_block_t;

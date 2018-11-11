@@ -1,7 +1,7 @@
 /*
  * trinamic2130.h - register descriptors for Trinamic TRM2130 stepper driver
  *
- * v0.0.1 / 2018-10-27 / ©Io Engineering / Terje
+ * v0.0.1 / 2018-11-10 / ©Io Engineering / Terje
  */
 
 /*
@@ -36,8 +36,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 */
 
-#ifndef _TRINAMIC_H_
-#define _TRINAMIC_H_
+#ifndef _TRINAMIC2130_H_
+#define _TRINAMIC2130_H_
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -47,7 +47,56 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define Off 0
 #endif
 
-#define TMC2130_COMPLETE // comment out for minimum set of registers
+//#define TMC2130_COMPLETE // comment out for minimum set of registers
+
+typedef enum {
+    TMC2130_Microsteps_1 = 1,
+    TMC2130_Microsteps_2 = 2,
+    TMC2130_Microsteps_4 = 4,
+    TMC2130_Microsteps_8 = 8,
+    TMC2130_Microsteps_16 = 16,
+    TMC2130_Microsteps_32 = 32,
+    TMC2130_Microsteps_64 = 64,
+    TMC2130_Microsteps_128 = 128,
+    TMC2130_Microsteps_256 = 256
+} tmc2130_microsteps_t;
+
+// Default values from datasheet example
+/*
+    SPI send: 0xEC000100C3; // CHOPCONF: TOFF=3, HSTRT=4, HEND=1, TBL=2, CHM=0 (spreadCycle)
+    SPI send: 0x9000061F0A; // IHOLD_IRUN: IHOLD=10, IRUN=31 (max. current), IHOLDDELAY=6
+    SPI send: 0x910000000A; // TPOWERDOWN=10: Delay before power down in stand still
+    SPI send: 0x8000000004; // EN_PWM_MODE=1 enables stealthChop (with default PWM_CONF)
+    SPI send: 0x93000001F4; // TPWM_THRS=500 yields a switching velocity about 35000 = ca. 30RPM
+    SPI send: 0xF0000401C8; // PWM_CONF: AUTO=1, 2/1024 Fclk, Switch amplitude limit=200, Grad=1
+*/
+
+// General
+#define TMC2130_MICROSTEPS TMC2130_Microsteps_16
+#define TMC2130_R_SENSE 110
+#define TMC2130_CURRENT 500
+// CHOPCONF
+#define TMC2130_CONSTANT_OFF_TIME 3 // 7
+#define TMC2130_FAST_DECAY_TIME 4 // 13
+#define TMC2130_SINE_WAVE_OFFSET 1 // 15
+#define TMC2130_CHOPPER_MODE 0 // 1
+#define TMC2130_BLANK_TIME 2 // 3
+#define TMC2130_RANDOM_TOFF 0 // 1
+// IHOLD_IRUN
+#define TMC2130_IHOLD 10
+#define TMC2130_IRUN 31 // max. current
+#define TMC2130_IHOLDDELAY 6
+// TPOWERDOWN
+#define TMC2130_TPOWERDOWN 10
+// EN_PWM_MODE
+#define TMC2130_EN_PWM_MODE 1
+// TPWM_THRS
+#define TMC2130_TPWM_THRS 500
+// PWM_CONF
+#define TMC2130_PWM_AUTOSCALE 1
+#define TMC2130_        , 2/1024 Fclk,
+#define TMC2130_PWM_AMPL 200
+#define TMC2130_PWM_GRAD 1
 
 typedef enum {
     TMC2130Reg_GCONF = 0x00,
@@ -75,18 +124,6 @@ typedef enum {
     TMC2130Reg_ENCM_CTRL = 0x72,
     TMC2130Reg_LOST_STEPS = 0x73
 } tmc2130_regaddr_t;
-
-typedef enum {
-    TMC2130_Microsteps_1 = 1,
-    TMC2130_Microsteps_2 = 2,
-    TMC2130_Microsteps_4 = 4,
-    TMC2130_Microsteps_8 = 8,
-    TMC2130_Microsteps_16 = 16,
-    TMC2130_Microsteps_32 = 32,
-    TMC2130_Microsteps_64 = 64,
-    TMC2130_Microsteps_128 = 128,
-    TMC2130_Microsteps_256 = 256
-} tmc2130_microsteps_t;
 
 typedef union {
     tmc2130_regaddr_t reg;
@@ -183,7 +220,7 @@ typedef union {
     uint32_t value;
     struct {
         uint32_t
-        ihold :5,
+        ihold      :5,
         reserved1  :3,
         irun       :5,
         reserved2  :3,
@@ -405,8 +442,8 @@ typedef union {
         hend     :4,
         fd3      :1,
         disfdcc  :1,
-        chm      :1,
         rndtf    :1,
+        chm      :1,
         tbl      :2,
         vsense   :1,
         vhighfs  :1,
@@ -580,12 +617,13 @@ typedef struct {
     TMC2130_tpwmthrs_dgr_t tpwmthrs;
     TMC2130_tcoolthrs_dgr_t tcoolthrs;
     TMC2130_thigh_dgr_t thigh;
-    TMC2130_xdirect_dgr_t xdirect;
     TMC2130_vdcmin_dgr_t vdcmin;
 #ifdef TMC2130_COMPLETE
+    TMC2130_xdirect_dgr_t xdirect;
     TMC2130_mslut_n_dgr_t mslut[8];
     TMC2130_mslutsel_dgr_t mslutsel;
     TMC2130_mslutstart_dgr_t mslutstart;
+    TMC2130_encm_ctrl_dgr_t encm_ctrl;
 #endif
     TMC2130_mscnt_dgr_t mscnt;
     TMC2130_mscuract_dgr_t mscuract;
@@ -595,14 +633,14 @@ typedef struct {
     TMC2130_coolconf_dgr_t coolconf;
     TMC2130_pwmconf_dgr_t pwmconf;
     TMC2130_pwm_scale_dgr_t pwm_scale;
-    TMC2130_encm_ctrl_dgr_t encm_ctrl;
     TMC2130_lost_steps_dgr_t lost_steps;
     TMC2130_status_t driver_status;
 
     void *cs_pin;    // the CS pin for the stepper driver
     tmc2130_microsteps_t microsteps;
-    uint16_t resistor; // mOhm
+    uint16_t r_sense; // mOhm
     uint16_t current;  // mA
+    uint8_t hold_current_pct; // percent
     int16_t constant_off_time;
     bool cool_step_enabled;
 } TMC2130_t;
@@ -614,7 +652,7 @@ typedef struct {
 
 void TMC2130_Init(TMC2130_t *driver);
 void TMC2130_SetDefaults (TMC2130_t *driver);
-void TMC2130_SetCurrent (TMC2130_t *driver, uint16_t mA);
+void TMC2130_SetCurrent (TMC2130_t *driver, uint16_t mA, uint8_t hold_pct);
 void TMC2130_SetMicrosteps(TMC2130_t *driver, tmc2130_microsteps_t usteps);
 void TMC2130_SetConstantOffTimeChopper(TMC2130_t *driver, uint8_t constant_off_time, uint8_t blank_time, uint8_t fast_decay_time, int8_t sine_wave_offset, bool use_current_comparator);
 TMC2130_status_t TMC2130_WriteRegister (TMC2130_t *driver, TMC2130_datagram_t *reg);

@@ -192,8 +192,8 @@ void report_feedback_message(message_code_t message_code)
             break;
 
         default:
-            if(hal.userdefined_feedback_message)
-                hal.userdefined_feedback_message(hal.stream_write_all);
+            if(hal.driver_feedback_message)
+                hal.driver_feedback_message(hal.stream_write_all);
             break;
     }
 
@@ -859,8 +859,8 @@ void report_realtime_status (void)
         sys.report.mpg_mode = false;
     }
 
-    if(hal.userdefined_rt_report)
-        hal.userdefined_rt_report(hal.stream_write_all);
+    if(hal.driver_rt_report)
+        hal.driver_rt_report(hal.stream_write_all);
 
     hal.stream_write_all(">\r\n");
 }

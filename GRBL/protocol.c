@@ -490,8 +490,8 @@ bool protocol_exec_rt_system ()
                   break;
 
                   default:
-                      if(hal.userdefined_rt_command_execute)
-                          hal.userdefined_rt_command_execute(rt_exec);
+                      if(hal.driver_rt_command_execute)
+                          hal.driver_rt_command_execute(rt_exec);
                       break;
               }
 

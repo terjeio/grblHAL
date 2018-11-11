@@ -65,6 +65,6 @@ void keypad_settings_report (bool axis_settings, axis_setting_type_t setting_typ
 
 void keypad_keyclick_handler (bool keydown);
 void keypad_enqueue_keycode (char cmd);
-void keypad_process_keypress (uint8_t state);
+void keypad_process_keypress (uint_fast16_t state);
 
 #endif

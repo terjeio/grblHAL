@@ -75,6 +75,8 @@ void keypad_write_settings (void)
 bool driver_setting (uint_fast16_t setting, float value, char *svalue)
 {
     bool ok = false;
+    
+    svalue = svalue;
 
     switch(setting) {
 
@@ -131,6 +133,9 @@ void driver_settings_restore (uint8_t restore_flag)
 
 void driver_settings_report (bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx)
 {
+    axis_idx = axis_idx;
+    setting_type = setting_type;
+    
     if(!axis_settings) {
         report_float_setting(Setting_JogStepSpeed, jog_config.step_speed, 0);
         report_float_setting(Setting_JogSlowSpeed, jog_config.slow_speed, 0);
@@ -201,7 +206,7 @@ static char *strrepl (char *str, int c, char *str3) {
 	return str;
 }
 
-void process_keypress (uint8_t state) {
+void process_keypress (uint_fast16_t state) {
 
 	bool addedGcode, jogCommand = false;
 	char command[30] = "", keycode = keypad_get_keycode();

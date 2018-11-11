@@ -1400,11 +1400,9 @@ static bool driver_setting (uint_fast16_t param, float value, char *svalue)
 
 static void driver_settings_report (bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx)
 {
-    if(axis_settings) {
 #ifdef ENABLE_TRINAMIC
-        trinamic_settings_report(axis_settings, setting_type, axis_idx);
+    trinamic_settings_report(axis_settings, setting_type, axis_idx);
 #endif
-    }
 }
 
 void driver_settings_restore (uint8_t restore_flag)
@@ -1499,6 +1497,10 @@ bool driver_init (void)
     hal.driver_setting = driver_setting;
     hal.driver_settings_report = driver_settings_report;
     hal.driver_settings_restore = driver_settings_restore;
+
+    hal.driver_mcode_check = trimamic_MCodeCheck;
+    hal.driver_mcode_validate = trimamic_MCodeValidate;
+    hal.driver_mcode_execute = trimamic_MCodeExecute;
 #endif
 
     hal.set_bits_atomic = bitsSetAtomic;
@@ -1506,9 +1508,9 @@ bool driver_init (void)
     hal.set_value_atomic = valueSetAtomic;
 
 #ifdef _USERMCODES_H_
-    hal.userdefined_mcode_check = userMCodeCheck;
-    hal.userdefined_mcode_validate = userMCodeValidate;
-    hal.userdefined_mcode_execute = userMCodeExecute;
+    hal.driver_mcode_check = userMCodeCheck;
+    hal.driver_mcode_validate = userMCodeValidate;
+    hal.driver_mcode_execute = userMCodeExecute;
 #endif
 
     hal.show_message = showMessage;

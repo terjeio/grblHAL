@@ -1075,9 +1075,9 @@ static void report_string_setting (uint8_t setting, char *value)
     hal.stream_write("\r\n");
 }
 
-static void driver_settings_report (bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx)
+static void driver_settings_report (bool axis_setting, axis_setting_type_t setting_type, uint8_t axis_idx)
 {
-    if(!axis_settings) {
+    if(!axis_setting) {
 #ifdef KEYPAD_ENABLE
     	keypad_settings_report(axis_setting, setting_type, axis_idx);
 #endif
