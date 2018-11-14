@@ -34,7 +34,7 @@
 
 //#define FreeRTOS                // remove comment to enable Ethernet streaming
 //#define SDCARD_SUPPORT          // remove comment to enable SD card support
-#define ENABLE_TRINAMIC         // remove comment to enable Trinamic TMC2130 support NOTE: work in progress)
+//#define ENABLE_TRINAMIC         // remove comment to enable Trinamic TMC2130 support NOTE: work in progress)
 
 #define CNC_BOOSTERPACK         // remove comment if for CNC Boosterpack
 #ifdef CNC_BOOSTERPACK

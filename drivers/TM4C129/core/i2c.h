@@ -30,7 +30,5 @@
 #define I2C_ADR_I2CBRIDGE 0x47
 
 void I2C_DriverInit (SPI_driver_t *drv);
-TMC2130_status_t I2C_ReadRegister (TMC2130_t *driver, TMC2130_datagram_t *reg);
-TMC2130_status_t I2C_WriteRegister (TMC2130_t *driver, TMC2130_datagram_t *reg);
 
 #endif

@@ -25,25 +25,64 @@
 #include <stdio.h>
 
 #include "driver.h"
-#include "i2c.h"
+#include "spi.h"    // uncomment interface to use (only one!)
+//#include "i2c.h"    // uncomment interface to use (only one!)
 
-#define F_SPI 4000000
-#define SPI_DELAY _delay_cycles(5);
+#if defined(__SPI_DRIVER_H__) && defined(__I2C_DRIVER_H__)
+#error Only code for one physical interface may be compiled in!
+#endif
 
 #define ENABLE_AXIS_SETTING 90
 
+char const *const axis_letter[] = {
+    "X",
+    "Y",
+    "Z",
+    "A",
+    "B",
+    "C"
+};
+
 static TMC2130_t stepper[N_AXIS];
+
+// Wrapper for initializing physical interface (since two alternatives are provided)
+void SPI_DriverInit (SPI_driver_t *driver)
+{
+#ifdef __SPI_DRIVER_H__
+    SPI__DriverInit(driver);
+#else
+    I2C_DriverInit(driver);
+#endif
+}
 
 void trinamic_init (void)
 {
     uint_fast8_t idx = N_AXIS;
 
+#ifdef __SPI_DRIVER_H__
+    static chip_select_t cs[N_AXIS];
+
+    cs[0].port = SPI_CS_PORT_X;
+    cs[0].pin = SPI_CS_PIN_X;
+    cs[1].port = SPI_CS_PORT_Y;
+    cs[1].pin = SPI_CS_PIN_Y;
+    cs[2].port = SPI_CS_PORT_Z;
+    cs[2].pin = SPI_CS_PIN_Z;
+
+    // TODO: add definitions for other axes if more than three!
+#endif
+
     do {
         if(bit_istrue(driver_settings.trinamic_enable.mask, bit(--idx))) {
 
             TMC2130_SetDefaults(&stepper[idx]);
-
+#ifdef __SPI_DRIVER_H__
+            stepper[idx].cs_pin = &cs[idx];
+            GPIOPinTypeGPIOOutput(cs[idx].port, cs[idx].pin);
+            GPIOPinWrite(cs[idx].port, cs[idx].pin, cs[idx].pin);
+#else
             stepper[idx].cs_pin = (void *)idx;
+#endif
             stepper[idx].current = driver_settings.motor_setting[idx].current;
             stepper[idx].microsteps = driver_settings.motor_setting[idx].microsteps;
             stepper[idx].r_sense = driver_settings.motor_setting[idx].r_sense;
@@ -146,14 +185,206 @@ void trinamic_settings_report (bool axis_settings, axis_setting_type_t setting_t
         report_uint_setting((setting_type_t)ENABLE_AXIS_SETTING, driver_settings.trinamic_enable.mask);
 }
 
-void SPI_DriverInit (SPI_driver_t *driver)
+static char *append (char *s)
 {
-    I2C_DriverInit(driver);
+    while(*s) s++;
+
+    return s;
 }
 
-uint_fast16_t trimamic_MCodeCheck (uint_fast16_t mcode)
+static void write_line (char *s)
 {
-    return driver_settings.trinamic_enable.mask && (mcode == 121 || mcode == 122 || mcode == 906 || mcode == 911 || mcode == 912) ? mcode : 0;
+    strcat(s, "\r\n");
+    hal.stream_write(s);
+}
+
+static void write_report (void)
+{
+    /* Marlin format debug report
+
+     SENDING:M122
+    X   Y
+    Enabled     false   false
+    Set current 850 850
+    RMS current 826 826
+    MAX current 1165    1165
+    Run current 26/31   26/31
+    Hold current    13/31   13/31
+    CS actual       13/31   13/31
+    PWM scale   41  41
+    vsense      1=.18   1=.18
+    stealthChop true    true
+    msteps      16  16
+    tstep       1048575 1048575
+    pwm
+    threshold       0   0
+    [mm/s]      -   -
+    OT prewarn  false   false
+    OT prewarn has
+    been triggered  false   false
+    off time        5   5
+    blank time  24  24
+    hysterisis
+    -end        2   2
+    -start      3   3
+    Stallguard thrs 0   0
+    DRVSTATUS   X   Y
+    stallguard
+    sg_result       0   0
+    fsactive
+    stst        X   X
+    olb
+    ola
+    s2gb
+    s2ga
+    otpw
+    ot
+    'Driver registers:'
+        X = 0x80:0D:00:00
+        Y = 0x80:0D:00:00
+*/
+
+    char buf[65];
+    uint_fast8_t idx = N_AXIS;
+
+    hal.stream_write("Trinamic TMC2130:\r\n");
+
+    do {
+        if(bit_istrue(driver_settings.trinamic_enable.mask, bit(--idx))) {
+            TMC2130_ReadRegister(&stepper[idx], (TMC2130_datagram_t *)&stepper[idx].chopconf);
+            TMC2130_ReadRegister(&stepper[idx], (TMC2130_datagram_t *)&stepper[idx].drv_status);
+            TMC2130_ReadRegister(&stepper[idx], (TMC2130_datagram_t *)&stepper[idx].pwm_scale);
+            TMC2130_ReadRegister(&stepper[idx], (TMC2130_datagram_t *)&stepper[idx].tstep);
+        }
+    } while(idx);
+
+    sprintf(buf, "%-13s", "");
+    for(idx = 0; idx < N_AXIS; idx++) {
+        if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx)))
+            sprintf(append(buf), "%8s", axis_letter[idx]);
+    }
+    write_line(buf);
+
+    sprintf(buf, "%-13s", "run current");
+    for(idx = 0; idx < N_AXIS; idx++) {
+        if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx)))
+            sprintf(append(buf), "%5d/31", stepper[idx].ihold_irun.reg.irun);
+    }
+    write_line(buf);
+
+    sprintf(buf, "%-13s", "hold current");
+    for(idx = 0; idx < N_AXIS; idx++) {
+        if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx)))
+            sprintf(append(buf), "%5d/31", stepper[idx].ihold_irun.reg.ihold);
+    }
+    write_line(buf);
+
+    sprintf(buf, "%-13s", "CS actual");
+    for(idx = 0; idx < N_AXIS; idx++) {
+        if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx)))
+            sprintf(append(buf), "%5d/31", stepper[idx].drv_status.reg.cs_actual);
+    }
+    write_line(buf);
+
+    sprintf(buf, "%-13s", "PWM scale");
+    for(idx = 0; idx < N_AXIS; idx++) {
+        if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx)))
+            sprintf(append(buf), "%8d", stepper[idx].pwm_scale.reg.pwm_scale);
+    }
+    write_line(buf);
+
+    sprintf(buf, "%-13s", "vsense");
+    for(idx = 0; idx < N_AXIS; idx++) {
+        if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx)))
+            sprintf(append(buf), "%8s", stepper[idx].chopconf.reg.vsense ? "1=0.18" : "0=0.32");
+    }
+    write_line(buf);
+
+    sprintf(buf, "%-13s", "mstep");
+    for(idx = 0; idx < N_AXIS; idx++) {
+        if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx)))
+            sprintf(append(buf), "%8d", 1 << (8 - stepper[idx].chopconf.reg.mres));
+    }
+    write_line(buf);
+
+    sprintf(buf, "%-13s", "tstep");
+    for(idx = 0; idx < N_AXIS; idx++) {
+        if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx)))
+            sprintf(append(buf), "%8d", stepper[idx].tstep.reg.tstep);
+    }
+
+    write_line(buf);
+
+    hal.stream_write("PWM:\n\r");
+
+    sprintf(buf, "%-13s", "pwm autoscale");
+
+    for(idx = 0; idx < N_AXIS; idx++) {
+        if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx)))
+            sprintf(append(buf), "%8d", stepper[idx].pwmconf.reg.pwm_autoscale);
+    }
+    write_line(buf);
+
+    sprintf(buf, "%-13s", "pwm ampl");
+    for(idx = 0; idx < N_AXIS; idx++) {
+        if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx)))
+            sprintf(append(buf), "%8d", stepper[idx].pwmconf.reg.pwm_ampl);
+    }
+    write_line(buf);
+
+    sprintf(buf, "%-13s", "pwm grad");
+    for(idx = 0; idx < N_AXIS; idx++) {
+        if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx)))
+            sprintf(append(buf), "%8d", stepper[idx].pwmconf.reg.pwm_grad);
+    }
+    write_line(buf);
+
+    sprintf(buf, "%-13s", "off time");
+    for(idx = 0; idx < N_AXIS; idx++) {
+        if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx)))
+            sprintf(append(buf), "%8d", stepper[idx].chopconf.reg.toff);
+    }
+    write_line(buf);
+
+
+    sprintf(buf, "%-13s", "blank time");
+    for(idx = 0; idx < N_AXIS; idx++) {
+        if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx)))
+            sprintf(append(buf), "%8d", stepper[idx].chopconf.reg.tbl);
+    }
+    write_line(buf);
+
+    hal.stream_write("Hysteresis:\r\n");
+
+    sprintf(buf, "%-13s", "-end");
+    for(idx = 0; idx < N_AXIS; idx++) {
+        if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx)))
+            sprintf(append(buf), "%8d", stepper[idx].chopconf.reg.hend);
+    }
+    write_line(buf);
+
+    sprintf(buf, "%-13s", "-start");
+    for(idx = 0; idx < N_AXIS; idx++) {
+        if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx)))
+            sprintf(append(buf), "%8d", stepper[idx].chopconf.reg.hstrt);
+    }
+    write_line(buf);
+
+    hal.stream_write("DRIVER STATUS:\r\n");
+
+    sprintf(buf, "%-13s", "otpw");
+    for(idx = 0; idx < N_AXIS; idx++) {
+        if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx)))
+            sprintf(append(buf), "%8s", stepper[idx].drv_status.reg.otpw ? "*" : "");
+    }
+    write_line(buf);
+
+    sprintf(buf, "%-13s", "ot");
+    for(idx = 0; idx < N_AXIS; idx++) {
+        if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx)))
+            sprintf(append(buf), "%8s", stepper[idx].drv_status.reg.ot ? "*" : "");
+    }
+    write_line(buf);
 }
 
 static bool check_params (parser_block_t *gc_block, uint_fast16_t *value_words)
@@ -184,6 +415,11 @@ static bool check_params (parser_block_t *gc_block, uint_fast16_t *value_words)
     return ok;
 }
 
+uint_fast16_t trimamic_MCodeCheck (uint_fast16_t mcode)
+{
+    return driver_settings.trinamic_enable.mask && (mcode == 121 || mcode == 906 || mcode == 911 || mcode == 912 || mcode == 913) ? mcode : 0;
+}
+
 status_code_t trimamic_MCodeValidate (parser_block_t *gc_block, uint_fast16_t *value_words)
 {
     status_code_t state = Status_GcodeValueWordMissing;
@@ -192,23 +428,17 @@ status_code_t trimamic_MCodeValidate (parser_block_t *gc_block, uint_fast16_t *v
 
         case 121:
             state = Status_OK;
-            gc_block->driver_mcode_sync = true;
-            if(bit_istrue(*value_words, bit(Word_S))) {
-                bit_false(*value_words, bit(Word_S));
-            }
-            break;
-
-        case 122:
-            if(check_params(gc_block, value_words)) {
-                state = Status_OK;
-                gc_block->driver_mcode_sync = true;
-            }
+//            gc_block->driver_mcode_sync = true;
             break;
 
         case 906:
             if(check_params(gc_block, value_words)) {
                 state = Status_OK;
                 gc_block->driver_mcode_sync = true;
+                if(bit_isfalse(*value_words, bit(Word_Q)))
+                    gc_block->values.q = NAN;
+                else // TODO: add range check?
+                    bit_false(*value_words, bit(Word_Q));
             }
             break;
 
@@ -216,337 +446,66 @@ status_code_t trimamic_MCodeValidate (parser_block_t *gc_block, uint_fast16_t *v
         case 912:
             state = Status_OK;
             break;
+
+        case 913:
+            if(check_params(gc_block, value_words)) {
+                state = Status_OK;
+                gc_block->driver_mcode_sync = true;
+            }
+            break;
     }
 
     return state;
 }
-
-static char *append (char *s)
-{
-    while(*s) s++;
-
-    return s;
-}
-
-static void write_line (char *s)
-{
-    strcat(s, "\r\n");
-    hal.stream_write(s);
-}
-
 void trimamic_MCodeExecute (uint_fast16_t state, parser_block_t *gc_block)
 {
     uint_fast8_t idx = N_AXIS;
 
     switch(gc_block->driver_mcode) {
 
-        case 122:
-            do {
-                idx--;
-                if(!isnan(gc_block->values.xyz[idx]))
-                    TMC2130_SetMicrosteps(&stepper[idx], (tmc2130_microsteps_t)gc_block->values.xyz[idx]);
-            } while(idx);
+        case 121:
+            write_report();
             break;
 
         case 906:
             do {
                 idx--;
                 if(!isnan(gc_block->values.xyz[idx]))
-                    TMC2130_SetCurrent(&stepper[idx], (uint16_t)gc_block->values.xyz[idx], stepper[idx].hold_current_pct);
+                    TMC2130_SetCurrent(&stepper[idx], (uint16_t)gc_block->values.xyz[idx],
+                                        isnan(gc_block->values.q) ? stepper[idx].hold_current_pct : (uint8_t)gc_block->values.q);
             } while(idx);
             break;
 
-        case 911:;
-            bool otpw[N_AXIS];
-            do {
-                if(bit_istrue(driver_settings.trinamic_enable.mask, bit(--idx))) {
-                    TMC2130_ReadRegister(&stepper[idx], (TMC2130_datagram_t *)&stepper[idx].drv_status);
-                    otpw[idx] = stepper[idx].drv_status.reg.otpw;
+        case 911:; // TODO: format grbl style?
+            char buf[15];
+            TMC2130_status_t status;
+            for(idx = 0; idx < N_AXIS; idx++) {
+                if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx))) {
+                    status = TMC2130_ReadRegister(&stepper[idx], (TMC2130_datagram_t *)&stepper[idx].drv_status);
+                    strcpy(buf, axis_letter[idx]);
+                    strcat(buf, ":");
+                    if(status.driver_error)
+                        strcat(buf, "E");
+                    else if(stepper[idx].drv_status.reg.ot)
+                        strcat(buf, "O");
+                    else if(stepper[idx].drv_status.reg.otpw)
+                        strcat(buf, "W");
+                    write_line(buf);
                 }
-            } while(idx);
-         //   sprintf(buf, "ot warning %d %d %d\r\n", otpw[0], otpw[1], otpw[2]);
-         //   hal.stream_write(buf);
+            }
             break;
 
-        case 912: // clear prewarn flags
-//            TMC2130_ReadRegister (&stepper[idx], (TMC2130_datagram_t *)&stepper[idx].g);
+        case 912:
+            // TODO: clear prewarn flags - Marlin has a counter for otpw, implement similar autotune? M906S
             break;
 
-        case 121:;
-            char buf[50];
-            hal.stream_write("Trinamic TMC2130:\r\n");
+        case 913:
             do {
-                if(bit_istrue(driver_settings.trinamic_enable.mask, bit(--idx))) {
-                    TMC2130_ReadRegister(&stepper[idx], (TMC2130_datagram_t *)&stepper[idx].chopconf);
-                    TMC2130_ReadRegister(&stepper[idx], (TMC2130_datagram_t *)&stepper[idx].drv_status);
-                    TMC2130_ReadRegister(&stepper[idx], (TMC2130_datagram_t *)&stepper[idx].pwm_scale);
-                }
+                idx--;
+                if(!isnan(gc_block->values.xyz[idx]))
+                    TMC2130_SetHybridThreshold(&stepper[idx], (uint32_t)gc_block->values.xyz[idx], settings.steps_per_mm[idx]);
             } while(idx);
-
-            sprintf(buf, "%-13s", "");
-            sprintf(append(buf), "%8s", driver_settings.trinamic_enable.x ? "X" : "");
-            sprintf(append(buf), "%8s", driver_settings.trinamic_enable.y ? "Y" : "");
-            sprintf(append(buf), "%8s", driver_settings.trinamic_enable.z ? "Z" : "");
-            write_line(buf);
-
-            sprintf(buf, "%-13s", "run current");
-            for(idx = 0; idx < N_AXIS; idx++) {
-                if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx)))
-                    sprintf(append(buf), "%5d/31", stepper[idx].ihold_irun.reg.irun);
-            }
-            write_line(buf);
-
-            sprintf(buf, "%-13s", "hold current");
-            for(idx = 0; idx < N_AXIS; idx++) {
-                if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx)))
-                    sprintf(append(buf), "%5d/31", stepper[idx].ihold_irun.reg.ihold);
-            }
-            write_line(buf);
-
-            sprintf(buf, "%-13s", "CS actual");
-            for(idx = 0; idx < N_AXIS; idx++) {
-                if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx)))
-                    sprintf(append(buf), "%5d/31", stepper[idx].drv_status.reg.cs_actual);
-            }
-            write_line(buf);
-
-            sprintf(buf, "%-13s", "PWM scale");
-            for(idx = 0; idx < N_AXIS; idx++) {
-                if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx)))
-                    sprintf(append(buf), "%8d", stepper[idx].pwm_scale.reg.pwm_scale);
-            }
-            write_line(buf);
-
-            sprintf(buf, "%-13s", "vsense");
-            for(idx = 0; idx < N_AXIS; idx++) {
-                if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx)))
-                    sprintf(append(buf), "    %d=%2d", stepper[idx].chopconf.reg.vsense, stepper[idx].ihold_irun.reg.irun);
-            }
-            write_line(buf);
-
-            sprintf(buf, "%-13s", "mstep");
-            for(idx = 0; idx < N_AXIS; idx++) {
-                if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx)))
-                    sprintf(append(buf), "%8d", 1 << (8 - stepper[idx].chopconf.reg.mres));
-            }
-            write_line(buf);
-
-            hal.stream_write("pwm:\n\r");
-
-            sprintf(buf, "%-13s", "pwm autoscale");
-
-            for(idx = 0; idx < N_AXIS; idx++) {
-                if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx)))
-                    sprintf(append(buf), "%8d", stepper[idx].pwmconf.reg.pwm_autoscale);
-            }
-            write_line(buf);
-
-            sprintf(buf, "%-13s", "pwm ampl");
-            for(idx = 0; idx < N_AXIS; idx++) {
-                if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx)))
-                    sprintf(append(buf), "%8d", stepper[idx].pwmconf.reg.pwm_ampl);
-            }
-            write_line(buf);
-
-            sprintf(buf, "%-13s", "pwm grad");
-            for(idx = 0; idx < N_AXIS; idx++) {
-                if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx)))
-                    sprintf(append(buf), "%8d", stepper[idx].pwmconf.reg.pwm_grad);
-            }
-            write_line(buf);
-
-            sprintf(buf, "%-13s", "off time");
-            for(idx = 0; idx < N_AXIS; idx++) {
-                if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx)))
-                    sprintf(append(buf), "%8d", stepper[idx].chopconf.reg.toff);
-            }
-            write_line(buf);
-
-
-            sprintf(buf, "%-13s", "blank time");
-            for(idx = 0; idx < N_AXIS; idx++) {
-                if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx)))
-                    sprintf(append(buf), "%8d", stepper[idx].chopconf.reg.tbl);
-            }
-            write_line(buf);
-
-            hal.stream_write("hysteresis:\r\n");
-
-            sprintf(buf, "%-13s", "-end");
-            for(idx = 0; idx < N_AXIS; idx++) {
-                if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx)))
-                    sprintf(append(buf), "%8d", stepper[idx].chopconf.reg.hend);
-            }
-            write_line(buf);
-
-            sprintf(buf, "%-13s", "-start");
-            for(idx = 0; idx < N_AXIS; idx++) {
-                if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx)))
-                    sprintf(append(buf), "%8d", stepper[idx].chopconf.reg.hstrt);
-            }
-            write_line(buf);
-
-            hal.stream_write("DRV_STATUS:\r\n");
-
-            sprintf(buf, "%-13s", "otpw");
-            for(idx = 0; idx < N_AXIS; idx++) {
-                if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx)))
-                    sprintf(append(buf), "%8s", stepper[idx].drv_status.reg.otpw ? "*" : "");
-            }
-            write_line(buf);
-
-            sprintf(buf, "%-13s", "ot");
-            for(idx = 0; idx < N_AXIS; idx++) {
-                if(bit_istrue(driver_settings.trinamic_enable.mask, bit(idx)))
-                    sprintf(append(buf), "%8s", stepper[idx].drv_status.reg.ot ? "*" : "");
-            }
-            write_line(buf);
-
             break;
+
     }
 }
-
-
-/*
- SENDING:M122
-X   Y
-Enabled     false   false
-Set current 850 850
-RMS current 826 826
-MAX current 1165    1165
-Run current 26/31   26/31
-Hold current    13/31   13/31
-CS actual       13/31   13/31
-PWM scale   41  41
-vsense      1=.18   1=.18
-stealthChop true    true
-msteps      16  16
-tstep       1048575 1048575
-pwm
-threshold       0   0
-[mm/s]      -   -
-OT prewarn  false   false
-OT prewarn has
-been triggered  false   false
-off time        5   5
-blank time  24  24
-hysterisis
--end        2   2
--start      3   3
-Stallguard thrs 0   0
-DRVSTATUS   X   Y
-stallguard
-sg_result       0   0
-fsactive
-stst        X   X
-olb
-ola
-s2gb
-s2ga
-otpw
-ot
-'Driver registers:'
-    X = 0x80:0D:00:00
-    Y = 0x80:0D:00:00
- * */
-
-/*
-TMC2130_status_t SPI_ReadRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
-{
-    uint32_t data;
-    TMC2130_status_t status;
-
-    SPI_SELECT;
-    SPI_DELAY
-
-    // dummy write to prepare data
-    SSIDataPut(SPI_BASE, reg->addr.value);
-    SSIDataPut(SPI_BASE, 0);
-    SSIDataPut(SPI_BASE, 0);
-    SSIDataPut(SPI_BASE, 0);
-    SSIDataPut(SPI_BASE, 0);
-    while(SSIBusy(SPI_BASE));
-
-    // Ditch data in FIFO
-    while(SSIDataGetNonBlocking(SPI_BASE, &data));
-
-    SPI_DESELECT;
-    SPI_DELAY
-
-    // get register data
-
-    SPI_SELECT;
-    SPI_DELAY
-
-    SSIDataPut(SPI_BASE, reg->addr.value);
-    SSIDataPut(SPI_BASE, 0);
-    SSIDataPut(SPI_BASE, 0);
-    SSIDataPut(SPI_BASE, 0);
-    SSIDataPut(SPI_BASE, 0);
-    while(SSIBusy(SPI_BASE));
-
-    // Read values from FIFO
-    SSIDataGetNonBlocking(SPI_BASE, &data);
-    status.value = (uint8_t)data;
-    SSIDataGetNonBlocking(SPI_BASE, &data);
-    reg->payload.value = ((uint8_t)data << 24);
-    SSIDataGetNonBlocking(SPI_BASE, &data);
-    reg->payload.value |= ((uint8_t)data << 16);
-    SSIDataGetNonBlocking(SPI_BASE, &data);
-    reg->payload.value |= ((uint8_t)data << 8);
-    SSIDataGetNonBlocking(SPI_BASE, &data);
-    reg->payload.value |= (uint8_t)data;
-
-    SPI_DESELECT;
-
-    return status;
-}
-
-TMC2130_status_t SPI_WriteRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
-{
-    TMC2130_status_t status = {0};
-
-    SPI_SELECT;
-
-    // assume FIFO is empty?
-    reg->addr.write = 1;
-    SSIDataPut(SPI_BASE, reg->addr.value);
-    reg->addr.write = 0;
-    SSIDataPut(SPI_BASE, (reg->payload.value >> 24) & 0xFF);
-    SSIDataPut(SPI_BASE, (reg->payload.value >> 16) & 0xFF);
-    SSIDataPut(SPI_BASE, (reg->payload.value >> 8) & 0xFF);
-    SSIDataPut(SPI_BASE, reg->payload.value & 0xFF);
-    while(SSIBusy(SPI_BASE));
-
-    SPI_DESELECT;
-
-    return status;
-}
-
-void SPI_DriverInit (SPI_driver_t *driver)
-{
-    driver->WriteRegister = SPI_WriteRegister;
-    driver->ReadRegister = SPI_ReadRegister;
-
-    PREF(SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA));
-    PREF(SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOQ));
-    PREF(SysCtlPeripheralEnable(SPI_PERIPH));
-
-    PREF(GPIOPinTypeGPIOOutput(SPI_CS_PORT, SPI_CS_PIN));
-
-    PREF(GPIOPinConfigure(SPI_CLK));
-    PREF(GPIOPinTypeSSI(SPI_PORT, SPI_SCLK_PIN));
-
-    PREF(GPIOPinConfigure(SPI_TX));
-    PREF(GPIOPinTypeSSI(SPI_PORT, SPI_MOSI_PIN));
-
-    PREF(GPIOPinConfigure(SPI_RX));
-    PREF(GPIOPinTypeSSI(SPI_PORT, SPI_MISO_PIN));
-
-    SPI_DESELECT;
-
-    SSIClockSourceSet(SPI_BASE, SSI_CLOCK_SYSTEM);
-    PREF(SSIConfigSetExpClk(SPI_BASE, 120000000, SSI_FRF_MOTO_MODE_0, SSI_MODE_MASTER, F_SPI, 8));
-    PREF(SSIEnable(SPI_BASE));
-}
-*/
