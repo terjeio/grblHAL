@@ -328,7 +328,7 @@ void mc_homing_cycle (uint8_t cycle_mask)
         return;
     }
 
-    hal.limits_enable(false); // Disable hard limits pin change register for cycle duration
+    hal.limits_enable(false, true); // Disable hard limits pin change register for cycle duration
 
     // -------------------------------------------------------------------------------------
     // Perform homing routine. NOTE: Special motion case. Only system reset works.
@@ -364,7 +364,9 @@ void mc_homing_cycle (uint8_t cycle_mask)
     }
 
     // If hard limits feature enabled, re-enable hard limits pin change register after homing cycle.
-    hal.limits_enable(settings.limits.flags.hard_enabled);
+    // NOTE: always call at end of homing regadless of setting, may be used to disable
+    // sensorless homing or switch back to limit switches input (if different from homing switches)
+    hal.limits_enable(settings.limits.flags.hard_enabled, false);
 }
 
 

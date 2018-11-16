@@ -220,8 +220,9 @@ static void stepperPulseStartDelayed (stepper_t *stepper)
 }
 
 // Disable limit pins interrupt, called from mc_homing_cycle()
-static void limitsEnable (bool on)
+static void limitsEnable (bool on, bool homing)
 {
+    homing = homing;
     if(on)
         Homing_Interrupt_Enable();
     else
@@ -411,7 +412,7 @@ static bool driver_setup (settings_t *settings)
     else
         spindleSetStateFixed((spindle_state_t){0}, 0, 0);
 
-    IOInitDone = settings->version == 12;
+    IOInitDone = settings->version == 14;
 
     coolantSetState((coolant_state_t){0});
     stepperSetDirOutputs((axes_signals_t){0});

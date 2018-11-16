@@ -59,9 +59,6 @@ static serial_buffer_t rxbackup;
 static char txbuf[TX_BUFFER_SIZE];
 static volatile uint16_t tx_head = 0, tx_tail = 0;
 
-static bool (*serialReceiveCallback)(char) = 0;
-static bool (*serialBlockingCallback)(void) = 0;
-
 #ifdef SERIAL2_MOD
 static char rx2buf[RX_BUFFER_SIZE];
 static volatile uint16_t rx2_head = 0, rx2_tail = 0, rx2_overflow = 0;
@@ -185,8 +182,8 @@ bool serialPutC (const char c) {
         next_head = (tx_head + 1) & (TX_BUFFER_SIZE - 1);   // .. if not, set and update head pointer
 
         while(tx_tail == next_head) {                       // While TX buffer full
-            SERIAL_MODULE->IE |= EUSCI_A_IE_TXIE;               // Enable TX interrupts???
-            if(!serialBlockingCallback())                   // check if blocking for space,
+            SERIAL_MODULE->IE |= EUSCI_A_IE_TXIE;           // Enable TX interrupts???
+            if(!hal.stream_blocking_callback())           // check if blocking for space,
                 return false;                               // exit if not (leaves TX buffer in an inconsistent state)
         }
 
@@ -293,7 +290,7 @@ void SERIAL_IRQHandler (void)
                 rxbuffer.tail = rxbuffer.head;
                 hal.stream_read = serialGetC; // restore normal input
 
-            } else if(!serialReceiveCallback || serialReceiveCallback(data)) {
+            } else if(!hal.protocol_process_realtime || hal.protocol_process_realtime(data)) {
 
                 bptr = (rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1);  // Get next head pointer
 

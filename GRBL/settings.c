@@ -457,7 +457,7 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
 
             case Setting_HardLimitsEnable:
                 settings.limits.flags.hard_enabled = int_value != 0;
-                hal.limits_enable(settings.limits.flags.hard_enabled); // Change immediately. NOTE: Nice to have but could be problematic later.
+                hal.limits_enable(settings.limits.flags.hard_enabled, false); // Change immediately. NOTE: Nice to have but could be problematic later.
                 break;
 
             case Setting_RestoreOverrides:

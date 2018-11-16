@@ -331,7 +331,7 @@ static void stepperPulseStartDelayed (stepper_t *stepper)
 }
 
 // Enable/disable limit pins interrupt
-static void limitsEnable (bool on) {
+static void limitsEnable (bool on, bool homing) {
     on = on && settings.limits.flags.hard_enabled;
 #ifdef CNC_BOOSTERPACK_SHORTS
   #if STEP_OUTMODE == GPIO_BITBAND
@@ -1018,7 +1018,7 @@ static bool driver_setup (settings_t *settings)
 
 // Set defaults
 
-    IOInitDone = settings->version == 13;
+    IOInitDone = settings->version == 14;
 
     settings_changed(settings);
 

@@ -62,6 +62,7 @@ typedef union {
 } driver_cap_t;
 
 typedef void (*stream_write_ptr)(const char *s);
+typedef axes_signals_t (*limits_get_state_ptr)(void);
 
 /* TODO: add to HAL so that a different formatting (xml, json etc) of reports may be implemented by driver? */
 typedef struct {
@@ -89,8 +90,8 @@ typedef struct HAL {
 
     bool (*driver_setup)(settings_t *settings);
 
-    void (*limits_enable)(bool on);
-    axes_signals_t (*limits_get_state)(void);
+    void (*limits_enable)(bool on, bool homing);
+    limits_get_state_ptr limits_get_state;
     void (*coolant_set_state)(coolant_state_t mode);
     coolant_state_t (*coolant_get_state)(void);
     void (*delay_ms)(uint32_t ms, void (*callback)(void));

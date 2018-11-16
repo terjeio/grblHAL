@@ -34,7 +34,7 @@
 
 //#define FreeRTOS                // remove comment to enable Ethernet streaming
 //#define SDCARD_SUPPORT          // remove comment to enable SD card support
-//#define ENABLE_TRINAMIC         // remove comment to enable Trinamic TMC2130 support NOTE: work in progress)
+#define ENABLE_TRINAMIC         // remove comment to enable Trinamic TMC2130 support NOTE: work in progress)
 
 #define CNC_BOOSTERPACK         // remove comment if for CNC Boosterpack
 #ifdef CNC_BOOSTERPACK
@@ -54,8 +54,7 @@
 #include "trinamic.h"
 
 typedef struct {
-    axes_signals_t trinamic_enable;
-    motor_settings_t motor_setting[N_AXIS];
+    trinamic_settings_t trinamic;
 } driver_settings_t;
 
 extern driver_settings_t driver_settings;

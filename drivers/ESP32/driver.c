@@ -429,7 +429,7 @@ IRAM_ATTR static void stepperPulseStart (stepper_t *stepper)
 }
 
 // Enable/disable limit pins interrupt
-static void limitsEnable (bool on)
+static void limitsEnable (bool on, bool homing)
 {
     uint32_t i;
     for(i = INPUT_LIMIT_X; i <= INPUT_LIMIT_Z; i++) {

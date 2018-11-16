@@ -1548,7 +1548,7 @@ status_code_t gc_execute_block(char *block, char *message)
 
         // Only distance and unit modal commands and G53 absolute override command are allowed.
         // NOTE: Feed rate word and axis word checks have already been performed in STEP 3.
-        if (command_words & ~(bit(ModalGroup_G3)|bit(ModalGroup_G6|bit(ModalGroup_G0))))
+        if (command_words & ~(bit(ModalGroup_G3)|bit(ModalGroup_G6)|bit(ModalGroup_G0)))
             FAIL(Status_InvalidJogCommand);
 
         if (!(gc_block.non_modal_command == NonModal_AbsoluteOverride || gc_block.non_modal_command == NonModal_NoAction))

@@ -32,13 +32,21 @@ typedef struct {
     uint16_t current; // mA
     uint16_t r_sense; // mOhm
     tmc2130_microsteps_t microsteps;
+    uint8_t homing_sensitivity;
 } motor_settings_t;
+
+typedef struct {
+    axes_signals_t driver_enable;
+    axes_signals_t homing_enable;
+    motor_settings_t driver[N_AXIS];
+} trinamic_settings_t;
 
 // Init wrapper for physical interface
 void SPI_DriverInit (SPI_driver_t *driver);
 
 void trinamic_init (void);
 void trinamic_configure (void);
+void trinamic_homing (bool enable);
 bool trinamic_setting (uint_fast16_t setting, float value, char *svalue);
 void trinamic_settings_restore (uint8_t restore_flag);
 void trinamic_settings_report (bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx);

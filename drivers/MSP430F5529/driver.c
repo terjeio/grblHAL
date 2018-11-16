@@ -159,7 +159,7 @@ static void stepperPulseStartDelayed (stepper_t *stepper)
 }
 
 // Enable/disable limit pins interrupt
-static void limitsEnable (bool on)
+static void limitsEnable (bool on, bool homing)
 {
     if (on && settings.limits.flags.hard_enabled)
         LIMIT_PORT_IE |= HWLIMIT_MASK; // Enable Pin Change Interrupt
@@ -639,7 +639,7 @@ static bool driver_setup (settings_t *settings)
 
   // Set defaults
 
-    IOInitDone = settings->version == 13;
+    IOInitDone = settings->version == 14;
 
     settings_changed(settings);
 

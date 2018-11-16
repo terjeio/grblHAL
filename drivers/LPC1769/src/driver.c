@@ -186,7 +186,8 @@ static void stepperPulseStartDelayed (stepper_t *stepper)
 }
 
 // Enable/disable limit pins interrupt
-static void limitsEnable (bool on) {
+static void limitsEnable (bool on, bool homing)
+{
     on = on && settings.limits.flags.hard_enabled;
     BITBAND_PERI(LIMIT_INTCLR, X_LIMIT_PIN) = 0;
     BITBAND_PERI(LIMIT_INTCLR, Y_LIMIT_PIN) = 0;

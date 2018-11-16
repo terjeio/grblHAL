@@ -604,7 +604,7 @@ static void stepperPulseStartPPI (stepper_t *stepper)
 #endif
 
 // Enable/disable limit pins interrupt
-static void limitsEnable (bool on)
+static void limitsEnable (bool on, bool homing)
 {
 #ifdef CNC_BOOSTERPACK
     uint32_t i;
@@ -624,6 +624,10 @@ static void limitsEnable (bool on)
         GPIOIntEnable(LIMIT_PORT, HWLIMIT_MASK); // Enable Pin Change Interrupt
     else
         GPIOIntDisable(LIMIT_PORT, HWLIMIT_MASK); // Disable Pin Change Interrupt
+#endif
+
+#if defined(ENABLE_TRINAMIC)
+    trinamic_homing(homing);
 #endif
 }
 
