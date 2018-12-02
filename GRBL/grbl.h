@@ -53,7 +53,6 @@
 #include "protocol.h"
 #include "state_machine.h"
 #include "report.h"
-#include "serial.h"
 #include "spindle_control.h"
 #include "stepper.h"
 #include "system.h"

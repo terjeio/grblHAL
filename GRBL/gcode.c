@@ -252,17 +252,26 @@ status_code_t gc_execute_block(char *block, char *message)
                     case 33:
                         if(!hal.spindle_get_data)
                             FAIL(Status_GcodeUnsupportedCommand); // [G33 not supported]
-                        // No break. Continues to next line.
+                        if (axis_command)
+                            FAIL(Status_GcodeAxisCommandConflict); // [Axis word/command conflict]
+                        axis_command = AxisCommand_MotionMode;
+                        word_bit.group = ModalGroup_G1;
+                        gc_block.modal.motion = (motion_mode_t)int_value;
+                        gc_block.modal.canned_cycle_active = false;
+                        break;
 
                     case 38:
-                        if(!hal.probe_get_state)
-                            FAIL(Status_GcodeUnsupportedCommand); // [G38 not supported by driver]
+                        if(!(hal.probe_get_state && ((mantissa == 20) || (mantissa == 30) || (mantissa == 40) || (mantissa == 50))))
+                            FAIL(Status_GcodeUnsupportedCommand); // [probing not supported by driver or unsupported G38.x command]
+                        int_value += (mantissa / 10) + 100;
+                        mantissa = 0; // Set to zero to indicate valid non-integer G command.
                         //  No break. Continues to next line.
+
                     case 0: case 1: case 2: case 3:
                         // Check for G0/1/2/3/38 being called with G10/28/30/92 on same block.
                         // * G43.1 is also an axis command but is not explicitly defined this way.
                         if (axis_command)
-                            FAIL(Status_GcodeAxisCommandConflict);// [Axis word/command conflict]
+                            FAIL(Status_GcodeAxisCommandConflict); // [Axis word/command conflict]
                         axis_command = AxisCommand_MotionMode;
                         // No break. Continues to next line.
 
@@ -270,17 +279,11 @@ status_code_t gc_execute_block(char *block, char *message)
                         word_bit.group = ModalGroup_G1;
                         gc_block.modal.motion = (motion_mode_t)int_value;
                         gc_block.modal.canned_cycle_active = false;
-                        if (int_value == 38) {
-                            if (!((mantissa == 20) || (mantissa == 30) || (mantissa == 40) || (mantissa == 50)))
-                                FAIL(Status_GcodeUnsupportedCommand); // [Unsupported G38.x command]
-                            gc_block.modal.motion += (mantissa / 10) + 100;
-                            mantissa = 0; // Set to zero to indicate valid non-integer G command.
-                        }
                         break;
 
                     case 73: case 81: case 82: case 83: case 85: case 86: case 89:
                         if (axis_command)
-                            FAIL(Status_GcodeAxisCommandConflict);// [Axis word/command conflict]
+                            FAIL(Status_GcodeAxisCommandConflict); // [Axis word/command conflict]
                         axis_command = AxisCommand_MotionMode;
                         word_bit.group = ModalGroup_G1;
                         gc_block.modal.canned_cycle_active = true;
@@ -952,7 +955,7 @@ status_code_t gc_execute_block(char *block, char *message)
     // [13. Cutter radius compensation ]: G41/42 NOT SUPPORTED. Error, if enabled while G53 is active.
     // [G40 Errors]: G2/3 arc is programmed after a G40. The linear move after disabling is less than tool diameter.
     //   NOTE: Since cutter radius compensation is never enabled, these G40 errors don't apply. Grbl supports G40
-    //   only for the purpose to not esrror when G40 is sent with a g-code program header to setup the default modes.
+    //   only for the purpose to not error when G40 is sent with a g-code program header to setup the default modes.
 
     // [14. Cutter length compensation ]: G43 NOT SUPPORTED, but G43.1 and G49 are.
     // [G43.1 Errors]: Motion command in same line.
@@ -988,6 +991,8 @@ status_code_t gc_execute_block(char *block, char *message)
     // is active. The read pauses the processor temporarily and may cause a rare crash. For
     // future versions on processors with enough memory, all coordinate data should be stored
     // in memory and written to EEPROM only when there is not a cycle active.
+    // NOTE: If EEPROM emulation is active then EEPROM reads/writes are buffered and updates
+    // delayed until no cycle is active.
 
     if (bit_istrue(command_words, bit(ModalGroup_G12))) { // Check if called in block
         if (gc_block.modal.coord_system.idx > N_COORDINATE_SYSTEM)
@@ -1900,8 +1905,8 @@ status_code_t gc_execute_block(char *block, char *message)
 
         protocol_buffer_synchronize(); // Sync and finish all remaining buffered motions before moving on.
 
-        if (sys.state != STATE_CHECK_MODE) {
-            if (gc_state.modal.program_flow == ProgramFlow_Paused || gc_block.modal.program_flow == ProgramFlow_OptionalStop) {
+        if (gc_state.modal.program_flow == ProgramFlow_Paused || gc_block.modal.program_flow == ProgramFlow_OptionalStop) {
+            if (sys.state != STATE_CHECK_MODE) {
                 system_set_exec_state_flag(EXEC_FEED_HOLD); // Use feed hold for program pause.
                 protocol_execute_realtime(); // Execute suspend.
             }
@@ -1969,13 +1974,12 @@ status_code_t gc_execute_block(char *block, char *message)
 /*
   Not supported:
 
-  - Canned cycles
+  - Some canned cycles
   - Tool radius compensation
-  - A,B,C-axes
+  - A,B,C-axes (compile-option)
   - Evaluation of expressions
   - Variables
-  - Override control (TBD)
-  - Tool changes
+  - Tool changes (driver and/or compile-option)
   - Switches
 
    (*) Indicates optional parameter, enabled through config.h and re-compile

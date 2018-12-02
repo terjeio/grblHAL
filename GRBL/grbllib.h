@@ -21,4 +21,13 @@
 
 #include <stdint.h>
 
-int grbl_enter ();
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
+int grbl_enter (void);
+
+#ifdef __cplusplus
+}
+#endif

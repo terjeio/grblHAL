@@ -169,9 +169,8 @@ void st_deenergize ()
 // enabled. Startup init and limits call this function but shouldn't start the cycle.
 void st_wake_up ()
 {
-    // Initialize stepper output bits to ensure first ISR call does not step
-    // and cancel any pending steppers deenergize
-    st.step_outbits.value = 0;
+    // Initialize stepper data to ensure first ISR call does not step and
+    // cancel any pending steppers deenergize
     st.exec_block = NULL;
     sys.steppers_deenergize = false;
 
@@ -244,13 +243,8 @@ ISR_CODE void st_go_idle ()
 */
 ISR_CODE void stepper_driver_interrupt_handler (void)
 {
-    // Set the direction pins a couple of nanoseconds before we step the steppers
-
-    // Then pulse the stepping pins and
-    // Enable step pulse reset timer so that The Stepper Port Reset Interrupt can reset the signal after
-    // exactly settings.pulse_microseconds, independent of the main Timer1 prescaler.
-
-    if(st.step_outbits.value) //TODO: remove this test? must do for PPI mode? results in strange stepping for Tiva, others too?
+    // Start a step pulse when there is a block to execute.
+    if(st.exec_block)
         hal.stepper_pulse_start(&st);
 
     // If there is no step segment, attempt to pop one from the stepper buffer
@@ -300,17 +294,18 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
 
           #ifdef ADAPTIVE_MULTI_AXIS_STEP_SMOOTHING
             // With AMASS enabled, adjust Bresenham axis increment counters according to AMASS level.
-            st.steps[X_AXIS] = st.exec_block->steps[X_AXIS] >> st.exec_segment->amass_level;
-            st.steps[Y_AXIS] = st.exec_block->steps[Y_AXIS] >> st.exec_segment->amass_level;
-            st.steps[Z_AXIS] = st.exec_block->steps[Z_AXIS] >> st.exec_segment->amass_level;
+            st.amass_level = st.exec_segment->amass_level;
+            st.steps[X_AXIS] = st.exec_block->steps[X_AXIS] >> st.amass_level;
+            st.steps[Y_AXIS] = st.exec_block->steps[Y_AXIS] >> st.amass_level;
+            st.steps[Z_AXIS] = st.exec_block->steps[Z_AXIS] >> st.amass_level;
            #ifdef A_AXIS
-            st.steps[A_AXIS] = st.exec_block->steps[A_AXIS] >> st.exec_segment->amass_level;
+            st.steps[A_AXIS] = st.exec_block->steps[A_AXIS] >> st.amass_level;
            #endif
            #ifdef B_AXIS
-            st.steps[B_AXIS] = st.exec_block->steps[B_AXIS] >> st.exec_segment->amass_level;
+            st.steps[B_AXIS] = st.exec_block->steps[B_AXIS] >> st.amass_level;
            #endif
            #ifdef C_AXIS
-            st.steps[C_AXIS] = st.exec_block->steps[C_AXIS] >> st.exec_segment->amass_level;
+            st.steps[C_AXIS] = st.exec_block->steps[C_AXIS] >> st.amass_level;
            #endif
          #endif
 
@@ -336,9 +331,7 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
         bit_true(sys_rt_exec_state, EXEC_MOTION_CANCEL);
     }
 
-    register axes_signals_t step_outbits;
-
-    step_outbits.value = 0;
+    register axes_signals_t step_outbits = (axes_signals_t){0};
 
     // Execute step displacement profile by Bresenham line algorithm
 

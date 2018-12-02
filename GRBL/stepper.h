@@ -78,6 +78,7 @@ typedef struct {
     axes_signals_t step_outbits;    // The next stepping-bits to be output
     axes_signals_t dir_outbits;     // The next direction-bits to be output
     uint32_t steps[N_AXIS];
+    uint_fast8_t amass_level;       // AMASS level for this segment
     uint_fast16_t spindle_pwm;
     uint_fast16_t step_count;       // Steps remaining in line segment motion
     uint32_t step_event_count;

@@ -167,7 +167,7 @@ bool protocol_main_loop()
 
             } else if (c <= (nocaps ? ' ' - 1 : ' ') || line_flags.value) {
                 // Throw away all whitepace, control characters, comment characters and overflow characters.
-                if(c >=  ' ' && line_flags.comment_parentheses) {
+                if(c >= ' ' && line_flags.comment_parentheses) {
                     if(user_message.tracker == 5)
                         user_message.message[user_message.idx++] = c == ')' ? '\0' : c;
                     else if(user_message.tracker > 0 && CAPS(c) == msg[user_message.tracker])

@@ -111,12 +111,18 @@ typedef enum {
 // Useful macros
 #define clear_vector(a) memset(a, 0, sizeof(a))
 #define clear_coord_data(a) memset(a, 0.0f, sizeof(coord_data_t))
+#ifndef max
 #define max(a,b) (((a) > (b)) ? (a) : (b))
+#endif
+#ifndef min
 #define min(a,b) (((a) < (b)) ? (a) : (b))
+#endif
 #define isequal_position_vector(a,b) !memcmp(a, b, sizeof(coord_data_t))
 
 // Bit field and masking macros
+#ifndef bit
 #define bit(n) (1UL << n)
+#endif
 #define bit_true(x,mask) (x) |= (mask)
 #define bit_false(x,mask) (x) &= ~(mask)
 #define BIT_SET(x, bit, v) { if (v) { x |= (bit); } else { x &= ~(bit); } }
