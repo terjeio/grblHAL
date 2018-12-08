@@ -1,6 +1,6 @@
 ## SAMD21 Driver (RFC - to be published later)
 
-A GrblHAL driver for the Atmel SAMD21 processor on a [Arduion MKR ZERO board](https://store.arduino.cc/arduino-mkrzero).
+A GrblHAL driver for the Atmel SAMD21 processor on a [Arduiono MKR ZERO board](https://store.arduino.cc/arduino-mkrzero).
 
 ### *** EXPERIMENTAL *** ###
 
