@@ -634,7 +634,10 @@ void report_build_info (char *line)
     hal.stream_write(uitoa((uint32_t)N_TOOLS));
 #endif
 
-  hal.stream_write("]\r\n");
+    hal.stream_write("]\r\n");
+
+    if(hal.report_options)
+        hal.report_options();
 }
 
 

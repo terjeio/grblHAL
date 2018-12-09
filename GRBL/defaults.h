@@ -92,6 +92,7 @@
 
 // Grbl default settings
 
+#define DEFAULT_STREAM 0 // 0 = Serial, 1 = Bluetooth, 2 = Ethernet, 3 = WiFi
 #define DEFAULT_X_STEPS_PER_MM 250.0f
 #define DEFAULT_Y_STEPS_PER_MM 250.0f
 #define DEFAULT_Z_STEPS_PER_MM 250.0f
@@ -151,7 +152,12 @@
 #define DEFAULT_C_MAX_TRAVEL 200.0f // mm
 
 #define DEFAULT_G73_RETRACT 0.1f // mm
-#define DEFAULT_SPINDLE_PPR 100 // pulses per revolution
+
+// When the HAL driver supports spindle sync then this option sets the number of pulses per revolution
+// for the spindle encoder. Depending on the driver this may lead to the "spindle at speed" detection
+// beeing enabled. When this is enabled grbl will wait for the spindle to reach the programmed speed
+// before continue processing. NOTE: Currently there is no timeout for this wait.
+#define DEFAULT_SPINDLE_PPR 0 // Pulses per revolution. Default 0.
 
 // Enables and configures Grbl's sleep mode feature. If the spindle or coolant are powered and Grbl
 // is not actively moving or receiving any commands, a sleep timer will start. If any data or commands

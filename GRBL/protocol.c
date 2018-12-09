@@ -113,7 +113,7 @@ bool protocol_main_loop()
     xcommand[0] = '\0';
     user_message.show = false;
 
-    for (;;) {
+    while(true) {
 
         // Process one line of incoming stream data, as the data becomes available. Performs an
         // initial filtering by removing spaces and comments and capitalizing all letters.

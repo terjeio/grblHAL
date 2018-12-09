@@ -119,6 +119,8 @@ typedef struct HAL {
     void (*stream_cancel_read_buffer)(void);
     bool (*stream_suspend_read)(bool await);
 
+    void (*report_options)(void);
+
     void (*set_bits_atomic)(volatile uint_fast16_t *value, uint_fast16_t bits);
     uint_fast16_t (*clear_bits_atomic)(volatile uint_fast16_t *value, uint_fast16_t bits);
     uint_fast16_t (*set_value_atomic)(volatile uint_fast16_t *value, uint_fast16_t bits);

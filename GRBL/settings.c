@@ -28,7 +28,7 @@ const settings_t defaults = {
 
     .version = SETTINGS_VERSION,
 
-    .stream = StreamSetting_Serial,
+    .stream = (stream_setting_t)DEFAULT_STREAM,
     .junction_deviation = DEFAULT_JUNCTION_DEVIATION,
     .arc_tolerance = DEFAULT_ARC_TOLERANCE,
     .g73_retract = DEFAULT_G73_RETRACT,
@@ -268,6 +268,30 @@ void settings_restore (uint8_t restore_flag) {
 
     if (restore_flag & SETTINGS_RESTORE_DEFAULTS) {
         memcpy(&settings, &defaults, sizeof(settings_t));
+
+        // Sanity check for default stream assignment
+        if(settings.stream != StreamSetting_Serial)
+          switch(settings.stream) {
+
+            case StreamSetting_Bluetooth:
+                if(!hal.driver_cap.bluetooth)
+                    settings.stream = StreamSetting_Serial;
+                break;
+
+            case StreamSetting_Ethernet:
+                if(!hal.driver_cap.ethernet)
+                    settings.stream = StreamSetting_Serial;
+                break;
+
+            case StreamSetting_WiFi:
+                if(!hal.driver_cap.wifi)
+                    settings.stream = StreamSetting_Serial;
+                break;
+
+            default:
+                settings.stream = StreamSetting_Serial;
+        }
+
         write_global_settings();
     }
 
