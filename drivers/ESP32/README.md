@@ -6,6 +6,17 @@ A GrblHAL driver for the ESP32 processor.
 
 ---
 
+__Update 2018-12-14:__ Prototype [CNC BoosterPack](https://github.com/terjeio/CNC_Boosterpack) "motherboard" up and running.
+
+The board has an 8-bit I2C IO-expander and a micro SD card socket on board. Option to use EEPROM on BoosterPack for settings.
+
+I have reorganized the HAL structure a bit so all drivers and the core grbl code must be published simultaneously.
+To aid this work I am contemplating making similar CNC BoosterPack "motherboards" for Arduino MKRZERO and Cypress CY8CKIT-059 (PSoC 5).
+
+Complemented with the Trinamic TMC2130 version of the CNC BoosterPack silent stepping is within reach for all these processors... 
+
+---
+
 __Update 2018-11-08:__ I2C keypad interface done, usable for jogging and overrides.
 
 Driver code published \(still for preview\), but not yet the changed core Grbl code required for compilation. No more work will be done on this driver until I receive dev kits and IO-expanders ordered from China.
@@ -43,3 +54,6 @@ The standard GRBL/config.h should be modified with these changes at the top:
 Add: #include "esp_attr.h"
 Change: #define ISR_CODE to #define ISR_CODE IRAM_ATTR
 ```
+
+---
+2018-12-14
