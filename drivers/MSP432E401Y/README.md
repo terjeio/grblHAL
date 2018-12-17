@@ -4,8 +4,7 @@ A GrblHAL driver for the Texas Instruments [MSP432E401Y LaunchPad](http://www.ti
 
 Default pin assignments matches the [CNC BoosterPack](https://github.com/terjeio/CNC_Boosterpack).
 
-**NOTE:** Inital coding and testing complete, code to be released later.
-
+**NOTE:** How to build instructions to be added later. Eg. FreeRTOS has to be built as a library and linked to.
 
 ---
-2018-12-08
+2018-12-17

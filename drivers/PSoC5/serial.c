@@ -77,7 +77,7 @@ void serialRxFlush(void) {
 
 void serialRxCancel(void) {
 
-    rxbuf[rx_head] = CAN;
+    rxbuf[rx_head] = CMD_RESET;
     rx_tail = rx_head;
     rx_head = (rx_tail + 1) & (RX_BUFFER_SIZE - 1);
     UART_ClearRxBuffer(); // clear FIFO too
@@ -96,7 +96,7 @@ void serialWriteS(const char *data) {
 
 void serialWriteLn(const char *data) {
     serialWriteS(data);
-    serialWriteS(EOL);
+    serialWriteS(ASCII_EOL);
 }
 
 void serialWrite(const char *data, unsigned int length) {

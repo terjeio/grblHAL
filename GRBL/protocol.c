@@ -80,14 +80,14 @@ bool protocol_main_loop()
 
     if (settings.limits.flags.hard_enabled && settings.limits.flags.check_at_init && hal.limits_get_state().value) {
         set_state(STATE_ALARM); // Ensure alarm state is active.
-        report_feedback_message(Message_CheckLimits);
+        hal.report.feedback_message(Message_CheckLimits);
     }
 
     // Check for and report alarm state after a reset, error, or an initial power up.
     // NOTE: Sleep mode disables the stepper drivers and position can't be guaranteed.
     // Re-initialize the sleep state as an ALARM mode to ensure user homes or acknowledges.
     if (sys.state & (STATE_ALARM|STATE_ESTOP|STATE_SLEEP)) {
-        report_feedback_message(sys.state == STATE_ESTOP ? Message_EStop : Message_AlarmLock);
+        hal.report.feedback_message(sys.state == STATE_ESTOP ? Message_EStop : Message_AlarmLock);
         set_state(sys.state == STATE_ESTOP ? STATE_ESTOP : STATE_ALARM); // Ensure alarm state is set.
     } else {
         // Check if the safety door is open.
@@ -117,7 +117,7 @@ bool protocol_main_loop()
 
         // Process one line of incoming stream data, as the data becomes available. Performs an
         // initial filtering by removing spaces and comments and capitalizing all letters.
-        while((c = hal.stream_read()) != SERIAL_NO_DATA) {
+        while((c = hal.stream.read()) != SERIAL_NO_DATA) {
 
             if(c == CMD_RESET) {
 
@@ -159,7 +159,7 @@ bool protocol_main_loop()
                 else  // Parse and execute g-code block.
                     gc_state.last_error = gc_execute_block(line, user_message.show ? user_message.message : NULL);
 
-                hal.report_status_message(gc_state.last_error);
+                hal.report.status_message(gc_state.last_error);
 
                 // Reset tracking data for next line.
                 nocaps = user_message.show = false;
@@ -217,7 +217,7 @@ bool protocol_main_loop()
             if (xcommand[0] == '$') // Grbl '$' system command
                 system_execute_line(xcommand);
             else if (sys.state & (STATE_ALARM|STATE_ESTOP|STATE_JOG)) // Everything else is gcode. Block if in alarm, eStop or jog state.
-                hal.report_status_message(Status_SystemGClock);
+                hal.report.status_message(Status_SystemGClock);
             else // Parse and execute g-code block.
                 gc_execute_block(xcommand, NULL);
 
@@ -333,7 +333,7 @@ bool protocol_exec_rt_system ()
         // Halt everything upon a critical event flag. Currently hard and soft limits flag this.
         if ((alarm_code_t)rt_exec == Alarm_HardLimit || (alarm_code_t)rt_exec == Alarm_SoftLimit || (alarm_code_t)rt_exec == Alarm_EStop) {
             system_set_exec_alarm(rt_exec);
-            report_feedback_message((alarm_code_t)rt_exec == Alarm_EStop ? Message_EStop : Message_CriticalEvent);
+            hal.report.feedback_message((alarm_code_t)rt_exec == Alarm_EStop ? Message_EStop : Message_CriticalEvent);
             system_clear_exec_state_flag(EXEC_RESET); // Disable any existing reset
             // Block everything, except reset and status reports, until user issues reset or power
             // cycles. Hard limits typically occur while unattended or not paying attention. Gives
@@ -366,8 +366,8 @@ bool protocol_exec_rt_system ()
             if(hal.driver_reset)
                 hal.driver_reset();
 
-            if(hal.stream_suspend_read && hal.stream_suspend_read(false))
-                hal.stream_cancel_read_buffer(); // flush pending blocks (after M6)
+            if(hal.stream.suspend_read && hal.stream.suspend_read(false))
+                hal.stream.cancel_read_buffer(); // flush pending blocks (after M6)
 
             plan_reset();
             st_reset();
@@ -381,11 +381,9 @@ bool protocol_exec_rt_system ()
         if (rt_exec & EXEC_STATUS_REPORT)
             report_realtime_status();
 
-#ifdef PID_LOG
         // Execute and print PID log to output stream
         if (rt_exec & EXEC_PID_REPORT)
             report_pid_log();
-#endif
 
         rt_exec &= ~(EXEC_STOP|EXEC_STATUS_REPORT|EXEC_PID_REPORT); // clear requests already processed
 
@@ -572,7 +570,7 @@ ISR_CODE bool protocol_process_realtime (char c)
         case CMD_STOP: // Set as true
             system_set_exec_state_flag(EXEC_STOP);
             char_counter = 0;
-            hal.stream_cancel_read_buffer();
+            hal.stream.cancel_read_buffer();
             add = false;
             break;
 
@@ -617,7 +615,7 @@ ISR_CODE bool protocol_process_realtime (char c)
 
         case CMD_JOG_CANCEL: // Cancel jogging
             char_counter = 0;
-            hal.stream_cancel_read_buffer();
+            hal.stream.cancel_read_buffer();
             break;
 
         case CMD_OVERRIDE_FEED_RESET:

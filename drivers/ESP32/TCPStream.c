@@ -172,7 +172,7 @@ void TCPStreamRxFlush (void)
 
 void TCPStreamRxCancel (void)
 {
-    rxbuf[rx_head] = CAN;
+    rxbuf[rx_head] = CMD_RESET;
     rx_tail = rx_head;
     rx_head = (rx_tail + 1) & (RX_BUFFER_SIZE - 1);
 }
@@ -204,7 +204,7 @@ void TCPStreamWriteS (const char *data)
 void TCPStreamWriteLn (const char *data)
 {
     TCPStreamWriteS(data);
-    TCPStreamWriteS(EOL);
+    TCPStreamWriteS(ASCII_EOL);
 }
 
 void TCPStreamWrite (const char *data, unsigned int length)
@@ -395,7 +395,7 @@ static err_t TCPStreamAccept (void *arg, struct tcp_pcb *pcb, err_t err)
     tcp_sent(pcb, streamSent);
 
     selectStream(StreamSetting_WiFi);
-	hal.stream_write_all("[MSG:WIFI CONNECTED]\r\n");
+	hal.stream.write_all("[MSG:WIFI CONNECTED]\r\n");
 
     return ERR_OK;
 }

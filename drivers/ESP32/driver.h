@@ -34,35 +34,27 @@
 #include "driver/i2c.h"
 
 #include "freertos/queue.h"
+#include "freertos/semphr.h"
 
 #include "GRBL/grbl.h"
 
 #include "keypad.h"
 
 // Configuration
+// Set value to 1 to enable, 0 to disable
 
-//#define PWM_RAMPED // uncomment to enable ramped spindle PWM.
-//#define PROBE_ISR // uncomment to catch probe state change by interrupt TODO: needs verification!
-//#define KEYPAD_ENABLE // uncomment to enable I2C keypad for jogging etc. NOTE: not yet ready
-//#define WIFI_ENABLE // uncomment to enable serial communications over WiFi.
-//#define BLUETOOTH_ENABLE // uncomment to enable serial communications over Bluetooth.
-//#define SDCARD_ENABLE // uncomment to run jobs from SD card.
-//#define IOEXPAND_ENABLE // uncomment to enable I2C IO expander for some output signals.
+#define CNC_BOOSTERPACK  0 // do not change!
+#define PWM_RAMPED       0 // Ramped spindle PWM.
+#define PROBE_ENABLE     1 // Probe input
+#define PROBE_ISR        0 // Catch probe state change by interrupt TODO: needs verification!
+#define KEYPAD_ENABLE    0 // I2C keypad for jogging etc. NOTE: not yet ready
+#define WIFI_ENABLE      0 // Streaming over WiFi.
+#define BLUETOOTH_ENABLE 0 // Streaming over Bluetooth.
+#define SDCARD_ENABLE    0 // Run jobs from SD card.
+#define IOEXPAND_ENABLE  0 // I2C IO expander for some output signals.
+#define EEPROM_ENABLE    0 // I2C EEPROM (24LC16) support.
 
 // End configuration
-
-
-#ifdef SDCARD_ENABLE
-
-// Pin mapping when using SPI mode.
-// With this mapping, SD card can be used both in SPI and 1-line SD mode.
-// Note that a pull-up on CS line is required in SD mode.
-#define PIN_NUM_MISO 19
-#define PIN_NUM_MOSI 18
-#define PIN_NUM_CLK  5
-#define PIN_NUM_CS   21
-
-#endif // SDCARD_ENABLE
 
 typedef struct {
 	wifi_settings_t wifi;
@@ -70,7 +62,118 @@ typedef struct {
 	jog_config_t jog_config;
 } driver_settings_t;
 
+typedef struct {
+	uint8_t action;
+	void *params;
+} i2c_task_t;
+
 extern driver_settings_t driver_settings;
+
+#if CNC_BOOSTERPACK
+
+#define IOEXPAND 0
+
+#if SDCARD_ENABLE
+
+// Pin mapping when using SPI mode.
+// With this mapping, SD card can be used both in SPI and 1-line SD mode.
+// Note that a pull-up on CS line is required in SD mode.
+#define PIN_NUM_MISO 19
+#define PIN_NUM_MOSI 23
+#define PIN_NUM_CLK  18
+#define PIN_NUM_CS   5
+
+#endif // SDCARD_ENABLE
+
+// timer definitions
+#define STEP_TIMER_GROUP TIMER_GROUP_0
+#define STEP_TIMER_INDEX TIMER_0
+
+// Define step pulse output pins.
+#define X_STEP_PIN      GPIO_NUM_26
+#define Y_STEP_PIN      GPIO_NUM_27
+#define Z_STEP_PIN      GPIO_NUM_14
+#define STEP_MASK     	(1ULL << X_STEP_PIN|1ULL << Y_STEP_PIN|1ULL << Z_STEP_PIN) // All step bits
+
+// Define step direction output pins. NOTE: All direction pins must be on the same port.
+#define X_DIRECTION_PIN     GPIO_NUM_2
+#define Y_DIRECTION_PIN     GPIO_NUM_15
+#define Z_DIRECTION_PIN     GPIO_NUM_12
+#define DIRECTION_MASK    	(1ULL << X_DIRECTION_PIN|1ULL << Y_DIRECTION_PIN|1ULL << Z_DIRECTION_PIN) // All direction bits
+
+// Define stepper driver enable/disable output pin(s).
+#define STEPPERS_DISABLE_PIN    IOEXPAND
+#define STEPPERS_DISABLE_MASK	(1ULL << STEPPERS_DISABLE_PIN)
+
+// Define homing/hard limit switch input pins and limit interrupt vectors.
+#define X_LIMIT_PIN     GPIO_NUM_4
+#define Y_LIMIT_PIN     GPIO_NUM_16
+#define Z_LIMIT_PIN     GPIO_NUM_32
+#define LIMIT_MASK    	(1ULL << X_LIMIT_PIN|1ULL << Y_LIMIT_PIN|1ULL << Z_LIMIT_PIN) // All limit bits
+
+// Define spindle enable and spindle direction output pins.
+#define SPINDLE_ENABLE_PIN      IOEXPAND
+#define SPINDLE_DIRECTION_PIN   IOEXPAND
+#define SPINDLE_MASK 			(1ULL << SPINDLE_ENABLE_PIN|1ULL << SPINDLE_DIRECTION_PIN)
+#define SPINDLEPWMPIN     		GPIO_NUM_17
+
+// Define flood and mist coolant enable output pins.
+
+#define COOLANT_FLOOD_PIN   IOEXPAND
+#define COOLANT_MIST_PIN    IOEXPAND
+#define COOLANT_MASK 		(1UL << COOLANT_FLOOD_PIN|1ULL << COOLANT_MIST_PIN)
+
+// Define user-control CONTROLs (cycle start, reset, feed hold) input pins.
+#define RESET_PIN           GPIO_NUM_35
+#define FEED_HOLD_PIN       GPIO_NUM_39
+#define CYCLE_START_PIN     GPIO_NUM_36
+#define SAFETY_DOOR_PIN     GPIO_NUM_34
+#define CONTROL_MASK      	(1UL << RESET_PIN|1UL << FEED_HOLD_PIN|1UL << CYCLE_START_PIN|1UL << SAFETY_DOOR_PIN)
+
+// Define probe switch input pin.
+#define PROBE_PIN       GPIO_NUM_13
+
+#if KEYPAD_ENABLE
+#define KEYPAD_STROBE_PIN	GPIO_NUM_33
+#endif
+
+#if IOEXPAND_ENABLE || KEYPAD_ENABLE || EEPROM_ENABLE
+// Define I2C port/pins
+#define I2C_PORT  I2C_NUM_1
+#define I2C_SDA   GPIO_NUM_21
+#define I2C_SCL   GPIO_NUM_22
+#define I2C_CLOCK 100000
+#endif
+
+#if IOEXPAND_ENABLE
+typedef union {
+	uint8_t mask;
+	struct {
+		uint8_t stepper_enable_z :1,
+				stepper_enable_y :1,
+				mist_on          :1,
+				flood_on         :1,
+				reserved         :1,
+			    spindle_dir      :1,
+				stepper_enable_x :1,
+				spindle_on		 :1;
+	};
+} ioexpand_t;
+#endif
+
+#else
+
+#if SDCARD_ENABLE
+
+// Pin mapping when using SPI mode.
+// With this mapping, SD card can be used both in SPI and 1-line SD mode.
+// Note that a pull-up on CS line is required in SD mode.
+#define PIN_NUM_MISO 19
+#define PIN_NUM_MOSI 23
+#define PIN_NUM_CLK  18
+#define PIN_NUM_CS   5
+
+#endif // SDCARD_ENABLE
 
 // timer definitions
 #define STEP_TIMER_GROUP TIMER_GROUP_0
@@ -80,58 +183,86 @@ extern driver_settings_t driver_settings;
 #define X_STEP_PIN      GPIO_NUM_12
 #define Y_STEP_PIN      GPIO_NUM_14
 #define Z_STEP_PIN      GPIO_NUM_27
-#define HWSTEP_MASK     (1ULL << X_STEP_PIN|1ULL << Y_STEP_PIN|1ULL << Z_STEP_PIN) // All step bits
+#define STEP_MASK     	(1ULL << X_STEP_PIN|1ULL << Y_STEP_PIN|1ULL << Z_STEP_PIN) // All step bits
 
 // Define step direction output pins. NOTE: All direction pins must be on the same port.
 #define X_DIRECTION_PIN     GPIO_NUM_26
 #define Y_DIRECTION_PIN     GPIO_NUM_25
 #define Z_DIRECTION_PIN     GPIO_NUM_33
-#define HWDIRECTION_MASK    (1ULL << X_DIRECTION_PIN|1ULL << Y_DIRECTION_PIN|1ULL << Z_DIRECTION_PIN) // All direction bits
+#define DIRECTION_MASK    	(1ULL << X_DIRECTION_PIN|1ULL << Y_DIRECTION_PIN|1ULL << Z_DIRECTION_PIN) // All direction bits
 
 // Define stepper driver enable/disable output pin(s).
 #define STEPPERS_DISABLE_PIN    GPIO_NUM_13
+#define STEPPERS_DISABLE_MASK	(1ULL << STEPPERS_DISABLE_PIN)
 
 // Define homing/hard limit switch input pins and limit interrupt vectors.
 #define X_LIMIT_PIN     GPIO_NUM_2
 #define Y_LIMIT_PIN     GPIO_NUM_4
 #define Z_LIMIT_PIN     GPIO_NUM_15
-#define HWLIMIT_MASK    (1ULL << X_LIMIT_PIN|1ULL << Y_LIMIT_PIN|1ULL << Z_LIMIT_PIN) // All limit bits
+#define LIMIT_MASK    	(1ULL << X_LIMIT_PIN|1ULL << Y_LIMIT_PIN|1ULL << Z_LIMIT_PIN) // All limit bits
 
 // Define spindle enable and spindle direction output pins.
 #define SPINDLE_ENABLE_PIN      GPIO_NUM_18
 #define SPINDLE_DIRECTION_PIN   GPIO_NUM_5
-#define HWSPINDLE_MASK (1ULL << SPINDLE_ENABLE_PIN|1ULL << SPINDLE_DIRECTION_PIN)
+#define SPINDLE_MASK 			(1ULL << SPINDLE_ENABLE_PIN|1ULL << SPINDLE_DIRECTION_PIN)
 #define SPINDLEPWMPIN     		GPIO_NUM_17
 
 // Define flood and mist coolant enable output pins.
 
 #define COOLANT_FLOOD_PIN   GPIO_NUM_16
 #define COOLANT_MIST_PIN    GPIO_NUM_21
-#define HWCOOLANT_MASK (1UL << COOLANT_FLOOD_PIN|1ULL << COOLANT_MIST_PIN)
+#define COOLANT_MASK 		(1UL << COOLANT_FLOOD_PIN|1ULL << COOLANT_MIST_PIN)
 
 // Define user-control CONTROLs (cycle start, reset, feed hold) input pins.
 #define RESET_PIN           GPIO_NUM_34
 #define FEED_HOLD_PIN       GPIO_NUM_36
 #define CYCLE_START_PIN     GPIO_NUM_39
 #define SAFETY_DOOR_PIN     GPIO_NUM_35
-#define HWCONTROL_MASK      (1UL << RESET_PIN|1UL << FEED_HOLD_PIN|1UL << CYCLE_START_PIN|1UL << SAFETY_DOOR_PIN)
+#define CONTROL_MASK      	(1UL << RESET_PIN|1UL << FEED_HOLD_PIN|1UL << CYCLE_START_PIN|1UL << SAFETY_DOOR_PIN)
 
 // Define probe switch input pin.
+#if PROBE_ENABLE
 #define PROBE_PIN       GPIO_NUM_32
-
-#ifdef KEYPAD_ENABLE
-#define KEYPAD_STROBE_PIN	GPIO_NUM_21 //33
+#else
+#define PROBE_PIN       0xFF
 #endif
 
-// Define I2C port/pins
-#define I2C_PORT I2C_NUM_1 // Comment out to not enable I2C
-#define I2C_SDA  GPIO_NUM_23
-#define I2C_SCL  GPIO_NUM_22
-#define I2C_CLOCK 100000
+#if KEYPAD_ENABLE
+#error No free pins for keypad!
+#endif
 
-void selectStream (stream_setting_t stream);
+#if IOEXPAND_ENABLE || KEYPAD_ENABLE || EEPROM_ENABLE
+// Define I2C port/pins
+#define I2C_PORT  I2C_NUM_1
+#define I2C_SDA   GPIO_NUM_21
+#define I2C_SCL   GPIO_NUM_22
+#define I2C_CLOCK 100000
+#endif
+
+#if IOEXPAND_ENABLE
+typedef union {
+	uint8_t mask;
+	struct {
+		uint8_t spindle_on       :1,
+				spindle_dir      :1,
+				mist_on          :1,
+				flood_on         :1,
+				stepper_enable_z :1,
+				stepper_enable_x :1,
+				stepper_enable_y :1,
+				reserved		 :1;
+	};
+} ioexpand_t;
+#endif
+
+#endif
+
 #ifdef I2C_PORT
 extern QueueHandle_t i2cQueue;
+extern SemaphoreHandle_t i2cBusy;
 void i2c_init (void);
 #endif
-#endif
+
+void selectStream (stream_setting_t stream);
+
+#endif // __DRIVER_H__

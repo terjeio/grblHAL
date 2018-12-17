@@ -26,18 +26,8 @@
 
 #define USE_USB
 
-#define BS   0x08
-#define LF   0x0A
-#define CR   0x0D
-#define XON  0x11
-#define XOFF 0x13
-#define CAN  0x18
-#define EOF  0x1A
-#define DEL  0x7F
-#define EOL  "\r\n"
+#define ASCII_EOL  "\r\n"
 
-#define XONOK (XON|0x80)
-#define XOFFOK (XOFF|0x80)
 #define TX_BUFFER_SIZE 128      // must be a power of 2
 #define RX_BUFFER_SIZE 1024     // must be a power of 2
 #define RX_BUFFER_HWM 900

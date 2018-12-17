@@ -28,6 +28,8 @@
 
 #include "driver.h"
 
+#if EEPROM_ENABLE
+
 #define EEPROM_I2C_ADDRESS (0xA0 >> 1)
 #define EEPROM_ADDR_BITS_LO 8
 #define EEPROM_BLOCK_SIZE (2 ^ EEPROM_LO_ADDR_BITS)
@@ -47,95 +49,37 @@ void eeprom_init (void)
 	i2c_init();
 }
 
-/* could not get ACK polling to work...
-static void WaitForACK (void)
-{
-    while(EUSCI_B1->STATW & EUSCI_B_STATW_BBUSY);
-
-    do {
-        EUSCI_B1->IFG &= ~(EUSCI_B_IFG_TXIFG0|EUSCI_B_IFG_RXIFG0);
-        EUSCI_B1->CTLW0 |= EUSCI_B_CTLW0_TR|EUSCI_B_CTLW0_TXSTT;     // I2C TX, start condition
-
-        while (EUSCI_B1->CTLW0 & EUSCI_B_CTLW0_TXSTT) {               // Ensure stop condition got sent
-            if(!(EUSCI_B1->IFG & EUSCI_B_IFG_NACKIFG))           // Break out if ACK received
-              break;
-        }
-//        EUSCI_B1->CTLW0 |= EUSCI_B_CTLW0_TXSTP;
-//        while (EUSCI_B1->CTLW0 & EUSCI_B_CTLW0_TXSTP);               // Ensure stop condition got sent
-        __delay_cycles(5000);
-    } while(EUSCI_B1->IFG & EUSCI_B_IFG_NACKIFG);
-//    EUSCI_B1->CTLW0 |= EUSCI_B_CTLW0_TXSTP;
-//    while (EUSCI_B1->CTLW0 & EUSCI_B_CTLW0_TXSTP);               // Ensure stop condition got sent
-}
-*/
-/*
 static void StartI2C (bool read)
 {
-    bool single = i2c.count == 1;
+	if(i2cBusy != NULL && xSemaphoreTake(i2cBusy, 5 / portTICK_PERIOD_MS) == pdTRUE) {
 
-    EUSCI_B1->I2CSA = i2c.addr;                                         // Set EEPROM address and MSB part of data address
-    EUSCI_B1->IFG &= ~(EUSCI_B_IFG_TXIFG0|EUSCI_B_IFG_RXIFG0);          // Clear interrupt flags
-    EUSCI_B1->CTLW0 |= EUSCI_B_CTLW0_TR|EUSCI_B_CTLW0_TXSTT;            // Transmit start condition and address
-    while(!(EUSCI_B1->IFG & EUSCI_B_IFG_TXIFG0));                       // Wait for TX
-    EUSCI_B1->TXBUF = i2c.word_addr;                                    // Transmit data address LSB
-//    EUSCI_B1->IFG &= ~EUSCI_B_IFG_TXIFG0;                               // Clear TX interrupt flag and
-    while(!(EUSCI_B1->IFG & EUSCI_B_IFG_TXIFG0));                       // wait for transmit complete
+		i2c.addr <<= 1;
+		i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+		i2c_master_start(cmd);
+		i2c_master_write_byte(cmd, i2c.addr|I2C_MASTER_WRITE, true);
+		i2c_master_write_byte(cmd, i2c.word_addr, true);
 
-    if(read) {                                                          // Read data from EEPROM:
-        EUSCI_B1->CTLW0 |= EUSCI_B_CTLW0_TXSTP;                         // Transmit STOP condtition
-        while (EUSCI_B1->CTLW0 & EUSCI_B_CTLW0_TXSTP);                  // and wait for it to complete
-        EUSCI_B1->CTLW0 &= ~EUSCI_B_CTLW0_TR;                           // Set read mode
-        if(single)                                                      // and issue
-            EUSCI_B1->CTLW0 |= EUSCI_B_CTLW0_TXSTT|EUSCI_B_CTLW0_TXSTP; // restart and stop condition if single byte read
-        else                                                            // else
-            EUSCI_B1->CTLW0 |= EUSCI_B_CTLW0_TXSTT;                     // restart condition only
+		if(read) {
+			i2c_master_start(cmd);
+			i2c_master_write_byte(cmd, i2c.addr|I2C_MASTER_READ, true);
+			if (i2c.count > 1)
+				i2c_master_read(cmd, i2c.data, i2c.count - 1, I2C_MASTER_ACK);
+			i2c_master_read_byte(cmd, i2c.data + i2c.count - 1, I2C_MASTER_NACK);
+			i2c_master_stop(cmd);
+		} else {
+			i2c_master_write(cmd, i2c.data, i2c.count, true);
+			i2c_master_stop(cmd);
+		}
 
-        while(i2c.count) {                                              // Read data...
-            if(!single && i2c.count == 1) {
-                EUSCI_B1->CTLW0 |= EUSCI_B_CTLW0_TXSTP;
-                while (EUSCI_B1->CTLW0 & EUSCI_B_CTLW0_TXSTP) {
-                    while(!(EUSCI_B1->IFG & EUSCI_B_IFG_RXIFG0));
-                }
-            } else
-                while(!(EUSCI_B1->IFG & EUSCI_B_IFG_RXIFG0));
-            i2c.count--;
-            *i2c.data++ = EUSCI_B1->RXBUF;
-        }
-    } else {                                                            // Write data to EEPROM:
-        while (i2c.count--) {
-            EUSCI_B1->TXBUF = *i2c.data++;
-            while(!(EUSCI_B1->IFG & EUSCI_B_IFG_TXIFG0));
-        }
-        EUSCI_B1->CTLW0 |= EUSCI_B_CTLW0_TXSTP;                         // I2C stop condition
- //       WaitForACK();
-        hal.delay_ms(5, 0);                                             // Wait a bit for the write cycle to complete
-    }
-    while (EUSCI_B1->CTLW0 & EUSCI_B_CTLW0_TXSTP);                      // Ensure stop condition got sent
-}
-*/
-static void StartI2C (bool read)
-{
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-    i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, i2c.addr, I2C_MASTER_NACK);
-    i2c_master_write_byte(cmd, i2c.word_addr, I2C_MASTER_NACK);
+		esp_err_t ret = i2c_master_cmd_begin(I2C_PORT, cmd, 1000 / portTICK_PERIOD_MS);
+//		printf("EE %d %d %d\n", read, i2c.count, ret);
+		i2c_cmd_link_delete(cmd);
 
-    if(read) {
-        i2c_master_start(cmd);
-        i2c_master_write_byte(cmd, i2c.addr, I2C_MASTER_NACK);
-        if (i2c.count > 1)
-            i2c_master_read(cmd, i2c.data, i2c.count - 1, I2C_MASTER_ACK);
-        else
-        	i2c_master_read_byte(cmd, i2c.data + i2c.count - 1, I2C_MASTER_NACK);
-        i2c_master_stop(cmd);
-    } else {
-    	i2c_master_write(cmd, i2c.data, i2c.count, I2C_MASTER_NACK);
-        i2c_master_stop(cmd);
-        vTaskDelay(20/portTICK_PERIOD_MS);
-     }
+		xSemaphoreGive(i2cBusy);
 
-	i2c_master_cmd_begin(I2C_PORT, cmd, 1000 / portTICK_PERIOD_MS);
-	i2c_cmd_link_delete(cmd);
+		if(!read) // Delay 5ms for write to complete
+			vTaskDelay(10 / portTICK_PERIOD_MS);
+	}
 }
 
 uint8_t eepromGetByte (uint32_t addr)
@@ -177,6 +121,7 @@ void eepromWriteBlockWithChecksum (uint32_t destination, uint8_t *source, uint32
 
         StartI2C(false);
 
+        i2c.data += i2c.count;
         i2c.word_addr = destination & 0xFF;
     }
 
@@ -195,3 +140,5 @@ bool eepromReadBlockWithChecksum (uint8_t *destination, uint32_t source, uint32_
 
     return calc_checksum(destination, size) == eepromGetByte(source + size);
 }
+
+#endif

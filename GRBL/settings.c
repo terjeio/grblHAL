@@ -91,9 +91,9 @@ const settings_t defaults = {
     .spindle.pwm_min_value = DEFAULT_SPINDLE_PWM_MIN_VALUE,
     .spindle.pwm_max_value = DEFAULT_SPINDLE_PWM_MAX_VALUE,
     .spindle.ppr = DEFAULT_SPINDLE_PPR,
-    .spindle.P_gain = 1.0f,
-    .spindle.I_gain = 0.0f,
-    .spindle.D_gain = 100.0f,
+    .spindle.P_gain = DEFAULT_SPINDLE_P_GAIN,
+    .spindle.I_gain = DEFAULT_SPINDLE_I_GAIN,
+    .spindle.D_gain = DEFAULT_SPINDLE_D_GAIN,
 
     .steps_per_mm[X_AXIS] = DEFAULT_X_STEPS_PER_MM,
     .steps_per_mm[Y_AXIS] = DEFAULT_Y_STEPS_PER_MM,
@@ -428,7 +428,9 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
                 break;
 
             case Setting_InvertProbePin: // Reset to ensure change. Immediate re-init may cause problems.
-                settings.flags.invert_probe_pin = int_value !=0;
+                if(!hal.probe_configure_invert_mask)
+                    return Status_SettingDisabled;
+                settings.flags.invert_probe_pin = int_value != 0;
                 hal.probe_configure_invert_mask(false);
                 break;
 
@@ -470,6 +472,8 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
                 break;
 
             case Setting_ProbePullUpDisable:
+                if(!hal.probe_configure_invert_mask)
+                    return Status_SettingDisabled;
                 settings.flags.disable_probe_pullup = int_value != 0;
                 break;
 
@@ -566,10 +570,9 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
                 break; // Re-initialize spindle rpm calibration
 
             case Setting_LaserMode:
-                if(hal.driver_cap.variable_spindle)
-                    settings.flags.laser_mode = int_value != 0;
-                else
+                if(!hal.driver_cap.variable_spindle)
                     return Status_SettingDisabledLaser;
+                settings.flags.laser_mode = int_value != 0;
                 break;
 
             case Setting_PWMFreq:
@@ -659,7 +662,7 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
 // Initialize the config subsystem
 void settings_init() {
     if(!read_global_settings()) {
-        hal.report_status_message(Status_SettingReadFail);
+        hal.report.status_message(Status_SettingReadFail);
         settings_restore(SETTINGS_RESTORE_ALL); // Force restore all EEPROM data.
         report_grbl_settings();
     } else {

@@ -34,6 +34,11 @@ volatile uint_fast16_t sys_rt_exec_alarm;   // Global realtime executor bitflag 
 
 HAL hal;
 
+static const report_t report_fns = {
+    .status_message = report_status_message,
+    .feedback_message = report_feedback_message
+};
+
 // called from stream drivers while tx is blocking, return false to terminate
 
 static bool stream_tx_blocking (void)
@@ -73,7 +78,7 @@ int grbl_enter (void)
 	hal.protocol_process_realtime = protocol_process_realtime;
 	hal.stream_blocking_callback = stream_tx_blocking;
 	hal.protocol_enqueue_gcode = protocol_enqueue_gcode;
-    hal.report_status_message = report_status_message;
+	memcpy(&hal.report, &report_fns, sizeof(report_t));
 
 #ifdef DEBUGOUT
 	hal.debug_out = debug_out; // must be overridden by driver to have any effect
@@ -114,7 +119,7 @@ int grbl_enter (void)
     driver_ok = driver_ok && hal.driver_setup(&settings);
 
     if(!driver_ok) {
-        hal.stream_write("GrblHAL: incompatible driver\r\n");
+        hal.stream.write("GrblHAL: incompatible driver\r\n");
         while(true);
     }
 
@@ -143,8 +148,8 @@ int grbl_enter (void)
     // will return to this loop to be cleanly re-initialized.
     while(looping) {
 
-        // Reset entry points
-        hal.report_status_message = report_status_message;
+        // Reset report entry points
+        memcpy(&hal.report, &report_fns, sizeof(report_t));
 
 		// Reset system variables.
 		uint_fast16_t prior_state = sys.state;
@@ -169,7 +174,7 @@ int grbl_enter (void)
 		flush_override_buffers();
 
 		// Reset Grbl primary systems.
-		hal.stream_reset_read_buffer(); // Clear input stream buffer
+		hal.stream.reset_read_buffer(); // Clear input stream buffer
 		gc_init(); // Set g-code parser to default state
 		hal.limits_enable(settings.limits.flags.hard_enabled, false);
 		plan_reset(); // Clear block buffer and planner variables

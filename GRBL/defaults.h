@@ -157,7 +157,14 @@
 // for the spindle encoder. Depending on the driver this may lead to the "spindle at speed" detection
 // beeing enabled. When this is enabled grbl will wait for the spindle to reach the programmed speed
 // before continue processing. NOTE: Currently there is no timeout for this wait.
+// Default value is 0, meaning spindle sync is disabled
 #define DEFAULT_SPINDLE_PPR 0 // Pulses per revolution. Default 0.
+
+// When spindle sync is available these are the default settings for the PID algorithm.
+#define DEFAULT_SPINDLE_P_GAIN  1.0f
+#define DEFAULT_SPINDLE_I_GAIN  0.01f
+#define DEFAULT_SPINDLE_D_GAIN  0.0f
+#define DEFAULT_SPINDLE_I_MAX   10.0f
 
 // Enables and configures Grbl's sleep mode feature. If the spindle or coolant are powered and Grbl
 // is not actively moving or receiving any commands, a sleep timer will start. If any data or commands

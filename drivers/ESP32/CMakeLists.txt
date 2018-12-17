@@ -2,7 +2,7 @@
 # in this exact order for cmake to work correctly
 cmake_minimum_required(VERSION 3.5)
 
-set(MAIN_SRCS main.c driver.c nvs.c esp32-hal-uart.c bluetooth.c wifi.c TCPStream.c sdcard.c keypad.c
+set(MAIN_SRCS main.c driver.c nvs.c esp32-hal-uart.c bluetooth.c wifi.c TCPStream.c sdcard.c keypad.c ioexpand.c eeprom.c
  GRBL/grbllib.c
  GRBL/coolant_control.c
  GRBL/eeprom_emulate.c

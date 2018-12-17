@@ -147,7 +147,7 @@ void BTStreamFlush (void)
 IRAM_ATTR void BTStreamCancel (void)
 {
 //    BT_MUTEX_LOCK();
-    rxbuffer.data[rxbuffer.head] = CAN;
+    rxbuffer.data[rxbuffer.head] = CMD_RESET;
     rxbuffer.tail = rxbuffer.head;
     rxbuffer.head = (rxbuffer.tail + 1) & (RX_BUFFER_SIZE - 1);
 //    UART_MUTEX_UNLOCK();
@@ -157,7 +157,7 @@ bool BTStreamSuspendInput (bool suspend)
 {
     BT_MUTEX_LOCK();
     if(suspend)
-        hal.stream_read = BTStreamGetNull;
+        hal.stream.read = BTStreamGetNull;
     else if(rxbuffer.backup)
         memcpy(&rxbuffer, &rxbackup, sizeof(serial_rx_buffer_t));
     UART_MUTEX_UNLOCK();
@@ -181,7 +181,7 @@ static void esp_spp_cb (esp_spp_cb_event_t event, esp_spp_cb_param_t *param)
 		    tx_buffers[0].head = tx_buffers[1].head = 0;
 			txbuffer = txbuffer_send = &tx_buffers[0];
 			selectStream(StreamSetting_Bluetooth);
-			hal.stream_write_all("[MSG:BT OK]\r\n");
+			hal.stream.write_all("[MSG:BT OK]\r\n");
 			break;
 
 		case ESP_SPP_CLOSE_EVT:
@@ -200,7 +200,7 @@ static void esp_spp_cb (esp_spp_cb_event_t event, esp_spp_cb_param_t *param)
 					memcpy(&rxbackup, &rxbuffer, sizeof(serial_rx_buffer_t));
 					rxbuffer.backup = true;
 					rxbuffer.tail = rxbuffer.head;
-					hal.stream_read = BTStreamGetC; // restore normal input
+					hal.stream.read = BTStreamGetC; // restore normal input
 
 				} else if(hal.protocol_process_realtime && hal.protocol_process_realtime(c)) {
 

@@ -31,16 +31,20 @@
 #include "GRBL/grbl.h"
 
 // Configuration
+// Set value to 1 to enable, 0 to disable
 
-#define CNC_BOOSTERPACK         // comment in if for CNC Boosterpack
-#ifdef CNC_BOOSTERPACK
-#define CNC_BOOSTERPACK_SHORTS  // comment in if for CNC Boosterpack with shorts
-#define CNC_BOOSTERPACK_A4998   // comment in if used with Polulu A4998 drivers - for suppying VDD via GPIO (PE5)
+#define PWM_RAMPED              0 // Ramped spindle PWM.
+#define LASER_PPI               0 // Laser PPI (Pulses Per Inch) option.
+#define KEYPAD_ENABLE           0 // I2C keypad for jogging etc.
+#define ATC_ENABLE              0 // do not change!
+#define CNC_BOOSTERPACK         1 // Use CNC Boosterpack pin assignments.
+#if CNC_BOOSTERPACK
+  #define CNC_BOOSTERPACK_SHORTS  1 // Shorts added to BoosterPack for some signals (for faster and simpler driver)
+  #define CNC_BOOSTERPACK_A4998   1 // Using Polulu A4998 drivers - for suppying VDD via GPIO (PE5)
+#else
+  #define CNC_BOOSTERPACK_SHORTS 0 // do not change!
+  #define CNC_BOOSTERPACK_A4998  0 // do not change!
 #endif
-
-//#define HAS_KEYPAD //uncomment to enable I2C keypad for jogging etc.
-//#define PWM_RAMPED
-//#define LASER_PPI
 
 // End configuration
 
@@ -64,7 +68,7 @@
 
 // timer definitions
 
-#define STEPPER_TIM TIMER1
+#define STEPPER_TIM WTIMER0
 #define STEPPER_TIMER_PERIPH timerPeriph(STEPPER_TIM)
 #define STEPPER_TIMER_BASE timerBase(STEPPER_TIM)
 #define STEPPER_TIMER_INT timerINT(STEPPER_TIM, A)
@@ -106,7 +110,7 @@
 #define DIRECTION_OUTMODE   GPIO_MAP
 
 // Define stepper driver enable/disable output pin(s).
-#ifdef CNC_BOOSTERPACK
+#if CNC_BOOSTERPACK
 #define STEPPERS_DISABLE_XY_PORT    GPIO_PORTE_BASE
 #define STEPPERS_DISABLE_XY_PIN     GPIO_PIN_1
 #define STEPPERS_DISABLE_Z_PORT     GPIO_PORTF_BASE
@@ -116,15 +120,15 @@
 #define STEPPERS_DISABLE_PIN    GPIO_PIN_1
 #endif
 
-#ifdef CNC_BOOSTERPACK_A4998
+#if CNC_BOOSTERPACK_A4998
 // Stepper driver VDD supply
 #define STEPPERS_VDD_PORT GPIO_PORTE_BASE
 #define STEPPERS_VDD_PIN  GPIO_PIN_5
 #endif
 
 // Define homing/hard limit switch input pins and limit interrupt vectors.
-#ifdef CNC_BOOSTERPACK
-  #ifdef CNC_BOOSTERPACK_SHORTS
+#if CNC_BOOSTERPACK
+  #if CNC_BOOSTERPACK_SHORTS
     #define LIMIT_PORT      GPIO_PORTF_BASE
     #define X_LIMIT_PIN     GPIO_PIN_1
     #define Y_LIMIT_PIN     GPIO_PIN_3
@@ -154,8 +158,8 @@
 #define COOLANT_MIST_PIN	GPIO_PIN_7
 
 // Define user-control CONTROLs (cycle start, reset, feed hold) input pins.
-#ifdef CNC_BOOSTERPACK
-  #ifdef CNC_BOOSTERPACK_SHORTS
+#if CNC_BOOSTERPACK
+  #if CNC_BOOSTERPACK_SHORTS
     #define CONTROL_PORT		GPIO_PORTC_BASE
     #define RESET_PIN			GPIO_PIN_7
     #define FEED_HOLD_PIN		GPIO_PIN_5
@@ -182,7 +186,7 @@
 #define SPINDLEPPIN			GPIO_PIN_2
 #define SPINDLEPWM_MAP		GPIO_PB2_T3CCP0
 
-#ifdef LASER_PPI
+#if LASER_PPI
 
 typedef struct {
     float ppi;

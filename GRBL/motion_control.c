@@ -486,8 +486,8 @@ ISR_CODE void mc_reset ()
         if(hal.driver_reset)
             hal.driver_reset();
 
-        if(hal.stream_suspend_read)
-            hal.stream_suspend_read(false);
+        if(hal.stream.suspend_read)
+            hal.stream.suspend_read(false);
 
         // Kill steppers only if in any motion state, i.e. cycle, actively holding, or homing.
         // NOTE: If steppers are kept enabled via the step idle delay setting, this also keeps

@@ -66,9 +66,7 @@ void report_execute_startup_message (char *line, status_code_t status_code);
 // Prints build info and user info.
 void report_build_info (char *line);
 
-#ifdef PID_LOG
 // Prints current PID log.
 void report_pid_log (void);
-#endif
 
 #endif

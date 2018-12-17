@@ -198,7 +198,7 @@ void set_state (uint_fast16_t new_state)
         case STATE_SAFETY_DOOR:
             if((sys.state & (STATE_ALARM|STATE_ESTOP|STATE_SLEEP|STATE_CHECK_MODE)))
                 return;
-            report_feedback_message(Message_SafetyDoorAjar);
+            hal.report.feedback_message(Message_SafetyDoorAjar);
             // no break
         case STATE_SLEEP:
             sys.parking_state = Parking_Retracting;
@@ -230,7 +230,7 @@ static void state_idle (uint_fast16_t rt_exec)
         set_state(STATE_HOLD);
 
     if ((rt_exec & EXEC_TOOL_CHANGE)) {
-        hal.stream_suspend_read(true); // Block reading from input stream until tool change state is acknowledged
+        hal.stream.suspend_read(true); // Block reading from input stream until tool change state is acknowledged
         set_state(STATE_TOOL_CHANGE);
     }
 }
@@ -238,7 +238,7 @@ static void state_idle (uint_fast16_t rt_exec)
 static void state_cycle (uint_fast16_t rt_exec)
 {
     if ((rt_exec & EXEC_TOOL_CHANGE))
-        hal.stream_suspend_read(true); // Block reading from input stream until tool change state is acknowledged
+        hal.stream.suspend_read(true); // Block reading from input stream until tool change state is acknowledged
 
     if (rt_exec & EXEC_CYCLE_COMPLETE)
         set_state(gc_state.tool_change ? STATE_TOOL_CHANGE : STATE_IDLE);
@@ -258,7 +258,7 @@ static void state_await_toolchanged (uint_fast16_t rt_exec)
 {
     if ((rt_exec & EXEC_CYCLE_START) && !gc_state.tool_change) {
         // Tool change complete, restore "normal" stream input
-        if(hal.stream_suspend_read && hal.stream_suspend_read(false)) {
+        if(hal.stream.suspend_read && hal.stream.suspend_read(false)) {
             sys.state = STATE_CYCLE;    // Force a running state realtime report
             report_realtime_status();   // to get the streaming going again
         }
@@ -430,7 +430,7 @@ static void state_await_resume (uint_fast16_t rt_exec)
                     // Handles restoring of spindle state
                     if (sys.override.spindle_stop.restore || sys.override.spindle_stop.restore_cycle) {
                         if (gc_state.modal.spindle.on) {
-                            report_feedback_message(Message_SpindleRestore);
+                            hal.report.feedback_message(Message_SpindleRestore);
                             if (settings.flags.laser_mode) // When in laser mode, ignore spindle spin-up delay. Set to turn on laser when cycle starts.
                                 sys.step_control.update_spindle_rpm = On;
                             else
@@ -488,7 +488,7 @@ static void state_await_waypoint_retract (uint_fast16_t rt_exec)
 
 static void restart_retract (void)
 {
-    report_feedback_message(Message_SafetyDoorAjar);
+    hal.report.feedback_message(Message_SafetyDoorAjar);
 
     stateHandler = state_await_hold;
 

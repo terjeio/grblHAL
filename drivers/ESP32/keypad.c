@@ -26,6 +26,8 @@
 #include "driver.h"
 #include "GRBL/grbl.h"
 
+#if KEYPAD_ENABLE
+
 #define KEYBUF_SIZE 16
 
 static bool jogging = false, keyreleased = true;
@@ -268,16 +270,22 @@ void keypad_process_keypress (uint_fast16_t state)
 
 void keypad_keyclick_handler (bool keydown)
 {
-	const uint8_t action = 1;
+	const i2c_task_t i2c_task = {
+		.action = 1,
+		.params = NULL
+	};
 
 	keyreleased = !keydown;
 
 	if(keydown) {
 	    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-		xQueueSendFromISR(i2cQueue, (void *)&action, &xHigherPriorityTaskWoken);
+		xQueueSendFromISR(i2cQueue, (void *)&i2c_task, &xHigherPriorityTaskWoken);
 	} else if(jogging) {
 		jogging = false;
 		hal.protocol_process_realtime(CMD_JOG_CANCEL);
 		keybuf_tail = keybuf_head = 0; // flush keycode buffer TODO: queue as well?
 	}
 }
+
+#endif
+

@@ -21,8 +21,6 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#define GRBL_NVS_SIZE 1536
-
 bool nvsInit(void);
 bool nvsRead (uint8_t *dest);
 bool nvsWrite (uint8_t *source);

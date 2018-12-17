@@ -67,7 +67,7 @@ static esp_err_t wifi_event_handler (void *ctx, system_event_t *event)
 			break;
 
     	case SYSTEM_EVENT_STA_GOT_IP:
-    		hal.stream_write_all("[MSG:WIFI ACTIVE]\r\n");
+    		hal.stream.write_all("[MSG:WIFI ACTIVE]\r\n");
 			xEventGroupSetBits(wifi_event_group, CONNECTED_BIT);
 		    TCPStreamInit();
 		    TCPStreamListen(port);
@@ -77,7 +77,7 @@ static esp_err_t wifi_event_handler (void *ctx, system_event_t *event)
 
     	case SYSTEM_EVENT_STA_DISCONNECTED:
 		    selectStream(StreamSetting_Serial); // Fall back to previous?
-    		hal.stream_write_all("[MSG:WIFI DISCONNECTED]\r\n");
+    		hal.stream.write_all("[MSG:WIFI DISCONNECTED]\r\n");
 			/* This is a workaround as ESP32 WiFi libs don't currently
 			   auto-reassociate. */
 			esp_wifi_connect();

@@ -81,6 +81,23 @@ typedef struct {
     void (*report_execute_startup_message)(char *line, status_code_t status_code);
 } HAL_report_t;
 
+typedef struct {
+    void (*status_message)(status_code_t status_code);
+    void (*feedback_message)(message_code_t message_code);
+} report_t;
+
+typedef struct {
+    stream_setting_t type;
+    uint16_t (*get_rx_buffer_available)(void);
+//    bool (*stream_write)(char c);
+    stream_write_ptr write; // write to current I/O stream only
+    stream_write_ptr write_all; // write to all active output streams
+    int16_t (*read)(void);
+    void (*reset_read_buffer)(void);
+    void (*cancel_read_buffer)(void);
+    bool (*suspend_read)(bool await);
+} io_stream_t;
+
 typedef struct HAL {
     uint32_t version;
     char *info;
@@ -110,16 +127,7 @@ typedef struct HAL {
     void (*stepper_cycles_per_tick)(uint32_t cycles_per_tick);
     void (*stepper_pulse_start)(stepper_t *stepper);
 
-    uint16_t (*stream_get_rx_buffer_available)(void);
-//    bool (*stream_write)(char c);
-    stream_write_ptr stream_write; // write to current IO stream only
-    stream_write_ptr stream_write_all; // write to all ative output streams
-    int16_t (*stream_read)(void);
-    void (*stream_reset_read_buffer)(void);
-    void (*stream_cancel_read_buffer)(void);
-    bool (*stream_suspend_read)(bool await);
-
-    void (*report_options)(void);
+    io_stream_t stream; // pointers to current I/O stream handlers
 
     void (*set_bits_atomic)(volatile uint_fast16_t *value, uint_fast16_t bits);
     uint_fast16_t (*clear_bits_atomic)(volatile uint_fast16_t *value, uint_fast16_t bits);
@@ -143,6 +151,7 @@ typedef struct HAL {
     void (*tool_select)(tool_data_t *tool);
     void (*tool_change)(parser_state_t *gc_state);
     void (*show_message)(const char *msg);
+    void (*report_options)(void);
     void (*driver_reset)(void);
     bool (*driver_setting)(uint_fast16_t setting, float value, char *svalue);
     void (*driver_settings_restore)(uint8_t restore_flag);
@@ -155,8 +164,7 @@ typedef struct HAL {
     eeprom_io_t eeprom;
 
     // entry points set by grbl at reset
-
-    void (*report_status_message)(status_code_t status_code);
+    report_t report;
 
     // callbacks - set up by grbl before MCU init
     bool (*protocol_enqueue_gcode)(char *data);

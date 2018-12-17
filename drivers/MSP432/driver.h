@@ -33,8 +33,24 @@
 
 #define NO_MSP_CLASSIC_DEFINES
 
-#define CNC_BOOSTERPACK_SHORTS
-#define CNC_BOOSTERPACK_A4998 // comment out if used with Polulu A4998 drivers - for suppying VDD via GPIO (P4.3)
+// Configuration
+// Set value to 1 to enable, 0 to disable
+
+#define KEYPAD_ENABLE   0 // I2C keypad for jogging etc.
+#define ATC_ENABLE      0 // do not change!
+#define CNC_BOOSTERPACK 1 // do not change!
+
+#if CNC_BOOSTERPACK
+  #define EEPROM_ENABLE           1 // only change if BoosterPack does not have EEPROM mounted
+  #define CNC_BOOSTERPACK_SHORTS  1 // shorts added to BoosterPack for some signals (for faster and simpler driver)
+  #define CNC_BOOSTERPACK_A4998   1 // using Polulu A4998 drivers - for suppying VDD via GPIO (PE5)
+#else
+  #define EEPROM_ENABLE          0 // do not change!
+  #define CNC_BOOSTERPACK_SHORTS 0 // do not change!
+  #define CNC_BOOSTERPACK_A4998  0 // do not change!
+#endif
+
+// End configuration
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -49,6 +65,9 @@
 #define portG(p) GPIO_PORT_P ## p
 #define portINT(p) portQ(p)
 #define portQ(p) PORT ## p ## _IRQn
+#define portHANDLER(p) portH(p)
+#define portH(p) PORT ## p ## _IRQHandler
+
 
 #define timer(p) timerN(p)
 #define timerN(p) TIMER_ ## p
@@ -56,11 +75,17 @@
 #define timerI0(p) T ## p ## _0_IRQn
 #define timerINTN(p) timerIN(p)
 #define timerIN(p) T ## p ## _N_IRQn
+#define timerHANDLER0(p) timerH(p)
+#define timerH(p) T ## p ## _0_IRQHandler
+#define timerHANDLERN(p) timerHN(p)
+#define timerHN(p) T ## p ## _N_IRQHandler
 
 #define timer32(p) timer32N(p)
 #define timer32N(p) TIMER32_ ## p
-#define timer32INT0(p) timer32I0(p)
-#define timer32I0(p) T32_INT ## p ## _IRQn
+#define timer32INT(p) timer32I(p)
+#define timer32I(p) T32_INT ## p ## _IRQn
+#define timer32HANDLER(p) timer32H(p)
+#define timer32H(p) T32_INT ## p ## _IRQHandler
 
 // Define GPIO I/O mode options
 
@@ -76,67 +101,80 @@
 
 // Define timer registers
 
-#define STEPPER_TIM 1
-#define STEPPER_TIMER timer32(STEPPER_TIM)
-#define STEPPER_TIMER_INT0 timer32INT0(STEPPER_TIM)
+#define STEPPER_TIM        1
+#define STEPPER_TIMER      timer32(STEPPER_TIM)
+#define STEPPER_TIMER_INT  timer32INT(STEPPER_TIM)
+#define STEPPER_IRQHandler timer32HANDLER(STEPPER_TIM)
 
-#define PULSE_TIM A2
-#define PULSE_TIMER timer(PULSE_TIM)
-#define PULSE_TIMER_INT0 timerINT0(PULSE_TIM)
+#define PULSE_TIM              A2
+#define PULSE_TIMER            timer(PULSE_TIM)
+#define PULSE_TIMER_INT0       timerINT0(PULSE_TIM)
+#define PULSE_TIMER_INTN       timerINTN(PULSE_TIM)
+#define STEPPULSE_0_IRQHandler timerHANDLER0(PULSE_TIM)
+#define STEPPULSE_N_IRQHandler timerHANDLERN(PULSE_TIM)
 
-#define DEBOUNCE_TIM A3
-#define DEBOUNCE_TIMER timer(DEBOUNCE_TIM)
+#define SPINDLE_PWM_TIM   A0
+#define SPINDLE_PWM_TIMER timer(SPINDLE_PWM_TIM)
+
+#define DEBOUNCE_TIM        A3
+#define DEBOUNCE_TIMER      timer(DEBOUNCE_TIM)
 #define DEBOUNCE_TIMER_INT0 timerINT0(DEBOUNCE_TIM)
+#define DEBOUNCE_IRQHandler timerHANDLER0(DEBOUNCE_TIM)
 
-#define RPM_CNT A1
-#define RPM_COUNTER timer(RPM_CNT)
-#define RPM_COUNTER_INT0 timerINT0(RPM_CNT)
-#define RPM_COUNTER_PORT P7
-#define RPM_COUNTER_PIN 2
-#define RPM_COUNTER_BIT (1<<RPM_COUNTER_PIN)
+#define RPM_CNT               A1
+#define RPM_COUNTER           timer(RPM_CNT)
+#define RPM_COUNTER_INT0      timerINT0(RPM_CNT)
+#define RPMCOUNTER_IRQHandler timerHANDLER0(RPM_CNT)
+#define RPM_COUNTER_PN        7
+#define RPM_COUNTER_PORT      port(RPM_COUNTER_PN)
+#define RPM_COUNTER_PIN       2
+#define RPM_COUNTER_BIT       (1<<RPM_COUNTER_PIN)
 
-#define RPM_TIM 2
-#define RPM_TIMER timer32(RPM_TIM)
-#define RPM_TIMER_INT0 timer32INT0(RPM_TIM)
+#define RPM_TIM       2
+#define RPM_TIMER     timer32(RPM_TIM)
+#define RPM_TIMER_INT timer32INT(RPM_TIM)
 
 #define RPM_INDEX_PN 6
 #define RPM_INDEX_PORT port(RPM_INDEX_PN)
 #define RPM_INDEX_PIN 3
 #define RPM_INDEX_BIT (1<<RPM_INDEX_PIN)
 #define RPM_INDEX_INT portINT(RPM_INDEX_PN)
+// RPM_INDEX_INT: interrupt handler is shared with interrupt assigned below
 
 // Define step pulse output pins. NOTE: All step bit pins must be on the same port.
 
-#define STEP_PORT       P4
-#define X_STEP_PIN      0
-#define Y_STEP_PIN      2
-#define Z_STEP_PIN      4
-#define X_STEP_BIT      (1<<X_STEP_PIN)
-#define Y_STEP_BIT      (1<<Y_STEP_PIN)
-#define Z_STEP_BIT      (1<<Z_STEP_PIN)
+#define STEP_PN    4
+#define STEP_PORT  port(STEP_PN)
+#define X_STEP_PIN 0
+#define Y_STEP_PIN 2
+#define Z_STEP_PIN 4
+#define X_STEP_BIT (1<<X_STEP_PIN)
+#define Y_STEP_BIT (1<<Y_STEP_PIN)
+#define Z_STEP_BIT (1<<Z_STEP_PIN)
 #define STEP_MASK (X_STEP_BIT|Y_STEP_BIT|Z_STEP_BIT) // All step bits
+#define STEP_OUTMODE GPIO_MAP
 //#define STEP_OUTMODE GPIO_SHIFT3
 //#define STEP_OUTMODE GPIO_BITBAND
-#define STEP_OUTMODE GPIO_MAP
 
 // Define step direction output pins. NOTE: All direction pins must be on the same port.
 
-#define DIRECTION_PORT    P1
-#define X_DIRECTION_PIN   6
-#define Y_DIRECTION_PIN   7
-#define Z_DIRECTION_PIN   5
-#define X_DIRECTION_BIT   (1<<X_DIRECTION_PIN)
-#define Y_DIRECTION_BIT   (1<<Y_DIRECTION_PIN)
-#define Z_DIRECTION_BIT   (1<<Z_DIRECTION_PIN)
+#define DIRECTION_PN    1
+#define DIRECTION_PORT  port(DIRECTION_PN)
+#define X_DIRECTION_PIN 6
+#define Y_DIRECTION_PIN 7
+#define Z_DIRECTION_PIN 5
+#define X_DIRECTION_BIT (1<<X_DIRECTION_PIN)
+#define Y_DIRECTION_BIT (1<<Y_DIRECTION_PIN)
+#define Z_DIRECTION_BIT (1<<Z_DIRECTION_PIN)
 #define DIRECTION_MASK (X_DIRECTION_BIT|Y_DIRECTION_BIT|Z_DIRECTION_BIT) // All direction bits
-//#define DIRECTION_OUTMODE GPIO_MAP
-#define DIRECTION_OUTMODE GPIO_BITBAND
+#define DIRECTION_OUTMODE GPIO_MAP
+//#define DIRECTION_OUTMODE GPIO_BITBAND
 
 // Define stepper driver enable/disable output pin.
 
-#define STEPPERS_DISABLE_Z_PORT  P5
-#define STEPPERS_DISABLE_Z_PIN   7
-#define STEPPERS_DISABLE_Z_BIT   (1<<STEPPERS_DISABLE_Z_PIN)
+#define STEPPERS_DISABLE_Z_PORT P5
+#define STEPPERS_DISABLE_Z_PIN  7
+#define STEPPERS_DISABLE_Z_BIT (1<<STEPPERS_DISABLE_Z_PIN)
 
 #define STEPPERS_DISABLE_XY_PORT P4
 #define STEPPERS_DISABLE_X_PIN   5
@@ -144,9 +182,9 @@
 #define STEPPERS_DISABLE_X_BIT   (1<<STEPPERS_DISABLE_X_PIN)
 #define STEPPERS_DISABLE_Y_BIT   (1<<STEPPERS_DISABLE_Y_PIN)
 
-#ifdef CNC_BOOSTERPACK_A4998
+#if CNC_BOOSTERPACK_A4998
 
-// Stepper driver VDD supply
+// Stepper driver VDD/VIO supply
 
 #define STEPPERS_VDD_PORT P4
 #define STEPPERS_VDD_PIN  3
@@ -157,12 +195,13 @@
 // Define homing/hard limit switch input pins
 // NOTE: All limit bit pins must be on the same port
 
-#ifdef CNC_BOOSTERPACK_SHORTS
+#if CNC_BOOSTERPACK_SHORTS
 
-#define LIMIT_PN      2
-#define LIMIT_PORT    port(LIMIT_PN)
-#define LIMIT_GPIO    portGpio(LIMIT_PN)
-#define LIMIT_INT     portINT(LIMIT_PN)
+#define LIMIT_PN         2
+#define LIMIT_PORT       port(LIMIT_PN)
+#define LIMIT_GPIO       portGpio(LIMIT_PN)
+#define LIMIT_INT        portINT(LIMIT_PN)
+#define LIMIT_IRQHandler portHANDLER(LIMIT_PN)
 
 #define X_LIMIT_PIN 3
 #define Y_LIMIT_PIN 6
@@ -179,12 +218,14 @@
 #define LIMIT_PORT_X    port(LIMIT_PN_X)
 #define LIMIT_GPIO_X    portGpio(LIMIT_PN_X)
 #define LIMIT_INT_X     portINT(LIMIT_PN_X)
+#define LIMIT_X_IRQHandler portHANDLER(LIMIT_PN_X)
 
 #define LIMIT_PN_YZ     2
 #define LIMIT_PORT_Y    port(LIMIT_PN_YZ)
 #define LIMIT_PORT_Z    port(LIMIT_PN_YZ)
 #define LIMIT_GPIO_YZ   portGpio(LIMIT_PN_YZ)
 #define LIMIT_INT_YZ    portINT(LIMIT_PN_YZ)
+#define LIMIT_YZ_RST_IRQHandler portHANDLER(LIMIT_PN_YZ)
 
 #define X_LIMIT_PIN 0
 #define Y_LIMIT_PIN 6
@@ -210,12 +251,13 @@
 
 // Define user-control controls (cycle start, reset, feed hold) input pins.
 
-#ifdef CNC_BOOSTERPACK_SHORTS
+#if CNC_BOOSTERPACK_SHORTS
 
 #define CONTROL_PN          6
 #define CONTROL_PORT        port(CONTROL_PN)
 #define CONTROL_GPIO        portGpio(CONTROL_PN)
 #define CONTROL_INT         portINT(CONTROL_PN)
+#define CONTROL_IRQHandler  portHANDLER(CONTROL_PN)
 
 #define RESET_PIN           0
 #define FEED_HOLD_PIN       6
@@ -231,10 +273,10 @@
 
 #else
 
-#define CONTROL_PN_CS       2
-#define CONTROL_PN_FH       5
-#define CONTROL_PN_SD       6
-#define CONTROL_PN_RST      6
+#define CONTROL_PN_RST      2
+#define CONTROL_PN_FH       6
+#define CONTROL_PN_CS       6
+#define CONTROL_PN_SD       5
 #define CONTROL_PORT_CS     port(CONTROL_PN_CS)
 #define CONTROL_PORT_FH     port(CONTROL_PN_FH)
 #define CONTROL_PORT_SD     port(CONTROL_PN_SD)
@@ -244,18 +286,20 @@
 #define CONTROL_GPIO_SD_RST portGpio(CONTROL_PN_SD)
 #define CONTROL_INT_SD_RST  portINT(CONTROL_PN_SD)
 #define CONTROL_INT_FH      portINT(CONTROL_PN_FH)
+#define CONTROL_FH_CS_IRQHandler portHANDLER(CONTROL_PN_FH)
+#define CONTROL_SD_MODE_Handler portHANDLER(CONTROL_PN_SD)
 
-#define RESET_PIN           7
+#define RESET_PIN           4
 #define FEED_HOLD_PIN       6
-#define CYCLE_START_PIN     4
+#define CYCLE_START_PIN     7
 #define SAFETY_DOOR_PIN     6
 #define RESET_BIT           (1<<RESET_PIN)
 #define FEED_HOLD_BIT       (1<<FEED_HOLD_PIN)
 #define CYCLE_START_BIT     (1<<CYCLE_START_PIN)
 #define SAFETY_DOOR_BIT     (1<<SAFETY_DOOR_PIN)
-#define CONTROL_MASK        (RESET_BIT|FEED_HOLD_BIT|CYCLE_START_BIT|SAFETY_DOOR_BIT)
+//#define CONTROL_MASK        (RESET_BIT|FEED_HOLD_BIT|CYCLE_START_BIT|SAFETY_DOOR_BIT)
 //#define CONTROL_SHIFT       GPIO_SHIFT0 // Uncomment and set shift value if pins are consecutive and ordered
-//#define CONTROL_INMODE GPIO_BITBAND
+#define CONTROL_INMODE GPIO_BITBAND
 
 #endif
 
@@ -280,10 +324,6 @@
 #define SPINDLE_PWM_PORT  P2
 #define SPINDLE_PWM_PIN   5
 #define SPINDLE_PWM_BIT   (1<<SPINDLE_PWM_PIN)
-
-// Define spindle PWM timer parameters
-
-#define SPINDLE_PWM_TIMER TIMER_A0
 
 /*
  * CNC Boosterpack GPIO assignments
@@ -349,6 +389,7 @@
 #define MODE_INT            GPIO2_INT
 #define MODE_SWITCH_PIN     GPIO2_PIN
 #define MODE_SWITCH_BIT     GPIO2_BIT
+#define MODE_IRQHandler     portHANDLER(GPIO2_PN)
 
 // to be removed?
 #define MODE_LED_PIN        0

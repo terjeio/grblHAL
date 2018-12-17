@@ -33,17 +33,12 @@
 #define INTERRUPT_FREQ 1000u
 #define SYSTICK_INTERRUPT_VECTOR_NUMBER 15u
 
-static volatile uint8_t curr_step_outbits = 0;
 static volatile uint32_t ms_count = 1;
 static uint32_t curr_spindle_pwm = 0;
 static bool spindlePWM = false, IOInitDone = false;
 static spindle_pwm_t spindle_pwm;
 static axes_signals_t next_step_outbits;
 static void (*delayCallback)(void) = 0;
-
-#ifdef STEP_PULSE_DELAY
-static uint8_t next_step_outbits, step_port_invert_mask, dir_port_invert_mask;
-#endif
 
 // Interrupt handler prototypes
 static void stepper_driver_isr (void);
@@ -197,26 +192,41 @@ inline static void stepperSetDirOutputs (axes_signals_t dir_outbits)
     DirOutput_Write(dir_outbits.value);
 }
 
-// Sets stepper direction and pulse pins and starts a step pulse, called from stepper_driver_interrupt_handler()
-// When delayed pulse the step register is written in the step delay interrupt handler
+// Sets stepper direction and pulse pins and starts a step pulse
 static void stepperPulseStart (stepper_t *stepper)
 {
-    
-	if(spindlePWM && stepper->spindle_pwm != curr_spindle_pwm)
-		curr_spindle_pwm = spindleSetSpeed(stepper->spindle_pwm);
+    if(stepper->new_block) {
+        stepper->new_block = false;
+        stepperSetDirOutputs(stepper->dir_outbits);
+    }
 
-    StepOutput_Write(stepper->step_outbits.value);
-    DirOutput_Write(stepper->dir_outbits.value);
+    if(stepper->step_outbits.value) {
+
+        if(spindlePWM && stepper->spindle_pwm != curr_spindle_pwm)
+		    curr_spindle_pwm = spindleSetSpeed(stepper->spindle_pwm);
+
+        StepOutput_Write(stepper->step_outbits.value);
+    }
 }
 
+// Delayed pulse version: sets stepper direction and pulse pins and starts a step pulse with an initial delay.
+// TODO: unsupported, to be completed
 static void stepperPulseStartDelayed (stepper_t *stepper)
 {
-	if(spindlePWM && stepper->spindle_pwm != curr_spindle_pwm)
-		curr_spindle_pwm = spindleSetSpeed(stepper->spindle_pwm);
+    if(stepper->new_block) {
+        stepper->new_block = false;
+        stepperSetDirOutputs(stepper->dir_outbits);
+    }
+    
+    if(stepper->step_outbits.value) {
 
-    stepperSetDirOutputs(stepper->dir_outbits);
-    next_step_outbits = stepper->step_outbits; // Store out_bits
-//    TimerEnable(TIMER2_BASE, TIMER_A);
+        if(spindlePWM && stepper->spindle_pwm != curr_spindle_pwm)
+		    curr_spindle_pwm = spindleSetSpeed(stepper->spindle_pwm);
+
+        next_step_outbits = stepper->step_outbits; // Store out_bits
+       
+//TODO: implement timer for initial delay...
+    }
 }
 
 // Disable limit pins interrupt, called from mc_homing_cycle()
@@ -468,12 +478,12 @@ bool driver_init (void)
 
 	hal.system_control_get_state = systemGetState;
 
-    hal.stream_read = serialGetC;
-    hal.stream_write = serialWriteS;
-    hal.stream_write_all = serialWriteS;
-    hal.stream_get_rx_buffer_available = serialRxFree;
-    hal.stream_reset_read_buffer = serialRxFlush;
-    hal.stream_cancel_read_buffer = serialRxCancel;
+    hal.stream.read = serialGetC;
+    hal.stream.write = serialWriteS;
+    hal.stream.write_all = serialWriteS;
+    hal.stream.get_rx_buffer_available = serialRxFree;
+    hal.stream.reset_read_buffer = serialRxFlush;
+    hal.stream.cancel_read_buffer = serialRxCancel;
 
     hal.eeprom.type = EEPROM_Physical;
 	hal.eeprom.get_byte = (uint8_t (*)(uint32_t))&EEPROM_ReadByte;
@@ -521,19 +531,12 @@ static void stepper_driver_isr (void)
 // This interrupt is enabled when Grbl sets the motor port bits to execute
 // a step. This ISR resets the motor port after a short period (settings.pulse_microseconds)
 // completing one step cycle.
-// NOTE: TivaC has a shared interrupt for match and timeout
+
 static void stepper_pulse_isr (void)
 {
     //Stepper_Timer_ReadStatusRegister();
 
-#ifdef STEP_PULSE_DELAY
-	uint32_t iflags = TimerIntStatus(TIMER2_BASE, true);
-	TimerIntClear(TIMER2_BASE, iflags); // clear interrupt flags
-	GPIOPinWrite(STEP_PORT, STEP_MASK, iflags & TIMER_TIMA_MATCH ? next_step_outbits : step_port_invert_mask);
-#else
-//	TimerIntClear(TIMER2_BASE, TIMER_TIMA_TIMEOUT); // clear interrupt flag
-	//GPIOPinWrite(STEP_PORT, STEP_MASK, step_port_invert_mask);
-#endif
+    StepOutput_Write(next_step_outbits.value);
 }
 
 static void limit_isr (void)

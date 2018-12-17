@@ -33,7 +33,7 @@
 // userMcodeCheck - return mcode if implemented, 0 otherwise
 //
 
-uint8_t userMCodeCheck (uint8_t mcode)
+uint_fast16_t userMCodeCheck (uint_fast16_t mcode)
 {
 #ifdef LASER_PPI
     return mcode == 6 || mcode == 61 || mcode == 100 || mcode == 101 || ((mcode == 123 || mcode == 124) && settings.flags.laser_mode) ? mcode : 0;
@@ -104,7 +104,7 @@ status_code_t userMCodeValidate (parser_block_t *gc_block, uint_fast16_t *value_
 // userMcodeExecute - execute user defined M-code
 //
 
-void userMCodeExecute (uint8_t state, parser_block_t *gc_block) {
+void userMCodeExecute (uint_fast16_t state, parser_block_t *gc_block) {
 
     switch(gc_block->driver_mcode) {
 
@@ -119,7 +119,7 @@ void userMCodeExecute (uint8_t state, parser_block_t *gc_block) {
         case 101:
             // do something
             break;
-#ifdef LASER_PPI
+#if LASER_PPI
         case 123:
             laser.ppi = gc_block->values.p;
             break;

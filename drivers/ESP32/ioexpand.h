@@ -26,21 +26,7 @@
 #ifndef _IOEXPAND_H_
 #define _IOEXPAND_H_
 
-#include <stdint.h>
-
-typedef union {
-	uint8_t mask;
-	struct {
-		uint8_t spindle_on       :1,
-				spindle_dir      :1,
-				mist_on          :1,
-				flood_on         :1,
-				stepper_enable_z :1,
-				stepper_enable_x :1,
-				stepper_enable_y :1,
-				reserved		 :1;
-	};
-} ioexpand_t;
+#include "driver.h"
 
 void ioexpand_init (void);
 void ioexpand_out (ioexpand_t pins);

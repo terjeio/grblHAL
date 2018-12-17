@@ -24,18 +24,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define XON  0x11
-#define XOFF 0x13
-#define EOF  0x1A
-#define BS   0x08
-#define LF   0x0A
-#define CR   0x0D
-#define CAN  0x18
-#define DEL  0x7F
-#define EOL  "\r\n"
+#define ASCII_EOL  "\r\n"
 
-#define XONOK (XON|0x80)
-#define XOFFOK (XOFF|0x80)
 #define RX_BUFFER_SIZE 1024     // must be a power of 2
 #define RX_BUFFER_HWM 900
 #define RX_BUFFER_LWM 300

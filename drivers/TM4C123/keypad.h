@@ -54,7 +54,7 @@ typedef enum {
 } jogmode_t;
 
 void keypad_setup (void);
-void process_keypress (uint8_t state);
+void process_keypress (uint_fast16_t state);
 
 bool driver_setting (uint_fast16_t setting, float value, char *svalue);
 void driver_settings_restore (uint8_t restore_flag);

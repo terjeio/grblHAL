@@ -40,7 +40,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <msp430.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include "GRBL\serial.h"
 #include "GRBL\grbl.h"
 
 #include "serial.h"
@@ -107,7 +106,7 @@ void serialRxFlush (void)
 
 void serialRxCancel (void)
 {
-    rxbuf[rx_head] = CAN;
+    rxbuf[rx_head] = ASCII_CAN;
     rx_tail = rx_head;
     rx_head = (rx_tail + 1) & (RX_BUFFER_SIZE - 1);
     SERIAL_RTS_PORT_OUT &= ~SERIAL_RTS_BIT;;

@@ -36,11 +36,11 @@ static void sleep_execute()
     hal.delay_ms((uint32_t)(SLEEP_DURATION * 1000.0f), fall_asleep);
 
     // Fetch current number of buffered characters in input stream buffer.
-    uint16_t rx_initial = hal.stream_get_rx_buffer_available();
+    uint16_t rx_initial = hal.stream.get_rx_buffer_available();
 
     do {
         // Monitor for any new input stream data or external events (queries, buttons, alarms) to exit.
-        if ((hal.stream_get_rx_buffer_available() != rx_initial) || sys_rt_exec_state || sys_rt_exec_alarm ) {
+        if ((hal.stream.get_rx_buffer_available() != rx_initial) || sys_rt_exec_state || sys_rt_exec_alarm ) {
             // Disable sleep timeout and return to normal operation.
             hal.delay_ms(0, 0);
             return;
@@ -50,7 +50,7 @@ static void sleep_execute()
     // If reached, sleep counter has expired. Execute sleep procedures.
     // Notify user that Grbl has timed out and will be parking.
     // To exit sleep, resume or reset. Either way, the job will not be recoverable.
-    report_feedback_message(Message_SleepMode);
+    hal.report.feedback_message(Message_SleepMode);
     system_set_exec_state_flag(EXEC_SLEEP);
 }
 

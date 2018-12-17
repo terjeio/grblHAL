@@ -37,7 +37,7 @@ bool nvsRead (uint8_t *dest)
 {
 	bool ok;
 
-	if(!(ok = grblNVS && esp_partition_read(grblNVS, 0, (void *)dest, GRBL_NVS_SIZE) == ESP_OK))
+	if(!(ok = grblNVS && esp_partition_read(grblNVS, 0, (void *)dest, hal.eeprom.size) == ESP_OK))
 		grblNVS = NULL;
 
 	return ok;
@@ -47,7 +47,7 @@ bool nvsWrite (uint8_t *source)
 {
 	return grblNVS &&
 			esp_partition_erase_range(grblNVS, 0, SPI_FLASH_SEC_SIZE) == ESP_OK &&
-			 esp_partition_write(grblNVS, 0, (void *)source, GRBL_NVS_SIZE) == ESP_OK;
+			 esp_partition_write(grblNVS, 0, (void *)source, hal.eeprom.size) == ESP_OK;
 }
 
 bool nvsInit (void)

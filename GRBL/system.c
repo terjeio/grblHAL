@@ -126,7 +126,7 @@ status_code_t system_execute_line (char *line)
                 retval = Status_InvalidStatement;
             else {
                 sys.block_delete_enabled = !sys.block_delete_enabled;
-                report_feedback_message(sys.block_delete_enabled ? Message_Enabled : Message_Disabled);
+                hal.report.feedback_message(sys.block_delete_enabled ? Message_Enabled : Message_Disabled);
             }
             break;
 
@@ -138,10 +138,10 @@ status_code_t system_execute_line (char *line)
                 // is idle and ready, regardless of alarm locks. This is mainly to keep things
                 // simple and consistent.
                 mc_reset();
-                report_feedback_message(Message_Disabled);
+                hal.report.feedback_message(Message_Disabled);
             } else if (sys.state == STATE_IDLE) { // Requires idle mode.
                 set_state(STATE_CHECK_MODE);
-                report_feedback_message(Message_Enabled);
+                hal.report.feedback_message(Message_Enabled);
             } else
                 retval = Status_IdleError;
             break;
@@ -163,7 +163,7 @@ status_code_t system_execute_line (char *line)
                 else if(control_signals.reset)
                     retval = Status_Reset;
                 else {
-                    report_feedback_message(Message_AlarmUnlock);
+                    hal.report.feedback_message(Message_AlarmUnlock);
                     set_state(STATE_IDLE);
                 }
                 // Don't run startup script. Prevents stored moves in startup from causing accidents.
@@ -309,7 +309,7 @@ status_code_t system_execute_line (char *line)
                     break;
             }
             if(retval == Status_OK) {
-                report_feedback_message(Message_RestoreDefaults);
+                hal.report.feedback_message(Message_RestoreDefaults);
                 mc_reset(); // Force reset to ensure settings are initialized correctly.
             }
             break;
@@ -321,7 +321,7 @@ status_code_t system_execute_line (char *line)
                 uint_fast8_t counter;
                 for (counter = 0; counter < N_STARTUP_LINE; counter++) {
                     if (!(settings_read_startup_line(counter, line)))
-                        hal.report_status_message(Status_SettingReadFail);
+                        hal.report.status_message(Status_SettingReadFail);
                     else
                         report_startup_line(counter, line);
                 }
@@ -349,10 +349,10 @@ status_code_t system_execute_line (char *line)
 
 #ifdef DEBUGOUT
         case 'Q':
-            hal.stream_write(uitoa((uint32_t)sizeof(settings_t)));
-            hal.stream_write(" ");
-            hal.stream_write(uitoa((uint32_t)sizeof(coord_data_t) + 1));
-            hal.stream_write("\r\n");
+            hal.stream.write(uitoa((uint32_t)sizeof(settings_t)));
+            hal.stream.write(" ");
+            hal.stream.write(uitoa((uint32_t)sizeof(coord_data_t) + 1));
+            hal.stream.write("\r\n");
             break;
 #endif
 

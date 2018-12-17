@@ -150,7 +150,7 @@ void serialRxFlush (void)
 //
 void serialRxCancel (void)
 {
-    rxbuf[rx_head] = CAN;
+    rxbuf[rx_head] = CMD_RESET;
     rx_tail = rx_head;
     rx_head = (rx_tail + 1) & (RX_BUFFER_SIZE - 1);
 #ifdef RTS_PORT
@@ -215,7 +215,7 @@ void serialWriteS (const char *s)
 void serialWriteLn (const char *s)
 {
     serialWriteS(s);
-    serialWriteS(EOL);
+    serialWriteS(ASCII_EOL);
 }
 
 //

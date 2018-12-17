@@ -30,9 +30,6 @@
 #include "eeprom.h"
 #include "serial.h"
 
-//#include "usermcodes.h"
-//#include "keypad.h"
-
 static volatile bool ms_delay = false;
 static volatile uint16_t debounce_count = 0;
 static bool pwmEnabled = false, IOInitDone = false, busy = false;
@@ -93,7 +90,7 @@ static void stepperGoIdle (void)
 static void stepperCyclesPerTick (uint32_t cycles_per_tick)
 {
     STEPPER_TIMER_CTL |= TACLR; // start in up mode
-    STEPPER_TIMER_CCR0 = cycles_per_tick < (1UL << 16) /*< 65536 (4.1ms @ 16MHz)*/ ? cycles_per_tick : 0xFFFF /*Just set the slowest speed possible.*/;
+    STEPPER_TIMER_CCR0 = cycles_per_tick < (1UL << 16) ? (uint16_t)cycles_per_tick : 0xFFFF;
 }
 
 // Sets up stepper driver interrupt timeout, "Normal" version
@@ -109,23 +106,23 @@ static void stepperCyclesPerTickPrescaled (uint32_t cycles_per_tick)
         cycles_per_tick = cycles_per_tick >> 3;
     } else {
         STEPPER_TIMER_EX0 = TAIDEX_7; // DIV 8
-        STEPPER_TIMER_CTL &= ID0|ID1; // DIV 8
+        STEPPER_TIMER_CTL |= ID0|ID1; // DIV 8
         cycles_per_tick = cycles_per_tick >> 6;
     }
-    STEPPER_TIMER_CCR0 = cycles_per_tick < (1UL << 16) ? cycles_per_tick : 0xFFFF;
+    STEPPER_TIMER_CCR0 = cycles_per_tick < (1UL << 16) ? (uint16_t)cycles_per_tick : 0xFFFF;
     STEPPER_TIMER_CTL |= TACLR|MC0;
 }
 
 // Set stepper pulse output pins
 // NOTE: step_outbits are: bit0 -> X, bit1 -> Y, bit2 -> Z, needs to be mapped to physical pins by bit shifting or other means
- static void stepperSetStepOutputs (axes_signals_t step_outbits)
+inline static void stepperSetStepOutputs (axes_signals_t step_outbits)
 {
     STEP_PORT_OUT = (STEP_PORT_OUT & ~HWSTEP_MASK) | (step_outbits.value ^ step_port_invert.value) << 1;
 }
 
 // Set stepper direction output pins
 // NOTE1: step_outbits are: bit0 -> X, bit1 -> Y, bit2 -> Z, needs to be mapped to physical pins by bit shifting or other means
- static void stepperSetDirOutputs (axes_signals_t dir_outbits)
+inline static void stepperSetDirOutputs (axes_signals_t dir_outbits)
 {
     DIRECTION_PORT_OUT = (DIRECTION_PORT_OUT & ~HWDIRECTION_MASK) | (dir_outbits.value ^ dir_port_invert.value);
 }
@@ -136,13 +133,14 @@ static void stepperPulseStart (stepper_t *stepper)
 {
     static uint_fast16_t current_pwm = 0;
 
-    if(stepper->spindle_pwm != current_pwm)
-        current_pwm = spindleSetSpeed(stepper->spindle_pwm);
-
     stepperSetDirOutputs(stepper->dir_outbits);
-    stepperSetStepOutputs(stepper->step_outbits);
 
-    PULSE_TIMER_CTL |= TACLR|MC0;
+    if(stepper->step_outbits.value) {
+        if(stepper->spindle_pwm != current_pwm)
+            current_pwm = spindleSetSpeed(stepper->spindle_pwm);
+        stepperSetStepOutputs(stepper->step_outbits);
+        PULSE_TIMER_CTL |= TACLR|MC0;
+    }
 }
 
 // Sets stepper direction and pulse pins and starts a step pulse with and initial delay
@@ -150,12 +148,14 @@ static void stepperPulseStartDelayed (stepper_t *stepper)
 {
     static uint_fast16_t current_pwm = 0;
 
-    if(stepper->spindle_pwm != current_pwm)
-        current_pwm = spindleSetSpeed(stepper->spindle_pwm);
-
     stepperSetDirOutputs(stepper->dir_outbits);
-    next_step_outbits = stepper->step_outbits; // Store out_bits
-    PULSE_TIMER_CTL |= TACLR|MC0;
+
+    if(stepper->step_outbits.value) {
+        if(stepper->spindle_pwm != current_pwm)
+            current_pwm = spindleSetSpeed(stepper->spindle_pwm);
+        next_step_outbits = stepper->step_outbits; // Store out_bits
+        PULSE_TIMER_CTL |= TACLR|MC0;
+    }
 }
 
 // Enable/disable limit pins interrupt
@@ -372,9 +372,9 @@ static coolant_state_t coolantGetState (void)
 
 static void showMessage (const char *msg)
 {
-    hal.stream_write("[MSG:");
-    hal.stream_write(msg);
-    hal.stream_write("]\r\n");
+    hal.stream.write("[MSG:");
+    hal.stream.write(msg);
+    hal.stream.write("]\r\n");
 }
 
 // Helper functions for setting/clearing/inverting individual bits atomically (uninterruptable)
@@ -409,11 +409,7 @@ static void settings_changed (settings_t *settings)
     step_port_invert = settings->steppers.step_invert;
     dir_port_invert = settings->steppers.dir_invert;
 
-    spindle_pwm.period = (uint32_t)(3125000 / settings->spindle.pwm_freq);
-    spindle_pwm.off_value = (uint32_t)(spindle_pwm.period * settings->spindle.pwm_off_value / 100.0f);
-    spindle_pwm.min_value = (uint32_t)(spindle_pwm.period * settings->spindle.pwm_min_value / 100.0f);
-    spindle_pwm.max_value = (uint32_t)(spindle_pwm.period * settings->spindle.pwm_max_value / 100.0f);
-    spindle_pwm.pwm_gradient = (float)(spindle_pwm.max_value - spindle_pwm.min_value) / (settings->spindle.rpm_max - settings->spindle.rpm_min);
+    spindle_precompute_pwm_values(&spindle_pwm, 3125000UL);
 
     hal.spindle_pwm_off = spindle_pwm.off_value;
 
@@ -542,7 +538,6 @@ static void settings_changed (settings_t *settings)
           else
               PROBE_PORT_OUT &= ~PROBE_PIN;
           PROBE_PORT_REN |= PROBE_PIN;
-
     }
 }
 
@@ -571,8 +566,10 @@ static bool driver_setup (settings_t *settings)
     PULSE_TIMER_CTL |= TACLR|TASSEL1; // for 0.2uS per count
     PULSE_TIMER_CCTL0 |= CCIE;
 
-//    if(hal.driver_cap.step_pulse_delay)
-//        PULSE_TIMER_CCTL1 |= CCIE;
+#ifdef CNC_BOOSTERPACK_A4998
+    STEPPERS_VDD_DIR |= STEPPERS_VDD_BIT;
+    STEPPERS_VDD_OUT |= STEPPERS_VDD_BIT;
+#endif
 
    /****************************
     *  Software debounce init  *
@@ -699,12 +696,12 @@ bool driver_init (void)
 
     hal.system_control_get_state = systemGetState;
 
-    hal.stream_read = serialGetC;
-    hal.stream_write = serialWriteS;
-    hal.stream_write_all = serialWriteS;
-    hal.stream_get_rx_buffer_available = serialRxFree;
-    hal.stream_reset_read_buffer = serialRxFlush;
-    hal.stream_cancel_read_buffer = serialRxCancel;
+    hal.stream.read = serialGetC;
+    hal.stream.write = serialWriteS;
+    hal.stream.write_all = serialWriteS;
+    hal.stream.get_rx_buffer_available = serialRxFree;
+    hal.stream.reset_read_buffer = serialRxFlush;
+    hal.stream.cancel_read_buffer = serialRxCancel;
 
     hal.show_message = showMessage;
 

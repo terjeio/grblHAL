@@ -2,7 +2,7 @@
 
   ioexpand.c - driver code for Espressif ESP32 processor
 
-  I2C I/O expander
+  I2C I/O expander, PCA9654E - with address pins to GND. PCA9654EA has a different address!
 
   Part of Grbl
 
@@ -23,27 +23,96 @@
 
 */
 
+#if IOEXPAND_ENABLE
+
 #include "ioexpand.h"
 #include "driver.h"
+
+#define IOEX_ADDRESS 0x40
+#define READ_INPUT   0
+#define RW_OUTPUT    1
+#define RW_INVERSION 2
+#define RW_CONFIG    3
 
 void ioexpand_init (void)
 {
 	i2c_init();
+
+	if(i2cBusy != NULL && xSemaphoreTake(i2cBusy, 5 / portTICK_PERIOD_MS) == pdTRUE) {
+
+		// 0 = output, 1 = input
+		// TODO: move to driver.h?
+		const ioexpand_t cfg = {
+			.spindle_on = 0,
+			.spindle_dir = 0,
+			.mist_on = 0,
+			.flood_on = 0,
+			.stepper_enable_z = 0,
+			.stepper_enable_x = 0,
+			.stepper_enable_y = 0,
+			.reserved = 1
+		};
+
+		i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+		i2c_master_start(cmd);
+		i2c_master_write_byte(cmd, IOEX_ADDRESS|I2C_MASTER_WRITE, true);
+		i2c_master_write_byte(cmd, RW_CONFIG, true);
+		i2c_master_write_byte(cmd, cfg.mask, true);
+		i2c_master_stop(cmd);
+		i2c_master_cmd_begin(I2C_PORT, cmd, 1000 / portTICK_PERIOD_MS);
+
+		i2c_master_start(cmd);
+		i2c_master_write_byte(cmd, IOEX_ADDRESS|I2C_MASTER_WRITE, true);
+		i2c_master_write_byte(cmd, RW_INVERSION, true);
+		i2c_master_write_byte(cmd, 0, true);
+		i2c_master_stop(cmd);
+		i2c_master_cmd_begin(I2C_PORT, cmd, 1000 / portTICK_PERIOD_MS);
+
+		i2c_cmd_link_delete(cmd);
+
+		xSemaphoreGive(i2cBusy);
+	}
 }
 
 void ioexpand_out (ioexpand_t pins)
 {
-//mutex!! I2C is used by keypad and eeprom too
-	/*
-   i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-   i2c_master_start(cmd);
-   i2c_master_write_byte(cmd, (0x20 << 1) | 0x01, I2C_MASTER_ACK);
-   */
+	if(i2cBusy != NULL && xSemaphoreTake(i2cBusy, 5 / portTICK_PERIOD_MS) == pdTRUE) {
+
+		i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+		i2c_master_start(cmd);
+		i2c_master_write_byte(cmd, IOEX_ADDRESS|I2C_MASTER_WRITE, true);
+		i2c_master_write_byte(cmd, RW_OUTPUT, true);
+		i2c_master_write_byte(cmd, pins.mask, true);
+		i2c_master_stop(cmd);
+		i2c_master_cmd_begin(I2C_PORT, cmd, 1000 / portTICK_PERIOD_MS);
+		i2c_cmd_link_delete(cmd);
+
+		xSemaphoreGive(i2cBusy);
+	}
 }
 
 ioexpand_t ioexpand_in (void)
 {
 	ioexpand_t pins = {0};
 
+	if(i2cBusy != NULL && xSemaphoreTake(i2cBusy, 5 / portTICK_PERIOD_MS) == pdTRUE) {
+
+		i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+		i2c_master_start(cmd);
+		i2c_master_write_byte(cmd, IOEX_ADDRESS|I2C_MASTER_WRITE, true);
+		i2c_master_write_byte(cmd, READ_INPUT, true);
+		i2c_master_start(cmd);
+		i2c_master_write_byte(cmd, IOEX_ADDRESS|I2C_MASTER_READ, true);
+		i2c_master_read_byte(cmd, &pins.mask, I2C_MASTER_NACK);
+		i2c_master_stop(cmd);
+
+		i2c_master_cmd_begin(I2C_PORT, cmd, 1000 / portTICK_PERIOD_MS);
+		i2c_cmd_link_delete(cmd);
+
+		xSemaphoreGive(i2cBusy);
+	}
+
 	return pins;
 }
+
+#endif

@@ -28,16 +28,25 @@
 #include "driver.h"
 #include "eeprom.h"
 #include "serial.h"
-//#include "usermcodes.h"
-//#include "keypad.h"
-//#include "atc.h"
+
+#if KEYPAD_ENABLE
+#include "keypad.h"
+#endif
+
+#if ATC_ENABLE
+#include "atc.h"
+#endif
+
+#if LASER_PPI || ATC_ENABLE
+#include "usermcodes.h"
+#endif
 
 // prescale step counter to 20Mhz (80 / (STEPPER_DRIVER_PRESCALER + 1))
 #define STEPPER_DRIVER_PRESCALER 3
 
-//#define SPINDLE_SYNC // do NOT enable - not complete!
+//#define SPINDLE_SYNC_ENABLE // do NOT enable - not complete!
 
-#ifdef PWM_RAMPED
+#if PWM_RAMPED
 
 #define SPINDLE_RAMP_STEP_INCR 20 // timer compare register change per ramp step
 #define SPINDLE_RAMP_STEP_TIME 2  // ms
@@ -53,7 +62,7 @@ typedef struct {
 static pwm_ramp_t pwm_ramp;
 #endif
 
-#ifdef LASER_PPI
+#if LASER_PPI
 
 laser_ppi_t laser;
 
@@ -61,12 +70,13 @@ static void ppi_timeout_isr (void);
 
 #endif
 
-#ifdef SPINDLE_SYNC
+#ifdef SPINDLE_SYNC_ENABLE
 
 typedef struct {                     // Set when last encoder pulse count did not match at last index
     float block_start;
     float prev_pos;
     float dpp; // distance per pulse in mm
+    void (*stepper_pulse_start_normal)(stepper_t *stepper);
     uint32_t timer_value_start;
     uint_fast8_t segment_id;
     uint32_t segments;
@@ -81,12 +91,6 @@ static bool pwmEnabled = false, IOInitDone = false, probeState = false;
 static axes_signals_t next_step_outbits;
 static spindle_pwm_t spindle_pwm;
 static void (*delayCallback)(void) = 0;
-
-static uint16_t step_prescaler[3] = {
-    STEPPER_DRIVER_PRESCALER,
-    STEPPER_DRIVER_PRESCALER + 8,
-    STEPPER_DRIVER_PRESCALER + 64
-};
 
 // Inverts the probe pin state depending on user settings and probing cycle mode.
 static uint8_t probe_invert;
@@ -159,7 +163,7 @@ static void driver_delay_ms (uint32_t ms, void (*callback)(void))
 static void stepperEnable (axes_signals_t enable)
 {
     enable.mask ^= settings.steppers.enable_invert.mask;
-#ifdef CNC_BOOSTERPACK
+#if CNC_BOOSTERPACK
     GPIOPinWrite(STEPPERS_DISABLE_XY_PORT, STEPPERS_DISABLE_XY_PIN, enable.x ? STEPPERS_DISABLE_XY_PIN : 0);
     GPIOPinWrite(STEPPERS_DISABLE_Z_PORT, STEPPERS_DISABLE_Z_PIN, enable.z ? STEPPERS_DISABLE_Z_PIN : 0);
 #else
@@ -176,7 +180,7 @@ static void stepperWakeUp (void)
     } else
         TimerLoadSet(PULSE_TIMER_BASE, TIMER_A, settings.steppers.pulse_microseconds - 1);
 
-#ifdef LASER_PPI
+#if LASER_PPI
     laser.next_pulse = 0;
 #endif
 
@@ -194,29 +198,15 @@ static void stepperGoIdle (void)
     TimerDisable(STEPPER_TIMER_BASE, TIMER_A);
 }
 
-// Sets up stepper driver interrupt timeout, AMASS version
+// Sets up stepper driver interrupt timeout
 static void stepperCyclesPerTick (uint32_t cycles_per_tick)
 {
-    TimerLoadSet(STEPPER_TIMER_BASE, TIMER_A, cycles_per_tick < (1UL << 16) /*< 65536 (4.1ms @ 16MHz)*/ ? cycles_per_tick : 0xFFFF /*Just set the slowest speed possible.*/);
-}
-
-// Sets up stepper driver interrupt timeout, "Normal" version
-// TODO: can use stepperCyclesPerTick and 32bit timer?
-static void stepperCyclesPerTickPrescaled (uint32_t cycles_per_tick)
-{
-    uint32_t prescaler;
-    // Compute step timing and timer prescalar for normal step generation.
-    if (cycles_per_tick < (1UL << 16)) // < 65536  (4.1ms @ 16MHz)
-        prescaler = step_prescaler[0]; // prescaler: 0
-    else if (cycles_per_tick < (1UL << 19)) { // < 524288 (32.8ms@16MHz)
-        prescaler = step_prescaler[1]; // prescaler: 8
-        cycles_per_tick = cycles_per_tick >> 3;
-    } else {
-        prescaler = step_prescaler[2]; // prescaler: 64
-        cycles_per_tick = cycles_per_tick >> 6;
-    }
-    TimerPrescaleSet(STEPPER_TIMER_BASE, TIMER_A, prescaler);
-    TimerLoadSet(STEPPER_TIMER_BASE, TIMER_A, cycles_per_tick < (1UL << 16) /*< 65536 (4.1ms @ 16MHz)*/ ? cycles_per_tick : 0xFFFF /*Just set the slowest speed possible.*/);
+// Limit min steps/s to about 2 (hal.f_step_timer @ 20MHz)
+#ifdef ADAPTIVE_MULTI_AXIS_STEP_SMOOTHING
+    TimerLoadSet(STEPPER_TIMER_BASE, TIMER_A, cycles_per_tick < (1UL << 18) ? cycles_per_tick : (1UL << 18) - 1UL);
+#else
+    TimerLoadSet(STEPPER_TIMER_BASE, TIMER_A, cycles_per_tick < (1UL << 23) ? cycles_per_tick : (1UL << 23) - 1UL);
+#endif
 }
 
 // Set stepper pulse output pins
@@ -245,14 +235,16 @@ inline static void stepperSetDirOutputs (axes_signals_t dir_outbits)
 #endif
 }
 
-// Sets stepper direction and pulse pins and starts a step pulse
+// "Normal" version: Sets stepper direction and pulse pins and starts a step pulse a few nanoseconds later.
+// If spindle synchronized motion switch to PID version.
 static void stepperPulseStart (stepper_t *stepper)
 {
     static uint_fast16_t current_pwm = 0;
 
-#ifdef SPINDLE_SYNC
+#ifdef SPINDLE_SYNC_ENABLE
     if(stepper->new_block) {
         if(stepper->exec_segment->spindle_sync) {
+            spindle_tracker.stepper_pulse_start_normal = hal.stepper_pulse_start;
             hal.stepper_pulse_start = stepperPulseStartSyncronized;
             stepperPulseStartSyncronized(stepper);
             return;
@@ -260,32 +252,69 @@ static void stepperPulseStart (stepper_t *stepper)
         stepper->new_block = false;
         stepperSetDirOutputs(stepper->dir_outbits);
     }
-#endif
-
-    if(stepper->spindle_pwm != current_pwm)
-        current_pwm = spindleSetSpeed(stepper->spindle_pwm);
-
+#else
     if(stepper->new_block) {
         stepper->new_block = false;
         stepperSetDirOutputs(stepper->dir_outbits);
     }
+#endif
 
-    stepperSetStepOutputs(stepper->step_outbits);
-    TimerEnable(PULSE_TIMER_BASE, TIMER_A);
+    if(stepper->step_outbits.value) {
+        if(stepper->spindle_pwm != current_pwm)
+            current_pwm = spindleSetSpeed(stepper->spindle_pwm);
+        stepperSetStepOutputs(stepper->step_outbits);
+        TimerEnable(PULSE_TIMER_BASE, TIMER_A);
+    }
 }
 
-#ifdef SPINDLE_SYNC
+// Delayed pulse version: sets stepper direction and pulse pins and starts a step pulse with an initial delay.
+// If spindle synchronized motion switch to PID version.
+// TODO: only delay after setting dir outputs?
+static void stepperPulseStartDelayed (stepper_t *stepper)
+{
+    static uint_fast16_t current_pwm = 0;
 
-// Sets stepper direction and pulse pins and starts a step pulse
-// When delayed pulse the step register is written in the step delay interrupt handler
+#ifdef SPINDLE_SYNC_ENABLE
+    if(stepper->new_block) {
+        if(stepper->exec_segment->spindle_sync) {
+            spindle_tracker.stepper_pulse_start_normal = hal.stepper_pulse_start;
+            hal.stepper_pulse_start = stepperPulseStartSyncronized;
+            stepperPulseStartSyncronized(stepper);
+            return;
+        }
+        stepper->new_block = false;
+        stepperSetDirOutputs(stepper->dir_outbits);
+    }
+#else
+    if(stepper->new_block) {
+        stepper->new_block = false;
+        stepperSetDirOutputs(stepper->dir_outbits);
+    }
+#endif
+
+    if(stepper->step_outbits.value) {
+        if(stepper->spindle_pwm != current_pwm)
+            current_pwm = spindleSetSpeed(stepper->spindle_pwm);
+        next_step_outbits = stepper->step_outbits; // Store out_bits
+        TimerEnable(PULSE_TIMER_BASE, TIMER_A);
+    }
+}
+
+#if SPINDLE_SYNC_ENABLE
+
+#error Spindle sync code not ready!
+
+// Spindle sync version: sets stepper direction and pulse pins and starts a step pulse.
+// Switches back to "normal" version if spindle synchronized motion is finished.
+// TODO: add delayed pulse handling...
 static void stepperPulseStartSyncronized (stepper_t *stepper)
 {
     static spindle_sync_t spindle_sync;
 
     if(stepper->new_block) {
         if(!stepper->exec_segment->spindle_sync) {
-            hal.stepper_pulse_start = stepperPulseStart;
-            stepperPulseStart(stepper);
+            hal.stepper_pulse_start = spindle_tracker.stepper_pulse_start_normal;
+            hal.stepper_pulse_start(stepper);
             return;
         } else {
             spindle_sync.dpp = stepper->exec_block->programmed_rate * 120.0f;
@@ -299,7 +328,10 @@ static void stepperPulseStartSyncronized (stepper_t *stepper)
         stepperSetDirOutputs(stepper->dir_outbits);
     }
 
-    stepperSetStepOutputs(stepper->step_outbits);
+    if(stepper->step_outbits.value) {
+        stepperSetStepOutputs(stepper->step_outbits);
+        TimerEnable(PULSE_TIMER_BASE, TIMER_A);
+    }
 
     if(spindle_sync.segment_id != stepper->exec_segment->id) {
 
@@ -313,36 +345,14 @@ static void stepperPulseStartSyncronized (stepper_t *stepper)
 
         spindle_sync.segments++;
 
-
  //       float current_pos = (spindleGetData(true).angular_position - spindle_sync.block_start) * stepper->exec_block->programmed_rate;
 
         spindle_sync.prev_pos = stepper->exec_segment->target_position;
-
     }
-
-    TimerEnable(PULSE_TIMER_BASE, TIMER_A);
 }
 #endif
 
-// Sets stepper direction and pulse pins and starts a step pulse with an initial delay
-// When delayed pulse the step register is written in the step delay interrupt handler
-static void stepperPulseStartDelayed (stepper_t *stepper)
-{
-    static uint_fast16_t current_pwm = 0;
-
-    if(stepper->spindle_pwm != current_pwm)
-        current_pwm = spindleSetSpeed(stepper->spindle_pwm);
-
-    if(stepper->new_block) {
-        stepper->new_block = false;
-        stepperSetDirOutputs(stepper->dir_outbits);
-    }
-
-    next_step_outbits = stepper->step_outbits; // Store out_bits
-    TimerEnable(PULSE_TIMER_BASE, TIMER_A);
-}
-
-#ifdef CONSTANT_SURFACE_SPEED_OPTION
+#ifdef CSS_ENABLE
 
 // Sets stepper direction and pulse pins and starts a step pulse with an initial delay
 // When delayed pulse the step register is written in the step delay interrupt handler
@@ -369,7 +379,7 @@ static void stepperPulseStartCSS (stepper_t *stepper)
 
 #endif
 
-#ifdef LASER_PPI
+#if LASER_PPI
 
 static void spindleOn ();
 
@@ -388,23 +398,25 @@ static void stepperPulseStartPPI (stepper_t *stepper)
         laser.steps_per_pulse = steps_per_pulse;
     }
 
-    if(stepper->spindle_pwm != current_pwm) {
-        current_pwm = spindleSetSpeed(stepper->spindle_pwm);
-        laser.next_pulse = 0;
-    }
-
-    if(laser.next_pulse == 0) {
-        laser.next_pulse = laser.steps_per_pulse;
-        if(current_pwm != hal.spindle_pwm_off) {
-            spindleOn();
-            TimerEnable(LASER_PPI_TIMER_BASE, TIMER_A);
-            // TODO: T2CCP0 - use timer timeout to switch off CCP output w/o using interrupt? single shot PWM?
+    if(stepper->step_outbits.value) {
+        if(stepper->spindle_pwm != current_pwm) {
+            current_pwm = spindleSetSpeed(stepper->spindle_pwm);
+            laser.next_pulse = 0;
         }
-    } else
-        laser.next_pulse--;
 
-    stepperSetStepOutputs(stepper->step_outbits);
-    TimerEnable(PULSE_TIMER_BASE, TIMER_A);
+        if(laser.next_pulse == 0) {
+            laser.next_pulse = laser.steps_per_pulse;
+            if(current_pwm != hal.spindle_pwm_off) {
+                spindleOn();
+                TimerEnable(LASER_PPI_TIMER_BASE, TIMER_A);
+                // TODO: T2CCP0 - use timer timeout to switch off CCP output w/o using interrupt? single shot PWM?
+            }
+        } else
+            laser.next_pulse--;
+
+        stepperSetStepOutputs(stepper->step_outbits);
+        TimerEnable(PULSE_TIMER_BASE, TIMER_A);
+    }
 }
 #endif
 
@@ -537,7 +549,7 @@ static uint_fast16_t spindleComputePWMValue (float rpm, uint8_t speed_ovr)
 }
 
 // Sets spindle speed
-#ifdef PWM_RAMPED
+#if PWM_RAMPED
 static uint_fast16_t spindleSetSpeed (uint_fast16_t pwm_value)
 {
     if (pwm_value == hal.spindle_pwm_off) {
@@ -605,7 +617,7 @@ static void spindleSetStateVariable (spindle_state_t state, float rpm, uint8_t s
     }
 }
 
-#ifdef SPINDLE_SYNC
+#ifdef SPINDLE_SYNC_ENABLE
 static spindle_data_t spindleGetData (spindle_data_request_t request)
 {
     static spindle_data_t spindle_data;
@@ -631,10 +643,10 @@ static spindle_state_t spindleGetState (void)
     state.on = pwmEnabled || GPIOPinRead(SPINDLE_ENABLE_PORT, SPINDLE_ENABLE_PIN) != 0;
     state.ccw = hal.driver_cap.spindle_dir && GPIOPinRead(SPINDLE_DIRECTION_PORT, SPINDLE_DIRECTION_PIN) != 0;
     state.value ^= settings.spindle.invert.mask;
-#ifdef PWM_RAMPED
+#if PWM_RAMPED
     state.at_speed = pwm_ramp.pwm_current == pwm_ramp.pwm_target;
 #endif
-#ifdef SPINDLE_SYNC
+#ifdef SPINDLE_SYNC_ENABLE
     state.at_speed = spindleGetData(SpindleData_RPM).rpm == (state.on ? 300.0f : 0.0f);
 #endif
 
@@ -665,9 +677,9 @@ static coolant_state_t coolantGetState (void)
 
 static void showMessage (const char *msg)
 {
-    hal.stream_write("[MSG:");
-    hal.stream_write(msg);
-    hal.stream_write("]\r\n");
+    hal.stream.write("[MSG:");
+    hal.stream.write(msg);
+    hal.stream.write("]\r\n");
 }
 
 // Helper functions for setting/clearing/inverting individual bits atomically (uninterruptable)
@@ -731,14 +743,14 @@ static void settings_changed (settings_t *settings)
         } else {
             TimerIntRegister(PULSE_TIMER_BASE, TIMER_A, stepper_pulse_isr);
             TimerIntEnable(PULSE_TIMER_BASE, TIMER_TIMA_TIMEOUT);
-          #ifdef CONSTANT_SURFACE_SPEED_OPTION
+          #ifdef CSS_ENABLE
             hal.stepper_pulse_start = stepperPulseStartCSS;
           #else
             hal.stepper_pulse_start = stepperPulseStart;
           #endif
         }
 
-      #ifdef LASER_PPI
+      #if LASER_PPI
         if(!settings->flags.laser_mode)
             laser_ppi_mode(false);
       #endif
@@ -823,7 +835,7 @@ static bool driver_setup (settings_t *settings)
     GPIOPinTypeGPIOOutput(DIRECTION_PORT, HWDIRECTION_MASK);
     GPIOPadConfigSet(DIRECTION_PORT, HWDIRECTION_MASK, GPIO_STRENGTH_8MA, GPIO_PIN_TYPE_STD);
 
-#ifdef CNC_BOOSTERPACK
+#if CNC_BOOSTERPACK
     GPIOPinTypeGPIOOutput(STEPPERS_DISABLE_XY_PORT, STEPPERS_DISABLE_XY_PIN);
     GPIOPinTypeGPIOOutput(STEPPERS_DISABLE_Z_PORT, STEPPERS_DISABLE_Z_PIN);
 #else
@@ -849,13 +861,13 @@ static bool driver_setup (settings_t *settings)
     IntPendClear(PULSE_TIMER_INT);
     TimerPrescaleSet(PULSE_TIMER_BASE, TIMER_A, 79); // for 1uS per count
 
-#ifdef CNC_BOOSTERPACK_A4998
+#if CNC_BOOSTERPACK_A4998
     GPIOPinTypeGPIOOutput(STEPPERS_VDD_PORT, STEPPERS_VDD_PIN);
     GPIOPadConfigSet(STEPPERS_VDD_PORT, STEPPERS_VDD_PIN, GPIO_STRENGTH_12MA, GPIO_PIN_TYPE_STD);
     GPIOPinWrite(STEPPERS_VDD_PORT, STEPPERS_VDD_PIN, STEPPERS_VDD_PIN);
 #endif
 
-#ifdef LASER_PPI
+#if LASER_PPI
 
    /********************************
     *  PPI mode pulse width timer  *
@@ -954,9 +966,6 @@ static bool driver_setup (settings_t *settings)
     GPIOPadConfigSet(COOLANT_FLOOD_PORT, COOLANT_FLOOD_PIN, GPIO_STRENGTH_8MA, GPIO_PIN_TYPE_STD);
     GPIOPadConfigSet(COOLANT_MIST_PORT, COOLANT_MIST_PIN, GPIO_STRENGTH_8MA, GPIO_PIN_TYPE_STD);
 
-    if(hal.driver_cap.amass_level == 0)
-        hal.stepper_cycles_per_tick = &stepperCyclesPerTickPrescaled;
-
    /******************
     *  Spindle init  *
     ******************/
@@ -979,13 +988,13 @@ static bool driver_setup (settings_t *settings)
         GPIOPinConfigure(SPINDLEPWM_MAP);
         GPIOPinTypeTimer(SPINDLEPPORT, SPINDLEPPIN);
         GPIOPadConfigSet(SPINDLEPPORT, SPINDLEPPIN, GPIO_STRENGTH_8MA, GPIO_PIN_TYPE_STD);
-      #ifdef PWM_RAMPED
+      #if PWM_RAMPED
         pwm_ramp.ms_cfg = pwm_ramp.pwm_current = pwm_ramp.pwm_target = 0;
       #endif
     } else
         hal.spindle_set_state = &spindleSetState;
 
-#ifdef _KEYPAD_H_
+#if KEYPAD_ENABLE
 
    /*********************
     *  I2C KeyPad init  *
@@ -1027,7 +1036,7 @@ bool driver_init (void)
 
     hal.info = "TM4C123HP6PM";
     hal.driver_setup = driver_setup;
-    hal.f_step_timer = 20000000;
+    hal.f_step_timer = SysCtlClockGet() / (STEPPER_DRIVER_PRESCALER + 1); // 20 MHz
     hal.rx_buffer_size = RX_BUFFER_SIZE;
     hal.delay_ms = driver_delay_ms;
     hal.settings_changed = settings_changed;
@@ -1053,19 +1062,19 @@ bool driver_init (void)
     hal.spindle_get_state = spindleGetState;
     hal.spindle_set_speed = spindleSetSpeed;
     hal.spindle_compute_pwm_value = spindleComputePWMValue;
-#ifdef SPINDLE_SYNC
+#ifdef SPINDLE_SYNC_ENABLE
     hal.spindle_get_data = spindleGetData;
     hal.spindle_reset_data = spindleDataReset;
 #endif
 
     hal.system_control_get_state = systemGetState;
 
-    hal.stream_read = serialGetC;
-    hal.stream_write = serialWriteS;
-    hal.stream_write_all = serialWriteS;
-    hal.stream_get_rx_buffer_available = serialRxFree;
-    hal.stream_reset_read_buffer = serialRxFlush;
-    hal.stream_cancel_read_buffer = serialRxCancel;
+    hal.stream.read = serialGetC;
+    hal.stream.write = serialWriteS;
+    hal.stream.write_all = serialWriteS;
+    hal.stream.get_rx_buffer_available = serialRxFree;
+    hal.stream.reset_read_buffer = serialRxFlush;
+    hal.stream.cancel_read_buffer = serialRxCancel;
 
     hal.eeprom.type = EEPROM_Physical;
     hal.eeprom.get_byte = eepromGetByte;
@@ -1078,14 +1087,14 @@ bool driver_init (void)
     hal.set_value_atomic = valueSetAtomic;
 
 #ifdef _USERMCODES_H_
-    hal.userdefined_mcode_check = userMCodeCheck;
-    hal.userdefined_mcode_validate = userMCodeValidate;
-    hal.userdefined_mcode_execute = userMCodeExecute;
+    hal.driver_mcode_check = userMCodeCheck;
+    hal.driver_mcode_validate = userMCodeValidate;
+    hal.driver_mcode_execute = userMCodeExecute;
 #endif
 
     hal.show_message = showMessage;
 
-#ifdef _KEYPAD_H_
+#if KEYPAD_ENABLE
     hal.execute_realtime = process_keypress;
     hal.driver_setting = driver_setting;
     hal.driver_settings_restore = driver_settings_restore;
@@ -1101,10 +1110,10 @@ bool driver_init (void)
 
     hal.driver_cap.spindle_dir = On;
     hal.driver_cap.variable_spindle = On;
-#ifdef PWM_RAMPED
+#if PWM_RAMPED
     hal.driver_cap.spindle_at_speed = On;
 #endif
-#ifdef SPINDLE_SYNC
+#ifdef SPINDLE_SYNC_ENABLE
     hal.driver_cap.spindle_sync = On;
     hal.driver_cap.spindle_at_speed = On;
 #endif
@@ -1115,10 +1124,10 @@ bool driver_init (void)
     hal.driver_cap.control_pull_up = On;
     hal.driver_cap.limits_pull_up = On;
     hal.driver_cap.probe_pull_up = On;
-#ifdef LASER_PPI
+#if LASER_PPI
     hal.driver_cap.laser_ppi_mode = On;
 #endif
-#ifdef CONSTANT_SURFACE_SPEED_OPTION
+#ifdef CSS_ENABLE
     hal.driver_cap.constant_surface_speed = On;
 #endif
 
@@ -1170,14 +1179,14 @@ static void software_debounce_isr (void)
         hal.limit_interrupt_callback(state);
 }
 
-#ifdef LASER_PPI
+#if LASER_PPI
 
 void laser_ppi_mode (bool on)
 {
     if(on)
         hal.stepper_pulse_start = stepperPulseStartPPI;
     else
-        hal.stepper_pulse_start = settings.pulse_delay_microseconds ? stepperPulseStartDelayed : stepperPulseStart;
+        hal.stepper_pulse_start = settings.steppers.pulse_delay_microseconds ? stepperPulseStartDelayed : stepperPulseStart;
     gc_set_laser_ppimode(on);
 }
 
@@ -1225,7 +1234,7 @@ static void control_isr (void)
 }
 
 // Interrupt handler for 1 ms interval timer
-#ifdef PWM_RAMPED
+#if PWM_RAMPED
 static void systick_isr (void)
 {
     if(pwm_ramp.ms_cfg) {
@@ -1240,7 +1249,7 @@ static void systick_isr (void)
                     pwm_ramp.pwm_current = pwm_ramp.pwm_target;
 
                 if(pwm_ramp.pwm_current == 0) { // stop?
-                    if(settings.flags.spindle_disable_with_zero_speed)
+                    if(settings.spindle.disable_with_zero_speed)
                         spindleOff();
                     TimerLoadSet(SPINDLE_PWM_TIMER_BASE, TIMER_A, spindle_pwm.period + 20000);
                     TimerDisable(SPINDLE_PWM_TIMER_BASE, TIMER_A); // Disable PWM. Output voltage is zero.

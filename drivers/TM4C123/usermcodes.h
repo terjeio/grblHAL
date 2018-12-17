@@ -25,8 +25,10 @@
 #ifndef _USERMCODES_H_
 #define _USERMCODES_H_
 
-uint8_t userMCodeCheck (uint8_t mcode);
-uint8_t userMCodeValidate (parser_block_t *gc_block, uint_fast16_t *value_words);
-void userMCodeExecute (uint8_t state, parser_block_t *gc_block);
+#include "GRBL/grbl.h"
+
+uint_fast16_t userMCodeCheck (uint_fast16_t mcode);
+status_code_t userMCodeValidate (parser_block_t *gc_block, uint_fast16_t *value_words);
+void userMCodeExecute (uint_fast16_t state, parser_block_t *gc_block);
 
 #endif

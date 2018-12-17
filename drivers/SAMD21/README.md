@@ -4,6 +4,9 @@ A GrblHAL driver for the Atmel SAMD21 processor on a [Arduiono MKR ZERO board](h
 
 ### *** EXPERIMENTAL *** ###
 
+**NOTE:** Not all code included - I have not spent much time to grasp, for me, the strange ways the Arduino framework is to be set up when publishing code.
+It seems to me that subdirectories with code is problematic... Any guidance will be welcome.
+
 This driver compiles and uploads from the Arduino IDE and is partially dependent on the Arduino framework.
 
 For flexibility and to reduce overhead the vector table is relocated to RAM. On my todo list is to improve GPIO speed even more than already done.
@@ -35,4 +38,7 @@ Numbers in round brackets are the Arduino pin assignments, in square brackets th
 
 Using pin 25 for stepper enable is perhaps not possible as this pin is decoupled with a total of 4.8uF... Testing required!
 
-__NOTE:__ Only tested on my bench with an oscilloscope, some switches and LEDs.
+**NOTE:** Only tested on my bench with an oscilloscope, some switches and LEDs.
+
+---
+2018-12-17

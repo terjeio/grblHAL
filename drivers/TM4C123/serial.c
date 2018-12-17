@@ -131,7 +131,7 @@ inline uint16_t serialRxCount (void)
 
 uint16_t serialRxFree (void)
 {
-    return RX_BUFFER_SIZE - serialRxCount();
+    return (RX_BUFFER_SIZE - 1) - serialRxCount();
 }
 
 void serialRxFlush (void)
@@ -142,7 +142,7 @@ void serialRxFlush (void)
 
 void serialRxCancel (void)
 {
-    rxbuf[rx_head] = CAN;
+    rxbuf[rx_head] = ASCII_CAN;
     rx_tail = rx_head;
     rx_head = (rx_tail + 1) & (RX_BUFFER_SIZE - 1);
 
@@ -161,7 +161,7 @@ void serialWriteS (const char *data)
 void serialWriteLn (const char *data)
 {
     serialWriteS(data);
-    serialWriteS(EOL);
+    serialWriteS(ASCII_EOL);
 }
 
 void serialWrite (const char *data, unsigned int length)

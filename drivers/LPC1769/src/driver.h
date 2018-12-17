@@ -38,7 +38,12 @@
 #include <stdint.h>
 //-------------------------------------------------
 
-#define SDCARD_SUPPORT
+// Configuration
+// Set value to 1 to enable, 0 to disable
+
+#define SDCARD_ENABLE 0 // Run jobs from SD card.
+
+// End configuration
 
 #define port(p) portI(p)
 #define portI(p) LPC_GPIO ## p

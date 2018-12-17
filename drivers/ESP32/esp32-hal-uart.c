@@ -95,7 +95,7 @@ static void IRAM_ATTR _uart_isr (void *arg)
 			memcpy(&rxbackup, &rxbuffer, sizeof(serial_rx_buffer_t));
 			rxbuffer.backup = true;
 			rxbuffer.tail = rxbuffer.head;
-			hal.stream_read = uartRead; // restore normal input
+			hal.stream.read = uartRead; // restore normal input
 
 		} else if(hal.protocol_process_realtime && hal.protocol_process_realtime(c)) {
 
@@ -305,7 +305,7 @@ void uartFlush (void)
 IRAM_ATTR void uartCancel (void)
 {
 //    UART_MUTEX_LOCK();
-    rxbuffer.data[rxbuffer.head] = CAN;
+    rxbuffer.data[rxbuffer.head] = CMD_RESET;
     rxbuffer.tail = rxbuffer.head;
     rxbuffer.head = (rxbuffer.tail + 1) & (RX_BUFFER_SIZE - 1);
 //    UART_MUTEX_UNLOCK();
@@ -315,7 +315,7 @@ bool uartSuspendInput (bool suspend)
 {
     UART_MUTEX_LOCK();
     if(suspend)
-        hal.stream_read = uartGetNull;
+        hal.stream.read = uartGetNull;
     else if(rxbuffer.backup)
         memcpy(&rxbuffer, &rxbackup, sizeof(serial_rx_buffer_t));
     UART_MUTEX_UNLOCK();

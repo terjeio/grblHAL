@@ -31,7 +31,7 @@
 #include "serial.h"
 #include "grbl-lpc/pwm_driver.h"
 
-#ifdef SDCARD_SUPPORT
+#if SDCARD_ENABLE
 #include "sdcard.h"
 #endif
 
@@ -164,12 +164,19 @@ static void stepperPulseStart (stepper_t *stepper)
 {
     static uint_fast16_t current_pwm = 0;
 
-    if(stepper->spindle_pwm != current_pwm)
-        current_pwm = spindleSetSpeed(stepper->spindle_pwm);
+    if(stepper->new_block) {
+        stepper->new_block = false;
+        stepperSetDirOutputs(stepper->dir_outbits);
+    }
 
-    stepperSetDirOutputs(stepper->dir_outbits);
-    stepperSetStepOutputs(stepper->step_outbits);
-    PULSE_TIMER->TCR = 1;
+    if(stepper->step_outbits.value) {
+
+    	if(stepper->spindle_pwm != current_pwm)
+			current_pwm = spindleSetSpeed(stepper->spindle_pwm);
+
+		stepperSetStepOutputs(stepper->step_outbits);
+		PULSE_TIMER->TCR = 1;
+    }
 }
 
 // Sets stepper direction and pulse pins and starts a step pulse with and initial delay
@@ -177,12 +184,19 @@ static void stepperPulseStartDelayed (stepper_t *stepper)
 {
     static uint_fast16_t current_pwm = 0;
 
-    if(stepper->spindle_pwm != current_pwm)
-        current_pwm = spindleSetSpeed(stepper->spindle_pwm);
+    if(stepper->new_block) {
+        stepper->new_block = false;
+        stepperSetDirOutputs(stepper->dir_outbits);
+    }
 
-    stepperSetDirOutputs(stepper->dir_outbits);
-    next_step_outbits = stepper->step_outbits; // Store out_bits
-    PULSE_TIMER->TCR = 1;
+    if(stepper->step_outbits.value) {
+
+		if(stepper->spindle_pwm != current_pwm)
+			current_pwm = spindleSetSpeed(stepper->spindle_pwm);
+
+		next_step_outbits = stepper->step_outbits; // Store out_bits
+		PULSE_TIMER->TCR = 1;
+    }
 }
 
 // Enable/disable limit pins interrupt
@@ -620,7 +634,7 @@ static bool driver_setup (settings_t *settings)
     COOLANT_FLOOD_PORT->FIODIR |= COOLANT_FLOOD_BIT;
     COOLANT_MIST_PORT->FIODIR |= COOLANT_MIST_BIT;
 
-#ifdef _SDCARD_H_
+#if SDCARD_ENABLE
     sdcard_init();
 #endif
 
@@ -655,7 +669,7 @@ bool driver_init (void) {
     hal.delay_ms = &driver_delay_ms;
     hal.settings_changed = settings_changed;
 
-#ifdef _SDCARD_H_
+#if SDCARD_ENABLE
     hal.driver_reset = sdcard_reset;
 #endif
 
@@ -683,12 +697,12 @@ bool driver_init (void) {
 
     hal.system_control_get_state = systemGetState;
 
-    hal.stream_read = serialGetC;
-    hal.stream_write = serialWriteS;
-    hal.stream_write_all = serialWriteS;
-    hal.stream_get_rx_buffer_available = serialRxFree;
-    hal.stream_reset_read_buffer = serialRxFlush;
-    hal.stream_cancel_read_buffer = serialRxCancel;
+    hal.stream.read = serialGetC;
+    hal.stream.write = serialWriteS;
+    hal.stream.write_all = serialWriteS;
+    hal.stream.get_rx_buffer_available = serialRxFree;
+    hal.stream.reset_read_buffer = serialRxFlush;
+    hal.stream.cancel_read_buffer = serialRxCancel;
 
     hal.eeprom.type = EEPROM_None;
 //    hal.eeprom.get_byte = eepromGetByte;
@@ -724,7 +738,7 @@ bool driver_init (void) {
     hal.driver_cap.control_pull_up = On;
     hal.driver_cap.limits_pull_up = On;
     hal.driver_cap.probe_pull_up = On;
-#ifdef _SDCARD_H_
+#if SDCARD_ENABLE
     hal.driver_cap.sd_card = On;
 #endif
     // no need to move version check before init - compiler will fail any mismatch for existing entries

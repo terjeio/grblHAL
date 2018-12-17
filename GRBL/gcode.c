@@ -116,7 +116,7 @@ void gc_init()
 
     // Load default G54 coordinate system.
     if (!settings_read_coord_data(gc_state.modal.coord_system.idx, &gc_state.modal.coord_system.xyz))
-        hal.report_status_message(Status_SettingReadFail);
+        hal.report.status_message(Status_SettingReadFail);
 
 }
 
@@ -439,7 +439,7 @@ status_code_t gc_execute_block(char *block, char *message)
                         break;
 #ifndef N_TOOLS
                     case 6:
-                        if(hal.stream_suspend_read)
+                        if(hal.stream.suspend_read)
                             word_bit.group = ModalGroup_M6;
                         else
                             FAIL(Status_GcodeUnsupportedCommand); // [Unsupported M command]
@@ -812,24 +812,24 @@ status_code_t gc_execute_block(char *block, char *message)
 
         switch(gc_block.override_command) {
 
-            case 49:
+            case Override_FeedSpeed:
                 gc_block.modal.override_ctrl.feed_rate_disable = gc_block.values.p == 0.0f;
                 gc_block.modal.override_ctrl.spindle_rpm_disable = gc_block.values.p == 0.0f;
                 break;
 
-            case 50:
+            case Override_FeedRate:
                 gc_block.modal.override_ctrl.feed_rate_disable = gc_block.values.p == 0.0f;
                 break;
 
-            case 51:
+            case Override_SpindleSpeed:
                 gc_block.modal.override_ctrl.spindle_rpm_disable = gc_block.values.p == 0.0f;
                 break;
 
-            case 53:
+            case Override_FeedHold:
                 gc_block.modal.override_ctrl.feed_hold_disable = gc_block.values.p == 0.0f;
                 break;
 
-            case 56:
+            case Override_Parking:
                 if(settings.parking.flags.enable_override_control)
                     gc_block.modal.override_ctrl.parking_disable = gc_block.values.p == 0.0f;
                 break;
@@ -1952,7 +1952,7 @@ status_code_t gc_execute_block(char *block, char *message)
                 spindle_stop();
                 hal.coolant_set_state((coolant_state_t){0});
             }
-            report_feedback_message(Message_ProgramEnd);
+            hal.report.feedback_message(Message_ProgramEnd);
         }
         gc_state.modal.program_flow = ProgramFlow_Running; // Reset program flow.
     }

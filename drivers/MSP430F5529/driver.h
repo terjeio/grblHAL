@@ -21,8 +21,6 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-//#define HAS_KEYPAD //uncomment to enable I2C keypad for jogging etc.
-
 #include "portmacros.h"
 
 // Define step pulse output pins
@@ -52,6 +50,18 @@
 #define STEPPERS_DISABLE_PIN_Z      BIT4
 #define STEPPERS_DISABLE_OUT_Z      portOut(STEPPERS_DISABLE_PORT_Z)
 #define STEPPERS_DISABLE_DIR_Z      portDir(STEPPERS_DISABLE_PORT_Z)
+
+#ifdef CNC_BOOSTERPACK_A4998
+
+// Stepper driver VDD supply
+
+#define STEPPERS_VDD_PORT 6
+#define STEPPERS_VDD_OUT  portOut(STEPPERS_VDD_PORT)
+#define STEPPERS_VDD_DIR  portDir(STEPPERS_VDD_PORT)
+#define STEPPERS_VDD_PIN  6
+#define STEPPERS_VDD_BIT  (1<<STEPPERS_VDD_PIN)
+
+#endif
 
 // Define homing/hard limit switch input pins and limit interrupt vectors.
 // NOTE: All limit bit pins must be on the same port
