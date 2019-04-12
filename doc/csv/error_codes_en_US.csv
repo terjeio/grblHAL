@@ -35,3 +35,6 @@ Error Code in v1.1+ ,Error Message in v1.0-, Error Description
 36,Invalid gcode ID:36,Unused value words found in block.
 37,Invalid gcode ID:37,G43.1 dynamic tool length offset is not assigned to configured tool length axis.
 38,Invalid gcode ID:38,Tool number greater than max supported value.
+39,Invalid gcode ID:39,Illegal tool table entry.
+40,Invalid gcode ID:40,G-code command not allowed when tool change is pendig.
+41,Invalid gcode ID:41,Spindle not running when motion commanded in CSS mode.

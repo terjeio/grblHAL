@@ -2,7 +2,7 @@
   report.h - reporting and messaging methods
   Part of Grbl
 
-  Copyright (c) 2018 Terje Io
+  Copyright (c) 2018-2019 Terje Io
   Copyright (c) 2012-2016 Sungeun K. Jeon for Gnea Research LLC
 
   Grbl is free software: you can redistribute it and/or modify
@@ -23,6 +23,9 @@
 #define report_h
 
 #include "system.h"
+
+// Initialize reporting subsystem
+void report_init (void);
 
 // Prints system status messages.
 void report_status_message (status_code_t status_code);

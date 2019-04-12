@@ -37,8 +37,6 @@ __Constants:__
 
 `uint32_t rx_buffer_size` - input stream buffer size.
 
-`uint_fast16_t spindle_pwm_off` - when PWM value is equal or less it will cause the spindle to stop
-
 ---
 
 __Required entry points that must be assigned by the driver:__
@@ -65,17 +63,14 @@ NOTE: the callback function may be called from interrupt context.
 `bool (*probe_get_state)(void)`  
 Returns current probe state taking into account the current inversion status. The driver may implement this by the means of an interrupt handler for maximum responsiveness.
 
-`void (*spindle_set_state)(spindle_state_t state, float rpm, uint8_t spindle_rpm_ovr)`
+`void (*spindle_set_state)(spindle_state_t state, float rpm)`  
 Enable/disable spindle according to the supplied parameters.
 
-`spindle_state_t (*spindsle_get_state)(void)`  
+`spindle_state_t (*spindle_get_state)(void)`  
 Returns spindle state.
 
-`uint_fast16_t (*spindle_set_speed)(uint_fast16_t pwm_value)`  
-Set spindle RPM from the provided PWM value.
-
-`uint_fast16_t (*spindle_compute_pwm_value)(float rpm, uint8_t spindle_rpm_ovr)`  
-Returns the PWM value to be used for the specified RPM and override percentage.
+`void (*spindle_update_rpm)(float rpm)`  
+Update the spindle speed.
 
 `control_signals_t (*system_control_get_state)(void)`  
 Returns control input signals status.
@@ -101,27 +96,27 @@ Sets up the stepper timer for the next step interval. A free running timer with 
 `void (*stepper_pulse_start)(stepper_t *stepper)`  
 Starts pulse output. The driver may implement several version of this to reduce call overhead. Eg. one for "standard" pulse output \(no delay\), a delayed version or, if spindle sync is supported, a version handling the spindle sync. The driver can then dynamically switch between these as required.
 
-`uint16_t (*serial_get_rx_buffer_available)(void)`  
+`uint16_t (*stream.get_rx_buffer_available)(void)`  
 Returns number of free character slots in the input stream buffer.
 
-`bool (*serial_write)(char c)`  
-Write a character to the output stream.
+`bool (*stream.write)(const char *s)`  
+Write a 0 terminated string to the current output stream.
  
-`void (*serial_write_string)(const char *s)`  
-Write a 0 terminated string to the output stream.
+`void (*stream.write_all)(const char *s)`  
+Write a 0 terminated string to all enabled output streams.
 
-`int16_t (*serial_read)(void)`  
-Read a character from the input stream. Returns -1 if no character available.
+`int16_t (*stream.read)(void)`  
+Read a character from the current input stream. Returns -1 if no character available.
 
-`void (*serial_reset_read_buffer)(void)`  
-Flushes the input stream buffer.
+`void (*stream.reset_read_buffer)(void)`  
+Flushes the current input stream buffer.
 
-`void (*serial_cancel_read_buffer)(void)`  
-Flushes the input stream buffer and inserts a CAN character. This will typically be used downstream to flush the block input buffer as part of jog cancelling.
+`void (*stream.cancel_read_buffer)(void)`  
+Flushes the current input stream buffer and inserts a CAN character. This will typically be used downstream to flush the block input buffer as part of jog cancelling.
 
-`bool (*serial_suspend_read)(bool await)`  
+`bool (*stream.suspend_read)(bool await)`  
 
-The serial handling functions may be used to redirect input and output streams by replacing the handlers. Eg. when reading from a SD card redirect `serial_read` to the SD card get_next_character function.  Similarily other streams may be dynamically switched in or out by replacing the handler functions on connect/disconnect events - there is no need for the grbl core to know what the stream source is. An added benefit of this is that the serial stream will be available for reconfiguration if there is any problems with the setup.
+The stream handling functions may be used to redirect input and output streams by replacing the handlers. Eg. when reading from a SD card redirect `stream.read` to the SD card get_next_character function.  Similarily other streams may be dynamically switched in or out by replacing the handler functions on connect/disconnect events - there is no need for the grbl core to know what the stream source is. An added benefit of this is that the serial stream will be available for reconfiguration if there is any problems with the setup.
 
 `void (*set_bits_atomic)(volatile uint_fast16_t *value, uint_fast16_t bits)`  
 Set bits in a variable atomically.
@@ -145,31 +140,30 @@ __NOTE:__ these entry points may temporarily be set 'active' by the driver, deac
 Uninstalls the driver by releasing claimed hardware.
 
 `void (*execute_realtime)(uint8_t state)`  
-Called regularly, may be used for functions like keypad scanning or display update, 
+Called regularly by the core, may be used for functions like keypad scanning or display update, 
 
-`uint8_t (*userdefined_mcode_check)(uint8_t mcode)`  
+`uint8_t (*driver_mcode_check)(uint8_t mcode)`  
 Return the `mcode` value if it is implemented by the driver, 0 if not.
 
-`status_code_t (*userdefined_mcode_validate)(parser_block_t *gc_block, uint32_t *value_words)`  
+`status_code_t (*driver_mcode_validate)(parser_block_t *gc_block, uint32_t *value_words)`  
 Return `Status_OK` if parameters are valid. The M code to be validated is stored in `gc_block->user_defined_mcode`, set `gc_block->user_defined_mcode_sync` to true if execution has to be synchronized. Available parameters are stored in `gc_block->values`.
 NOTE: any value words claimed by the M code must be cleared from the `value_words` variable pointed to. 
 
-`void (*userdefined_mcode_execute)(uint_fast16_t state, parser_block_t *gc_block)`  
+`void (*driver_mcode_execute)(uint_fast16_t state, parser_block_t *gc_block)`  
 Execute user defined M code, The M code to be executed is stored in `gc_block->user_defined_mcode`, parameters in `gc_block->values`.
 
  
-`void (*userdefined_rt_command_execute)(uint8_t cmd)`  
+`void (*driver_rt_command_execute)(uint8_t cmd)`  
 Execute a real time command, `cmd` is an top bit set character received from the input stream.  
 NOTE: this is not called from an interrupt context.
 
-`void (*userdefined_rt_report)(void)`  
+`void (*driver_rt_report)(void)`  
 Add information to the standard real time report by calling `hal.serial_write_string`. The supplied string must start with a `|` character.
 
+`void (*driver_feedback_message)(void)`  
+Allows adding feedback messages to the standard set. 
 
-`void (*userdefined_feedback_message)(void)`  
-
-
-`status_code_t (*userdefined_sys_command_execute)(uint_fast16_t state, char *line, char *lcline)`  
+`status_code_t (*driver_sys_command_execute)(uint_fast16_t state, char *line, char *lcline)`  
 Parse user defined system command \($ prefixed\), two versions of the command is provided; `line` is a uppercase version with spaces removed, `lcline` is a lowercase version. Return `Status_Unhandled` if not handled, `Status_OK` or an appropriate error status if handled.
 
 
@@ -193,6 +187,9 @@ static void showMessage (const char *msg)
     hal.serial_write_string("]\r\n");
 ```
 
+`void (*report_options)(void)`  
+Called when options are reported on $I request. Allows the driver to output custom options.  
+
 `void (*driver_reset)(void)`  
 Called when a soft reset is executed by the core.
 
@@ -206,7 +203,6 @@ Called when there is a need to restore settings to their default value. Test for
 `void (*driver_settings_report)(bool axis_settings)` 
 Called when the settings report is generated, first time before the axis specific parameters, second time after.
  
-
 `spindle_data_t (*spindle_get_data)(spindle_data_request_t request)`  
 Called when spindle synchronized motion is called for. TBC.
 
@@ -311,8 +307,9 @@ probe_pull_up
 amass_level - this has two bits allocated allowing 0-3 range to be specified, may be removed
 program_stop - input signal
 spindle_at_speed - required for spindle synchronized motion
+spindle_pwm_invert
+spindle_pid
 laser_ppi_mode - laser pulses per inch supported
-constant_surface_speed
 spindle_sync - for spindle synchronized motion
 sd_card
 bluetooth
@@ -320,4 +317,4 @@ ethernet
 wifi
 ```
 ---
-2018-10-25
+2019-04-12

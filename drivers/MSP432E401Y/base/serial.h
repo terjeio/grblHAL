@@ -113,11 +113,11 @@
 #define SERIAL1_RX uartRXpin(SERIAL1, SERIAL1_IOPORT, SERIAL1_RX_PIN)
 #define SERIAL1_TX uartTXpin(SERIAL1, SERIAL1_IOPORT, SERIAL1_TX_PIN)
 #define SERIAL1_PINS uartIOpins(SERIAL1_RX_PIN, SERIAL1_TX_PIN)
-
+/*
 #define RTS_PERIPH SYSCTL_PERIPH_GPIOL
 #define RTS_PORT GPIO_PORTL_BASE
 #define RTS_PIN  GPIO_PIN_3
-
+*/
 void serialInit (void);
 int16_t serialGetC (void);
 bool serialPutC (const char data);

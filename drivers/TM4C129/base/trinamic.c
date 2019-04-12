@@ -21,11 +21,11 @@
 
 #include "driver.h"
 
-#ifdef TRINAMIC_ENABLE
+#if TRINAMIC_ENABLE
 
 #include <stdio.h>
 
-#ifdef TRINAMIC_I2C
+#if TRINAMIC_I2C
 #include "i2c.h"
 #else
 #include "spi.h"
@@ -50,10 +50,10 @@ static limits_get_state_ptr limits_get_state = NULL;
 // Wrapper for initializing physical interface (since two alternatives are provided)
 void SPI_DriverInit (SPI_driver_t *driver)
 {
-#ifdef __SPI_DRIVER_H__
-    SPI__DriverInit(driver);
-#else
+#if TRINAMIC_I2C
     I2C_DriverInit(driver);
+#else
+    SPI__DriverInit(driver);
 #endif
 }
 

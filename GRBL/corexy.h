@@ -1,8 +1,9 @@
 /*
-  sleep.h - Sleep methods header file
+  corexy.c - corexy kinematics implementation
   Part of Grbl
-  
-  Copyright (c) 2016 Sungeun K. Jeon  
+
+  Copyright (c) 2019 Terje Io
+  Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -18,11 +19,5 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef sleep_h
-#define sleep_h
-
-// Checks running conditions for sleep. If satisfied, enables sleep countdown and executes
-// sleep mode upon elapse.
-void sleep_check();
-
-#endif
+// Initialize HAL pointers for CoreXY kinematics
+void corexy_init (void);

@@ -2,7 +2,7 @@
   planner.c - buffers movement commands and manages the acceleration profile plan
   Part of Grbl
 
-  Copyright (c) 2017-2018 Terje Io
+  Copyright (c) 2017-2019 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
   Copyright (c) 2011 Jens Geisler
@@ -29,17 +29,7 @@ static uint_fast8_t block_buffer_head;                  // Index of the next blo
 static uint_fast8_t next_buffer_head;                   // Index of the next buffer head
 static uint_fast8_t block_buffer_planned;               // Index of the optimally planned block
 
-// Define planner variables
-typedef struct {
-  int32_t position[N_AXIS];         // The planner position of the tool in absolute steps. Kept separate
-                                    // from g-code position for movements requiring multiple line motions,
-                                    // i.e. arcs, canned cycles, and backlash compensation.
-  float previous_unit_vec[N_AXIS];  // Unit vector of previous path line segment
-  float previous_nominal_speed;     // Nominal speed of previous path line segment
-} planner_t;
-
 static planner_t pl;
-
 
 // Returns the index of the next block in the ring buffer. Also called by stepper segment buffer.
 inline static uint_fast8_t plan_next_block_index (uint_fast8_t block_index)
@@ -341,23 +331,14 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
     // Compute and store initial move distance data.
 
     // Copy position data based on type of motion being planned.
+#ifdef HAL_KINEMATICS
+    if(!hal.kinematics.plan_copy_position(block->condition.system_motion, target, position_steps, target_steps))
+#else
     if (block->condition.system_motion) {
-   #ifdef COREXY
-        position_steps[X_AXIS] = system_convert_corexy_to_x_axis_steps(sys_position);
-        position_steps[Y_AXIS] = system_convert_corexy_to_y_axis_steps(sys_position);
-        position_steps[Z_AXIS] = sys_position[Z_AXIS];
-   #else
         memcpy(position_steps, sys_position, sizeof(sys_position));
-   #endif
     } else
+#endif
         memcpy(position_steps, pl.position, sizeof(pl.position));
-
-  #ifdef COREXY
-    target_steps[A_MOTOR] = lroundf(target[A_MOTOR] * settings.steps_per_mm[A_MOTOR]);
-    target_steps[B_MOTOR] = lroundf(target[B_MOTOR] * settings.steps_per_mm[B_MOTOR]);
-    int32_t a_steps = (target_steps[X_AXIS] - position_steps[X_AXIS]) + (target_steps[Y_AXIS] - position_steps[Y_AXIS]);
-    int32_t b_steps = (target_steps[X_AXIS] - position_steps[X_AXIS]) - (target_steps[Y_AXIS] - position_steps[Y_AXIS]);
-  #endif
 
     idx = N_AXIS;
     do {
@@ -365,21 +346,12 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
         // Calculate target position in absolute steps, number of steps for each axis, and determine max step events.
         // Also, compute individual axes distance for move and prep unit vector calculations.
         // NOTE: Computes true distance from converted step values.
-      #ifdef COREXY
-        if(idx == A_MOTOR)
-            delta_steps = a_steps;
-        else if(idx == B_MOTOR)
-            delta_steps = b_steps;
-        else {
-            target_steps[idx] = lround(target[idx] * settings.steps_per_mm[idx]);
-            delta_steps = target_steps[idx] - position_steps[idx];
-            break;
-        }
-      #else
+#ifdef HAL_KINEMATICS
+        delta_steps = hal.kinematics.plan_calc_position(idx, target, position_steps, target_steps);
+#else
         target_steps[idx] = lroundf(target[idx] * settings.steps_per_mm[idx]);
         delta_steps = target_steps[idx] - position_steps[idx];
-      #endif
-
+#endif
         block->steps[idx] = labs(delta_steps);
         block->step_event_count = max(block->step_event_count, block->steps[idx]);
         unit_vec[idx] = (float)delta_steps / settings.steps_per_mm[idx]; // Store unit vector numerator
@@ -390,7 +362,6 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
 
     } while(idx);
 
-#ifdef CONSTANT_SURFACE_SPEED_OPTION
     // Calculate RPM to be used for Constant Surface Speed calculations
     if(block->condition.is_rpm_pos_adjusted) {
         block->spindle.rpm = block->spindle.surface_speed / (float)(position_steps[block->spindle.axis] / settings.steps_per_mm[block->spindle.axis] * 2.0f * M_PI);
@@ -400,7 +371,6 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
         if(block->spindle.target_rpm > block->spindle.max_rpm)
             block->spindle.target_rpm = block->spindle.max_rpm;
     }
-#endif
 
     // Bail if this is a zero-length block. Highly unlikely to occur.
     if (block->step_event_count == 0)
@@ -507,23 +477,8 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
 // Reset the planner position vectors. Called by the system abort/initialization routine.
 void plan_sync_position ()
 {
-  // TODO: For motor configurations not in the same coordinate frame as the machine position,
-  // this function needs to be updated to accomodate the difference.
-   #ifdef COREXY
-    uint_fast8_t idx = N_AXIS;
-    do {
-        switch(--idx) {
-            case X_AXIS:
-                pl.position[X_AXIS] = system_convert_corexy_to_x_axis_steps(sys_position);
-                break;
-            case Y_AXIS:
-                pl.position[Y_AXIS] = system_convert_corexy_to_y_axis_steps(sys_position);
-                break;
-            default:
-                pl.position[idx] = sys_position[idx];
-                break;
-        }
-    } while (idx);
+  #ifdef HAL_KINEMATICS
+    hal.kinematics.plan_sync_position (&pl);
   #else
     memcpy(pl.position, sys_position, sizeof(pl.position));
   #endif

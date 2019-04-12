@@ -4,7 +4,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2018 Terje Io
+  Copyright (c) 2018-2019 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -35,6 +35,14 @@
 #include "diskio.h"
 #endif
 
+#if IOEXPAND_ENABLE
+#include "ioexpand.h"
+#endif
+
+#if EEPROM_ENABLE
+#include "eeprom.h"
+#endif
+
 #define pinIn(p) ((PORT->Group[g_APinDescription[p].ulPort].IN.reg & (1 << g_APinDescription[p].ulPin)) != 0)
 #define pinOut(p, e) { if(e) PORT->Group[g_APinDescription[p].ulPort].OUTSET.reg = (1 << g_APinDescription[p].ulPin); else  PORT->Group[g_APinDescription[p].ulPort].OUTCLR.reg = (1 << g_APinDescription[p].ulPin); }
 
@@ -51,7 +59,11 @@ static void (*delayCallback)(void) = 0;
 
 static axes_signals_t limit_ies; // declare here for now...
 
-static uint_fast16_t spindleSetSpeed (uint_fast16_t pwm_value);
+static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value);
+
+#if IOEXPAND_ENABLE
+static ioexpand_t iopins = {0};
+#endif
 
 static void SysTick_IRQHandler (void);
 static void STEPPER_IRQHandler (void);
@@ -87,8 +99,14 @@ static void driver_delay_ms (uint32_t ms, void (*callback)(void))
 static void stepperEnable (axes_signals_t enable)
 {
     enable.value ^= settings.steppers.enable_invert.mask;
-
+#if IOEXPAND_ENABLE // TODO: read from expander?
+    iopins.stepper_enable_x = enable.x;
+    iopins.stepper_enable_y = enable.y;
+    iopins.stepper_enable_z = enable.z;
+	ioexpand_out(iopins);	
+#else
 	pinOut(STEPPERS_DISABLE_PIN, enable.x);
+#endif
 }
 
 // Resets and enables stepper driver ISR timer and forces a stepper driver interrupt callback
@@ -149,18 +167,12 @@ inline static void stepperSetDirOutputs (axes_signals_t dir_outbits)
 // Sets stepper direction and pulse pins and starts a step pulse
 static void stepperPulseStart (stepper_t *stepper)
 {
-    static uint_fast16_t current_pwm = 0;
-
     if(stepper->new_block) {
         stepper->new_block = false;
         stepperSetDirOutputs(stepper->dir_outbits);
     }
 
 	if(stepper->step_outbits.value) {
-		
-		if(stepper->spindle_pwm != current_pwm)
-			current_pwm = spindleSetSpeed(stepper->spindle_pwm);
-
 		stepperSetStepOutputs(stepper->step_outbits);
 
 		STEP_TIMER->COUNT16.COUNT.reg = 0;
@@ -174,18 +186,12 @@ static void stepperPulseStart (stepper_t *stepper)
 // Sets stepper direction and pulse pins and starts a step pulse with and initial delay
 static void stepperPulseStartDelayed (stepper_t *stepper)
 {
-    static uint_fast16_t current_pwm = 0;
-
 	if(stepper->new_block) {
         stepper->new_block = false;
         stepperSetDirOutputs(stepper->dir_outbits);
     }
 
 	if(stepper->step_outbits.value) {
-			
-		if(stepper->spindle_pwm != current_pwm)
-			current_pwm = spindleSetSpeed(stepper->spindle_pwm);
-
 		next_step_outbits = stepper->step_outbits; // Store out_bits
 		
 		STEP_TIMER->COUNT16.COUNT.reg = 0;
@@ -280,55 +286,66 @@ bool probeGetState (void)
 
 // Static spindle (off, on cw & on ccw)
 
-inline static void spindleOff (void)
+inline static void spindle_off (void)
 {
+#if IOEXPAND_ENABLE
+	iopins.spindle_on = settings.spindle.invert.on ? On : Off;
+	ioexpand_out(iopins);
+#else
 	pinOut(SPINDLE_ENABLE_PIN, settings.spindle.invert.on);
+#endif
 }
 
-inline static void spindleOn (void)
+inline static void spindle_on (void)
 {
+#if IOEXPAND_ENABLE
+	iopins.spindle_on = settings.spindle.invert.on ? Off : On;
+	ioexpand_out(iopins);
+#else
 	pinOut(SPINDLE_ENABLE_PIN, !settings.spindle.invert.on);
+#endif
 }
 
-inline static void spindleDir (bool ccw)
+inline static void spindle_dir (bool ccw)
 {
 #ifdef SPINDLE_DIRECTION_PIN
+#if IOEXPAND_ENABLE
+    if(hal.driver_cap.spindle_dir) {
+		iopins.spindle_dir = (ccw ^ settings.spindle.invert.ccw) ? On : Off;
+		ioexpand_out(iopins);
+	}
+#else
     if(hal.driver_cap.spindle_dir)
 		pinOut(SPINDLE_DIRECTION_PIN, (ccw ^ settings.spindle.invert.ccw));
+#endif
 #endif
 }
 
 // Start or stop spindle
-static void spindleSetState (spindle_state_t state, float rpm, uint8_t speed_ovr)
+static void spindleSetState (spindle_state_t state, float rpm)
 {
     if (!state.on)
-        spindleOff();
+        spindle_off();
     else {
-        spindleDir(state.ccw);
-        spindleOn();
+        spindle_dir(state.ccw);
+        spindle_on();
     }
 }
 
 // Variable spindle control functions
 
-// Spindle speed to PWM conversion. Keep routine small and efficient.
-static uint_fast16_t spindleComputePWMValue (float rpm, uint8_t speed_ovr)
-{
-    return spindle_compute_pwm_value(&spindle_pwm, rpm, speed_ovr);
-}
-
 // Sets spindle speed
-static uint_fast16_t spindleSetSpeed (uint_fast16_t pwm_value)
+static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
 {
-    if (pwm_value == hal.spindle_pwm_off) {
+    if (pwm_value == spindle_pwm.off_value) {
         pwmEnabled = false;
         if(settings.spindle.disable_with_zero_speed)
-            spindleOff();
+            spindle_off();
 		SPINDLE_PWM_TIMER->CTRLBSET.bit.CMD = TCC_CTRLBCLR_CMD_STOP_Val;
 		while(SPINDLE_PWM_TIMER->SYNCBUSY.bit.CTRLB);
     } else {
         if(!pwmEnabled)
-            spindleOn();
+            spindle_on();
         pwmEnabled = true;
 
 		SPINDLE_PWM_TIMER->CC[SPINDLE_PWM_CCREG].bit.CC = pwm_value;
@@ -340,15 +357,20 @@ static uint_fast16_t spindleSetSpeed (uint_fast16_t pwm_value)
     return pwm_value;
 }
 
+static void spindleUpdateRPM (float rpm)
+{
+    spindle_set_speed(spindle_compute_pwm_value(&spindle_pwm, rpm, false));
+}
+
 // Start or stop spindle
-static void spindleSetStateVariable (spindle_state_t state, float rpm, uint8_t speed_ovr)
+static void spindleSetStateVariable (spindle_state_t state, float rpm)
 {
     if (!state.on || rpm == 0.0f) {
-        spindleSetSpeed(hal.spindle_pwm_off);
-        spindleOff();
+        spindle_set_speed(spindle_pwm.off_value);
+        spindle_off();
     } else {
-        spindleDir(state.ccw);
-        spindleSetSpeed(spindle_compute_pwm_value(&spindle_pwm, rpm, speed_ovr));
+        spindle_dir(state.ccw);
+        spindle_set_speed(spindle_compute_pwm_value(&spindle_pwm, rpm, false));
     }
 }
 
@@ -357,10 +379,14 @@ static spindle_state_t spindleGetState (void)
 {
     spindle_state_t state = {0};
 
+#if IOEXPAND_ENABLE // TODO: read from expander?
+	state.on = iopins.spindle_on;
+	state.ccw = hal.driver_cap.spindle_dir && iopins.spindle_dir;
+#else
     state.on = pwmEnabled || pinIn(SPINDLE_ENABLE_PIN) != 0;
-
-#ifdef SPINDLE_DIRECTION_PIN
+  #ifdef SPINDLE_DIRECTION_PIN
     state.ccw = hal.driver_cap.spindle_dir && pinIn(SPINDLE_DIRECTION_PIN) != 0;
+  #endif
 #endif
 
     state.value ^= settings.spindle.invert.mask;
@@ -381,9 +407,14 @@ void debug_out (bool on)
 static void coolantSetState (coolant_state_t mode)
 {
     mode.value ^= settings.coolant_invert.mask;
-	
+#if IOEXPAND_ENABLE
+	iopins.flood_on = mode.flood;
+	iopins.mist_on = mode.mist;
+	ioexpand_out(iopins);
+#else
 	pinOut(COOLANT_FLOOD_PIN, mode.flood);
 	pinOut(COOLANT_MIST_PIN, mode.mist);
+#endif
 }
 
 // Returns coolant state in a coolant_state_t variable
@@ -391,8 +422,13 @@ static coolant_state_t coolantGetState (void)
 {
     coolant_state_t state = {0};
 
+#if IOEXPAND_ENABLE // TODO: read from expander?
+	state.flood = iopins.flood_on;
+	state.mist = iopins.mist_on;
+#else
     state.flood = pinIn(COOLANT_FLOOD_PIN);
     state.mist  = pinIn(COOLANT_MIST_PIN);
+#endif
 
     state.value ^= settings.coolant_invert.mask;
 
@@ -435,9 +471,7 @@ static void showMessage (const char *msg)
 // Configures perhipherals when settings are initialized or changed
 void settings_changed (settings_t *settings)
 {
-	spindle_precompute_pwm_values(&spindle_pwm, hal.f_step_timer);
-
-    hal.spindle_pwm_off = spindle_pwm.off_value;
+	hal.driver_cap.variable_spindle = spindle_precompute_pwm_values(&spindle_pwm, hal.f_step_timer);
 
     if(IOInitDone) {
 
@@ -450,7 +484,9 @@ void settings_changed (settings_t *settings)
 			while(SPINDLE_PWM_TIMER->SYNCBUSY.bit.CC2);
 			SPINDLE_PWM_TIMER->CTRLA.bit.ENABLE = 1;		
 			while(SPINDLE_PWM_TIMER->SYNCBUSY.bit.ENABLE);
-        }
+			hal.spindle_set_state = spindleSetStateVariable;
+        } else
+			hal.spindle_set_state = spindleSetState;
 
         if(hal.driver_cap.step_pulse_delay && settings->steppers.pulse_delay_microseconds) {
             hal.stepper_pulse_start = stepperPulseStartDelayed;
@@ -641,37 +677,39 @@ static bool driver_setup (settings_t *settings)
 		NVIC_EnableIRQ(DEBOUNCE_TIMER_IRQn);	// Enable stepper interrupt
 	}
 
- // Spindle init
-
+ // Steppers disable init
+#if IOEXPAND_ENABLE == 0
  	pinMode(SPINDLE_ENABLE_PIN, OUTPUT);
-#ifdef SPINDLE_DIRECTION_PIN
-	pinMode(SPINDLE_DIRECTION_PIN, OUTPUT);
 #endif
 
-    if((hal.driver_cap.variable_spindle)) {
+ // Spindle init
+#if IOEXPAND_ENABLE == 0
+ 	pinMode(SPINDLE_ENABLE_PIN, OUTPUT);
+  #ifdef SPINDLE_DIRECTION_PIN
+	pinMode(SPINDLE_DIRECTION_PIN, OUTPUT);
+  #endif
+#endif
+	pinMode(SPINDLEPWMPIN, OUTPUT);
 
-		pinMode(SPINDLEPWMPIN, OUTPUT);
+	GCLK->CLKCTRL.reg = (uint16_t)(GCLK_CLKCTRL_CLKEN | GCLK_CLKCTRL_GEN_GCLK7 | GCLK_CLKCTRL_ID_TCC0_TCC1); // 16 MHz
+	while(GCLK->STATUS.bit.SYNCBUSY);
 
-		GCLK->CLKCTRL.reg = (uint16_t)(GCLK_CLKCTRL_CLKEN | GCLK_CLKCTRL_GEN_GCLK7 | GCLK_CLKCTRL_ID_TCC0_TCC1); // 16 MHz
-		while(GCLK->STATUS.bit.SYNCBUSY);
+	PORT->Group[g_APinDescription[SPINDLEPWMPIN].ulPort].PINCFG[g_APinDescription[SPINDLEPWMPIN].ulPin].bit.PMUXEN = 1;
+	PORT->Group[g_APinDescription[SPINDLEPWMPIN].ulPort].PMUX[g_APinDescription[SPINDLEPWMPIN].ulPin >> 1].reg = PORT_PMUX_PMUXE_F;
 
-		PORT->Group[g_APinDescription[SPINDLEPWMPIN].ulPort].PINCFG[g_APinDescription[SPINDLEPWMPIN].ulPin].bit.PMUXEN = 1;
-		PORT->Group[g_APinDescription[SPINDLEPWMPIN].ulPort].PMUX[g_APinDescription[SPINDLEPWMPIN].ulPin >> 1].reg = PORT_PMUX_PMUXE_F;
-
-        SPINDLE_PWM_TIMER->CTRLA.bit.ENABLE = 0;
-		while(SPINDLE_PWM_TIMER->SYNCBUSY.bit.ENABLE);
-        SPINDLE_PWM_TIMER->CTRLA.bit.SWRST = 1;
-		while(SPINDLE_PWM_TIMER->SYNCBUSY.bit.SWRST || SPINDLE_PWM_TIMER->CTRLA.bit.SWRST);
-		SPINDLE_PWM_TIMER->WAVE.reg |= TCC_WAVE_WAVEGEN_NPWM;
-		while(SPINDLE_PWM_TIMER->SYNCBUSY.bit.WAVE);
-		SPINDLE_PWM_TIMER->CTRLA.bit.RESOLUTION = TCC_CTRLA_RESOLUTION_NONE_Val;
-    } else
-        hal.spindle_set_state = &spindleSetState;
+	SPINDLE_PWM_TIMER->CTRLA.bit.ENABLE = 0;
+	while(SPINDLE_PWM_TIMER->SYNCBUSY.bit.ENABLE);
+	SPINDLE_PWM_TIMER->CTRLA.bit.SWRST = 1;
+	while(SPINDLE_PWM_TIMER->SYNCBUSY.bit.SWRST || SPINDLE_PWM_TIMER->CTRLA.bit.SWRST);
+	SPINDLE_PWM_TIMER->WAVE.reg |= TCC_WAVE_WAVEGEN_NPWM;
+	while(SPINDLE_PWM_TIMER->SYNCBUSY.bit.WAVE);
+	SPINDLE_PWM_TIMER->CTRLA.bit.RESOLUTION = TCC_CTRLA_RESOLUTION_NONE_Val;
 
  // Coolant init
-  
+ #if IOEXPAND_ENABLE == 0
 	pinMode(COOLANT_FLOOD_PIN, OUTPUT);
 	pinMode(COOLANT_MIST_PIN, OUTPUT);
+#endif
 
  // Set defaults
 
@@ -679,8 +717,8 @@ static bool driver_setup (settings_t *settings)
 
     settings_changed(settings);
 
-    spindleSetState((spindle_state_t){0}, spindle_pwm.off_value, DEFAULT_SPINDLE_RPM_OVERRIDE);
-    coolantSetState((coolant_state_t){0});
+    hal.spindle_set_state((spindle_state_t){0}, 0.0f);
+    hal.coolant_set_state((coolant_state_t){0});
     stepperSetDirOutputs((axes_signals_t){0});
 
 #if SDCARD_ENABLE
@@ -821,10 +859,9 @@ bool driver_init (void) {
 //#endif
     hal.probe_configure_invert_mask = probeConfigureInvertMask;
 
-    hal.spindle_set_state = spindleSetStateVariable;
+    hal.spindle_set_state = spindleSetState;
     hal.spindle_get_state = spindleGetState;
-    hal.spindle_set_speed = spindleSetSpeed;
-    hal.spindle_compute_pwm_value = spindleComputePWMValue;
+    hal.spindle_update_rpm = spindleUpdateRPM;
 	
     hal.system_control_get_state = systemGetState;
 
@@ -851,6 +888,14 @@ bool driver_init (void) {
     hal.stream.suspend_read = serialSuspendInput;
 #endif
 
+#if EEPROM_ENABLE
+    eeprom_init();
+    hal.eeprom.type = EEPROM_Physical;
+    hal.eeprom.get_byte = eepromGetByte;
+    hal.eeprom.put_byte = eepromPutByte;
+    hal.eeprom.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
+    hal.eeprom.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
+#else
     if(nvsInit()) {
         hal.eeprom.type = EEPROM_Emulated;
         hal.eeprom.size = GRBL_EEPROM_SIZE;
@@ -858,6 +903,7 @@ bool driver_init (void) {
         hal.eeprom.memcpy_to_flash = nvsWrite;
 	} else
 	    hal.eeprom.type = EEPROM_None;
+#endif
 
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;

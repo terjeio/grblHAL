@@ -18,7 +18,7 @@ Sets spindle encoder output to \<n\> pulses per revolution, default is 120.
 
 AUTO:\<0|1\>
 
-Specifies operating mode: 0, manual mode - encoder outputs are controlled by RPM setting. 1 /(default/), automatic mode - encoder outputs are controlled by spindle on/off and PWM input.
+Specifies operating mode: 0, manual mode - encoder outputs are controlled by RPM setting. 1 \(default\), automatic mode - encoder outputs are controlled by spindle on/off and PWM input.
 
 SPINDLE:\<0|1\>
 
@@ -30,7 +30,7 @@ Adds \<n\> RPM offset to spindle encoder output in automatic mode.
 
 LOCK:\<0|1\>
 
-Specifies lock mode, 0 /(default/) - AUTO mode on: add STEP RPM offset to encoder output. AUTO mode off: adds a fraction of PWM input to encoder output, 1 - ignore STEP inputs When AUTO mode is on, scaled PWM input otherwise.
+Specifies lock mode, 0 \(default\) - AUTO mode on: add STEP RPM offset to encoder output. AUTO mode off: adds a fraction of PWM input to encoder output, 1 - ignore STEP inputs When AUTO mode is on, scaled PWM input otherwise.
 
 ---
 

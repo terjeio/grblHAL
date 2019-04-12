@@ -25,10 +25,10 @@ typedef union {
     uint8_t value;
     uint8_t mask;
     struct {
-        uint8_t flood     :1,
-                mist      :1,
-				reserved2 :1,
-				reserved3 :1,
+        uint8_t flood            :1,
+                mist             :1,
+                shower_coolant   :1,
+				spindle_air_blow :1,
 				reserved4 :1,
 				reserved5 :1,
 				reserved6 :1,

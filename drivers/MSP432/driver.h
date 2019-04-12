@@ -4,7 +4,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2017-2018 Terje Io
+  Copyright (c) 2017-2019 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -36,13 +36,13 @@
 // Configuration
 // Set value to 1 to enable, 0 to disable
 
-#define KEYPAD_ENABLE   0 // I2C keypad for jogging etc.
+#define KEYPAD_ENABLE   1 // I2C keypad for jogging etc.
 #define ATC_ENABLE      0 // do not change!
 #define CNC_BOOSTERPACK 1 // do not change!
 
 #if CNC_BOOSTERPACK
   #define EEPROM_ENABLE           1 // only change if BoosterPack does not have EEPROM mounted
-  #define CNC_BOOSTERPACK_SHORTS  1 // shorts added to BoosterPack for some signals (for faster and simpler driver)
+  #define CNC_BOOSTERPACK_SHORTS  0 // shorts added to BoosterPack for some signals (for faster and simpler driver)
   #define CNC_BOOSTERPACK_A4998   1 // using Polulu A4998 drivers - for suppying VDD via GPIO (PE5)
 #else
   #define EEPROM_ENABLE          0 // do not change!
@@ -67,7 +67,6 @@
 #define portQ(p) PORT ## p ## _IRQn
 #define portHANDLER(p) portH(p)
 #define portH(p) PORT ## p ## _IRQHandler
-
 
 #define timer(p) timerN(p)
 #define timerN(p) TIMER_ ## p
@@ -325,6 +324,8 @@
 #define SPINDLE_PWM_PIN   5
 #define SPINDLE_PWM_BIT   (1<<SPINDLE_PWM_PIN)
 
+#define SPINDLE_PID_SAMPLE_RATE 10 // ms
+
 /*
  * CNC Boosterpack GPIO assignments
  */
@@ -395,11 +396,15 @@
 #define MODE_LED_PIN        0
 #define MODE_LED_BIT        (1<<MODE_LED_PIN)
 
-#define KEYPAD_PORT         GPIO6_PORT
-#define KEYPAD_GPIO         GPIO6_GPIO
-#define KEYPAD_INT          GPIO6_INT
+#if KEYPAD_ENABLE
+#define KEYPAD_PN           GPIO6_PN
+#define KEYPAD_PORT         port(KEYPAD_PN)
+#define KEYPAD_GPIO         portGpio(KEYPAD_PN)
+#define KEYPAD_INT          portINT(KEYPAD_PN)
 #define KEYPAD_IRQ_PIN      GPIO6_PIN
 #define KEYPAD_IRQ_BIT      GPIO6_BIT
+#define KEYPAD_IRQHandler   portHANDLER(KEYPAD_PN)
+#endif
 
 // Driver initialization entry point
 

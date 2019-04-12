@@ -1,4 +1,4 @@
-## SAMD21 Driver (RFC - to be published later)
+## SAMD21 Driver
 
 A GrblHAL driver for the Atmel SAMD21 processor on a [Arduiono MKR ZERO board](https://store.arduino.cc/arduino-mkrzero).
 
@@ -18,27 +18,50 @@ Optional streaming of GCode from a SD card is implemented according to [this spe
 Proposed pin assignments:
 
 ``` plain
-  Steppers enable - PA03 (25) [  ]       [  ] +5V
-          Coolant - PA02 (15) [  ]       [  ] Vin
-   Spindle enable - PB02 (16) [02]       [  ] +3V3
-      Spindle dir - PB03 (17) [03]   M   [  ] GND
+             ARef - PA03 (25) [  ]       [  ] +5V
+      Spindle dir - PA02 (15) [  ]       [  ] Vin
+      Cycle start - PB02 (16) [02]       [  ] +3V3
+        Feed hold - PB03 (17) [03]   M   [  ] GND
+            Probe - PA04 (18) [  ]   K   [  ] CPU RESET
+           X step - PA05 (19) [  ]   R   [  ] (14) PB22 - UART TX
+           Y step - PA06 (20) [  ]       [  ] (13) PB23 - UART RX
+           Z step - PA07 (21) [  ]   Z   [  ] (12) PA09 - Flood
+            X lim - PA22 (00) [06]   E   [  ] (11) PA08 - Mist
+            Y lim - PA23 (01) [07]   R   [  ] (10) PA19 - Steppers enable
+            X dir - PA10 (02) [  ]   O   [00] (09) PA17 - Reset
+            Y dir - PA11 (03) [  ]       [01] (08) PA16 - Z lim
+            Z dir - PB10 (04) [10]       [05] (07) PA21 - Spindle enable
+      Safety door - PB11 (05) [11]       [04] (06) PA20 - Spindle PWM
+```
+
+---
+
+CNC BoosterPack pin assignments:
+``` plain
+             ARef - PA03 (25) [  ]       [  ] +5V
+            Y dir - PA02 (15) [  ]       [  ] Vin
+      Safety door - PB02 (16) [02]       [  ] +3V3
+            Reset - PB03 (17) [03]   M   [  ] GND
             Probe - PA04 (18) [  ]   K   [  ] CPU RESET
            X step - PA05 (19) [  ]   R   [  ] (14) PB22 - UART TX
            Y step - PA06 (20) [  ]       [  ] (13) PB23 - UART RX
            Z step - PA07 (21) [  ]   Z   [  ] (12) PA09 - I2C SCL
-            X lim - PA22 (00) [06]   E   [  ] (11) PA08 - I2C SDA
-            Y lim - PA23 (01) [07]   R   [  ] (10) PA19 - Z lim
-            X dir - PA10 (02) [  ]   O   [00] (09) PA17 - Feed hold
-            Y dir - PA11 (03) [  ]       [01] (08) PA16 - Cycle start
-            Z dir - PB10 (04) [10]       [05] (07) PA21 - Safety door / Mist
-            Reset - PB11 (05) [11]       [04] (06) PA20 - Spindle PWM
+            Z lim - PA22 (00) [06]   E   [  ] (11) PA08 - I2C SDA
+            Y lim - PA23 (01) [07]   R   [  ] (10) PA19 - GPIO1
+            Z dir - PA10 (02) [  ]   O   [00] (09) PA17 - Feed hold
+            X dir - PA11 (03) [  ]       [01] (08) PA16 - Cycle start
+            GPIO2 - PB10 (04) [10]       [05] (07) PA21 - X lim
+    Keypad strobe - PB11 (05) [11]       [04] (06) PA20 - Spindle PWM
 ```
 
-Numbers in round brackets are the Arduino pin assignments, in square brackets the GPIO interrupt (EXT_INT) assignments.
+NOTE: I2C I/O-expander is used for coolant, spindle and stepper enable signals, I2C EEPROM for settings. Prototype PCB ready for test.
 
-Using pin 25 for stepper enable is perhaps not possible as this pin is decoupled with a total of 4.8uF... Testing required!
+---
+
+Numbers in round brackets are the Arduino pin assignments, in square brackets the GPIO interrupt (EXT_INT) assignments.
 
 **NOTE:** Only tested on my bench with an oscilloscope, some switches and LEDs.
 
 ---
-2018-12-17
+2018-12-25
+

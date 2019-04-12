@@ -2,7 +2,7 @@
   limits.c - code pertaining to limit-switches and performing the homing cycle
   Part of Grbl
 
-  Copyright (c) 2017-2018 Terje Io
+  Copyright (c) 2017-2019 Terje Io
   Copyright (c) 2012-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -65,6 +65,27 @@ ISR_CODE void limit_interrupt_handler (axes_signals_t state) // DEFAULT: Limit p
     }
 }
 
+
+// Set machine positions for homed limit switches. Don't update non-homed axes.
+// NOTE: settings.max_travel[] is stored as a negative value.
+static void limits_set_machine_positions (uint8_t cycle_mask)
+{
+    uint_fast8_t idx = N_AXIS;
+
+    if(settings.flags.homing_force_set_origin) {
+        do {
+            if (cycle_mask & bit(--idx))
+                sys_position[idx] = 0;
+        } while(idx);
+    } else do {
+        if (cycle_mask & bit(--idx))
+            sys_position[idx] = bit_istrue(settings.homing.dir_mask, bit(idx))
+                                 ? lroundf((settings.max_travel[idx] + settings.homing.pulloff) * settings.steps_per_mm[idx])
+                                 : lroundf(-settings.homing.pulloff * settings.steps_per_mm[idx]);
+
+    } while(idx);
+}
+
 // Homes the specified cycle axes, sets the machine position, and performs a pull-off motion after
 // completing. Homing is a special motion case, which involves rapid uncontrolled stops to locate
 // the trigger point of the limit switches. The rapid stops are handled by a system level axis lock
@@ -97,12 +118,11 @@ void limits_go_home (uint8_t cycle_mask)
     do {
         idx--;
         // Initialize step pin masks
+#ifdef HAL_KINEMATICS
+        step_pin[idx] = hal.kinematics.limits_get_axis_mask(idx);
+#else
         step_pin[idx] = bit(idx);
-        #ifdef COREXY
-        if ((idx==A_MOTOR)||(idx==B_MOTOR))
-            step_pin[idx] = (bit(X_AXIS)|bit(Y_AXIS));
-        #endif
-
+#endif
         // Set target based on max_travel setting. Ensure homing switches engaged with search scalar.
         // NOTE: settings.max_travel[] is stored as a negative value.
         if (bit_istrue(cycle_mask, bit(idx)))
@@ -122,21 +142,12 @@ void limits_go_home (uint8_t cycle_mask)
             // Set target location for active axes and setup computation for homing rate.
             if (bit_istrue(cycle_mask, bit(--idx))) {
                 n_active_axis++;
-              #ifdef COREXY
-                if (idx == X_AXIS) {
-                    int32_t axis_position = system_convert_corexy_to_y_axis_steps(sys_position);
-                    sys_position[A_MOTOR] = axis_position;
-                    sys_position[B_MOTOR] = -axis_position;
-                } else if (idx == Y_AXIS) {
-                    int32_t axis_position = system_convert_corexy_to_x_axis_steps(sys_position);
-                    sys_position[A_MOTOR] = sys_position[B_MOTOR] = axis_position;
-                } else {
-                    sys_position[Z_AXIS] = 0;
-                }
-              #else
-                sys_position[idx] = 0;
-              #endif
 
+#ifdef HAL_KINEMATICS
+                hal.kinematics.limits_set_target_pos(idx);
+#else
+                sys_position[idx] = 0;
+#endif
                 // Set target direction based on cycle mask and homing cycle approach state.
                 // NOTE: This happens to compile smaller than any other implementation tried.
                 if (bit_istrue(settings.homing.dir_mask, bit(idx)))
@@ -171,14 +182,11 @@ void limits_go_home (uint8_t cycle_mask)
                 do {
                     idx--;
                     if ((axislock & step_pin[idx]) && (limit_state & bit(idx))) {
-                        #ifdef COREXY
-                        if (idx==Z_AXIS)
-                            axislock &= ~(step_pin[Z_AXIS]);
-                        else
-                            axislock &= ~(step_pin[A_MOTOR]|step_pin[B_MOTOR]);
-                        #else
-                        axislock &= ~(step_pin[idx]);
-                        #endif
+#ifdef HAL_KINEMATICS
+                        axislock &= ~hal.kinematics.limits_get_axis_mask(idx);
+#else
+                        axislock &= ~bit(idx);
+#endif
                     }
                 } while(idx);
 
@@ -245,58 +253,10 @@ void limits_go_home (uint8_t cycle_mask)
     // some initial clearance off the switches and should also help prevent them from falsely
     // triggering when hard limits are enabled or when more than one axes shares a limit pin.
 
-    idx = N_AXIS;
-
-    // Set machine positions for homed limit switches. Don't update non-homed axes.
-    // NOTE: settings.max_travel[] is stored as a negative value.
-#ifdef COREXY
-    if(settings.flags.homing_force_set_origin) {
-        do {
-            if (idx == X_AXIS) {
-                sys_position[A_MOTOR] = system_convert_corexy_to_y_axis_steps(sys_position);
-                sys_position[B_MOTOR] = - sys_position[A_MOTOR];
-            } else if (idx == Y_AXIS) {
-                sys_position[A_MOTOR] = system_convert_corexy_to_x_axis_steps(sys_position);
-                sys_position[B_MOTOR] = sys_position[A_MOTOR];
-            } else
-                sys_position[idx] = 0;
-        } while(idx);
-    } else do {
-         if (cycle_mask & bit(--idx)) {
-             int32_t set_axis_position = bit_istrue(settings.homing.dir_mask, bit(idx))
-                                          ? lroundf((settings.max_travel[idx] + settings.homing.pulloff) * settings.steps_per_mm[idx])
-                                          : lroundf(-settings.homing.pulloff * settings.steps_per_mm[idx]);
-             if (idx==X_AXIS) {
-                 int32_t off_axis_position = system_convert_corexy_to_y_axis_steps(sys_position);
-                 sys_position[A_MOTOR] = set_axis_position + off_axis_position;
-                 sys_position[B_MOTOR] = set_axis_position - off_axis_position;
-             } else if (idx==Y_AXIS) {
-                 int32_t off_axis_position = system_convert_corexy_to_x_axis_steps(sys_position);
-                 sys_position[A_MOTOR] = off_axis_position + set_axis_position;
-                 sys_position[B_MOTOR] = off_axis_position - set_axis_position;
-             } else
-                 sys_position[idx] = set_axis_position;
-         }
-    } while(idx);
-#else
-    idx = N_AXIS;
-    if(settings.flags.homing_force_set_origin) {
-        do {
-            if (cycle_mask & bit(--idx))
-                sys_position[idx] = 0;
-        } while(idx);
-    } else do {
-        if (cycle_mask & bit(--idx))
-            sys_position[idx] = bit_istrue(settings.homing.dir_mask, bit(idx))
-                                 ? lroundf((settings.max_travel[idx] + settings.homing.pulloff) * settings.steps_per_mm[idx])
-                                 : lroundf(-settings.homing.pulloff * settings.steps_per_mm[idx]);
-
-    } while(idx);
-#endif
+    limits_set_machine_positions(cycle_mask);
 
     sys.step_control.flags = 0; // Return step control to normal operation.
 }
-
 
 // Performs a soft limit check. Called from mc_line() only. Assumes the machine has been homed,
 // the workspace volume is in all negative space, and the system is in normal operation.

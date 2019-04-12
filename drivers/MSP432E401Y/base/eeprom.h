@@ -21,8 +21,8 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef _EEPROM_H_
-#define _EEPROM_H_
+#ifndef __EEPROM_H__
+#define __EEPROM_H__
 
 uint8_t eepromGetByte (uint32_t addr);
 void eepromPutByte (uint32_t addr, uint8_t new_value);

@@ -2,7 +2,7 @@
   settings.c - eeprom configuration handling
   Part of Grbl
 
-  Copyright (c) 2017-2018 Terje Io
+  Copyright (c) 2017-2019 Terje Io
   Copyright (c) 2011-2015 Sungeun K. Jeon
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -91,9 +91,10 @@ const settings_t defaults = {
     .spindle.pwm_min_value = DEFAULT_SPINDLE_PWM_MIN_VALUE,
     .spindle.pwm_max_value = DEFAULT_SPINDLE_PWM_MAX_VALUE,
     .spindle.ppr = DEFAULT_SPINDLE_PPR,
-    .spindle.P_gain = DEFAULT_SPINDLE_P_GAIN,
-    .spindle.I_gain = DEFAULT_SPINDLE_I_GAIN,
-    .spindle.D_gain = DEFAULT_SPINDLE_D_GAIN,
+    .spindle.pid.p_gain = DEFAULT_SPINDLE_P_GAIN,
+    .spindle.pid.i_gain = DEFAULT_SPINDLE_I_GAIN,
+    .spindle.pid.d_gain = DEFAULT_SPINDLE_D_GAIN,
+    .spindle.pid.i_max_error = DEFAULT_SPINDLE_I_MAX,
 
     .steps_per_mm[X_AXIS] = DEFAULT_X_STEPS_PER_MM,
     .steps_per_mm[Y_AXIS] = DEFAULT_Y_STEPS_PER_MM,
@@ -448,6 +449,7 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
 
             case Setting_ReportInches:
                 settings.flags.report_inches = int_value != 0;
+                report_init();
                 system_flag_wco_change(); // Make sure WCO is immediately updated.
                 break;
 
@@ -461,6 +463,10 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
 
             case Setting_SpindleInvertMask:
                 settings.spindle.invert.mask = int_value;
+                if(settings.spindle.invert.pwm && !hal.driver_cap.spindle_pwm_invert) {
+                    settings.spindle.invert.pwm = Off;
+                    return Status_SettingDisabled;
+                }
                 break;
 
             case Setting_ControlPullUpDisableMask:
@@ -561,13 +567,11 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
 
             case Setting_RpmMax:
                 settings.spindle.rpm_max = value;
-                // spindle_init();
-                break; // Re-initialize spindle rpm calibration
+                break;
 
             case Setting_RpmMin:
                 settings.spindle.rpm_min = value;
-                // spindle_init();
-                break; // Re-initialize spindle rpm calibration
+                break;
 
             case Setting_LaserMode:
                 if(!hal.driver_cap.variable_spindle)
@@ -577,23 +581,21 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
 
             case Setting_PWMFreq:
                 settings.spindle.pwm_freq = value;
-//              spindle_init();
-                break; // Re-initialize spindle pwm calibration
+                break;
 
+/* disabled for now - no clear use case for this value, and original code handling this is badly implemented (IMO)
             case Setting_PWMOffValue:
                 settings.spindle.pwm_off_value = value;
-//              spindle_init();
-                break; // Re-initialize spindle pwm calibration
+                break;
+*/
 
             case Setting_PWMMinValue:
                 settings.spindle.pwm_min_value = value;
-//              spindle_init();
-                break; // Re-initialize spindle pwm calibration
+                break;
 
             case Setting_PWMMaxValue:
                 settings.spindle.pwm_max_value = value;
-//              spindle_init();
-                break; // Re-initialize spindle pwm calibration
+                break;
 
             case Setting_StepperDeenergizeMask:
                 settings.steppers.deenergize.mask = int_value & AXES_BITMASK;
@@ -604,15 +606,39 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
                 break;
 
             case Setting_SpindlePGain:
-                settings.spindle.P_gain = value;
+                settings.spindle.pid.p_gain = value;
                 break;
 
             case Setting_SpindleIGain:
-                settings.spindle.I_gain = value;
+                settings.spindle.pid.i_gain = value;
                 break;
 
             case Setting_SpindleDGain:
-                settings.spindle.D_gain = value;
+                settings.spindle.pid.d_gain = value;
+                break;
+
+            case Setting_SpindleMaxError:
+                settings.spindle.pid.max_error = value;
+                break;
+
+            case Setting_SpindleIMaxError:
+                settings.spindle.pid.i_max_error = value;
+                break;
+
+            case Setting_PositionPGain:
+                settings.position.pid.p_gain = value;
+                break;
+
+            case Setting_PositionIGain:
+                settings.position.pid.i_gain = value;
+                break;
+
+            case Setting_PositionDGain:
+                settings.position.pid.d_gain = value;
+                break;
+
+            case Setting_PositionIMaxError:
+                settings.position.pid.i_max_error = value;
                 break;
 
             case Settings_Stream:
@@ -664,6 +690,7 @@ void settings_init() {
     if(!read_global_settings()) {
         hal.report.status_message(Status_SettingReadFail);
         settings_restore(SETTINGS_RESTORE_ALL); // Force restore all EEPROM data.
+        report_init();
         report_grbl_settings();
     } else {
         memset(&tool_table, 0, sizeof(tool_data_t)); // First entry is for tools not in tool table
@@ -672,6 +699,7 @@ void settings_init() {
         for (idx = 1; idx <= N_TOOLS; idx++)
             settings_read_tool_data(idx, &tool_table[idx]);
 #endif
+        report_init();
         hal.settings_changed(&settings);
     }
 }

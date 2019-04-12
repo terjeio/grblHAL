@@ -130,7 +130,7 @@ uint16_t serialRxCount (void)
 uint16_t serialRxFree (void)
 {
   unsigned int tail = rxbuffer.tail, head = rxbuffer.head;
-  return (RX_BUFFER_SIZE - 1) - BUFCOUNT(head, tail, RX_BUFFER_SIZE);
+  return RX_BUFFER_SIZE - BUFCOUNT(head, tail, RX_BUFFER_SIZE);
 }
 
 //
@@ -149,7 +149,7 @@ void serialRxFlush (void)
 //
 void serialRxCancel (void)
 {
-    rxbuffer.data[rxbuffer.head] = ASCII_CAN;
+    rxbuffer.data[rxbuffer.head] = CAN;
     rxbuffer.tail = rxbuffer.head;
     rxbuffer.head = (rxbuffer.tail + 1) & (RX_BUFFER_SIZE - 1);
 #ifdef RTS_PORT
@@ -213,7 +213,7 @@ void serialWriteS (const char *s)
 void serialWriteLn (const char *s)
 {
     serialWriteS(s);
-    serialWriteS(ASCII_EOL);
+    serialWriteS(EOL);
 }
 
 //
@@ -232,7 +232,7 @@ void serialWrite(const char *s, uint16_t length)
 //
 int16_t serialGetC (void)
 {
-    uint32_t bptr = rxbuffer.tail;
+    uint16_t bptr = rxbuffer.tail;
 
     if(bptr == rxbuffer.head)
         return -1; // no data available else EOF
@@ -257,7 +257,7 @@ static int16_t serialGetNull (void)
 bool serialSuspendInput (bool suspend)
 {
     if(suspend)
-        hal.stream.read = serialGetNull;
+        hal.stream_read = serialGetNull;
     else if(rxbuffer.backup)
         memcpy(&rxbuffer, &rxbackup, sizeof(serial_buffer_t));
 
@@ -267,7 +267,8 @@ bool serialSuspendInput (bool suspend)
 //
 void SERIAL_IRQHandler (void)
 {
-	uint32_t bptr;
+    char data;
+	uint16_t bptr;
 
 	switch(SERIAL_MODULE->IV) {
 
@@ -280,16 +281,16 @@ void SERIAL_IRQHandler (void)
                 SERIAL_MODULE->IE &= ~EUSCI_A_IE_TXIE;  // when buffer empty
             break;
 
-        case 0x02:;
-            uint16_t data = SERIAL_MODULE->RXBUF;       // Read character received
+        case 0x02:
+            data = (char)SERIAL_MODULE->RXBUF;                  // Read character received
             if(data == CMD_TOOL_ACK && !rxbuffer.backup) {
 
                 memcpy(&rxbackup, &rxbuffer, sizeof(serial_buffer_t));
                 rxbuffer.backup = true;
                 rxbuffer.tail = rxbuffer.head;
-                hal.stream.read = serialGetC; // restore normal input
+                hal.stream_read = serialGetC; // restore normal input
 
-            } else if(!hal.protocol_process_realtime || hal.protocol_process_realtime((char)data)) {
+            } else if(!hal.protocol_process_realtime || hal.protocol_process_realtime(data)) {
 
                 bptr = (rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1);  // Get next head pointer
 
@@ -327,7 +328,7 @@ void serialSelect (bool mpg)
 uint16_t serial2RxFree (void)
 {
   unsigned int tail = rx2_tail, head = rx2_head;
-  return (RX_BUFFER_SIZE - 1) - BUFCOUNT(head, tail, RX_BUFFER_SIZE);
+  return RX_BUFFER_SIZE - BUFCOUNT(head, tail, RX_BUFFER_SIZE);
 }
 
 //
@@ -343,9 +344,10 @@ void serial2RxFlush (void)
 //
 void serial2RxCancel (void)
 {
-    rx2buf[rx2_head] = ASCII_CAN;
+    rx2buf[rx2_head] = CAN;
     rx2_tail = rx2_head;
     rx2_head = (rx2_tail + 1) & (RX_BUFFER_SIZE - 1);
+
 }
 
 //
@@ -358,25 +360,26 @@ int16_t serial2GetC (void)
     if(bptr == rx2_head)
         return -1; // no data available else EOF
 
-    char data = rx2buf[bptr++];             // Get next character, increment tmp pointer
-    rx2_tail = bptr & (RX_BUFFER_SIZE - 1); // and update pointer
+    char data = rx2buf[bptr++];     // Get next character, increment tmp pointer
+    rx2_tail = bptr & (RX_BUFFER_SIZE - 1);  // and update pointer
 
     return (int16_t)data;
 }
 
 void SERIAL2_IRQHandler (void)
 {
-    uint32_t data, bptr;
+    char data;
+    uint16_t bptr;
 
     switch(SERIAL2_MODULE->IV) {
 
         case 0x02:
-            data = SERIAL2_MODULE->RXBUF;             // Read character received
+            data = (char)SERIAL2_MODULE->RXBUF;             // Read character received
             bptr = (rx2_head + 1) & (RX_BUFFER_SIZE - 1);            // Temp head position (to avoid volatile overhead)
             if(bptr == rx2_tail) {                                   // If buffer full
                 rx2_overflow = 1;                                    // flag overflow
             } else {
-                if(!hal.protocol_process_realtime|| hal.protocol_process_realtime((char)data)) {
+                if(!hal.protocol_process_realtime|| hal.protocol_process_realtime(data)) {
                     rx2buf[rx2_head] = data;                          // Add data to buffer
                     rx2_head = bptr;                                 // and update pointer
                 }

@@ -2,7 +2,7 @@
   grbllib.c - An embedded CNC Controller with rs274/ngc (g-code) support
   Part of Grbl
 
-  Copyright (c) 2017-2018 Terje Io
+  Copyright (c) 2017-2019 Terje Io
   Copyright (c) 2011-2015 Sungeun K. Jeon
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -109,10 +109,6 @@ int grbl_enter (void)
     driver_ok = driver_ok & hal.driver_cap.axes >= AXIS_N_SETTINGS;
 #endif
 */
-#ifdef CONSTANT_SURFACE_SPEED_OPTION
-    driver_ok = driver_ok & hal.driver_cap.constant_surface_speed;
-#endif
-
     sys.mpg_mode = false;
     sys.message = NULL;
 
@@ -192,7 +188,7 @@ int grbl_enter (void)
         else if(sys.state == STATE_ESTOP)
             set_state(STATE_ALARM);
 
-		if((sys.mpg_mode = sys.report.mpg_mode = mpg_init)) {
+		if((sys.mpg_mode = sys.report.flags.mpg_mode = mpg_init)) {
 		    mpg_init = false;
             report_realtime_status();
 		}

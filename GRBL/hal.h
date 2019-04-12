@@ -3,7 +3,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2016-2018 Terje Io
+  Copyright (c) 2016-2019 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -51,18 +51,29 @@ typedef union {
                  program_stop            :1,
                  spindle_at_speed        :1,
                  laser_ppi_mode          :1,
-                 constant_surface_speed  :1,
                  spindle_sync            :1,
                  sd_card                 :1,
                  bluetooth               :1,
                  ethernet                :1,
                  wifi                    :1,
-                 unassigned              :12;
+                 spindle_pwm_invert      :1,
+                 spindle_pid             :1,
+                 unassigned              :11;
     };
 } driver_cap_t;
 
 typedef void (*stream_write_ptr)(const char *s);
 typedef axes_signals_t (*limits_get_state_ptr)(void);
+
+typedef struct {
+    float (*system_convert_axis_steps_to_mpos) (int32_t *steps, uint_fast8_t idx);
+    void (*plan_sync_position)(planner_t *pl);
+    bool (*plan_copy_position) (bool system_motion, float *target, int32_t *position_steps, int32_t *target_steps);
+    int32_t (*plan_calc_position) (uint_fast8_t idx, float *target, int32_t *position_steps, int32_t *target_steps);
+    uint_fast8_t (*limits_get_axis_mask)(uint_fast8_t idx);
+    void (*limits_set_target_pos)(uint_fast8_t idx);
+    void (*limits_set_machine_positions)(uint8_t cycle_mask);
+} HAL_kinematics_t;
 
 /* TODO: add to HAL so that a different formatting (xml, json etc) of reports may be implemented by driver? */
 typedef struct {
@@ -103,7 +114,6 @@ typedef struct HAL {
     char *info;
     uint32_t f_step_timer;
     uint32_t rx_buffer_size;
-    uint_fast16_t spindle_pwm_off;
 
     bool (*driver_setup)(settings_t *settings);
 
@@ -113,10 +123,9 @@ typedef struct HAL {
     coolant_state_t (*coolant_get_state)(void);
     void (*delay_ms)(uint32_t ms, void (*callback)(void));
 
-    void (*spindle_set_state)(spindle_state_t state, float rpm, uint8_t rpm_override);
+    void (*spindle_set_state)(spindle_state_t state, float rpm);
     spindle_state_t (*spindle_get_state)(void);
-    uint_fast16_t (*spindle_set_speed)(uint_fast16_t pwm_value);
-    uint_fast16_t (*spindle_compute_pwm_value)(float rpm, uint8_t rpm_override);
+    void (*spindle_update_rpm)(float rpm);
     control_signals_t (*system_control_get_state)(void);
 
     void (*stepper_wake_up)(void);
@@ -161,6 +170,11 @@ typedef struct HAL {
 #ifdef DEBUGOUT
     void (*debug_out)(bool on);
 #endif
+
+#ifdef HAL_KINEMATICS
+    HAL_kinematics_t kinematics;
+#endif
+
     eeprom_io_t eeprom;
 
     // entry points set by grbl at reset

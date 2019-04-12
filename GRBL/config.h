@@ -28,6 +28,8 @@
 #ifndef _grbl_config_h_
 #define _grbl_config_h_
 
+//#define HAL_KINEMATICS // Remove comment to add HAL entry points for custom kinematics
+
 #define ISR_CODE
 
 // #define DEBUGOUT // Remove comment to add HAL entry point for debug output
@@ -93,10 +95,6 @@
 // If more than 3 axes are required a compliant driver must be provided
 #define N_AXIS 3 // Number of axes
 
-// Constant surface speed (CSS) is for lathes, when enabled this adds support for G96/G97 as per linuxcnc specs.
-// A compliant HAL driver is required as the final RPM calculations are left to the driver to handle.
-// #define CONSTANT_SURFACE_SPEED_OPTION // Uncomment to enable
-
 // Enables single axis homing commands. $HX, $HY, and $HZ for X, Y, and Z-axis homing. The full homing
 // cycle is still invoked by the $H command. This is disabled by default. It's here only to address
 // users that need to switch between a two-axis and three-axis machine. This is actually very rare.
@@ -147,7 +145,12 @@
 // defined at (http://corexy.com/theory.html). Motors are assumed to positioned and wired exactly as
 // described, if not, motions may move in strange directions. Grbl requires the CoreXY A and B motors
 // have the same steps per mm internally.
-// #define COREXY // Default disabled. Uncomment to enable.
+// NOTE 2: corexy_init() must be called at grbl startup (possibly by the driver) to
+// initialize the required HAL pointers.
+//#define COREXY // Default disabled. Uncomment to enable.
+#ifdef COREXY
+#define HAL_KINEMATICS
+#endif
 
 // ---------------------------------------------------------------------------------------
 // ADVANCED CONFIGURATION OPTIONS:

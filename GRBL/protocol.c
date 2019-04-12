@@ -48,13 +48,6 @@ static user_message_t user_message = {NULL, 0, 0, false};
 static const char *msg = "(MSG,";
 static void protocol_exec_rt_suspend();
 
-typedef struct {
-    float target[N_AXIS];
-    float restore_target[N_AXIS];
-    float retract_waypoint;
-    plan_line_data_t plan_data;
-} parking_data_t;
-
 // add gcode to execute not originating from normal input stream
 bool protocol_enqueue_gcode (char *gcode)
 {
@@ -92,7 +85,7 @@ bool protocol_main_loop()
     } else {
         // Check if the safety door is open.
         set_state(STATE_IDLE);
-        if (hal.system_control_get_state().safety_door_ajar) {
+        if (!settings.flags.safety_door_ignore_when_idle && hal.system_control_get_state().safety_door_ajar) {
             bit_true(sys_rt_exec_state, EXEC_SAFETY_DOOR);
             protocol_execute_realtime(); // Enter safety door mode. Should return as IDLE state.
         }

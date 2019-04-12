@@ -105,7 +105,7 @@ If everything went well, Grbl will respond with an 'ok' and this setting is stor
 
 **NOTE: From Grbl v0.9 to Grbl v1.1, only `$10` status reports changed and new `$30`/ `$31` spindle rpm max/min and `$32` laser mode settings were added. Everything else is the same.**
 
-#### $0 – Step pulse, microseconds
+#### $0 - Step pulse, microseconds
 
 Stepper drivers are rated for a certain minimum step pulse length. Check the data sheet or just try some numbers. You want the shortest pulses the stepper drivers can reliably recognize. If the pulses are too long, you might run into trouble when running the system at very high feed and pulse rates, because the step pulses can begin to overlap each other. We recommend something around 10 microseconds, which is the default value.
 
@@ -115,7 +115,7 @@ Every time your steppers complete a motion and come to a stop, Grbl will delay d
 
 The stepper idle lock time is the time length Grbl will keep the steppers locked before disabling. Depending on the system, you can set this to zero and disable it. On others, you may need 25-50 milliseconds to make sure your axes come to a complete stop before disabling. This is to help account for machine motors that do not like to be left on for long periods of time without doing something. Also, keep in mind that some stepper drivers don't remember which micro step they stopped on, so when you re-enable, you may witness some 'lost' steps due to this. In this case, just keep your steppers enabled via `$1=255`.
 
-#### $2 – Step port invert, mask
+#### $2 - Step port invert, mask
 
 This setting inverts the step pulse signal. By default, a step signal starts at normal-low and goes high upon a step pulse event. After a step pulse time set by `$0`, the pin resets to low, until the next step pulse event. When inverted, the step pulse behavior switches from normal-high, to low during the pulse, and back to high. Most users will not need to use this setting, but this can be useful for certain CNC-stepper drivers that have peculiar requirements. For example, an artificial delay between the direction pin and step pulse can be created by inverting the step pin.
 
@@ -132,7 +132,7 @@ This invert mask setting is a value which stores the axes to invert as bit flags
 | 6 | 00000110 |N | Y | Y |
 | 7 | 00000111 |Y | Y | Y |
 
-#### $3 – Direction port invert, mask
+#### $3 - Direction port invert, mask
 
 This setting inverts the direction signal for each axis. By default, Grbl assumes that the axes move in a positive direction when the direction pin signal is low, and a negative direction when the pin is high. Often, axes don't move this way with some machines. This setting will invert the direction pin signal for those axes that move the opposite way.
 
@@ -178,7 +178,7 @@ Junction deviation is used by the acceleration manager to determine how fast it 
 
 How we calculate it is a bit complicated, but, in general, higher values gives faster motion through corners, while increasing the risk of losing steps and positioning. Lower values makes the acceleration manager more careful and will lead to careful and slower cornering. So if you run into problems where your machine tries to take a corner too fast, *decrease* this value to make it slow down when entering corners. If you want your machine to move faster through junctions, *increase* this value to speed it up. For curious people, hit this [link](http://t.co/KQ5BvueY) to read about Grbl's cornering algorithm, which accounts for both velocity and junction angle with a very simple, efficient, and robust method.
 
-#### $12 – Arc tolerance, mm
+#### $12 - Arc tolerance, mm
 
 Grbl renders G2/G3 circles, arcs, and helices by subdividing them into teeny tiny lines, such that the arc tracing accuracy is never below this value. You will probably never need to adjust this setting, since `0.002mm` is well below the accuracy of most all CNC machines. But if you find that your circles are too crude or arc tracing is performing slowly, adjust this setting. Lower values give higher precision but may lead to performance issues by overloading Grbl with too many tiny lines. Alternately, higher values traces to a lower precision, but can speed up arc performance since Grbl has fewer lines to deal with.
 
@@ -207,12 +207,18 @@ By default, Grbl switches flood and mist on by a "high" level on the pin. To rev
 
 By default, Grbl switches the spindle on by a "high" level on the pin. To reverse this set this mask.
 
-| Setting Value | Mask |Invert spindle on | Invert spindle direction \(CCW\)|
-|:-------------:|:----:|:----------------:|:-------------------------------:|
-| 0 | 00000000 |N | N |
-| 1 | 00000001 |Y | N |
-| 2 | 00000010 |N | Y |
-| 3 | 00000011 |Y | Y |
+| Setting Value | Mask |Invert spindle on | Invert spindle direction \(CCW\)| Invert PWM output<sup>1</sup> |
+|:-------------:|:----:|:----------------:|:-------------------------------:|:------------------:|
+| 0 | 00000000 |N | N | N |
+| 1 | 00000001 |Y | N | N |
+| 2 | 00000010 |N | Y | N |
+| 3 | 00000011 |Y | Y | N |
+| 4 | 00000100 |N | N | Y |
+| 5 | 00000101 |Y | N | Y |
+| 6 | 00000110 |N | Y | Y |
+| 7 | 00000111 |Y | Y | Y |
+
+<br><sup>1</sup> Support is driver dependent - an error will be given if not supported.
 
 #### $17 - Control pins pullup disable, mask
 
@@ -360,7 +366,7 @@ Mask, specifies which axes to home in each cycle
 
 ### End driver specific settings
 
-#### $100, $101 and $102 – [X,Y,Z] steps/mm
+#### $100, $101 and $102 - [X,Y,Z] steps/mm
 
 Grbl needs to know how far each step will take the tool in reality. To calculate steps/mm for an axis of your machine you need to know:
 
@@ -372,7 +378,7 @@ The steps/mm can then be calculated like this: ```steps_per_mm = (steps_per_revo
 
 Compute this value for every axis and write these settings to Grbl.
 
-#### $110, $111 and $112 – [X,Y,Z] Max rate, mm/min
+#### $110, $111 and $112 - [X,Y,Z] Max rate, mm/min
 
 This sets the maximum rate each axis can move. Whenever Grbl plans a move, it checks whether or not the move causes any one of these individual axes to exceed their max rate. If so, it'll slow down the motion to ensure none of the axes exceed their max rate limits. This means that each axis has its own independent speed, which is extremely useful for limiting the typically slower Z-axis.
 
@@ -380,13 +386,13 @@ The simplest way to determine these values is to test each axis one at a time by
 
 NOTE: This max rate setting also sets the G0 seek rates.
 
-#### $120, $121, $122 – [X,Y,Z] Acceleration, mm/sec^2
+#### $120, $121, $122 - [X,Y,Z] Acceleration, mm/sec^2
 
 This sets the axes acceleration parameters in mm/second/second. Simplistically, a lower value makes Grbl ease slower into motion, while a higher value yields tighter moves and reaches the desired feed rates much quicker. Much like the max rate setting, each axis has its own acceleration value and are independent of each other. This means that a multi-axis motion will only accelerate as quickly as the lowest contributing axis can.
 
 Again, like the max rate setting, the simplest way to determine the values for this setting is to individually test each axis with slowly increasing values until the motor stalls. Then finalize your acceleration setting with a value 10-20% below this absolute max value. This should account for wear, friction, and mass inertia. We highly recommend that you dry test some G-code programs with your new settings before committing to them. Sometimes the loading on your machine is different when moving in all axes together.
 
 
-#### $130, $131, $132 – [X,Y,Z] Max travel, mm
+#### $130, $131, $132 - [X,Y,Z] Max travel, mm
 
 This sets the maximum travel from end to end for each axis in mm. This is only useful if you have soft limits (and homing) enabled, as this is only used by Grbl's soft limit feature to check if you have exceeded your machine limits with a motion command.

@@ -34,7 +34,7 @@
 #include "GRBL/grbllib.h"
 
 #ifndef FreeRTOS
-#error This configuration requires FreeRTOS enabled in driver.h!
+#error This configuration requires at least one FreeRTOS dependent option enabled in base/driver.h!
 #endif
 
 static void vGrblTask (void * pvParameters)
@@ -47,7 +47,7 @@ int main(void)
     /* Call driver init functions */
     Board_initGeneral();
 
-    xTaskCreate(vGrblTask, "Grbl", 2048, NULL, 0, NULL);
+    xTaskCreate(vGrblTask, "Grbl", configMINIMAL_STACK_SIZE, NULL, 0, NULL);
 
     vTaskStartScheduler();
 

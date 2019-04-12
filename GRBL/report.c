@@ -2,7 +2,7 @@
   report.c - reporting and messaging methods
   Part of Grbl
 
-  Copyright (c) 2017-2018 Terje Io
+  Copyright (c) 2017-2019 Terje Io
   Copyright (c) 2012-2016 Sungeun K. Jeon for Gnea Research LLC
 
   Grbl is free software: you can redistribute it and/or modify
@@ -32,6 +32,8 @@
 #include "grbl.h"
 
 static char buf[(STRLEN_COORDVALUE + 1) * N_AXIS];
+static char *(*get_axis_values)(float *axis_values);
+static char *(*get_rate_value)(float value);
 
 // Append a number of strings to the static buffer
 // NOTE: do NOT use for several int/float conversions as these share the same underlying buffer!
@@ -55,20 +57,48 @@ char *appendbuf (int argc, ...)
     return buf;
 }
 
-// Convert axis position values to null terminated string.
-static char *get_axis_values (float *axis_values)
+// Convert axis position values to null terminated string (mm).
+static char *get_axis_values_mm (float *axis_values)
 {
-    uint_fast8_t idx, decimal_places = settings.flags.report_inches ? N_DECIMAL_COORDVALUE_INCH : N_DECIMAL_COORDVALUE_MM;
+    uint_fast32_t idx;
 
     buf[0] = '\0';
 
     for (idx = 0; idx < N_AXIS; idx++) {
-        strcat(buf, ftoa(axis_values[idx], decimal_places));
+        strcat(buf, ftoa(axis_values[idx], N_DECIMAL_COORDVALUE_MM));
         if (idx < (N_AXIS - 1))
             strcat(buf, ",");
     }
 
     return buf;
+}
+
+// Convert axis position values to null terminated string (inch).
+static char *get_axis_values_inches (float *axis_values)
+{
+    uint_fast32_t idx;
+
+    buf[0] = '\0';
+
+    for (idx = 0; idx < N_AXIS; idx++) {
+        strcat(buf, ftoa(axis_values[idx] * INCH_PER_MM, N_DECIMAL_COORDVALUE_INCH));
+        if (idx < (N_AXIS - 1))
+            strcat(buf, ",");
+    }
+
+    return buf;
+}
+
+// Convert rate value to null terminated string (mm).
+static char *get_rate_value_mm (float value)
+{
+    return ftoa(value, N_DECIMAL_RATEVALUE_MM);
+}
+
+// Convert rate value to null terminated string (mm).
+static char *get_rate_value_inch (float value)
+{
+    return ftoa(value * INCH_PER_MM, N_DECIMAL_RATEVALUE_INCH);
 }
 
 // Convert axes signals bits to string representation
@@ -102,6 +132,12 @@ static inline char *axis_signals_tostring (char *buf, axes_signals_t signals)
     *buf = '\0';
 
     return buf;
+}
+
+void report_init (void)
+{
+    get_axis_values = settings.flags.report_inches ? get_axis_values_inches : get_axis_values_mm;
+    get_rate_value = settings.flags.report_inches ? get_rate_value_inch : get_rate_value_mm;
 }
 
 // Handles the primary confirmation protocol response for streaming interfaces and human-feedback.
@@ -266,22 +302,22 @@ void report_grbl_settings (void)
     report_float_setting(Setting_RpmMin, settings.spindle.rpm_min, N_DECIMAL_RPMVALUE);
     report_uint_setting(Setting_LaserMode, hal.driver_cap.variable_spindle ? settings.flags.laser_mode : 0);
     report_float_setting(Setting_PWMFreq, settings.spindle.pwm_freq, N_DECIMAL_SETTINGVALUE);
-    report_float_setting(Setting_PWMOffValue, settings.spindle.pwm_off_value, N_DECIMAL_SETTINGVALUE);
+//    report_float_setting(Setting_PWMOffValue, settings.spindle.pwm_off_value, N_DECIMAL_SETTINGVALUE);
     report_float_setting(Setting_PWMMinValue, settings.spindle.pwm_min_value, N_DECIMAL_SETTINGVALUE);
     report_float_setting(Setting_PWMMaxValue, settings.spindle.pwm_max_value, N_DECIMAL_SETTINGVALUE);
     report_uint_setting(Setting_StepperDeenergizeMask, settings.steppers.deenergize.mask);
-    if(hal.driver_cap.spindle_sync) {
+    if(hal.driver_cap.spindle_sync || hal.driver_cap.spindle_pid)
         report_uint_setting(Setting_SpindlePPR, settings.spindle.ppr);
-        report_float_setting(Setting_SpindlePGain, settings.spindle.P_gain, N_DECIMAL_SETTINGVALUE);
-        report_float_setting(Setting_SpindleIGain, settings.spindle.I_gain, N_DECIMAL_SETTINGVALUE);
-        report_float_setting(Setting_SpindleDGain, settings.spindle.D_gain, N_DECIMAL_SETTINGVALUE);
-    }
+
     report_uint_setting(Setting_HomingLocateCycles, settings.homing.locate_cycles);
 
     uint_fast8_t idx;
 
     for(idx = 0 ; idx < N_AXIS ; idx++)
         report_uint_setting((setting_type_t)(Setting_HomingCycle_1 + idx), settings.homing.cycle[idx]);
+
+    if(hal.driver_settings_report)
+        hal.driver_settings_report(false, (axis_setting_type_t)0, 0);
 
     report_uint_setting(Setting_RestoreOverrides, settings.flags.restore_overrides);
     report_uint_setting(Setting_IgnoreDoorWhenIdle, settings.flags.safety_door_ignore_when_idle);
@@ -290,11 +326,22 @@ void report_grbl_settings (void)
     report_uint_setting(Setting_ForceInitAlarm, settings.flags.force_initialization_alarm);
     report_uint_setting(Setting_CheckLimitsAtInit, settings.limits.flags.check_at_init);
     report_uint_setting(Setting_HomingInitLock, settings.homing.flags.init_lock);
-
     report_uint_setting(Settings_Stream, (uint32_t)settings.stream);
 
-    if(hal.driver_settings_report)
-        hal.driver_settings_report(false, (axis_setting_type_t)0, 0);
+    if(hal.driver_cap.spindle_pid) {
+        report_float_setting(Setting_SpindlePGain, settings.spindle.pid.p_gain, N_DECIMAL_SETTINGVALUE);
+        report_float_setting(Setting_SpindleIGain, settings.spindle.pid.i_gain, N_DECIMAL_SETTINGVALUE);
+        report_float_setting(Setting_SpindleDGain, settings.spindle.pid.d_gain, N_DECIMAL_SETTINGVALUE);
+        report_float_setting(Setting_SpindleMaxError, settings.spindle.pid.max_error, N_DECIMAL_SETTINGVALUE);
+        report_float_setting(Setting_SpindleIMaxError, settings.spindle.pid.i_max_error, N_DECIMAL_SETTINGVALUE);
+    }
+
+    if(hal.driver_cap.spindle_sync) {
+        report_float_setting(Setting_PositionPGain, settings.position.pid.p_gain, N_DECIMAL_SETTINGVALUE);
+        report_float_setting(Setting_PositionIGain, settings.position.pid.i_gain, N_DECIMAL_SETTINGVALUE);
+        report_float_setting(Setting_PositionDGain, settings.position.pid.d_gain, N_DECIMAL_SETTINGVALUE);
+        report_float_setting(Setting_PositionIMaxError, settings.position.pid.i_max_error, N_DECIMAL_SETTINGVALUE);
+    }
 
     // Print axis settings
     uint_fast8_t set_idx, val = (uint_fast8_t)Setting_AxisSettingsBase;
@@ -429,7 +476,7 @@ void report_gcode_modes (void)
         hal.stream.write(uitoa((uint32_t)(g5x - 59)));
     }
 
-    hal.stream.write(gc_state.diameter_mode ? " G7" : " G8");
+    hal.stream.write(gc_state.modal.diameter_mode ? " G7" : " G8");
 
     hal.stream.write(" G");
     hal.stream.write(uitoa((uint32_t)(gc_state.modal.plane_select + 17)));
@@ -440,6 +487,9 @@ void report_gcode_modes (void)
 
     hal.stream.write(" G");
     hal.stream.write(uitoa((uint32_t)(94 - gc_state.modal.feed_mode)));
+
+    if(hal.driver_cap.variable_spindle)
+        hal.stream.write(gc_state.modal.spindle_rpm_mode == SpindleSpeedMode_RPM ? " G97" : " G96");
 
     hal.stream.write(gc_state.canned.return_mode == CCReturnMode_RPos ? " G99" : " G98");
 
@@ -506,7 +556,7 @@ void report_gcode_modes (void)
 
     hal.stream.write(appendbuf(2, " T", uitoa((uint32_t)gc_state.tool->tool)));
 
-    hal.stream.write(appendbuf(2, " F", ftoa(gc_state.feed_rate, settings.flags.report_inches ? N_DECIMAL_RATEVALUE_INCH : N_DECIMAL_RATEVALUE_MM)));
+    hal.stream.write(appendbuf(2, " F", get_rate_value(gc_state.feed_rate)));
 
     if(hal.driver_cap.variable_spindle)
         hal.stream.write(appendbuf(2, " S", ftoa(gc_state.spindle.rpm, N_DECIMAL_RPMVALUE)));
@@ -637,16 +687,13 @@ void report_build_info (char *line)
         strcat(buf, "WIFI,");
 
 #ifdef N_TOOLS
-    strcat(buf, "ATC:");
+    strcat(buf, "ATC;");
     strcat(buf, uitoa((uint32_t)N_TOOLS));
     strcat(buf, ",");
 #else
     if(hal.stream.suspend_read)
         strcat(buf, "TC,"); // Manual tool change supported (M6)
 #endif
-
-    if(hal.driver_cap.constant_surface_speed)
-        strcat(buf, "CSS,");
 
     if(hal.driver_cap.spindle_sync)
         strcat(buf, "SS,");
@@ -659,8 +706,10 @@ void report_build_info (char *line)
     if(*append == ',')
         *append = '\0';
 
-    hal.stream.write(buf);
-    hal.stream.write("]\r\n");
+    if(*append != ':') {
+        hal.stream.write(buf);
+        hal.stream.write("]\r\n");
+    }
 
     if(hal.report_options)
         hal.report_options();
@@ -771,12 +820,12 @@ void report_realtime_status (void)
     // Report realtime feed speed
     if(settings.status_report.feed_speed) {
         if(hal.driver_cap.variable_spindle) {
-            hal.stream.write_all(appendbuf(2, "|FS:", ftoa(st_get_realtime_rate(), settings.flags.report_inches ? N_DECIMAL_RATEVALUE_INCH : N_DECIMAL_RATEVALUE_MM)));
+            hal.stream.write_all(appendbuf(2, "|FS:", get_rate_value(st_get_realtime_rate())));
             hal.stream.write_all(appendbuf(2, ",", ftoa(sys.spindle_rpm, N_DECIMAL_RPMVALUE)));
             if(hal.spindle_get_data /* && sys.mpg_mode */)
                 hal.stream.write_all(appendbuf(2, ",", ftoa(hal.spindle_get_data(SpindleData_RPM).rpm, N_DECIMAL_RPMVALUE)));
         } else
-            hal.stream.write_all(appendbuf(2, "|F:", ftoa(st_get_realtime_rate(), settings.flags.report_inches ? N_DECIMAL_RATEVALUE_INCH : N_DECIMAL_RATEVALUE_MM)));
+            hal.stream.write_all(appendbuf(2, "|F:", get_rate_value(st_get_realtime_rate())));
     }
 
     if(settings.status_report.pin_state) {
@@ -818,7 +867,7 @@ void report_realtime_status (void)
         }
     }
 
-    bool report_overrides = sys.report.override_counter <= 0;
+    sys.report.flags.add_report = sys.report.override_counter <= 0;
 
     if(settings.status_report.work_coord_offset) {
 
@@ -828,7 +877,7 @@ void report_realtime_status (void)
             sys.report.wco_counter = sys.state & (STATE_HOMING|STATE_CYCLE|STATE_HOLD|STATE_JOG|STATE_SAFETY_DOOR)
                                       ? (REPORT_WCO_REFRESH_BUSY_COUNT - 1) // Reset counter for slow refresh
                                       : (REPORT_WCO_REFRESH_IDLE_COUNT - 1);
-            report_overrides = false; // Set override on next report.
+            sys.report.flags.add_report = Off; // Set override on next report.
             hal.stream.write_all("|WCO:");
             hal.stream.write_all(get_axis_values(wco));
         }
@@ -838,7 +887,7 @@ void report_realtime_status (void)
 
         if (sys.report.override_counter > 0)
             sys.report.override_counter--;
-        else if(report_overrides) {
+        else if(sys.report.flags.add_report) {
 
             hal.stream.write_all(appendbuf(2, "|Ov:", uitoa((uint32_t)sys.override.feed_rate)));
             hal.stream.write_all(appendbuf(2, ",", uitoa((uint32_t)sys.override.rapid_rate)));
@@ -876,20 +925,22 @@ void report_realtime_status (void)
     } else if(gc_state.tool_change)
         hal.stream.write_all("|A:T");
 
-    if(sys.report.scaling) {
+    if(sys.report.flags.scaling) {
         axis_signals_tostring(buf, gc_get_g51_state());
         hal.stream.write_all("|Sc:");
         hal.stream.write_all(buf);
-        sys.report.scaling = false;
+        sys.report.flags.scaling = Off;
     }
 
-    if(sys.report.mpg_mode) {
+    if(sys.report.flags.mpg_mode) {
         hal.stream.write_all(sys.mpg_mode ? "|MPG:1" : "|MPG:0");
-        sys.report.mpg_mode = false;
+        sys.report.flags.mpg_mode = Off;
     }
 
     if(hal.driver_rt_report)
         hal.driver_rt_report(hal.stream.write_all);
+
+    sys.report.flags.add_report = false;
 
     hal.stream.write_all(">\r\n");
 }

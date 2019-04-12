@@ -12,7 +12,7 @@ $-Code	 Setting	 Units	Datatype	Data format	Setting Description	Min	Max
 13	Report in inches	boolean	bool		Enables inch units when returning any position and rate value that is not a settings value.		
 14	Invert control pins	mask	bitfield	Reset,Feed hold,Cycle start,Safety door	Inverts the control signals  (active low).		
 15	Invert coolant pins	mask	bitfield	Flood,Mist	Inverts the coolant and mist signals  (active low).		
-16	Invert spindle pins	mask	bitfield	Spindle on,Spindle CCW	Inverts the spindle on and counterclockwise signals ( (active low).		
+16	Invert spindle signals	mask	bitfield	Spindle on,Spindle CCW,Invert PWM	Inverts the spindle on, counterclockwise and PWM signals (active low).		
 17	Pullup disable control pins	mask	bitfield	Reset,Feed hold,Cycle start,Safety door	Disable the control signals pullup resistors. Potentially enables pulldown resistor if available.		
 18	Pullup disable limit pins	mask	bitfield	axes	Disable the limit signals pullup resistors. Potentially enables pulldown resistor if available.		
 19	Pullup disable probe pin	boolean	bool		Disable the probe signal pullup resistor. Potentially enables pulldown resistor if available.		
@@ -35,9 +35,6 @@ $-Code	 Setting	 Units	Datatype	Data format	Setting Description	Min	Max
 36	Spindle PWM max value	percent	float	##0.0	Spindle PWM max value in percent (duty cycle).		100
 37	Steppers deenergize 	mask	bitfield	axes	Specifies which steppers not to disable when stopped.		
 38	Spindle PPR	pulses	integer	###0	Spindle encoder pulses per revolution		
-39	Spindle P-gain		decimal	###0.000			
-40	Spindle I-gain		decimal	###0.000			
-41	Spindle D-gain		decimal	###0.000			
 43	Homing passes		integer	##9	Number of homing passes. Minimum 1, maximum 128.	1	128
 44	Axes homing, first pass	mask	bitfield	axes	Axes to home in first pass		
 45	Axes homing, second pass	mask	bitfield	axes	Axes to home in second pass		
@@ -64,6 +61,15 @@ $-Code	 Setting	 Units	Datatype	Data format	Setting Description	Min	Max
 73	WiFi Port		integer	####9	WiFi Port Number listening for incoming connections.	1	65535
 74	Bluetooth device		string	x(32)	Bluetooth device name.
 75	Bluetooth service		string	x(32)	Bluetooth service name.
+80	Spindle P-gain		decimal	###0.000			
+81	Spindle I-gain		decimal	###0.000			
+82	Spindle D-gain		decimal	###0.000			
+84	Spindle PID max error		decimal	###0.000			
+85	Spindle PID max I error		decimal	###0.000	Spindle PID max integrator error			
+90	Spindle sync P-gain		decimal	###0.000			
+91	Spindle sync I-gain		decimal	###0.000			
+92	Spindle sync D-gain		decimal	###0.000			
+95	Spindle sync PID max I error		decimal	###0.000	Spindle sync PID max integrator error			
 100	X-axis travel resolution	step/mm	float	#####0.000	X-axis travel resolution in steps per millimeter.		
 101	Y-axis travel resolution	step/mm	float	#####0.000	Y-axis travel resolution in steps per millimeter.		
 102	Z-axis travel resolution	step/mm	float	#####0.000	Z-axis travel resolution in steps per millimeter.		

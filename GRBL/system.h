@@ -2,7 +2,7 @@
   system.h - Header for system level commands and real-time processes
   Part of Grbl
 
-  Copyright (c) 2017-2018 Terje Io
+  Copyright (c) 2017-2019 Terje Io
   Copyright (c) 2014-2016 Sungeun K. Jeon for Gnea Research LLC
 
   Grbl is free software: you can redistribute it and/or modify
@@ -166,11 +166,20 @@ typedef struct {
 
 #endif
 
+typedef union {
+    uint8_t value;
+    struct {
+        uint8_t mpg_mode   :1,
+                scaling    :1, // Tracks when to add scaling info to status reports.
+                unassigned :5,
+                add_report :1; // Tracks when info is added to status reports.
+    };
+} report_tracking_flags_t;
+
 typedef struct {
-    int8_t override_counter;                 // Tracks when to add override data to status reports.
-    uint8_t wco_counter;                // Tracks when to add work coordinate offset data to status reports.
-    bool mpg_mode;
-    bool scaling;                       // Tracks when to add scaling info to status reports.
+    int8_t override_counter;        // Tracks when to add override data to status reports.
+    uint8_t wco_counter;            // Tracks when to add work coordinate offset data to status reports.
+    report_tracking_flags_t flags;  // Tracks when to add assorted info to status reports.
 } report_tracking_t;
 
 typedef struct {
@@ -224,7 +233,6 @@ status_code_t system_execute_line(char *line);
 // Execute the startup script lines stored in EEPROM upon initialization
 void system_execute_startup(char *line);
 
-
 void system_flag_wco_change();
 
 // Returns machine position of axis 'idx'. Must be sent a 'step' array.
@@ -232,12 +240,6 @@ void system_flag_wco_change();
 
 // Updates a machine 'position' array based on the 'step' array sent.
 void system_convert_array_steps_to_mpos(float *position, int32_t *steps);
-
-// CoreXY calculation only. Returns x or y-axis "steps" based on CoreXY motor steps.
-#ifdef COREXY
-  int32_t system_convert_corexy_to_x_axis_steps(int32_t *steps);
-  int32_t system_convert_corexy_to_y_axis_steps(int32_t *steps);
-#endif
 
 // Checks and reports if target array exceeds machine travel limits.
 bool system_check_travel_limits(float *target);

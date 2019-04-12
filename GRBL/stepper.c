@@ -2,7 +2,7 @@
   stepper.c - stepper motor driver: executes motion plans using stepper motors
   Part of Grbl
 
-  Copyright (c) 2016-2018 Terje Io
+  Copyright (c) 2016-2019 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -111,7 +111,7 @@ typedef struct {
     float target_position;  //
     float target_feed;      //
     float inv_feedrate;     // Used by PWM laser mode to speed up segment calculations.
-    uint_fast16_t current_spindle_pwm;
+    float current_spindle_rpm;
 } st_prep_t;
 
 static st_prep_t prep;
@@ -258,7 +258,6 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
             // Initialize step segment timing per step and load number of steps to execute.
             hal.stepper_cycles_per_tick(st.exec_segment->cycles_per_tick);
             st.step_count = st.exec_segment->n_step; // NOTE: Can sometimes be zero when moving slow.
-            st.spindle_pwm = st.exec_segment->spindle_pwm;
 
             // If the new segment starts a new planner block, initialize stepper variables and counters.
             if (st.exec_block != st.exec_segment->exec_block) {
@@ -309,12 +308,15 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
            #endif
          #endif
 
+            if(st.exec_segment->update_rpm)
+                hal.spindle_update_rpm(st.exec_segment->spindle_rpm);
+
         } else {
             // Segment buffer empty. Shutdown.
             st_go_idle();
             // Ensure pwm is set properly upon completion of rate-controlled motion.
-            if (st.exec_block->is_rpm_rate_adjusted)
-                st.spindle_pwm = hal.spindle_set_speed(hal.spindle_pwm_off);
+            if (st.exec_block->dynamic_rpm && settings.flags.laser_mode)
+                spindle_stop();
 
             system_set_exec_state_flag(EXEC_CYCLE_COMPLETE); // Flag main program for cycle complete
 
@@ -576,7 +578,7 @@ void st_prep_buffer()
 
                 // Setup laser mode variables. PWM rate adjusted motions will always complete a motion with the
                 // spindle off.
-                if ((st_prep_block->is_rpm_rate_adjusted = pl_block->condition.is_rpm_rate_adjusted))
+                if ((st_prep_block->dynamic_rpm = pl_block->condition.is_rpm_rate_adjusted || pl_block->condition.is_rpm_pos_adjusted))
                     // Pre-compute inverse programmed rate to speed up PWM updating per step segment.
                     prep.inv_feedrate = pl_block->condition.is_laser_ppi_mode ? 1.0f : 1.0f / pl_block->programmed_rate;
             }
@@ -681,6 +683,7 @@ void st_prep_buffer()
 
         // Set new segment to point to the current segment data block.
         prep_segment->exec_block = st_prep_block;
+        prep_segment->update_rpm = false;
 
         /*------------------------------------------------------------------------------------
             Compute the average velocity of this new segment by determining the total distance
@@ -788,34 +791,36 @@ void st_prep_buffer()
         } while (mm_remaining > prep.mm_complete); // **Complete** Exit loop. Profile complete.
 
         /* -----------------------------------------------------------------------------------
-        Compute spindle speed PWM output for step segment
+           Compute spindle spindle speed for step segment
         */
 
-        if (st_prep_block->is_rpm_rate_adjusted || sys.step_control.update_spindle_rpm) {
+        if (sys.step_control.update_spindle_rpm || st_prep_block->dynamic_rpm) {
             if (pl_block->condition.spindle.on) {
                 // NOTE: Feed and rapid overrides are independent of PWM value and do not alter laser power/rate.
                 // If current_speed is zero, then may need to be rpm_min*(100/MAX_SPINDLE_RPM_OVERRIDE)
                 // but this would be instantaneous only and during a motion. May not matter at all.
-                prep.current_spindle_pwm = hal.spindle_compute_pwm_value(st_prep_block->is_rpm_rate_adjusted && !pl_block->condition.is_laser_ppi_mode
-                                                                          ? pl_block->spindle.rpm * prep.current_speed * prep.inv_feedrate
-                                                                          : pl_block->spindle.rpm, sys.override.spindle_rpm);
-              #ifdef CONSTANT_SURFACE_SPEED_OPTION
-                if(pl_block->condition.is_rpm_pos_adjusted)
-                    st_prep_block->pwm_adjust = ((float)hal.spindle_compute_pwm_value(pl_block->spindle.target_rpm, sys.override.spindle_rpm) -
-                                                  (float)prep.current_spindle_pwm) / (float)pl_block->steps[pl_block->spindle.axis];
-                else
-                    st_prep_block->pwm_adjust = 0.0f;
-              #endif
+                prep.current_spindle_rpm = spindle_set_rpm(pl_block->condition.is_rpm_rate_adjusted && !pl_block->condition.is_laser_ppi_mode
+                                                            ? pl_block->spindle.rpm * prep.current_speed * prep.inv_feedrate
+                                                            : pl_block->spindle.rpm, sys.override.spindle_rpm);
+
+               if(pl_block->condition.is_rpm_pos_adjusted) {
+                    float npos = (float)(pl_block->step_event_count - prep.steps_remaining) / (float)pl_block->step_event_count;
+                    prep.current_spindle_rpm += (spindle_set_rpm(pl_block->spindle.target_rpm, sys.override.spindle_rpm) -
+                                                    prep.current_spindle_rpm) * npos;
+               }
+
             } else {
                 sys.spindle_rpm = 0.0f;
-                prep.current_spindle_pwm = hal.spindle_pwm_off;
-              #ifdef CONSTANT_SURFACE_SPEED_OPTION
-                st_prep_block->pwm_adjust = 0.0f;
-              #endif
+                prep.current_spindle_rpm = 0.0f;
             }
+// TODO: Fix the code so that RPM updates only is done on changes
+//            prep_segment->update_rpm = prep.current_spindle_rpm != sys.spindle_rpm;
+//            prep.current_spindle_rpm = sys.spindle_rpm;
+            prep_segment->update_rpm = true;
             sys.step_control.update_spindle_rpm = Off;
         }
-        prep_segment->spindle_pwm = prep.current_spindle_pwm; // Reload segment PWM value
+
+        prep_segment->spindle_rpm = prep.current_spindle_rpm; // Reload segment RPM   ?? Use sys.spindle_rpm
 
         /* -----------------------------------------------------------------------------------
            Compute segment step rate, steps to execute, and apply necessary rate corrections.

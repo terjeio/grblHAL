@@ -5,7 +5,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2018 Terje Io
+  Copyright (c) 2018-2019 Terje Io
 
   Some parts
    Copyright (c) 2011-2015 Sungeun K. Jeon
@@ -189,7 +189,7 @@ static uint8_t probe_invert;
 static ioexpand_t iopins = {0};
 #endif
 
-static uint_fast16_t spindleSetSpeed (uint_fast16_t pwm_value);
+static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value);
 
 static portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 
@@ -386,9 +386,10 @@ IRAM_ATTR static void stepperCyclesPerTick (uint32_t cycles_per_tick)
 // Set stepper pulse output pins
 inline IRAM_ATTR static void stepperSetStepOutputs (axes_signals_t step_outbits)
 {
+#ifdef xDEBUGOUT
 	if(step_outbits.value)
-    	hal.debug_out(true);
-
+		hal.debug_out(true);
+#endif
     if(step_outbits.x) {
         RMT.conf_ch[0].conf1.mem_rd_rst = 1;
         RMT.conf_ch[0].conf1.tx_start = 1;
@@ -424,18 +425,16 @@ inline IRAM_ATTR static void stepperSetDirOutputs (axes_signals_t dir_outbits)
 // Sets stepper direction and pulse pins and starts a step pulse
 IRAM_ATTR static void stepperPulseStart (stepper_t *stepper)
 {
-    static uint_fast16_t current_pwm = 0;
-
     if(stepper->new_block) {
         stepper->new_block = false;
         stepperSetDirOutputs(stepper->dir_outbits);
     }
 
     if(stepper->step_outbits.value) {
-        if(stepper->spindle_pwm != current_pwm)
-            current_pwm = spindleSetSpeed(stepper->spindle_pwm);
 		stepperSetStepOutputs(stepper->step_outbits);
+#ifdef DEBUGOUT
 		hal.debug_out(false);
+#endif
     }
 }
 
@@ -509,7 +508,7 @@ bool probeGetState (void)
 }
 
 // Static spindle (off, on cw & on ccw)
-inline static void spindleOff ()
+inline static void spindle_off ()
 {
 #if IOEXPAND_ENABLE
 	iopins.spindle_on = settings.spindle.invert.on ? On : Off;
@@ -519,7 +518,7 @@ inline static void spindleOff ()
 #endif
 }
 
-inline static void spindleOn ()
+inline static void spindle_on ()
 {
 #if IOEXPAND_ENABLE
 	iopins.spindle_on = settings.spindle.invert.on ? Off : On;
@@ -529,7 +528,7 @@ inline static void spindleOn ()
 #endif
 }
 
-inline static void spindleDir (bool ccw)
+inline static void spindle_dir (bool ccw)
 {
 	if(hal.driver_cap.spindle_dir) {
 #if IOEXPAND_ENABLE
@@ -542,30 +541,24 @@ inline static void spindleDir (bool ccw)
 }
 
 // Start or stop spindle
-static void spindleSetState (spindle_state_t state, float rpm, uint8_t speed_ovr)
+static void spindleSetState (spindle_state_t state, float rpm)
 {
     if (!state.on)
-        spindleOff();
+        spindle_off();
     else {
-        spindleDir(state.ccw);
-        spindleOn();
+        spindle_dir(state.ccw);
+        spindle_on();
     }
 }
 
 // Variable spindle control functions
 
-// Spindle speed to PWM conversion. Keep routine small and efficient.
-static uint_fast16_t spindleComputePWMValue (float rpm, uint8_t speed_ovr)
-{
-    return spindle_compute_pwm_value(&spindle_pwm, rpm, speed_ovr);
-}
-
 // Sets spindle speed
-static uint_fast16_t spindleSetSpeed (uint_fast16_t pwm_value)
+static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
 {
-    if (pwm_value == hal.spindle_pwm_off) {
+    if (pwm_value == spindle_pwm.off_value) {
         if(settings.spindle.disable_with_zero_speed)
-            spindleOff();
+            spindle_off();
 #if PWM_RAMPED
         pwm_ramp.pwm_target = pwm_value;
         ledc_set_fade_step_and_start(ledConfig.speed_mode, ledConfig.channel, pwm_ramp.pwm_target, 1, 4, LEDC_FADE_NO_WAIT);
@@ -582,7 +575,7 @@ static uint_fast16_t spindleSetSpeed (uint_fast16_t pwm_value)
     	 ledc_update_duty(ledConfig.speed_mode, ledConfig.channel);
 #endif
         if(!pwmEnabled) {
-            spindleOn();
+            spindle_on();
             pwmEnabled = true;
         }
     }
@@ -590,15 +583,20 @@ static uint_fast16_t spindleSetSpeed (uint_fast16_t pwm_value)
     return pwm_value;
 }
 
+static void spindleUpdateRPM (float rpm)
+{
+    spindle_set_speed(spindle_compute_pwm_value(&spindle_pwm, rpm, false));
+}
+
 // Start or stop spindle, variable version
-static void spindleSetStateVariable (spindle_state_t state, float rpm, uint8_t speed_ovr)
+static void spindleSetStateVariable (spindle_state_t state, float rpm)
 {
     if (!state.on || rpm == 0.0f) {
-        spindleSetSpeed(hal.spindle_pwm_off);
-        spindleOff();
+        spindle_set_speed(spindle_pwm.off_value);
+        spindle_off();
     } else {
-        spindleDir(state.ccw);
-        spindleSetSpeed(spindleComputePWMValue(rpm, speed_ovr));
+        spindle_dir(state.ccw);
+        spindle_set_speed(spindle_compute_pwm_value(&spindle_pwm, rpm, false));
     }
 }
 
@@ -774,21 +772,21 @@ void i2c_init (void)
 // Configures perhipherals when settings are initialized or changed
 static void settings_changed (settings_t *settings)
 {
-    if((hal.driver_cap.variable_spindle)) {
+    if((hal.driver_cap.variable_spindle = settings->spindle.rpm_max > settings->spindle.rpm_min)) {
 		uint32_t pwm_max_value = (1UL << ledTimerConfig.duty_resolution) - 1;
 
 		spindle_pwm.period = (uint32_t)(80000000UL / settings->spindle.pwm_freq);
-		spindle_pwm.off_value = (uint32_t)(pwm_max_value * settings->spindle.pwm_off_value / 100.0f);
+		spindle_pwm.off_value = settings->spindle.invert.pwm ? spindle_pwm.period : 0;
 		spindle_pwm.min_value = (uint32_t)(pwm_max_value * settings->spindle.pwm_min_value / 100.0f);
 		spindle_pwm.max_value = (uint32_t)(pwm_max_value * settings->spindle.pwm_max_value / 100.0f);
 		spindle_pwm.pwm_gradient = (float)(spindle_pwm.max_value - spindle_pwm.min_value) / (settings->spindle.rpm_max - settings->spindle.rpm_min);
-
-		hal.spindle_pwm_off = spindle_pwm.off_value;
 
 		ledc_set_freq(ledTimerConfig.speed_mode, ledTimerConfig.timer_num, (uint32_t)settings->spindle.pwm_freq);
     }
 
     if(IOInitDone) {
+
+        hal.spindle_set_state = hal.driver_cap.variable_spindle ? spindleSetStateVariable : spindleSetState;
 
     	// Validate stream setting, switch to serial if not supported
     	if((settings->stream == StreamSetting_WiFi && !hal.driver_cap.wifi) ||
@@ -1007,15 +1005,12 @@ static bool driver_setup (settings_t *settings)
     *  Spindle init  *
     ******************/
 
-    if((hal.driver_cap.variable_spindle)) {
 #if PWM_RAMPED
-    	ledc_fade_func_install(ESP_INTR_FLAG_IRAM);
+    ledc_fade_func_install(ESP_INTR_FLAG_IRAM);
 #endif
-    	ledConfig.speed_mode = ledTimerConfig.speed_mode;
-    	ledc_timer_config(&ledTimerConfig);
-    	ledc_channel_config(&ledConfig);
-    } else
-        hal.spindle_set_state = &spindleSetState;
+	ledConfig.speed_mode = ledTimerConfig.speed_mode;
+	ledc_timer_config(&ledTimerConfig);
+	ledc_channel_config(&ledConfig);
 
 #if SDCARD_ENABLE
     sdcard_init();
@@ -1035,7 +1030,7 @@ static bool driver_setup (settings_t *settings)
 
     settings_changed(settings);
 
-    hal.spindle_set_state((spindle_state_t){0}, spindle_pwm.off_value, DEFAULT_SPINDLE_RPM_OVERRIDE);
+    hal.spindle_set_state((spindle_state_t){0}, 0.0f);
     hal.coolant_set_state((coolant_state_t){0});
     hal.stepper_set_directions((axes_signals_t){0});
 
@@ -1159,10 +1154,9 @@ bool driver_init (void)
     hal.probe_configure_invert_mask = probeConfigure;
 #endif
 
-    hal.spindle_set_state = spindleSetStateVariable;
+    hal.spindle_set_state = spindleSetState;
     hal.spindle_get_state = spindleGetState;
-    hal.spindle_set_speed = spindleSetSpeed;
-    hal.spindle_compute_pwm_value = spindleComputePWMValue;
+    hal.spindle_update_rpm = spindleUpdateRPM;
 
     hal.system_control_get_state = systemGetState;
 

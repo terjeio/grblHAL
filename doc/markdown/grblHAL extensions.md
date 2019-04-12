@@ -88,15 +88,6 @@ Driver/hardware dependent which are supported. At least X should be, disables al
 $38=\<n\> : default driver dependent.  
 Spindle encoder pulses per revolution. Usage is driver dependent (for spindle synchronized motion).
 
-$39=\<float\> : default driver dependent.  
-Spindle PID regulator proportional gain. Usage is driver dependent.
-
-$40=\<float\> : default driver dependent.  
-Spindle PID regulator integral gain. Usage is driver dependent.
-
-$41=\<float\> : default driver dependent.  
-Spindle PID regulator derivative gain. Usage is driver dependent.
-
 $43=\<n\> : default 1, range 0 - 255.  
 Number of homing locate cycles, replaces #define N_HOMING_LOCATE_CYCLE
 
@@ -179,7 +170,30 @@ Bluetooth device name.
 
 $75=\<string\> : max 32 characters, default "GRBL serial port".  
 Bluetooth service name.
- 
+
+$80=\<float\> : default driver dependent.  
+Spindle PID regulator proportional gain. Usage is driver dependent.
+
+$81=\<float\> : default driver dependent.  
+Spindle PID regulator integral gain. Usage is driver dependent.
+
+$82=\<float\> : default driver dependent.  
+Spindle PID regulator derivative gain. Usage is driver dependent.
+
+$84=\<float\> : default driver dependent.  
+Spindle PID max output error. Usage is driver dependent.
+
+$85=\<float\> : default driver dependent.  
+Spindle PID regulator max integral error. Usage is driver dependent.
+
+$90=\<float\> : default driver dependent.  
+Spindle synced motion PID regulator proportional gain. Usage is driver dependent.
+
+$91=\<float\> : default driver dependent.  
+Spindle synced motion PID regulator integral gain. Usage is driver dependent.
+
+$92=\<float\> : default driver dependent.  
+Spindle synced motion PID regulator derivative gain. Usage is driver dependent.
 
 ENABLE_SOFTWARE_DEBOUNCE
 HARD_LIMIT_FORCE_STATE_CHECK

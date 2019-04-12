@@ -23,14 +23,10 @@
 
 */
 
-#ifndef __EEPROM_H__
-#define __EEPROM_H__
+#define HAS_EEPROM
 
 void eepromInit (void);
 uint8_t eepromGetByte (uint32_t addr);
 void eepromPutByte (uint32_t addr, uint8_t new_value);
 void eepromWriteBlockWithChecksum (uint32_t destination, uint8_t *source, uint32_t size);
 bool eepromReadBlockWithChecksum (uint8_t *destination, uint32_t source, uint32_t size);
-
-#endif
-

@@ -2,7 +2,7 @@
   gcode.c - rs274/ngc parser.
   Part of Grbl
 
-  Copyright (c) 2017-2018 Terje Io
+  Copyright (c) 2017-2019 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -71,7 +71,7 @@ static void set_scaling (float factor)
     gc_state.modal.scaling_active = factor != 1.0f;
 
     if(state.value != gc_get_g51_state().value)
-        sys.report.scaling = true;
+        sys.report.flags.scaling = On;
 }
 
 float *gc_get_scaling (void)
@@ -107,10 +107,7 @@ void gc_init()
 
     // Load default override status
     gc_state.modal.override_ctrl = sys.override.control;
-
-  #ifdef CONSTANT_SURFACE_SPEED_OPTION
-    gc_state.spindle.max_rpm = settings.rpm_max;
-  #endif
+    gc_state.spindle.max_rpm = settings.spindle.rpm_max; // default max speed for CSS mode
 
     set_scaling(1.0f);
 
@@ -222,6 +219,11 @@ status_code_t gc_execute_block(char *block, char *message)
             case 'G':
             // Determine 'G' command and its modal group
                 switch(int_value) {
+
+              //      case 7: case 8:
+              //          word_bit.group = ModalGroup_G15;
+              //          gc_block.modal.diameter_mode = int_value == 7; TODO: find specs for implementation, only affects X calculation? reporting? current position?
+              //          break;
 
                     case 10: case 28: case 30: case 92:
                         // Check for G10/28/30/92 being called with G0/1/2/3/38 on same block.
@@ -376,13 +378,13 @@ status_code_t gc_execute_block(char *block, char *message)
                         // gc_block.modal.control = CONTROL_MODE_EXACT_PATH; // G61
                         break;
 
-                  #ifdef CONSTANT_SURFACE_SPEED_OPTION
                     case 96: case 97:
-                        word_bit.group = ModalGroup_G14;
-                        gc_state.modal.spindle_rpm_mode = (spindle_rpm_mode_t)((int_value - 96) ^ 1);
-                        gc_parser_flags.spindle_force_sync = gc_state.modal.spindle_rpm_mode == SpindleSpeedMode_CSS; // needed?
+                        if(hal.driver_cap.variable_spindle) {
+                            word_bit.group = ModalGroup_G14;
+                            gc_block.modal.spindle_rpm_mode = (spindle_rpm_mode_t)((int_value - 96) ^ 1);
+                        } else
+                            FAIL(Status_GcodeUnsupportedCommand);
                         break;
-                  #endif
 
                     case 98: case 99:
                         word_bit.group = ModalGroup_G11;
@@ -770,20 +772,28 @@ status_code_t gc_execute_block(char *block, char *message)
     // bit_false(value_words,bit(Word_F)); // NOTE: Single-meaning value word. Set at end of error-checking.
 
     // [4. Set spindle speed ]: S or D is negative (done.)
-#ifdef CONSTANT_SURFACE_SPEED_OPTION
+
+    if (bit_istrue(command_words, bit(ModalGroup_G14))) {
+        if(gc_block.modal.spindle_rpm_mode == SpindleSpeedMode_CSS) {
+            if (bit_isfalse(value_words, bit(Word_S))) // TODO: add check for S0?
+                FAIL(Status_GcodeValueWordMissing);
+    // see below!! gc_block.values.s *= (gc_block.modal.units_imperial ? MM_PER_INCH * 12.0f : 1000.0f); // convert surface speed to mm/min
+            if (bit_istrue(value_words, bit(Word_D))) {
+                gc_state.spindle.max_rpm = min(gc_block.values.d, settings.spindle.rpm_max);
+                bit_false(value_words, bit(Word_D));
+            } else
+                gc_state.spindle.max_rpm = settings.spindle.rpm_max;
+        } else if(gc_state.modal.spindle_rpm_mode == SpindleSpeedMode_CSS)
+            gc_state.spindle.rpm = sys.spindle_rpm; // Is it correct to restore latest spindle RPM here?
+        gc_state.modal.spindle_rpm_mode = gc_block.modal.spindle_rpm_mode;
+    }
+
     if (bit_isfalse(value_words, bit(Word_S)))
         gc_block.values.s = gc_state.modal.spindle_rpm_mode == SpindleSpeedMode_RPM ? gc_state.spindle.rpm : gc_state.spindle.surface_speed;
-    else if(gc_state.modal.spindle_rpm_mode == SpindleSpeedMode_CSS) {
-        gc_block.values.s *= (gc_block.modal.units_imperial ? MM_PER_INCH * 12.0f : 1000.0f); // mm/min
-        if (bit_istrue(command_words, bit(ModalGroup_G14)) && bit_istrue(value_words, bit(Word_D))) {
-            gc_state.spindle.max_rpm = min(gc_block.values.d, settings.rpm_max);
-            bit_false(value_words, bit(Word_D));
-        }
-    }
-#else
-    if (bit_isfalse(value_words, bit(Word_S)))
-        gc_block.values.s = gc_state.spindle.rpm;
-#endif
+    else if(gc_state.modal.spindle_rpm_mode == SpindleSpeedMode_CSS)
+        // Unsure what to do about S values when in SpindleSpeedMode_CSS - ignore? For now use it to (re)calculate surface speed.
+        // Reinsert commented out code above if this is removed!!
+        gc_block.values.s *= (gc_block.modal.units_imperial ? MM_PER_INCH * 12.0f : 1000.0f); // convert surface speed to mm/min
 
     // bit_false(value_words,bit(Word_S)); // NOTE: Single-meaning value word. Set at end of error-checking.
 
@@ -892,7 +902,7 @@ status_code_t gc_execute_block(char *block, char *message)
             idx = N_AXIS;
             do {
                 if(bit_istrue(axis_words, bit(--idx))) {
-                    sys.report.scaling = sys.report.scaling || scale_factor.ijk[idx] != gc_block.values.xyz[idx];
+                    sys.report.flags.scaling = sys.report.flags.scaling || scale_factor.ijk[idx] != gc_block.values.xyz[idx];
                     scale_factor.ijk[idx] = gc_block.values.xyz[idx];
                     bit_false(axis_words, bit(idx));
                 }
@@ -932,7 +942,7 @@ status_code_t gc_execute_block(char *block, char *message)
             else
                 bit_false(value_words, bit(Word_I)|bit(Word_J)|bit(Word_K));
 #endif
-            sys.report.scaling = sys.report.scaling || gc_state.modal.scaling_active != gc_block.modal.scaling_active;
+            sys.report.flags.scaling = sys.report.flags.scaling || gc_state.modal.scaling_active != gc_block.modal.scaling_active;
             gc_state.modal.scaling_active = gc_block.modal.scaling_active;
 
         } else
@@ -1216,11 +1226,15 @@ status_code_t gc_execute_block(char *block, char *message)
         // the value must be positive. In inverse time mode, a positive value must be passed with each block.
         } else {
 
+            // Initial(?) check for spindle running for moves in G96 mode
+            if(gc_block.modal.spindle_rpm_mode == SpindleSpeedMode_CSS && (!gc_block.modal.spindle.on || gc_block.values.s == 0.0f))
+                 FAIL(Status_GcodeSpindleNotRunning);
+
             // Check if feed rate is defined for the motion modes that require it.
             if (gc_block.modal.motion == MotionMode_SpindleSynchronized) {
                 if(gc_block.values.k == 0.0f)
                     FAIL(Status_GcodeUndefinedFeedRate); // [Feed rate undefined]
-            } else if (gc_block.values.f == 0.0f) // Check if feed rate is defined for the motion modes that require it.
+            } else if (gc_block.values.f == 0.0f)
                 FAIL(Status_GcodeUndefinedFeedRate); // [Feed rate undefined]
 
             if (gc_block.modal.canned_cycle_active) {
@@ -1592,8 +1606,7 @@ status_code_t gc_execute_block(char *block, char *message)
                 gc_parser_flags.spindle_force_sync = On;
         }
 
-        gc_state.is_rpm_rate_adjusted = gc_state.modal.spindle.ccw && !gc_parser_flags.laser_disable;
-
+        gc_state.is_rpm_rate_adjusted = gc_state.modal.spindle.ccw && !gc_parser_flags.laser_disable && hal.driver_cap.variable_spindle;
     }
 
     // [0. Non-specific/common error-checks and miscellaneous setup]:
@@ -1615,14 +1628,18 @@ status_code_t gc_execute_block(char *block, char *message)
     plan_data.feed_rate = gc_state.feed_rate; // Record data for planner use.
 
     // [4. Set spindle speed ]:
-  #ifdef CONSTANT_SURFACE_SPEED_OPTION
-    plan_data.condition.is_rpm_pos_adjusted = gc_state.modal.spindle_rpm_mode == SpindleSpeedMode_CSS;
+
     if(gc_state.modal.spindle_rpm_mode == SpindleSpeedMode_CSS) {
-        gc_state.spindle.axis = plane.axis_0;
-        gc_state.spindle.surface_speed = plan_data.spindle.surface_speed = gc_block.values.s;
-        gc_block.values.s = min(gc_state.spindle.max_rpm, gc_state.spindle.surface_speed / (gc_state.position[gc_state.spindle.axis] * 2.0f * M_PI));
+        gc_state.spindle.surface_speed = gc_block.values.s;
+        if((plan_data.condition.is_rpm_pos_adjusted = gc_block.modal.motion != MotionMode_None && gc_block.modal.motion != MotionMode_Seek)) {
+            plan_data.spindle.surface_speed = gc_state.spindle.surface_speed;
+            gc_state.spindle.axis = plane.axis_0;
+            gc_block.values.s = min(gc_state.spindle.max_rpm, gc_state.spindle.surface_speed / (gc_state.position[gc_state.spindle.axis] * 2.0f * M_PI));
+            gc_parser_flags.spindle_force_sync = On;
+        } else
+            gc_block.values.s = sys.spindle_rpm; // Keep current RPM for rapids
     }
-  #endif
+
     if ((gc_state.spindle.rpm != gc_block.values.s) || gc_parser_flags.spindle_force_sync) {
         if (gc_state.modal.spindle.on && !gc_parser_flags.laser_is_motion)
             spindle_sync(gc_state.modal.spindle, gc_parser_flags.laser_disable ? 0.0f : gc_block.values.s);
@@ -1670,6 +1687,8 @@ status_code_t gc_execute_block(char *block, char *message)
         spindle_sync(gc_block.modal.spindle, plan_data.spindle.rpm);
         gc_state.modal.spindle = gc_block.modal.spindle;
     }
+
+// TODO: Recheck spindle running in CCS mode (is_rpm_pos_adjusted = On)?
 
     plan_data.condition.spindle = gc_state.modal.spindle; // Set condition flag for planner use.
     plan_data.condition.is_rpm_rate_adjusted = gc_state.is_rpm_rate_adjusted;

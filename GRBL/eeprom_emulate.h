@@ -22,8 +22,6 @@
 #ifndef __noeeprom_h__
 #define __noeeprom_h__
 
-#include "grbl.h"
-
 typedef struct {
     bool is_dirty;
     bool global_settings;

@@ -2,7 +2,7 @@
   gcode.h - rs274/ngc parser.
   Part of Grbl
 
-  Copyright (c) 2017-2018 Terje Io
+  Copyright (c) 2017-2019 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -71,8 +71,10 @@ typedef enum {
     Status_GcodeMaxValueExceeded = 38,
     Status_GcodeIllegalToolTableEntry = 39,
     Status_GcodeToolChangePending = 40,
-    Status_EStop = 41,
-    Status_Unhandled = 42, // For internal use only
+    Status_GcodeSpindleNotRunning = 41,
+
+    Status_EStop = 50,
+    Status_Unhandled = 59, // For internal use only
 
 // Some error codes as defined in bdring's ESP32 port
     Status_SDMountError = 60,
@@ -106,6 +108,7 @@ typedef enum {
     ModalGroup_G12,     // [G54,G55,G56,G57,G58,G59] Coordinate system selection
     ModalGroup_G13,     // [G61] Control mode
     ModalGroup_G14,     // [G96,G97] Spindle Speed Mode
+    ModalGroup_G15,     // [G7,G8] Lathe Diameter Mode
 
     ModalGroup_M4,      // [M0,M1,M2,M30] Stopping
     ModalGroup_M6,      // [M6] Tool change
@@ -344,6 +347,7 @@ typedef struct {
     feed_mode_t feed_mode;               // {G93,G94}
     bool units_imperial;                 // {G20,G21}
     bool distance_incremental;           // {G90,G91}
+    bool diameter_mode;                  // {G7,G8} Lathe diameter mode
     // uint8_t distance_arc;             // {G91.1} NOTE: Don't track. Only default supported.
     plane_select_t plane_select;         // {G17,G18,G19}
     // uint8_t cutter_comp;              // {G40} NOTE: Don't track. Only default supported.
@@ -396,12 +400,10 @@ typedef struct {
 
 typedef struct {
     float rpm;                  // RPM
-#ifdef CONSTANT_SURFACE_SPEED_OPTION
-    uint_fast8_t axis;          // Linear (tool) axis
-    float target_rpm;           // Target RPM at end of movement, used for calulating CSS data
+    uint_fast8_t axis;          // Linear (tool) axis for Constant Surface Speed Mode
     float surface_speed;        // Millimeters/min in Constant Surface Speed mode
+    float target_rpm;           // Target RPM at end of movement, used for calulating CSS data
     float max_rpm;              // Maximum spindle RPM in Constant Surface Speed Mode
-#endif
 } spindle_t;
 
 typedef struct {
@@ -416,7 +418,6 @@ typedef struct {
     int32_t line_number;                // Last line number sent
     tool_data_t *tool;                  // Tracks tool number and offset
     float tool_length_offset[N_AXIS];   // Tracks tool length offset value when enabled
-    bool diameter_mode;                 // {G7} Lathe diameter mode
     bool file_run;                      // Tracks % command
     bool is_laser_ppi_mode;
     bool is_rpm_rate_adjusted;

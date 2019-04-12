@@ -32,6 +32,10 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
+#ifndef FreeRTOS
+#error This configuration requires at least one FreeRTOS dependent option enabled in base/driver.h!
+#endif
+
 uint32_t g_ui32SysClock;
 
 static void vGrblTask (void * pvParameters)

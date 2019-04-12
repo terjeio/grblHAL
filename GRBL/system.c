@@ -2,7 +2,7 @@
   system.c - Handles system level commands and real-time processes
   Part of Grbl
 
-  Copyright (c) 2017-2018 Terje Io
+  Copyright (c) 2017-2019 Terje Io
   Copyright (c) 2014-2016 Sungeun K. Jeon for Gnea Research LLC
 
   Grbl is free software: you can redistribute it and/or modify
@@ -54,12 +54,16 @@ ISR_CODE void control_interrupt_handler (control_signals_t signals)
 // Executes user startup script, if stored.
 void system_execute_startup (char *line)
 {
-    uint_fast8_t n;
-    for (n = 0; n < N_STARTUP_LINE; n++) {
-        if (!(settings_read_startup_line(n, line)))
-            report_execute_startup_message(line, Status_SettingReadFail);
-        else if (line[0] != '\0')
-            report_execute_startup_message(line, gc_execute_block(line, NULL));
+    if(hal.eeprom.type != EEPROM_None) {
+
+        uint_fast8_t n;
+
+        for (n = 0; n < N_STARTUP_LINE; n++) {
+            if (!settings_read_startup_line(n, line))
+                report_execute_startup_message(line, Status_SettingReadFail);
+            else if (line[0] != '\0')
+                report_execute_startup_message(line, gc_execute_block(line, NULL));
+        }
     }
 }
 
@@ -392,43 +396,22 @@ void system_flag_wco_change ()
     sys.report.wco_counter = 0;
 }
 
-
 // Returns machine position of axis 'idx'. Must be sent a 'step' array.
 // NOTE: If motor steps and machine position are not in the same coordinate frame, this function
 //   serves as a central place to compute the transformation.
-inline static float system_convert_axis_steps_to_mpos (int32_t *steps, uint_fast8_t idx)
-{
-  #ifdef COREXY
-    return (float)(idx == X_AXIS ? system_convert_corexy_to_x_axis_steps(steps) : (idx == Y_AXIS ? system_convert_corexy_to_y_axis_steps(steps) : steps[idx])) / settings.steps_per_mm[idx];
-  #else
-    return steps[idx] / settings.steps_per_mm[idx];
-  #endif
-}
-
 
 void system_convert_array_steps_to_mpos (float *position, int32_t *steps)
 {
     uint_fast8_t idx = N_AXIS;
     do {
         idx--;
-        position[idx] = system_convert_axis_steps_to_mpos(steps, idx);
+#ifdef HAL_KINEMATICS
+        position[idx] = hal.kinematics.system_convert_axis_steps_to_mpos(steps, idx);
+#else
+        position[idx] = steps[idx] / settings.steps_per_mm[idx];
+#endif
     } while(idx);
 }
-
-
-// CoreXY calculation only. Returns x or y-axis "steps" based on CoreXY motor steps.
-#ifdef COREXY
-int32_t system_convert_corexy_to_x_axis_steps (int32_t *steps)
-{
-    return (steps[A_MOTOR] + steps[B_MOTOR]) >> 1;
-}
-
-int32_t system_convert_corexy_to_y_axis_steps (int32_t *steps)
-{
-    return (steps[A_MOTOR] - steps[B_MOTOR]) >> 1;
-}
-#endif
-
 
 // Checks and reports if target array exceeds machine travel limits. Returns true if check failed.
 bool system_check_travel_limits(float *target)

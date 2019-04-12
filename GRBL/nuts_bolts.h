@@ -2,7 +2,7 @@
   nuts_bolts.h - Header file for shared definitions, variables, and functions
   Part of Grbl
 
-  Copyright (c) 2017-2018 Terje Io
+  Copyright (c) 2017-2019 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -74,13 +74,6 @@
 #define AXES_BITMASK (X_AXIS_BIT|Y_AXIS_BIT|Z_AXIS_BIT|A_AXIS_BIT)
 #elif N_AXIS == 5
 #define AXES_BITMASK (X_AXIS_BIT|Y_AXIS_BIT|Z_AXIS_BIT|A_AXIS_BIT|B_AXIS_BIT)
-#endif
-
-// CoreXY motor assignments. DO NOT ALTER.
-// NOTE: If the A and B motor axis bindings are changed, this effects the CoreXY equations.
-#ifdef COREXY
-#define A_MOTOR X_AXIS // Must be X_AXIS
-#define B_MOTOR Y_AXIS // Must be Y_AXIS
 #endif
 
 typedef union {

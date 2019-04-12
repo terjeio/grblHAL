@@ -32,22 +32,16 @@
 #define eusciM(p) EUSCI_ ## p
 #define eusciINT(p) eusciI(p)
 #define eusciI(p) EUSCI ## p ## _IRQn
-#define eusciHANDLER(p) eusciH(p)
-#define eusciH(p) EUSCI ## p ## _IRQHandler
 
-#define ASCII_ETX  0x03
-#define ASCII_ACK  0x06
-#define ASCII_BS   0x08
-#define ASCII_LF   0x0A
-#define ASCII_CR   0x0D
-#define ASCII_XON  0x11
-#define ASCII_XOFF 0x13
-#define ASCII_NAK  0x15
-#define ASCII_EOF  0x1A
-#define ASCII_CAN  0x18
-#define ASCII_EM   0x19
-#define ASCII_DEL  0x7F
-#define ASCII_EOL  "\r\n"
+#define BS   0x08
+#define LF   0x0A
+#define CR   0x0D
+#define XON  0x11
+#define XOFF 0x13
+#define CAN  0x18
+#define EOF  0x1A
+#define DEL  0x7F
+#define EOL  "\r\n"
 
 #define XONOK (XON|0x80)
 #define XOFFOK (XOFF|0x80)
@@ -55,7 +49,7 @@
 #define RX_BUFFER_SIZE 1024     // must be a power of 2
 #define RX_BUFFER_HWM 900
 #define RX_BUFFER_LWM 300
-//#define RTS_PORT P1
+#define RTS_PORT P1
 #define RTS_PIN  4
 #define RTS_BIT (1<<RTS_PIN)
 //#define LINE_BUFFER_SIZE 20
@@ -65,7 +59,6 @@
 #define SERIAL_MOD A0
 #define SERIAL_MODULE eusci(SERIAL_MOD)
 #define SERIAL_MODULE_INT eusciINT(SERIAL_MOD)
-#define SERIAL_IRQHandler eusciHANDLER(SERIAL_MOD)
 #define SERIAL_PORT P1
 #define SERIAL_RX BIT2
 #define SERIAL_TX BIT3
@@ -76,7 +69,6 @@
 #define SERIAL2_MOD A2
 #define SERIAL2_MODULE eusci(SERIAL2_MOD)
 #define SERIAL2_MODULE_INT eusciINT(SERIAL2_MOD)
-#define SERIAL2_IRQHandler eusciHANDLER(SERIAL2_MOD)
 #define SERIAL2_PORT P3
 #define SERIAL2_RX BIT2
 #define SERIAL2_TX BIT3

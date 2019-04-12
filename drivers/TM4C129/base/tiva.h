@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include <time.h> // required by driverlib/hibernate.h below to stop warnings
+
 #include "inc/hw_gpio.h"
 #include "inc/hw_types.h"
 #include "inc/hw_ints.h"
@@ -23,6 +25,7 @@
 #include "driverlib/systick.h"
 #include "driverlib/ssi.h"
 #include "driverlib/flash.h"
+#include "driverlib/hibernate.h"
 
 //#include "driverlib/rom.h"
 //#include "driverlib/rom_map.h"

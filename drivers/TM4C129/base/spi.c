@@ -23,7 +23,7 @@
 
 #include "driver.h"
 
-#ifdef TRINAMIC_ENABLE
+#if TRINAMIC_ENABLE && !TRINAMIC_I2C
 
 #include "spi.h"
 

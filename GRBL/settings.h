@@ -2,7 +2,7 @@
   settings.h - eeprom configuration handling
   Part of Grbl
 
-  Copyright (c) 2017-2018 Terje Io
+  Copyright (c) 2017-2019 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -23,7 +23,6 @@
 #ifndef settings_h
 #define settings_h
 
-#include "grbl.h"
 #include "system.h"
 
 // Version of the persistent storage data. Will be used to migrate existing data from older versions of Grbl
@@ -60,6 +59,26 @@
 #define SETTING_INDEX_G59_3  N_COORDINATE_SYSTEM-1  // G59.3 position
 #endif
 #define SETTING_INDEX_G92    N_COORDINATE_SYSTEM+2  // Coordinate offset
+
+typedef enum {
+    SettingIndex_G54 = 0,
+    SettingIndex_G55,
+    SettingIndex_G56,
+    SettingIndex_G57,
+    SettingIndex_G58,
+    SettingIndex_G59,
+#if N_COORDINATE_SYSTEM >= 9
+    SettingIndex_G59_1,
+    SettingIndex_G59_2,
+    SettingIndex_G59_3,
+#endif
+    SettingIndex_G28,   // Home position 1
+    SettingIndex_G30,   // Home position 2
+    SettingIndex_G92,   // Coordinate offset
+    SettingIndex_NCoord
+} setting_coord_system_t;
+
+#define N_COORDINATE_SYSTEMS (SettingIndex_NCoord - 3)  // Number of supported work coordinate systems (from index 1)
 
 // Define Grbl axis settings numbering scheme. Starts at Setting_AxisSettingsBase, every INCREMENT, over N_SETTINGS.
 #define AXIS_N_SETTINGS          4
@@ -101,17 +120,15 @@ typedef enum {
     Setting_PWMMinValue = 35,
     Setting_PWMMaxValue = 36,
     Setting_StepperDeenergizeMask = 37,
-    Setting_SpindlePPR  = 38,
-    Setting_SpindlePGain  = 39,
-    Setting_SpindleIGain  = 40,
-    Setting_SpindleDGain  = 41,
+    Setting_SpindlePPR = 38,
+
     Setting_HomingLocateCycles = 43,
-    Setting_HomingCycle_1  = 44,
-    Setting_HomingCycle_2  = 45,
-    Setting_HomingCycle_3  = 46,
-    Setting_HomingCycle_4  = 47,
-    Setting_HomingCycle_5  = 48,
-    Setting_HomingCycle_6  = 49,
+    Setting_HomingCycle_1 = 44,
+    Setting_HomingCycle_2 = 45,
+    Setting_HomingCycle_3 = 46,
+    Setting_HomingCycle_4 = 47,
+    Setting_HomingCycle_5 = 48,
+    Setting_HomingCycle_6 = 49,
 // Optional driver implemented settings for jogging
     Setting_JogStepSpeed = 50,
     Setting_JogSlowSpeed = 51,
@@ -128,6 +145,25 @@ typedef enum {
     Setting_CheckLimitsAtInit = 65,
     Setting_HomingInitLock = 66,
     Settings_Stream = 70,
+// Optional settings for closed loop spindle speed control
+    Setting_SpindlePGain = 80,
+    Setting_SpindleIGain = 81,
+    Setting_SpindleDGain = 82,
+    Setting_SpindleDeadband = 83,
+    Setting_SpindleMaxError = 84,
+    Setting_SpindleIMaxError = 85,
+    Setting_SpindleDMaxError = 86,
+
+// Optional settings for closed loop spindle synchronized motion
+    Setting_PositionPGain = 90,
+    Setting_PositionIGain = 91,
+    Setting_PositionDGain = 92,
+    Setting_PositionDeadband = 93,
+    Setting_PositionMaxError = 94,
+    Setting_PositionIMaxError = 95,
+    Setting_PositionDMaxError = 96,
+//
+
     Setting_AxisSettingsBase = 100, // NOTE: Reserving settings values >= 100 for axis settings. Up to 255.
     Setting_AxisSettingsMax = 255
 } setting_type_t;
@@ -205,6 +241,17 @@ typedef struct {
 } parking_settings_t;
 
 typedef struct {
+    float p_gain;
+    float i_gain;
+    float d_gain;
+    float p_max_error;
+    float i_max_error;
+    float d_max_error;
+    float deadband;
+    float max_error;
+} pid_values_t;
+
+typedef struct {
     float rpm_max;
     float rpm_min;
     float pwm_freq;
@@ -212,13 +259,15 @@ typedef struct {
     float pwm_off_value;
     float pwm_min_value;
     float pwm_max_value;
-    float P_gain;
-    float I_gain;
-    float D_gain;
+    pid_values_t pid;
     uint16_t ppr; // Spindle encoder pulses per revolution
     spindle_state_t invert;
     bool disable_with_zero_speed;
 } spindle_settings_t;
+
+typedef struct {
+    pid_values_t pid;
+} position_pid_t; // Used for synchronized motion
 
 typedef union {
     uint8_t value;
@@ -290,6 +339,7 @@ typedef struct {
     homing_settings_t homing;
     limit_settings_t limits;
     parking_settings_t parking;
+    position_pid_t position; // Used for synchronized motion
 } settings_t;
 
 // Setting structs that may be used by driver

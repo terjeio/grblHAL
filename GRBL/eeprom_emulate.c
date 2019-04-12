@@ -167,7 +167,7 @@ static bool memcpy_from_ram_with_checksum (uint8_t *destination, uint32_t source
 
 //
 // Try to allocate RAM for EEPROM emulation and switch over to RAM based copy
-// Changes to RAM based copy wil be written to EEPROM when Grbl is in IDLE state
+// Changes to RAM based copy will be written to EEPROM when Grbl is in IDLE state
 // NOTE: enough free heap memory is required
 bool eeprom_emu_init()
 {

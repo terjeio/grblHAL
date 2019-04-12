@@ -23,6 +23,7 @@
 #include "driverlib/systick.h"
 #include "driverlib/ssi.h"
 #include "driverlib/flash.h"
+#include "driverlib/hibernate.h"
 
 //#include "driverlib/rom.h"
 //#include "driverlib/rom_map.h"

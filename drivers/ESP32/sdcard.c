@@ -206,7 +206,7 @@ static status_code_t sdcard_ls (char *buf)
 {
     char path[MAX_PATHLEN] = ""; // NB! also used as work area when recursing directories
 
-    return scan_dir(path, 10, buf) == FR_OK ? Status_OK : Status_SDFailedOpenDir;;
+    return scan_dir(path, 10, buf) == FR_OK ? Status_OK : Status_SDFailedOpenDir;
 }
 
 static void sdcard_end_job (void)

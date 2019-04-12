@@ -2,6 +2,7 @@
   planner.h - buffers movement commands and manages the acceleration profile plan
   Part of Grbl
 
+  Copyright (c) 2019 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -72,10 +73,8 @@ typedef struct {
 
     // Stored spindle speed data used by spindle overrides and resuming methods.
     spindle_t spindle;    // Block spindle speed. Copied from pl_line_data.
-    //    bool is_rpm_rate_adjusted;
 
-    // Message to be displayed when block is executed.
-    char *message;
+    char *message;                // Message to be displayed when block is executed.
 } plan_block_t;
 
 
@@ -88,6 +87,15 @@ typedef struct {
     char *message;              // Message to be displayed when block is executed.
 } plan_line_data_t;
 
+
+// Define planner variables
+typedef struct {
+  int32_t position[N_AXIS];         // The planner position of the tool in absolute steps. Kept separate
+                                    // from g-code position for movements requiring multiple line motions,
+                                    // i.e. arcs, canned cycles, and backlash compensation.
+  float previous_unit_vec[N_AXIS];  // Unit vector of previous path line segment
+  float previous_nominal_speed;     // Nominal speed of previous path line segment
+} planner_t;
 
 // Initialize and reset the motion plan subsystem
 void plan_reset(); // Reset all

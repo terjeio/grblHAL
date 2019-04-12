@@ -4,7 +4,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2018 Terje Io
+  Copyright (c) 2018-2019 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -77,7 +77,7 @@ static void (*delayCallback)(void) = 0;
 
 #endif
 
-static uint_fast16_t spindleSetSpeed (uint_fast16_t pwm_value);
+static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value);
 
 // Interrupt handler prototypes
 
@@ -162,18 +162,12 @@ inline static void stepperSetDirOutputs (axes_signals_t dir_outbits)
 // When delayed pulse the step register is written in the step delay interrupt handler
 static void stepperPulseStart (stepper_t *stepper)
 {
-    static uint_fast16_t current_pwm = 0;
-
     if(stepper->new_block) {
         stepper->new_block = false;
         stepperSetDirOutputs(stepper->dir_outbits);
     }
 
     if(stepper->step_outbits.value) {
-
-    	if(stepper->spindle_pwm != current_pwm)
-			current_pwm = spindleSetSpeed(stepper->spindle_pwm);
-
 		stepperSetStepOutputs(stepper->step_outbits);
 		PULSE_TIMER->TCR = 1;
     }
@@ -182,18 +176,12 @@ static void stepperPulseStart (stepper_t *stepper)
 // Sets stepper direction and pulse pins and starts a step pulse with and initial delay
 static void stepperPulseStartDelayed (stepper_t *stepper)
 {
-    static uint_fast16_t current_pwm = 0;
-
     if(stepper->new_block) {
         stepper->new_block = false;
         stepperSetDirOutputs(stepper->dir_outbits);
     }
 
     if(stepper->step_outbits.value) {
-
-		if(stepper->spindle_pwm != current_pwm)
-			current_pwm = spindleSetSpeed(stepper->spindle_pwm);
-
 		next_step_outbits = stepper->step_outbits; // Store out_bits
 		PULSE_TIMER->TCR = 1;
     }
@@ -279,77 +267,46 @@ bool probeGetState (void)
 
 // Static spindle (off, on cw & on ccw)
 
-inline static void spindleOff (void)
+inline static void spindle_off (void)
 {
     BITBAND_PERI(SPINDLE_ENABLE_PORT->FIOPIN, SPINDLE_ENABLE_PIN) = settings.spindle.invert.on;
 }
 
-inline static void spindleOn (void)
+inline static void spindle_on (void)
 {
     BITBAND_PERI(SPINDLE_ENABLE_PORT->FIOPIN, SPINDLE_ENABLE_PIN) = !settings.spindle.invert.on;
 }
 
-inline static void spindleDir (bool ccw)
+inline static void spindle_dir (bool ccw)
 {
     if(hal.driver_cap.spindle_dir)
     	BITBAND_PERI(SPINDLE_DIRECTION_PORT->FIOPIN, SPINDLE_DIRECTION_PIN) = ccw ^ settings.spindle.invert.ccw;
 }
 
 // Start or stop spindle
-static void spindleSetState (spindle_state_t state, float rpm, uint8_t speed_ovr)
+static void spindleSetState (spindle_state_t state, float rpm)
 {
     if (!state.on)
-        spindleOff();
+        spindle_off();
     else {
-        spindleDir(state.ccw);
-        spindleOn();
+        spindle_dir(state.ccw);
+        spindle_on();
     }
 }
 
 // Variable spindle control functions
 
-// Spindle speed to PWM conversion. Keep routine small and efficient.
-static uint_fast16_t spindleComputePWMValue (float rpm, uint8_t speed_ovr)
-{
-	uint_fast16_t pwm_value;
-
-    rpm *= (0.010f * speed_ovr); // Scale by spindle speed override value.
-    // Calculate PWM register value based on rpm max/min settings and programmed rpm.
-    if ((settings.spindle.rpm_min >= settings.spindle.rpm_max) || (rpm >= settings.spindle.rpm_max)) {
-        // No PWM range possible. Set simple on/off spindle control pin state.
-        sys.spindle_rpm = settings.spindle.rpm_max;
-        pwm_value = spindle_pwm.max_value - 1;
-    } else if (rpm <= settings.spindle.rpm_min) {
-        if (rpm == 0.0f) { // S0 disables spindle
-            sys.spindle_rpm = 0.0f;
-            pwm_value = spindle_pwm.off_value;
-        } else { // Set minimum PWM output
-            sys.spindle_rpm = settings.spindle.rpm_min;
-            pwm_value = spindle_pwm.min_value;
-        }
-    } else {
-        // Compute intermediate PWM value with linear spindle speed model.
-        // NOTE: A nonlinear model could be installed here, if required, but keep it VERY light-weight.
-        sys.spindle_rpm = rpm;
-        pwm_value = (uint_fast16_t)floorf((rpm - settings.spindle.rpm_min) * spindle_pwm.pwm_gradient) + spindle_pwm.min_value;
-        if(pwm_value >= spindle_pwm.max_value)
-            pwm_value = spindle_pwm.max_value - 1;
-    }
-
-    return pwm_value;
-}
-
 // Sets spindle speed
-static uint_fast16_t spindleSetSpeed (uint_fast16_t pwm_value)
+static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
 {
-    if (pwm_value == hal.spindle_pwm_off) {
+    if (pwm_value == spindle_pwm.off_value) {
         pwmEnabled = false;
         if(settings.spindle.disable_with_zero_speed)
-            spindleOff();
+            spindle_off();
         pwm_disable(&SPINDLE_PWM_CHANNEL); // Set PWM output low
     } else {
         if(!pwmEnabled)
-            spindleOn();
+            spindle_on();
         pwmEnabled = true;
         pwm_set_period(pwm_value);
         pwm_enable(&SPINDLE_PWM_CHANNEL);
@@ -358,18 +315,22 @@ static uint_fast16_t spindleSetSpeed (uint_fast16_t pwm_value)
     return pwm_value;
 }
 
+static void spindleUpdateRPM (float rpm)
+{
+    spindle_set_speed(spindle_compute_pwm_value(&spindle_pwm, rpm, false));
+}
+
 // Start or stop spindle
-static void spindleSetStateVariable (spindle_state_t state, float rpm, uint8_t speed_ovr)
+static void spindleSetStateVariable (spindle_state_t state, float rpm)
 {
     if (!state.on || rpm == 0.0f) {
-        spindleSetSpeed(hal.spindle_pwm_off);
-        spindleOff();
+        spindle_set_speed(spindle_pwm.off_value);
+        spindle_off();
     } else {
-
         if(!hal.driver_cap.spindle_dir)
-            spindleDir(state.ccw);
+            spindle_dir(state.ccw);
 
-        spindleSetSpeed(spindleComputePWMValue(rpm, speed_ovr));
+        spindle_set_speed(spindle_compute_pwm_value(&spindle_pwm, rpm, false));
     }
 }
 
@@ -447,11 +408,7 @@ void gpio_pinmode (LPC_GPIO_TypeDef *port, uint8_t pin, uint8_t pinmode)
 // Configures peripherals when settings are initialized or changed
 void settings_changed (settings_t *settings)
 {
-    spindle_pwm.period = (uint32_t)(12000000 / settings->spindle.pwm_freq);
-    spindle_pwm.off_value = (uint32_t)(spindle_pwm.period * settings->spindle.pwm_off_value / 100.0f);
-    spindle_pwm.min_value = (uint32_t)(spindle_pwm.period * settings->spindle.pwm_min_value / 100.0f);
-    spindle_pwm.max_value = (uint32_t)(spindle_pwm.period * settings->spindle.pwm_max_value / 100.0f);
-    spindle_pwm.pwm_gradient = (float)(spindle_pwm.max_value - spindle_pwm.min_value) / (settings->spindle.rpm_max - settings->spindle.rpm_min);
+	hal.driver_cap.variable_spindle = spindle_precompute_pwm_values(&spindle_pwm, 12000000UL);
 
 #if (STEP_OUTMODE == GPIO_MAP) || (DIRECTION_OUTMODE == GPIO_MAP)
     uint8_t i;
@@ -467,14 +424,15 @@ void settings_changed (settings_t *settings)
         dir_outmap[i] = c_dir_outmap[i] ^ c_dir_outmap[settings->dir_invert.value];
 #endif
 
-    hal.spindle_pwm_off = spindle_pwm.off_value;
-
     if(IOInitDone) {
 
         stepperEnable(settings->steppers.deenergize);
 
-        if(hal.driver_cap.variable_spindle)
+        if(hal.driver_cap.variable_spindle) {
             pwm_init(&SPINDLE_PWM_CHANNEL, SPINDLE_PWM_USE_PRIMARY_PIN, SPINDLE_PWM_USE_SECONDARY_PIN, spindle_pwm.period, 0);
+            hal.spindle_set_state = spindleSetStateVariable;
+        } else
+        	hal.spindle_set_state = spindleSetState;
 
         if(hal.driver_cap.step_pulse_delay && settings->steppers.pulse_delay_microseconds) {
             hal.stepper_pulse_start = &stepperPulseStartDelayed;
@@ -626,9 +584,6 @@ static bool driver_setup (settings_t *settings)
     SPINDLE_ENABLE_PORT->FIODIR |= SPINDLE_ENABLE_BIT;
     SPINDLE_DIRECTION_PORT->FIODIR |= SPINDLE_DIRECTION_BIT; // Configure as output pin.
 
-    if(!hal.driver_cap.variable_spindle)
-        hal.spindle_set_state = &spindleSetState;
-
  // Coolant init
 
     COOLANT_FLOOD_PORT->FIODIR |= COOLANT_FLOOD_BIT;
@@ -644,8 +599,8 @@ static bool driver_setup (settings_t *settings)
 
     settings_changed(settings);
 
-    spindleSetState((spindle_state_t){0}, spindle_pwm.off_value, DEFAULT_SPINDLE_RPM_OVERRIDE);
-    coolantSetState((coolant_state_t){0});
+    hal.spindle_set_state((spindle_state_t){0}, 0.0f);
+    hal.coolant_set_state((coolant_state_t){0});
     stepperSetDirOutputs((axes_signals_t){0});
 
     return IOInitDone;
@@ -690,10 +645,9 @@ bool driver_init (void) {
     hal.probe_get_state = probeGetState;
     hal.probe_configure_invert_mask = probeConfigureInvertMask;
 
-    hal.spindle_set_state = spindleSetStateVariable;
+    hal.spindle_set_state = spindleSetState;
     hal.spindle_get_state = spindleGetState;
-    hal.spindle_set_speed = spindleSetSpeed;
-    hal.spindle_compute_pwm_value = spindleComputePWMValue;
+    hal.spindle_update_rpm = spindleUpdateRPM;
 
     hal.system_control_get_state = systemGetState;
 
