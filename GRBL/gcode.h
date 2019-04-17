@@ -398,12 +398,19 @@ typedef struct {
     uint8_t tool;
 } tool_data_t;
 
+// Data used for Constant Surface Speed Mode calculations
 typedef struct {
-    float rpm;                  // RPM
-    uint_fast8_t axis;          // Linear (tool) axis for Constant Surface Speed Mode
-    float surface_speed;        // Millimeters/min in Constant Surface Speed mode
-    float target_rpm;           // Target RPM at end of movement, used for calulating CSS data
-    float max_rpm;              // Maximum spindle RPM in Constant Surface Speed Mode
+    float surface_speed;    // Surface speed in millimeters/min
+    float target_rpm;       // Target RPM at end of movement
+    float max_rpm;          // Maximum spindle RPM
+    float tool_offset;      // Tool offset
+    uint_fast8_t axis;      // Linear (tool) axis
+    bool active;
+} css_data_t;
+
+typedef struct {
+    float rpm;      // RPM
+    css_data_t css; // Data used for Constant Surface Speed Mode calculations
 } spindle_t;
 
 typedef struct {

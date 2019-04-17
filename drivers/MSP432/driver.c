@@ -36,6 +36,12 @@
 #include "atc.h"
 #endif
 
+typedef enum {
+    PIDState_Disabled = 0,
+    PIDState_Pending,
+    PIDState_Active,
+} pid_state_t;
+
 typedef struct {
     pid_values_t cfg;
     float deadband;
@@ -61,6 +67,7 @@ typedef struct {
     volatile uint16_t pulse_counter_last;   // Encoder pulse counter at last trigger
     volatile uint16_t pulse_counter_index;  // Encoder pulse counter at last index pulse
     bool error;                             // Set when last encoder pulse count did not match at last index
+    pid_state_t pid_state;
     pid_t pid;                              // PID data for RPM
 } spindle_encoder_t;
 
@@ -553,6 +560,7 @@ static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
         if(settings.spindle.disable_with_zero_speed)
             spindle_off();
         SPINDLE_PWM_TIMER->CCTL[2] = settings.spindle.invert.pwm ? TIMER_A_CCTLN_OUT : 0; // Set PWM output according to invert setting
+        spindle_encoder.pid.error = 0.0f;
     } else {
         if(!pwmEnabled)
             spindle_on();
@@ -580,16 +588,23 @@ static void spindleSetStateVariable (spindle_state_t state, float rpm)
     if (!state.on || rpm == 0.0f) {
         spindle_set_speed(spindle_pwm.off_value);
         spindle_off();
+        if(ms_count == 0)
+            SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
+        spindle_encoder.pid_state = PIDState_Disabled;
     } else {
         spindle_dir(state.ccw);
         if(spindle_data.rpm_programmed == 0.0f) {
-            pid_count = 0;
+            if(spindle_encoder.pid.enabled) {
+                pid_count = 0;
+                spindle_encoder.pid_state = PIDState_Pending;
+                SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
+            }
             spindle_encoder.pid.error = 0.0f;
             spindle_encoder.pid.i_error = 0.0f;
             spindle_encoder.pid.d_error = 0.0f;
             spindle_encoder.pid.sample_rate_prev = 1.0f;
         }
-#ifdef PID_LOG
+#ifdef sPID_LOG
         sys.pid_log.idx = 0;
 #endif
         spindle_set_speed(spindle_compute_pwm_value(&spindle_pwm, rpm + spindle_encoder.pid.error, spindle_encoder.pid.error != 0.0f));
@@ -646,9 +661,9 @@ static inline void spindle_rpm_pid (void)
     float rpm = spindle_calc_rpm();
     float error = pid(&spindle_encoder.pid, spindle_data.rpm_programmed, rpm, 1.0);
 
-#ifdef PID_LOG
+#ifdef sPID_LOG
     if(sys.pid_log.idx < PID_LOG) {
-        sys.pid_log.target[sys.pid_log.idx] = pid_err;
+        sys.pid_log.target[sys.pid_log.idx] = error;
         sys.pid_log.actual[sys.pid_log.idx] = rpm;
         sys.pid_log.idx++;
     }
@@ -661,10 +676,17 @@ static inline void spindle_rpm_pid (void)
 
 static void spindleDataReset (void)
 {
+    while(spindleLock);
+
+    uint32_t systick_state = SysTick->CTRL;
+
+    SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
+
     uint32_t index_count = spindle_data.index_count + 2;
 
 //    if(spindleGetData(SpindleData_RPM).rpm > 0.0f) // wait for index pulse if running
 //        while(index_count != spindle_data.index_count);
+    spindle_encoder.pid_state = PIDState_Pending;
 
     RPM_TIMER->LOAD = 0; // Reload RPM timer
     RPM_COUNTER->CTL = 0;
@@ -673,11 +695,13 @@ static void spindleDataReset (void)
     spindle_encoder.pulse_counter_index = 0;
     spindle_encoder.pulse_counter_last = 0;
     spindle_encoder.tpp = 0;
-
     spindle_data.pulse_count = 0;
     spindle_data.index_count = 0;
     RPM_COUNTER->CCR[0] = spindle_encoder.pulse_counter_trigger;
     RPM_COUNTER->CTL = TIMER_A_CTL_MC__CONTINUOUS|TIMER_A_CTL_CLR;
+
+    if(systick_state & SysTick_CTRL_ENABLE_Msk)
+        SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
 }
 
 // Returns spindle state in a spindle_state_t variable
@@ -686,9 +710,13 @@ static spindle_state_t spindleGetState (void)
     float rpm = spindleGetData(SpindleData_RPM).rpm;
     spindle_state_t state = {0};
 
-    state.on = pwmEnabled || (SPINDLE_ENABLE_PORT->IN & SPINDLE_ENABLE_BIT) != 0;
-    state.ccw = hal.driver_cap.spindle_dir && (SPINDLE_DIRECTION_PORT->IN & SPINDLE_DIRECTION_BIT) != 0;
+//    state.on = (SPINDLE_ENABLE_PORT->IN & SPINDLE_ENABLE_BIT) != 0;
+    state.on = BITBAND_PERI(SPINDLE_ENABLE_PORT->IN, SPINDLE_ENABLE_PIN);
+    if(hal.driver_cap.spindle_dir)
+        state.ccw = BITBAND_PERI(SPINDLE_DIRECTION_PORT->IN, SPINDLE_DIRECTION_PIN);
     state.value ^= settings.spindle.invert.mask;
+    if(pwmEnabled)
+    	state.on = On;
     state.at_speed = rpm >= spindle_data.rpm_low_limit && rpm <= spindle_data.rpm_high_limit;
 
     return state;
@@ -1397,18 +1425,25 @@ void SysTick_Handler (void)
 {
     static uint32_t spid = SPINDLE_PID_SAMPLE_RATE;
 
-    if(spindle_data.rpm_programmed > 0.0f) {
-        if(pid_count > 500) {
+    switch(spindle_encoder.pid_state) {
+
+        case PIDState_Pending:
+            if(pid_count < 500)
+                pid_count++;
+            else if(spindle_data.index_count > 2)
+                spindle_encoder.pid_state = PIDState_Active;
+            break;
+
+        case PIDState_Active:
             if(--spid == 0) {
                 spindle_rpm_pid();
                 spid = SPINDLE_PID_SAMPLE_RATE;
             }
-        } else
-            pid_count++;
+            break;
     }
 
     if(ms_count && !(--ms_count)) {
-        if(!spindle_encoder.pid.enabled)
+        if(spindle_encoder.pid_state == PIDState_Disabled)
             SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
         if(delayCallback) {
             delayCallback();

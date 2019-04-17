@@ -64,7 +64,7 @@ $34=0.
 $35=0.
 $36=100.
 $38=100
-$39=1.
+$39=0
 $40=0.
 $41=100.
 $43=1
@@ -336,11 +336,9 @@ Controls which axes to disable when grbl is idle, may be useful in a mill where 
 
 #### $38 - Spindle encoder pulses per revolution
 
-#### $39 - Spindle PID loop P-gain
+#### $39 - Lathe mode, boolean
 
-#### $40 - Spindle PID loop I-gain
-
-#### $41 - Spindle PID loop D-gain
+When enabled, Grbl will allow the use of `G7`, `G8`, `G96` and `G97` commands. 
 
 #### $43 - Homing cycles
 
@@ -363,6 +361,24 @@ Mask, specifies which axes to home in each cycle
 #### $50 Jogging distance, step mode
 #### $50 Jogging distance, slow mode
 #### $50 Jogging distance, fast mode
+
+#### $80 - Spindle speed PID loop P-gain
+
+A nonzero value for this and the $38 setting enables closed loop spindle speed control.
+
+#### $81 - Spindle speed PID loop I-gain
+
+#### $82 - Spindle speed PID loop D-gain
+
+#### $90 - Spindle sync PID loop P-gain
+
+A nonzero value for this and the $38 setting enables spindle synchronized motion \(`G33`\).
+
+#### $91 - Spindle sync PID loop I-gain
+
+#### $92 - Spindle sync PID loop D-gain
+
+Note: error 
 
 ### End driver specific settings
 

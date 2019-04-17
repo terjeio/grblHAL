@@ -236,7 +236,7 @@ void mc_canned_drill (motion_mode_t motion, float *target, plan_line_data_t *pl_
                 mc_dwell(canned->dwell);
 
             if(canned->spindle_off)
-                spindle_stop();
+                hal.spindle_set_state((spindle_state_t){0}, 0.0f);
 
             // rapid retract
             switch(motion) {
@@ -280,6 +280,14 @@ void mc_canned_drill (motion_mode_t motion, float *target, plan_line_data_t *pl_
     }
 }
 
+// G76 canned cycle for threading
+// G76 P- Z- I- J- R- K- Q- H- E- L-
+// P - picth, Z - final position, I - thread peak, J - initial depth, K - full depth
+// R - depth regression, Q - compound slide angle, H - spring passes, E - taper, L - taper end
+void mc_thread (float *target, plan_line_data_t *pl_data)
+{
+
+}
 
 // Sets up valid jog motion received from g-code parser, checks for soft-limits, and executes the jog.
 status_code_t mc_jog_execute (plan_line_data_t *pl_data, parser_block_t *gc_block)
@@ -480,7 +488,7 @@ ISR_CODE void mc_reset ()
         system_set_exec_state_flag(EXEC_RESET);
 
         // Kill spindle and coolant.
-        spindle_stop();
+        hal.spindle_set_state((spindle_state_t){0}, 0.0f);
         hal.coolant_set_state((coolant_state_t){0});
 
         if(hal.driver_reset)

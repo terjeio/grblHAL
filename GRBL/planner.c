@@ -362,14 +362,21 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
 
     } while(idx);
 
-    // Calculate RPM to be used for Constant Surface Speed calculations
+    // Calculate RPMs to be used for Constant Surface Speed calculations
     if(block->condition.is_rpm_pos_adjusted) {
-        block->spindle.rpm = block->spindle.surface_speed / (float)(position_steps[block->spindle.axis] / settings.steps_per_mm[block->spindle.axis] * 2.0f * M_PI);
-        if(block->spindle.rpm > block->spindle.max_rpm)
-            block->spindle.rpm = block->spindle.max_rpm;
-        block->spindle.target_rpm = block->spindle.surface_speed / (target[block->spindle.axis] * 2.0f * M_PI);
-        if(block->spindle.target_rpm > block->spindle.max_rpm)
-            block->spindle.target_rpm = block->spindle.max_rpm;
+        float pos;
+        if((pos = (float)position_steps[block->spindle.css.axis] / settings.steps_per_mm[block->spindle.css.axis] - block->spindle.css.tool_offset) > 0.0f) {
+            block->spindle.rpm = block->spindle.css.surface_speed / (pos * 2.0f * M_PI);
+            if(block->spindle.rpm > block->spindle.css.max_rpm)
+                block->spindle.rpm = block->spindle.css.max_rpm;
+        } else
+            block->spindle.rpm = block->spindle.css.max_rpm;
+        if((pos = target[block->spindle.css.axis] - block->spindle.css.tool_offset) > 0.0f) {
+            block->spindle.css.target_rpm = block->spindle.css.surface_speed / (pos * 2.0f * M_PI);
+            if(block->spindle.css.target_rpm > block->spindle.css.max_rpm)
+                block->spindle.css.target_rpm = block->spindle.css.max_rpm;
+        } else
+            block->spindle.css.target_rpm = block->spindle.css.max_rpm;
     }
 
     // Bail if this is a zero-length block. Highly unlikely to occur.

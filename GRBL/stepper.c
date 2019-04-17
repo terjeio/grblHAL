@@ -316,7 +316,7 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
             st_go_idle();
             // Ensure pwm is set properly upon completion of rate-controlled motion.
             if (st.exec_block->dynamic_rpm && settings.flags.laser_mode)
-                spindle_stop();
+                hal.spindle_set_state((spindle_state_t){0}, 0.0f);
 
             system_set_exec_state_flag(EXEC_CYCLE_COMPLETE); // Flag main program for cycle complete
 
@@ -675,7 +675,7 @@ void st_prep_buffer()
                     prep.maximum_speed = prep.exit_speed;
                 }
             }
-            sys.step_control.update_spindle_rpm = On; // Force update whenever updating block.
+            sys.step_control.update_spindle_rpm = On; // Force update whenever updating block. TODO: On -> !pl_block->condition.rapid_motion
         }
 
         // Initialize new segment
@@ -803,19 +803,16 @@ void st_prep_buffer()
                                                             ? pl_block->spindle.rpm * prep.current_speed * prep.inv_feedrate
                                                             : pl_block->spindle.rpm, sys.override.spindle_rpm);
 
-               if(pl_block->condition.is_rpm_pos_adjusted) {
+                if(pl_block->condition.is_rpm_pos_adjusted) {
                     float npos = (float)(pl_block->step_event_count - prep.steps_remaining) / (float)pl_block->step_event_count;
-                    prep.current_spindle_rpm += (spindle_set_rpm(pl_block->spindle.target_rpm, sys.override.spindle_rpm) -
+                    prep.current_spindle_rpm += (spindle_set_rpm(pl_block->spindle.css.target_rpm, sys.override.spindle_rpm) -
                                                     prep.current_spindle_rpm) * npos;
-               }
-
+                }
             } else {
                 sys.spindle_rpm = 0.0f;
                 prep.current_spindle_rpm = 0.0f;
             }
-// TODO: Fix the code so that RPM updates only is done on changes
-//            prep_segment->update_rpm = prep.current_spindle_rpm != sys.spindle_rpm;
-//            prep.current_spindle_rpm = sys.spindle_rpm;
+// TODO: Fix so that RPM updates only is done on changes
             prep_segment->update_rpm = true;
             sys.step_control.update_spindle_rpm = Off;
         }

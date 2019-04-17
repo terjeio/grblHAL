@@ -353,7 +353,7 @@ bool protocol_exec_rt_system ()
             // Kill spindle and coolant. TODO: Check Mach3 behaviour
             gc_state.modal.coolant.value = 0;
             gc_state.modal.spindle.value = 0;
-            spindle_stop();
+            hal.spindle_set_state((spindle_state_t){0}, 0.0f);
             hal.coolant_set_state(gc_state.modal.coolant);
 
             if(hal.driver_reset)

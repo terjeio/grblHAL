@@ -107,7 +107,7 @@ void gc_init()
 
     // Load default override status
     gc_state.modal.override_ctrl = sys.override.control;
-    gc_state.spindle.max_rpm = settings.spindle.rpm_max; // default max speed for CSS mode
+    gc_state.spindle.css.max_rpm = settings.spindle.rpm_max; // default max speed for CSS mode
 
     set_scaling(1.0f);
 
@@ -115,6 +115,8 @@ void gc_init()
     if (!settings_read_coord_data(gc_state.modal.coord_system.idx, &gc_state.modal.coord_system.xyz))
         hal.report.status_message(Status_SettingReadFail);
 
+//    if(settings.flags.lathe_mode)
+//        gc_state.modal.plane_select = PlaneSelect_ZX;
 }
 
 
@@ -220,10 +222,13 @@ status_code_t gc_execute_block(char *block, char *message)
             // Determine 'G' command and its modal group
                 switch(int_value) {
 
-              //      case 7: case 8:
-              //          word_bit.group = ModalGroup_G15;
-              //          gc_block.modal.diameter_mode = int_value == 7; TODO: find specs for implementation, only affects X calculation? reporting? current position?
-              //          break;
+                    case 7: case 8:
+                        if(settings.flags.lathe_mode) {
+                            word_bit.group = ModalGroup_G15;
+                            gc_block.modal.diameter_mode = int_value == 7; // TODO: find specs for implementation, only affects X calculation? reporting? current position?
+                        } else
+                            FAIL(Status_GcodeUnsupportedCommand); // [G7 & G8 not supported]
+                        break;
 
                     case 10: case 28: case 30: case 92:
                         // Check for G10/28/30/92 being called with G0/1/2/3/38 on same block.
@@ -360,7 +365,6 @@ status_code_t gc_execute_block(char *block, char *message)
                         break;
 
                     case 54: case 55: case 56: case 57: case 58: case 59:
-                        // NOTE: G59.x are not supported. (But their int_values would be 60, 61, and 62.)
                         word_bit.group = ModalGroup_G12;
                         gc_block.modal.coord_system.idx = int_value - 54; // Shift to array indexing.
 #if N_COORDINATE_SYSTEM > 6
@@ -379,7 +383,7 @@ status_code_t gc_execute_block(char *block, char *message)
                         break;
 
                     case 96: case 97:
-                        if(hal.driver_cap.variable_spindle) {
+                        if(settings.flags.lathe_mode && hal.driver_cap.variable_spindle) {
                             word_bit.group = ModalGroup_G14;
                             gc_block.modal.spindle_rpm_mode = (spindle_rpm_mode_t)((int_value - 96) ^ 1);
                         } else
@@ -779,17 +783,17 @@ status_code_t gc_execute_block(char *block, char *message)
                 FAIL(Status_GcodeValueWordMissing);
     // see below!! gc_block.values.s *= (gc_block.modal.units_imperial ? MM_PER_INCH * 12.0f : 1000.0f); // convert surface speed to mm/min
             if (bit_istrue(value_words, bit(Word_D))) {
-                gc_state.spindle.max_rpm = min(gc_block.values.d, settings.spindle.rpm_max);
+                gc_state.spindle.css.max_rpm = min(gc_block.values.d, settings.spindle.rpm_max);
                 bit_false(value_words, bit(Word_D));
             } else
-                gc_state.spindle.max_rpm = settings.spindle.rpm_max;
+                gc_state.spindle.css.max_rpm = settings.spindle.rpm_max;
         } else if(gc_state.modal.spindle_rpm_mode == SpindleSpeedMode_CSS)
             gc_state.spindle.rpm = sys.spindle_rpm; // Is it correct to restore latest spindle RPM here?
         gc_state.modal.spindle_rpm_mode = gc_block.modal.spindle_rpm_mode;
     }
 
     if (bit_isfalse(value_words, bit(Word_S)))
-        gc_block.values.s = gc_state.modal.spindle_rpm_mode == SpindleSpeedMode_RPM ? gc_state.spindle.rpm : gc_state.spindle.surface_speed;
+        gc_block.values.s = gc_state.modal.spindle_rpm_mode == SpindleSpeedMode_RPM ? gc_state.spindle.rpm : gc_state.spindle.css.surface_speed;
     else if(gc_state.modal.spindle_rpm_mode == SpindleSpeedMode_CSS)
         // Unsure what to do about S values when in SpindleSpeedMode_CSS - ignore? For now use it to (re)calculate surface speed.
         // Reinsert commented out code above if this is removed!!
@@ -884,6 +888,12 @@ status_code_t gc_execute_block(char *block, char *message)
         if (bit_istrue(axis_words, bit(--idx)))
             gc_block.values.xyz[idx] *= MM_PER_INCH;
     } while(idx);
+
+    if (bit_istrue(command_words, bit(ModalGroup_G15)))
+        gc_state.modal.diameter_mode = gc_block.modal.diameter_mode;
+
+    if(gc_state.modal.diameter_mode && bit_istrue(axis_words, bit(X_AXIS)))
+        gc_block.values.xyz[X_AXIS] /= 2.0f;
 
     // Scale axis words if commanded
     if(axis_command == AxisCommand_Scaling) {
@@ -1630,14 +1640,21 @@ status_code_t gc_execute_block(char *block, char *message)
     // [4. Set spindle speed ]:
 
     if(gc_state.modal.spindle_rpm_mode == SpindleSpeedMode_CSS) {
-        gc_state.spindle.surface_speed = gc_block.values.s;
+        gc_state.spindle.css.surface_speed = gc_block.values.s;
         if((plan_data.condition.is_rpm_pos_adjusted = gc_block.modal.motion != MotionMode_None && gc_block.modal.motion != MotionMode_Seek)) {
-            plan_data.spindle.surface_speed = gc_state.spindle.surface_speed;
-            gc_state.spindle.axis = plane.axis_0;
-            gc_block.values.s = min(gc_state.spindle.max_rpm, gc_state.spindle.surface_speed / (gc_state.position[gc_state.spindle.axis] * 2.0f * M_PI));
+            gc_state.spindle.css.active = true;
+            gc_state.spindle.css.axis = plane.axis_1;
+            gc_state.spindle.css.tool_offset = gc_state.modal.coord_system.xyz[gc_state.spindle.css.axis] + gc_state.g92_coord_offset[gc_state.spindle.css.axis] + gc_state.tool_length_offset[gc_state.spindle.css.axis];
+            float pos = gc_state.position[gc_state.spindle.css.axis] - gc_state.spindle.css.tool_offset;
+            gc_block.values.s = pos <= 0.0f ? gc_state.spindle.css.max_rpm : min(gc_state.spindle.css.max_rpm, gc_state.spindle.css.surface_speed / (pos * 2.0f * M_PI));
             gc_parser_flags.spindle_force_sync = On;
-        } else
-            gc_block.values.s = sys.spindle_rpm; // Keep current RPM for rapids
+        } else {
+            if(gc_state.spindle.css.active) {
+                gc_state.spindle.css.active = false;
+                protocol_buffer_synchronize(); // Empty planner buffer to ensure we get RPM at end of last CSS motion
+            }
+            gc_block.values.s = sys.spindle_rpm; // Keep current RPM
+        }
     }
 
     if ((gc_state.spindle.rpm != gc_block.values.s) || gc_parser_flags.spindle_force_sync) {
@@ -1938,6 +1955,8 @@ status_code_t gc_execute_block(char *block, char *message)
             gc_state.modal.motion = MotionMode_Linear;
             gc_block.modal.canned_cycle_active = false;
             gc_state.modal.plane_select = PlaneSelect_XY;
+//            gc_state.modal.plane_select = settings.flags.lathe_mode ? PlaneSelect_ZX : PlaneSelect_XY;
+//            gc_state.modal.spindle_rpm_mode = SpindleSpeedMode_RPM;
             gc_state.modal.distance_incremental = false;
             gc_state.modal.feed_mode = FeedMode_UnitsPerMin;
 // TODO: check           gc_state.distance_per_rev = 0.0f;
@@ -1968,8 +1987,9 @@ status_code_t gc_execute_block(char *block, char *message)
                 if (!(settings_read_coord_data(gc_state.modal.coord_system.idx, &gc_state.modal.coord_system.xyz)))
                     FAIL(Status_SettingReadFail);
                 system_flag_wco_change(); // Set to refresh immediately just in case something altered.
-                spindle_stop();
+                hal.spindle_set_state((spindle_state_t){0}, 0.0f);
                 hal.coolant_set_state((coolant_state_t){0});
+                sys.report.override_counter = -1; // Set to report change immediately
             }
             hal.report.feedback_message(Message_ProgramEnd);
         }
@@ -1982,7 +2002,6 @@ status_code_t gc_execute_block(char *block, char *message)
             protocol_buffer_synchronize(); // Ensure user defined mcode is executed when specified in program.
 
         hal.driver_mcode_execute(sys.state, &gc_block);
-
     }
 
     // TODO: % to denote start of program.

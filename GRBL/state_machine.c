@@ -295,7 +295,7 @@ static void state_await_hold (uint_fast16_t rt_exec)
         switch (sys.state) {
 
             case STATE_TOOL_CHANGE:
-                spindle_stop(); // De-energize
+                hal.spindle_set_state((spindle_state_t){0}, 0.0f); // De-energize
                 hal.coolant_set_state((coolant_state_t){0}); // De-energize
                 break;
 
@@ -339,12 +339,12 @@ static void state_await_hold (uint_fast16_t rt_exec)
                     } else {
                         // Parking motion not possible. Just disable the spindle and coolant.
                         // NOTE: Laser mode does not start a parking motion to ensure the laser stops immediately.
-                        spindle_stop(); // De-energize
+                        hal.spindle_set_state((spindle_state_t){0}, 0.0f); // De-energize
                         hal.coolant_set_state((coolant_state_t){0});     // De-energize
                         sys.parking_state = Parking_DoorAjar;
                     }
                 } else {
-                    spindle_stop(); // De-energize
+                    hal.spindle_set_state((spindle_state_t){0}, 0.0f); // De-energize
                     hal.coolant_set_state((coolant_state_t){0}); // De-energize
                     sys.parking_state = Parking_DoorAjar;
                 }
@@ -357,7 +357,7 @@ static void state_await_hold (uint_fast16_t rt_exec)
                 if (sys.override.spindle_stop.initiate) {
                     sys.override.spindle_stop.value = 0; // Clear stop override state
                     if (gc_state.modal.spindle.on) {
-                        spindle_stop(); // De-energize
+                        hal.spindle_set_state((spindle_state_t){0}, 0.0f); // De-energize
                         sys.override.spindle_stop.enabled = On; // Set stop override state to enabled, if de-energized.
                     }
                 }
@@ -468,7 +468,7 @@ static void state_await_waypoint_retract (uint_fast16_t rt_exec)
         park.plan_data.condition.coolant.value = 0;
         park.plan_data.condition.spindle.value = 0;
         park.plan_data.spindle.rpm = 0.0f;
-        spindle_stop(); // De-energize
+        hal.spindle_set_state((spindle_state_t){0}, 0.0f); // De-energize
         hal.coolant_set_state((coolant_state_t){0}); // De-energize
 
         stateHandler = state_await_resume;

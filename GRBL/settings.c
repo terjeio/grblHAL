@@ -35,6 +35,7 @@ const settings_t defaults = {
 
     .flags.report_inches = DEFAULT_REPORT_INCHES,
     .flags.laser_mode = DEFAULT_LASER_MODE,
+    .flags.lathe_mode = DEFAULT_LATHE_MODE,
     .flags.invert_probe_pin = DEFAULT_INVERT_PROBE_PIN,
     .flags.sleep_enable = DEFAULT_SLEEP_ENABLE,
     .flags.disable_laser_during_hold = DEFAULT_DISABLE_LASER_DURING_HOLD,
@@ -222,7 +223,7 @@ bool settings_write_tool_data (uint8_t idx, tool_data_t *tool_data)
     assert(idx > 0 && idx <= N_TOOLS); // NOTE: idx 0 is a non-persistent entry for tools not in tool table
 
     idx--;
-    if(hal.eeprom.type != EEPROM_None) {
+    if(hal.eeprom.type != EEPROM_None)
         hal.eeprom.memcpy_to_with_checksum(EEPROM_ADDR_TOOL_TABLE + idx * (sizeof(tool_data_t) + 1), (uint8_t *)tool_data, sizeof(tool_data_t));
 
     return true;
@@ -603,6 +604,10 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
 
             case Setting_SpindlePPR:
                 settings.spindle.ppr = int_value;
+                break;
+
+            case Setting_LatheMode:
+                settings.flags.lathe_mode = int_value != 0;
                 break;
 
             case Setting_SpindlePGain:

@@ -35,6 +35,7 @@ $-Code	 Setting	 Units	Datatype	Data format	Setting Description	Min	Max
 36	Spindle PWM max value	percent	float	##0.0	Spindle PWM max value in percent (duty cycle).		100
 37	Steppers deenergize 	mask	bitfield	axes	Specifies which steppers not to disable when stopped.		
 38	Spindle PPR	pulses	integer	###0	Spindle encoder pulses per revolution		
+39	Lathe-mode enable	boolean	bool		Enables lathe mode: allows use of G7, G8, G96 and G97.   		
 43	Homing passes		integer	##9	Number of homing passes. Minimum 1, maximum 128.	1	128
 44	Axes homing, first pass	mask	bitfield	axes	Axes to home in first pass		
 45	Axes homing, second pass	mask	bitfield	axes	Axes to home in second pass		

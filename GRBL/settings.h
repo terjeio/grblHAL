@@ -121,6 +121,7 @@ typedef enum {
     Setting_PWMMaxValue = 36,
     Setting_StepperDeenergizeMask = 37,
     Setting_SpindlePPR = 38,
+    Setting_LatheMode = 39,
 
     Setting_HomingLocateCycles = 43,
     Setting_HomingCycle_1 = 44,
@@ -203,7 +204,7 @@ typedef union {
                 homing_force_set_origin         :1,
                 limits_two_switches_on_axes     :1,
                 force_buffer_sync_on_wco_change :1,
-                unassigned                      :1;
+                lathe_mode                      :1;
     };
 } settingflags_t;
 

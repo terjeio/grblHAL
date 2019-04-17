@@ -74,11 +74,6 @@ typedef enum {
     SpindleData_AngularPosition
 } spindle_data_request_t;
 
-// Disables the spindle and sets spindle RPM to zero when variable spindle speed is enabled.
-// Called by various main program and ISR routines. Keep routine small, fast, and efficient.
-// Called by spindle_init(), spindle_set_speed(), spindle_set_state(), and mc_reset().
-#define spindle_stop() hal.spindle_set_state((spindle_state_t){0}, 0.0f)
-
 void spindle_set_override (uint_fast8_t speed_override);
 
 // Called by g-code parser when setting spindle state and requires a buffer sync.

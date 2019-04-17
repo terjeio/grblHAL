@@ -65,7 +65,10 @@ static char *get_axis_values_mm (float *axis_values)
     buf[0] = '\0';
 
     for (idx = 0; idx < N_AXIS; idx++) {
-        strcat(buf, ftoa(axis_values[idx], N_DECIMAL_COORDVALUE_MM));
+        if(gc_state.modal.diameter_mode && idx == X_AXIS)
+            strcat(buf, ftoa(axis_values[idx] * 2.0f, N_DECIMAL_COORDVALUE_MM));
+        else
+            strcat(buf, ftoa(axis_values[idx], N_DECIMAL_COORDVALUE_MM));
         if (idx < (N_AXIS - 1))
             strcat(buf, ",");
     }
@@ -308,6 +311,7 @@ void report_grbl_settings (void)
     report_uint_setting(Setting_StepperDeenergizeMask, settings.steppers.deenergize.mask);
     if(hal.driver_cap.spindle_sync || hal.driver_cap.spindle_pid)
         report_uint_setting(Setting_SpindlePPR, settings.spindle.ppr);
+    report_uint_setting(Setting_LatheMode, settings.flags.lathe_mode);
 
     report_uint_setting(Setting_HomingLocateCycles, settings.homing.locate_cycles);
 
@@ -445,7 +449,8 @@ void report_ngc_parameters (void)
     for (idx = 1; idx <= N_TOOLS; idx++) {
         hal.stream.write("[T");
         hal.stream.write(uitoa((uint32_t)idx));
-        report_util_axis_values(":", tool_table[idx].offset);
+        hal.stream.write(":");
+        hal.stream.write(get_axis_values(tool_table[idx].offset));
         hal.stream.write("]\r\n");
     }
 #endif
@@ -476,7 +481,8 @@ void report_gcode_modes (void)
         hal.stream.write(uitoa((uint32_t)(g5x - 59)));
     }
 
-    hal.stream.write(gc_state.modal.diameter_mode ? " G7" : " G8");
+    if(settings.flags.lathe_mode)
+        hal.stream.write(gc_state.modal.diameter_mode ? " G7" : " G8");
 
     hal.stream.write(" G");
     hal.stream.write(uitoa((uint32_t)(gc_state.modal.plane_select + 17)));
@@ -488,7 +494,7 @@ void report_gcode_modes (void)
     hal.stream.write(" G");
     hal.stream.write(uitoa((uint32_t)(94 - gc_state.modal.feed_mode)));
 
-    if(hal.driver_cap.variable_spindle)
+    if(settings.flags.lathe_mode && hal.driver_cap.variable_spindle)
         hal.stream.write(gc_state.modal.spindle_rpm_mode == SpindleSpeedMode_RPM ? " G97" : " G96");
 
     hal.stream.write(gc_state.canned.return_mode == CCReturnMode_RPos ? " G99" : " G98");
@@ -685,6 +691,9 @@ void report_build_info (char *line)
 
     if(hal.driver_cap.wifi)
         strcat(buf, "WIFI,");
+
+    if(settings.flags.lathe_mode)
+        strcat(buf, "LATHE,");
 
 #ifdef N_TOOLS
     strcat(buf, "ATC;");

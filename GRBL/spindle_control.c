@@ -47,7 +47,7 @@ bool spindle_set_state (spindle_state_t state, float rpm)
 
         if (!state.on) { // Halt or set spindle direction and rpm.
             sys.spindle_rpm = 0.0f;
-            spindle_stop();
+            hal.spindle_set_state((spindle_state_t){0}, 0.0f);
         } else {
             // NOTE: Assumes all calls to this function is when Grbl is not moving or must remain off.
         	// TODO: alarm/interlock if going from CW to CCW directly in non-laser mode?

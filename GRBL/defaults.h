@@ -129,6 +129,7 @@
 #define DEFAULT_HARD_LIMIT_ENABLE 0  // false
 #define DEFAULT_INVERT_PROBE_PIN 0 // false
 #define DEFAULT_LASER_MODE 0 // false
+#define DEFAULT_LATHE_MODE 0 // false
 #define DEFAULT_HOMING_ENABLE 0  // false
 #define DEFAULT_HOMING_DIR_MASK 0 // move positive dir
 #define DEFAULT_HOMING_FEED_RATE 25.0f // mm/min

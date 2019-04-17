@@ -297,9 +297,12 @@ static spindle_state_t spindleGetState (void)
 {
     spindle_state_t state = {0};
 
-    state.on = pwmEnabled || (SPINDLE_ENABLE_In & SPINDLE_ENABLE_PIN) != 0;
-    state.ccw = hal.driver_cap.spindle_dir && (SPINDLE_DIRECTION_IN & SPINDLE_DIRECTION_PIN) != 0;
+    state.on = (SPINDLE_ENABLE_In & SPINDLE_ENABLE_PIN) != 0;
+    if(hal.driver_cap.spindle_dir)
+        state.ccw = (SPINDLE_DIRECTION_IN & SPINDLE_DIRECTION_PIN) != 0;
     state.value ^= settings.spindle.invert.mask;
+    if(pwmEnabled)
+        state.on = On;
 
     return state;
 }
