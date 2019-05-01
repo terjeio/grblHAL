@@ -8,7 +8,7 @@ Once connected
  you should get the Grbl-prompt, which looks like this:
 
 ```
-GrblHAL 1.1d ['$' for help]
+Grbl 1.1d ['$' for help]
 ```
 
 Type $ and press enter to have Grbl print a help message. You should not see any local echo of the $ and enter. Grbl should respond with:
@@ -314,14 +314,11 @@ This sets the spindle speed for the maximum 5V PWM pin output. Higher programmed
 
 This sets the spindle speed for the minimum 0.02V PWM pin output (0V is disabled).  Lower RPM values are accepted by Grbl but the PWM output will not go below 0.02V, except when RPM is zero. If zero, the spindle is disabled and PWM output is 0V. 
 
-<a name="opmode"></a>
-#### $32 - Mode of operation, integer
+#### $32 - Laser mode, boolean
 
-* 0 - Normal, Grbl will operate as it always has, stopping motion with every `S` spindle speed command. This is the default operation of a milling machine to allow a pause to let the spindle change speeds.
+When enabled, Grbl will move continuously through consecutive `G1`, `G2`, or `G3` motion commands when programmed with a `S` spindle speed (laser power). The spindle PWM pin will be updated instantaneously through each motion without stopping. Please read the Grbl laser documentation and your laser device documentation prior to using this mode. Lasers are very dangerous. They can instantly damage your vision permanantly and cause fires. Grbl does not assume any responsibility for any issues the firmware may cause, as defined by its GPL license. 
 
-* 1 - Laser mode, Grbl will move continuously through consecutive `G1`, `G2`, or `G3` motion commands when programmed with a `S` spindle speed (laser power). The spindle PWM pin will be updated instantaneously through each motion without stopping. Please read the Grbl laser documentation and your laser device documentation prior to using this mode. Lasers are very dangerous. They can instantly damage your vision permanantly and cause fires. Grbl does not assume any responsibility for any issues the firmware may cause, as defined by its GPL license. 
-
-* 2 - Lathe mode, Grbl will allow the use of `G7`, `G8`, `G96` and `G97` commands. If the HAL driver supports spindle sync `G33` and `G76` are also enabled. Lathes, like lasers, are very dangerous. Grbl does not assume any responsibility for any issues the firmware may cause, as defined by its GPL license. 
+When disabled, Grbl will operate as it always has, stopping motion with every `S` spindle speed command. This is the default operation of a milling machine to allow a pause to let the spindle change speeds.
 
 #### $33 - Spindle PWM frequency 
 

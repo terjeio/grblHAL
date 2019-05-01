@@ -33,8 +33,6 @@ const settings_t defaults = {
     .arc_tolerance = DEFAULT_ARC_TOLERANCE,
     .g73_retract = DEFAULT_G73_RETRACT,
 
-    .legacy_rt_commands = DEFAULT_LEGACY_RTCOMMANDS,
-
     .flags.report_inches = DEFAULT_REPORT_INCHES,
     .flags.laser_mode = DEFAULT_LASER_MODE,
     .flags.lathe_mode = DEFAULT_LATHE_MODE,
@@ -59,7 +57,7 @@ const settings_t defaults = {
 
     .homing.flags.enabled = DEFAULT_HOMING_ENABLE,
     .homing.flags.init_lock = DEFAULT_HOMING_INIT_LOCK,
-    .homing.dir_mask.value = DEFAULT_HOMING_DIR_MASK,
+    .homing.dir_mask = DEFAULT_HOMING_DIR_MASK,
     .homing.feed_rate = DEFAULT_HOMING_FEED_RATE,
     .homing.seek_rate = DEFAULT_HOMING_SEEK_RATE,
     .homing.debounce_delay = DEFAULT_HOMING_DEBOUNCE_DELAY,
@@ -387,13 +385,6 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
                 settings.max_travel[axis_idx] = -value; // Store as negative for grbl internal use.
                 break;
 
-#ifdef ENABLE_BACKLASH_COMPENSATION
-            case AxisSetting_Backlash:
-                found = true;
-                settings.backlash[axis_idx] = value;
-                break;
-#endif
-
             default: // for stopping compiler warning
                 break;
         }
@@ -539,7 +530,7 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
                 break;
 
             case Setting_HomingDirMask:
-                settings.homing.dir_mask.value = int_value & AXES_BITMASK;
+                settings.homing.dir_mask = int_value & AXES_BITMASK;
                 break;
 
             case Setting_HomingFeedRate:
@@ -556,10 +547,6 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
 
             case Setting_HomingPulloff:
                 settings.homing.pulloff = value;
-                break;
-
-            case Setting_EnableLegacyRTCommands:
-                settings.legacy_rt_commands = value != 0;
                 break;
 
             case Setting_HomingLocateCycles:
@@ -588,22 +575,9 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
                 break;
 
             case Setting_LaserMode:
-                switch(int_value) {
-                    case 1:
-                        if(!hal.driver_cap.variable_spindle)
-                            return Status_SettingDisabledLaser;
-                        settings.flags.laser_mode = On;
-                        settings.flags.lathe_mode = Off;
-                        break;
-                    case 2:
-                        settings.flags.laser_mode = Off;
-                        settings.flags.lathe_mode = On;
-                        break;
-                    default:
-                        settings.flags.laser_mode = Off;
-                        settings.flags.lathe_mode = Off;
-                        break;
-                }
+                if(!hal.driver_cap.variable_spindle)
+                    return Status_SettingDisabledLaser;
+                settings.flags.laser_mode = int_value != 0;
                 break;
 
             case Setting_PWMFreq:
@@ -630,6 +604,10 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
 
             case Setting_SpindlePPR:
                 settings.spindle.ppr = int_value;
+                break;
+
+            case Setting_LatheMode:
+                settings.flags.lathe_mode = int_value != 0;
                 break;
 
             case Setting_SpindlePGain:
@@ -707,9 +685,6 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
     }
 
     write_global_settings();
-#ifdef ENABLE_BACKLASH_COMPENSATION
-    mc_backlash_init();
-#endif
     hal.settings_changed(&settings);
 
     return Status_OK;
@@ -730,9 +705,6 @@ void settings_init() {
             settings_read_tool_data(idx, &tool_table[idx]);
 #endif
         report_init();
-#ifdef ENABLE_BACKLASH_COMPENSATION
-        mc_backlash_init();
-#endif
         hal.settings_changed(&settings);
     }
 }

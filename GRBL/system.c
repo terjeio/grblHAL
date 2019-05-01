@@ -129,8 +129,8 @@ status_code_t system_execute_line (char *line)
             if (line[2] != '\0')
                 retval = Status_InvalidStatement;
             else {
-                sys.flags.block_delete_enabled = !sys.flags.block_delete_enabled;
-                hal.report.feedback_message(sys.flags.block_delete_enabled ? Message_Enabled : Message_Disabled);
+                sys.block_delete_enabled = !sys.block_delete_enabled;
+                hal.report.feedback_message(sys.block_delete_enabled ? Message_Enabled : Message_Disabled);
             }
             break;
 
@@ -396,9 +396,10 @@ void system_flag_wco_change ()
     sys.report.wco_counter = 0;
 }
 
-// Sets machine position. Must be sent a 'step' array.
+// Returns machine position of axis 'idx'. Must be sent a 'step' array.
 // NOTE: If motor steps and machine position are not in the same coordinate frame, this function
-//       serves as a central place to compute the transformation.
+//   serves as a central place to compute the transformation.
+
 void system_convert_array_steps_to_mpos (float *position, int32_t *steps)
 {
     uint_fast8_t idx = N_AXIS;
@@ -424,7 +425,7 @@ bool system_check_travel_limits(float *target)
         do {
             idx--;
         // When homing forced set origin is enabled, soft limits checks need to account for directionality.
-            failed = bit_istrue(settings.homing.dir_mask.value, bit(idx))
+            failed = bit_istrue(settings.homing.dir_mask, bit(idx))
                       ? (target[idx] < 0.0f || target[idx] > -settings.max_travel[idx])
                       : (target[idx] > 0.0f || target[idx] < settings.max_travel[idx]);
         } while(!failed && idx);

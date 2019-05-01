@@ -79,7 +79,7 @@ static void limits_set_machine_positions (uint8_t cycle_mask)
         } while(idx);
     } else do {
         if (cycle_mask & bit(--idx))
-            sys_position[idx] = bit_istrue(settings.homing.dir_mask.value, bit(idx))
+            sys_position[idx] = bit_istrue(settings.homing.dir_mask, bit(idx))
                                  ? lroundf((settings.max_travel[idx] + settings.homing.pulloff) * settings.steps_per_mm[idx])
                                  : lroundf(-settings.homing.pulloff * settings.steps_per_mm[idx]);
 
@@ -150,7 +150,7 @@ void limits_go_home (uint8_t cycle_mask)
 #endif
                 // Set target direction based on cycle mask and homing cycle approach state.
                 // NOTE: This happens to compile smaller than any other implementation tried.
-                if (bit_istrue(settings.homing.dir_mask.value, bit(idx)))
+                if (bit_istrue(settings.homing.dir_mask, bit(idx)))
                     target[idx] = approach ? - max_travel : max_travel;
                 else
                     target[idx] = approach ? max_travel : - max_travel;
@@ -255,11 +255,7 @@ void limits_go_home (uint8_t cycle_mask)
 
     limits_set_machine_positions(cycle_mask);
 
-#ifdef ENABLE_BACKLASH_COMPENSATION
-    mc_backlash_init();
-#endif
     sys.step_control.flags = 0; // Return step control to normal operation.
-    sys.flags.is_homed = On;
 }
 
 // Performs a soft limit check. Called from mc_line() only. Assumes the machine has been homed,
@@ -268,7 +264,7 @@ void limits_go_home (uint8_t cycle_mask)
 void limits_soft_check  (float *target)
 {
     if (system_check_travel_limits(target)) {
-        sys.flags.soft_limit = On;
+        sys.soft_limit = true;
         // Force feed hold if cycle is active. All buffered blocks are guaranteed to be within
         // workspace volume so just come to a controlled stop so position is not lost. When complete
         // enter alarm mode.

@@ -41,9 +41,6 @@
 #define M_PI 3.14159265358979323846f
 #endif
 
-#define TAN_30 0.57735f         // Used for threading calculations (60 degree inserts)
-#define RADDEG 0.0174532925f    // Radians per degree
-
 // Convert character to uppercase
 #define CAPS(c) ((c >= 'a' && c <= 'z') ? c & 0x5F : c)
 
@@ -124,8 +121,8 @@ typedef enum {
 #define BIT_SET(x, bit, v) { if (v) { x |= (bit); } else { x &= ~(bit); } }
 //#define bit_set(x, y, z) HWREGBITW(&x, y) = z;
 
-#define bit_istrue(x, mask) ((x & (mask)) != 0)
-#define bit_isfalse(x, mask) ((x & (mask)) == 0)
+#define bit_istrue(x,mask) ((x & mask) != 0)
+#define bit_isfalse(x,mask) ((x & mask) == 0)
 
 // Converts an uint32 variable to string.
 char *uitoa (uint32_t n);

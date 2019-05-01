@@ -324,8 +324,7 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
 
     memset(block, 0, sizeof(plan_block_t));                         // Zero all block values.
     memcpy(&block->spindle, &pl_data->spindle, sizeof(spindle_t));  // Copy spindle data (RPM etc)
-    block->condition = pl_data->condition;
-    block->overrides = pl_data->overrides;
+    block->condition.value = pl_data->condition.value;
     block->line_number = pl_data->line_number;
     block->message = pl_data->message;
 
@@ -466,11 +465,10 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
 
         pl.previous_nominal_speed = plan_compute_profile_parameters(block, plan_compute_profile_nominal_speed(block), pl.previous_nominal_speed);
 
-        if(!block->condition.backlash_motion) {
-            // Update previous path unit_vector and planner position.
-            memcpy(pl.previous_unit_vec, unit_vec, sizeof(unit_vec)); // pl.previous_unit_vec[] = unit_vec[]
-            memcpy(pl.position, target_steps, sizeof(target_steps)); // pl.position[] = target_steps[]
-        }
+        // Update previous path unit_vector and planner position.
+        memcpy(pl.previous_unit_vec, unit_vec, sizeof(unit_vec)); // pl.previous_unit_vec[] = unit_vec[]
+        memcpy(pl.position, target_steps, sizeof(target_steps)); // pl.position[] = target_steps[]
+
         // New block is all set. Update buffer head and next buffer head indices.
         block_buffer_head = next_buffer_head;
         next_buffer_head = plan_next_block_index(block_buffer_head);

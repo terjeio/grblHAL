@@ -174,7 +174,7 @@ static void corexy_limits_set_machine_positions (uint8_t cycle_mask)
     } else do {
          if (cycle_mask & bit(--idx)) {
              int32_t off_axis_position;
-             int32_t set_axis_position = bit_istrue(settings.homing.dir_mask.value, bit(idx))
+             int32_t set_axis_position = bit_istrue(settings.homing.dir_mask, bit(idx))
                                           ? lroundf((settings.max_travel[idx] + settings.homing.pulloff) * settings.steps_per_mm[idx])
                                           : lroundf(-settings.homing.pulloff * settings.steps_per_mm[idx]);
              switch(idx) {

@@ -44,11 +44,7 @@
 // the startup script. The lower half contains the global settings and space for future
 // developments.
 #define EEPROM_ADDR_GLOBAL         1U
-#ifdef ENABLE_BACKLASH_COMPENSATION
-#define EEPROM_ADDR_TOOL_TABLE     300U
-#else
 #define EEPROM_ADDR_TOOL_TABLE     256U
-#endif
 #define EEPROM_ADDR_PARAMETERS     512U
 #define EEPROM_ADDR_STARTUP_BLOCK  768U
 #define EEPROM_ADDR_BUILD_INFO     942U
@@ -118,14 +114,14 @@ typedef enum {
     Setting_PulseDelayMicroseconds = 29,
     Setting_RpmMax = 30,
     Setting_RpmMin = 31,
-    Setting_LaserMode = 32, // TODO: rename - shared with lathe mode
+    Setting_LaserMode = 32,
     Setting_PWMFreq = 33,
     Setting_PWMOffValue = 34,
     Setting_PWMMinValue = 35,
     Setting_PWMMaxValue = 36,
     Setting_StepperDeenergizeMask = 37,
     Setting_SpindlePPR = 38,
-    Setting_EnableLegacyRTCommands = 39,
+    Setting_LatheMode = 39,
 
     Setting_HomingLocateCycles = 43,
     Setting_HomingCycle_1 = 44,
@@ -179,8 +175,7 @@ typedef enum {
     AxisSetting_Acceleration = 2,
     AxisSetting_MaxTravel = 3,
     AxisSetting_StepperCurrent = 4,
-    AxisSetting_MicroSteps = 5,
-    AxisSetting_Backlash = 6
+    AxisSetting_MicroSteps = 5
 } axis_setting_type_t;
 
 typedef enum {
@@ -288,7 +283,7 @@ typedef struct {
     float feed_rate;
     float seek_rate;
     float pulloff;
-    axes_signals_t dir_mask;
+    uint8_t dir_mask;
     uint8_t locate_cycles;
     uint16_t debounce_delay;
     homing_settings_flags_t flags;
@@ -330,13 +325,10 @@ typedef struct {
     float max_rate[N_AXIS];
     float acceleration[N_AXIS];
     float max_travel[N_AXIS];
-#ifdef ENABLE_BACKLASH_COMPENSATION
-    float backlash[N_AXIS];
-#endif
     float junction_deviation;
     float arc_tolerance;
     float g73_retract;
-    bool legacy_rt_commands;
+
     control_signals_t control_invert;
     control_signals_t control_disable_pullup;
     coolant_state_t coolant_invert;

@@ -294,7 +294,7 @@ void report_grbl_settings (void)
     report_uint_setting(Setting_SoftLimitsEnable, settings.limits.flags.soft_enabled);
     report_uint_setting(Setting_HardLimitsEnable, settings.limits.flags.hard_enabled);
     report_uint_setting(Setting_HomingEnable, settings.homing.flags.enabled);
-    report_uint_setting(Setting_HomingDirMask, settings.homing.dir_mask.value);
+    report_uint_setting(Setting_HomingDirMask, settings.homing.dir_mask);
     report_float_setting(Setting_HomingFeedRate, settings.homing.feed_rate, N_DECIMAL_SETTINGVALUE);
     report_float_setting(Setting_HomingSeekRate, settings.homing.seek_rate, N_DECIMAL_SETTINGVALUE);
     report_uint_setting(Setting_HomingDebounceDelay, settings.homing.debounce_delay);
@@ -303,7 +303,7 @@ void report_grbl_settings (void)
     report_uint_setting(Setting_PulseDelayMicroseconds, settings.steppers.pulse_delay_microseconds);
     report_float_setting(Setting_RpmMax, settings.spindle.rpm_max, N_DECIMAL_RPMVALUE);
     report_float_setting(Setting_RpmMin, settings.spindle.rpm_min, N_DECIMAL_RPMVALUE);
-    report_uint_setting(Setting_LaserMode, settings.flags.laser_mode ? 1 : (settings.flags.lathe_mode ? 2 : 0));
+    report_uint_setting(Setting_LaserMode, hal.driver_cap.variable_spindle ? settings.flags.laser_mode : 0);
     report_float_setting(Setting_PWMFreq, settings.spindle.pwm_freq, N_DECIMAL_SETTINGVALUE);
 //    report_float_setting(Setting_PWMOffValue, settings.spindle.pwm_off_value, N_DECIMAL_SETTINGVALUE);
     report_float_setting(Setting_PWMMinValue, settings.spindle.pwm_min_value, N_DECIMAL_SETTINGVALUE);
@@ -311,8 +311,8 @@ void report_grbl_settings (void)
     report_uint_setting(Setting_StepperDeenergizeMask, settings.steppers.deenergize.mask);
     if(hal.driver_cap.spindle_sync || hal.driver_cap.spindle_pid)
         report_uint_setting(Setting_SpindlePPR, settings.spindle.ppr);
+    report_uint_setting(Setting_LatheMode, settings.flags.lathe_mode);
 
-    report_uint_setting(Setting_EnableLegacyRTCommands, settings.legacy_rt_commands ? 1 : 0);
     report_uint_setting(Setting_HomingLocateCycles, settings.homing.locate_cycles);
 
     uint_fast8_t idx;
@@ -372,12 +372,6 @@ void report_grbl_settings (void)
                     report_float_setting((setting_type_t)(val + idx), -settings.max_travel[idx], N_DECIMAL_SETTINGVALUE);
                     break;
 
-#ifdef ENABLE_BACKLASH_COMPENSATION
-                case AxisSetting_Backlash:
-                    report_float_setting((setting_type_t)(val + idx), settings.backlash[idx], N_DECIMAL_SETTINGVALUE);
-                    break;
-#endif
-
                 default:
                     if(hal.driver_settings_report)
                         hal.driver_settings_report(true, (axis_setting_type_t)set_idx, idx);
@@ -399,7 +393,7 @@ void report_probe_parameters (void)
     system_convert_array_steps_to_mpos(print_position, sys_probe_position);
     hal.stream.write("[PRB:");
     hal.stream.write(get_axis_values(print_position));
-    hal.stream.write(sys.flags.probe_succeeded ? ":1" : ":0");
+    hal.stream.write(sys.probe_succeeded ? ":1" : ":0");
     hal.stream.write("]\r\n");
 }
 
@@ -806,7 +800,7 @@ void report_realtime_status (void)
     if (!settings.status_report.machine_position || sys.report.wco_counter == 0) {
         for (idx = 0; idx < N_AXIS; idx++) {
             // Apply work coordinate offsets and tool length offset to current position.
-            wco[idx] = gc_get_offset(idx);
+            wco[idx] = gc_state.modal.coord_system.xyz[idx] + gc_state.g92_coord_offset[idx] + gc_state.tool_length_offset[idx];
             if (!settings.status_report.machine_position)
                 print_position[idx] -= wco[idx];
         }
@@ -849,7 +843,7 @@ void report_realtime_status (void)
         control_signals_t ctrl_pin_state = hal.system_control_get_state();
         bool prb_pin_state = hal.probe_get_state && hal.probe_get_state();
 
-        if (lim_pin_state.value | ctrl_pin_state.value | prb_pin_state | sys.flags.block_delete_enabled) {
+        if (lim_pin_state.value | ctrl_pin_state.value | prb_pin_state | sys.block_delete_enabled) {
 
             char *append = &buf[4];
 
@@ -872,7 +866,7 @@ void report_realtime_status (void)
                     *append++ = 'S';
                 if (ctrl_pin_state.e_stop)
                     *append++ = 'E';
-                if (ctrl_pin_state.block_delete && sys.flags.block_delete_enabled)
+                if (ctrl_pin_state.block_delete && sys.block_delete_enabled)
                     *append++ = 'B';
                 if (ctrl_pin_state.stop_disable)
                     *append++ = 'T';
