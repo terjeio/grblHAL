@@ -234,6 +234,13 @@
 #define DEFAULT_ENABLE_PARKING_OVERRIDE_CONTROL 0  // Default disabled. Uncomment to enable
 #define DEFAULT_DEACTIVATE_PARKING_UPON_INIT 0 // Default disabled. Uncomment to enable.
 
+// Using printable ASCII characters for realtime commands can cause issues with
+// files containing such characters in comments or settings. If the GCode sender support the
+// use of the top-bit set alternatives for these then they may be disabled.
+// NOTE: support for the top-bit set alternatives is always enabled.
+// NOTE: when disabled they are still active outside of comments and $ settings
+//       allowing their use from manual input, eg. from a terminal or MDI.
+#define DEFAULT_LEGACY_RTCOMMANDS 1  // Default enabled. Set to 0 to disable.
 
 // Define some default values if not defined above
 

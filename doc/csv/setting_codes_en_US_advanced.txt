@@ -6,7 +6,7 @@ $-Code	 Setting	 Units	Datatype	Data format	Setting Description	Min	Max
 4	Invert step enable pin	boolean	bitfield	axes	Inverts the stepper driver enable signals  (active low). If the stepper drivers shares the same enable signal only X is used.		
 5	Invert limit pins	mask	bitfield	axes	Inverts the axis limit input signals. 		
 6	Invert probe pin	boolean	bool		Inverts the probe input pin signal.		
-10	Status report options	mask	bitfield	Position type,Buffer state,Line numbers,Feed & speed,Pin state,Work coordinate offset,Overrides,Probe coordinates	Specifies optional data included in status reports.		
+10	Status report options	mask	bitfield	Position in machine coordinate,Buffer state,Line numbers,Feed & speed,Pin state,Work coordinate offset,Overrides,Probe coordinates	Specifies optional data included in status reports.		
 11	Junction deviation	mm	float	#####0.000	Sets how fast Grbl travels through consecutive motions. Lower value slows it down.		
 12	Arc tolerance	mm	float	#####0.000	Sets the G2 and G3 arc tracing accuracy based on radial error. Beware: A very small value may effect performance.		
 13	Report in inches	boolean	bool		Enables inch units when returning any position and rate value that is not a settings value.		
@@ -28,14 +28,14 @@ $-Code	 Setting	 Units	Datatype	Data format	Setting Description	Min	Max
 29	Pulse delay	microseconds	integer	##9	Step pulse delay	0	10
 30	Maximum spindle speed	RPM	float	#####0.000	Maximum spindle speed. Sets PWM to maximum duty cycle.		
 31	Minimum spindle speed	RPM	float	#####0.000	Minimum spindle speed. Sets PWM to minimum duty cycle.		
-32	Laser-mode enable	boolean	bool		Enables laser mode. Consecutive G1/2/3 commands will not halt when spindle speed is changed.		
+32	Mode of operation	integer	radiobuttons	Normal,Laser mode,Lathe mode	Laser mode: consecutive G1/2/3 commands will not halt when spindle speed is changed.\nLathe mode: allows use of G7, G8, G96 and G97.		
 33	Spindle PWM frequency	Hz	float	#####0	Spindle PWM frequency.		
 34	Spindle PWM off value	percent	float	##0.0	Spindle PWM off value in percent (duty cycle).		100
 35	Spindle PWM min value	percent	float	##0.0	Spindle PWM min value in percent (duty cycle).		100
 36	Spindle PWM max value	percent	float	##0.0	Spindle PWM max value in percent (duty cycle).		100
 37	Steppers deenergize 	mask	bitfield	axes	Specifies which steppers not to disable when stopped.		
 38	Spindle PPR	pulses	integer	###0	Spindle encoder pulses per revolution		
-39	Lathe-mode enable	boolean	bool		Enables lathe mode: allows use of G7, G8, G96 and G97.   		
+39	Enable legacy RT commands	boolean	bool		Enables "normal" processing of ?, ! and ~ characters when part of $-setting or comment. If disabled then they are added to the input string instead.		
 43	Homing passes		integer	##9	Number of homing passes. Minimum 1, maximum 128.	1	128
 44	Axes homing, first pass	mask	bitfield	axes	Axes to home in first pass		
 45	Axes homing, second pass	mask	bitfield	axes	Axes to home in second pass		
@@ -95,3 +95,9 @@ $-Code	 Setting	 Units	Datatype	Data format	Setting Description	Min	Max
 133	A-axis maximum travel	mm	float	#####0.000	Maximum A-axis travel distance from homing switch. Determines valid machine space for soft-limits and homing search distances.		
 134	B-axis maximum travel	mm	float	#####0.000	Maximum B-axis travel distance from homing switch. Determines valid machine space for soft-limits and homing search distances.		
 135	C-axis maximum travel	mm	float	#####0.000	Maximum B-axis travel distance from homing switch. Determines valid machine space for soft-limits and homing search distances.		
+160	X-axis backlash compensation	mm	float	#####0.000	X-axis backlash distance to compensate for.		
+161	Y-axis backlash compensation	mm	float	#####0.000	Y-axis backlash distance to compensate for.		
+162	Z-axis backlash compensation	mm	float	#####0.000	Z-axis backlash distance to compensate for.		
+163	A-axis backlash compensation	mm	float	#####0.000	A-axis backlash distance to compensate for.		
+164	B-axis backlash compensation	mm	float	#####0.000	B-axis backlash distance to compensate for.		
+165	C-axis backlash compensation	mm	float	#####0.000	B-axis backlash distance to compensate for.		

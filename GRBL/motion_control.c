@@ -2,9 +2,11 @@
   motion_control.c - high level interface for issuing motion commands
   Part of Grbl
 
-  Copyright (c) 2017-2018 Terje Io
+  Copyright (c) 2017-2019 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
+
+  Backlash compensation code based on code copyright (c) 2017 Patrick F. (Schildkroet)
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -22,6 +24,35 @@
 
 #include "grbl.h"
 
+#ifdef ENABLE_BACKLASH_COMPENSATION
+
+static float target_prev[N_AXIS];
+static axes_signals_t dir_negative, backlash_enabled;
+
+void mc_backlash_init (void)
+{
+    uint_fast8_t idx = N_AXIS;
+
+    backlash_enabled.mask = dir_negative.value = 0;
+
+    do {
+        if(settings.backlash[--idx] > 0.0001f)
+            backlash_enabled.mask |= bit(idx);
+        dir_negative.value |= bit(idx);
+    } while(idx);
+
+    dir_negative.value ^= settings.homing.dir_mask.value;
+
+    mc_sync_backlash_position();
+}
+
+void mc_sync_backlash_position (void)
+{
+    // Update target_prev
+    system_convert_array_steps_to_mpos(target_prev, sys_position);
+}
+
+#endif
 
 // Execute linear motion in absolute millimeter coordinates. Feed rate given in millimeters/second
 // unless invert_feed_rate is true. Then the feed_rate means that the motion should be completed in
@@ -56,6 +87,58 @@ bool mc_line (float *target, plan_line_data_t *pl_data)
         // doesn't update the machine position values. Since the position values used by the g-code
         // parser and planner are separate from the system machine positions, this is doable.
 
+#ifdef ENABLE_BACKLASH_COMPENSATION
+
+        if(backlash_enabled.mask) {
+
+            bool backlash_comp = false;
+            uint_fast8_t idx = N_AXIS, axismask = bit(N_AXIS - 1);
+
+            do {
+                idx--;
+                if(backlash_enabled.mask & axismask) {
+                    if(target[idx] > target_prev[idx]) {
+                        if (dir_negative.value & axismask) {
+                            dir_negative.value &= ~axismask;
+                            target_prev[idx] += settings.backlash[idx];
+                            backlash_comp = true;
+                        }
+                    } else if(target[idx] < target_prev[idx] && !(dir_negative.value & axismask)) {
+                        dir_negative.value |= axismask;
+                        target_prev[idx] -= settings.backlash[idx];
+                        backlash_comp = true;
+                    }
+                }
+                axismask >>= 1;
+            } while(idx);
+
+            if(backlash_comp) {
+
+                plan_line_data_t pl_backlash;
+
+                memset(&pl_backlash, 0, sizeof(plan_line_data_t));
+
+                pl_backlash.condition.rapid_motion = On;
+                pl_backlash.condition.backlash_motion = On;
+                pl_backlash.line_number = pl_data->line_number;
+                pl_backlash.spindle.rpm = pl_data->spindle.rpm;
+
+                // If the buffer is full: good! That means we are well ahead of the robot.
+                // Remain in this loop until there is room in the buffer.
+                while(plan_check_full_buffer()) {
+                    protocol_auto_cycle_start();     // Auto-cycle start when buffer is full.
+                    if(!protocol_execute_realtime()) // Check for any run-time commands
+                        return false;                // Bail, if system abort.
+                }
+
+                plan_buffer_line(target_prev, &pl_backlash);
+            }
+
+            memcpy(target_prev, target, sizeof(float) * N_AXIS);
+        }
+
+#endif // Backlash comp
+
         // If the buffer is full: good! That means we are well ahead of the robot.
         // Remain in this loop until there is room in the buffer.
         while(plan_check_full_buffer()) {
@@ -66,7 +149,11 @@ bool mc_line (float *target, plan_line_data_t *pl_data)
 
         // Plan and queue motion into planner buffer
         // bool plan_status; // Not used in normal operation.
-        plan_buffer_line(target, pl_data);
+        if(!plan_buffer_line(target, pl_data) && settings.flags.laser_mode && pl_data->condition.spindle.on && !pl_data->condition.spindle.ccw) {
+            // Correctly set spindle state, if there is a coincident position passed.
+            // Forces a buffer sync while in M3 laser mode only.
+            hal.spindle_set_state(pl_data->condition.spindle, pl_data->spindle.rpm);
+        }
     }
 
     return !(sys.abort || sys.cancel);
@@ -280,13 +367,153 @@ void mc_canned_drill (motion_mode_t motion, float *target, plan_line_data_t *pl_
     }
 }
 
-// G76 canned cycle for threading
-// G76 P- Z- I- J- R- K- Q- H- E- L-
-// P - picth, Z - final position, I - thread peak, J - initial depth, K - full depth
-// R - depth regression, Q - compound slide angle, H - spring passes, E - taper, L - taper end
-void mc_thread (float *target, plan_line_data_t *pl_data)
+// Calculates depth-of-cut (DOC) for a given threading pass (for 60 degree thread).
+inline float calc_thread_doc (uint_fast16_t pass, float area, float depth, float depth_regression)
 {
+    float doc;
 
+    if(depth_regression == 1.0f)
+        doc = pass * sqrtf(area / TAN_30);
+    else
+        doc = sqrtf(pass * area / TAN_30);
+
+    return doc + 0.01f > depth ? depth : doc;
+}
+
+// Repeated cycle for threading
+// G76 P- X- Z- I- J- R- K- Q- H- E- L-
+// P - picth, X - main taper distance, Z - final position, I - thread peak offset, J - initial depth, K - full depth
+// R - depth regression, Q - compound slide angle, H - spring passes, E - taper, L - taper end
+
+// TODO: change pitch to follow any tapers
+
+void mc_thread (plan_line_data_t *pl_data, float *position, gc_thread_data *thread)
+{
+    uint_fast16_t pass = 1, passes = 0;
+    float doc, area, z_offset_factor, thread_length, x_direction = thread->peak > 0.0f ? -1.0f : 1.0f;
+    float end_taper_length, end_taper_depth;
+    float end_taper_factor = thread->end_taper_type == Taper_None ? 0.0f : (thread->end_taper_type == Taper_Both ? 2.0f : 1.0f);
+    float target[N_AXIS];
+    gc_override_flags_t overrides = sys.override.control; // Save current override status
+
+    memcpy(target, position, sizeof(float) * N_AXIS);
+
+    area = thread->initial_depth * thread->initial_depth * TAN_30;
+    z_offset_factor = tanf(thread->compound_slide_angle * RADDEG);
+
+    // Calculate number of passes
+    while(calc_thread_doc(++passes, area, thread->depth, thread->depth_regression) < thread->depth);
+
+    pl_data->condition.rapid_motion = On;           // Set rapid motion condition flag and
+    pl_data->condition.is_rpm_pos_adjusted = Off;   // switch off CSS
+    pl_data->overrides = overrides;
+    pl_data->overrides.spindle_rpm_disable = On;
+    pl_data->overrides.sync = On;
+//TODO: Restore overrides on stop?
+
+    passes += thread->spring_passes + 1;
+
+    doc = calc_thread_doc(pass, area, thread->depth, thread->depth_regression);
+
+    if((thread_length = thread->z_final - position[Z_AXIS]) > 0.0f)
+        thread->end_taper_length = -thread->end_taper_length;
+
+    thread_length += thread->end_taper_length * end_taper_factor;
+
+    if(thread->main_taper_height != 0.0f)
+        thread->main_taper_height = thread->main_taper_height * thread_length / (thread_length - thread->end_taper_length * end_taper_factor);
+
+    // TODO: Add to initial move to compensate for acceleration distance?
+    /*
+    float acc_distance = pl_data->feed_rate * hal.spindle_get_data(SpindleData_RPM).rpm / settings.acceleration[Z_AXIS];
+    acc_distance = acc_distance * acc_distance * settings.acceleration[Z_AXIS] * 0.5f;
+     */
+
+    // Initial Z-move for compound slide angle offset
+    if(z_offset_factor != 0.0f) {
+        target[Z_AXIS] += thread->depth * z_offset_factor;
+        if(!mc_line(target, pl_data))
+            return;
+    }
+
+    while(--passes) {
+
+        end_taper_factor = doc / thread->depth;
+        end_taper_depth = thread->depth * end_taper_factor;
+        end_taper_length = thread->end_taper_length * end_taper_factor;
+
+        if(thread->end_taper_type == Taper_None) {
+            target[X_AXIS] += thread->peak - doc * x_direction;
+            if(!mc_line(target, pl_data))
+                return;
+        }
+
+        pl_data->condition.rapid_motion = Off;          // Clear rapid motion condition flag,
+        pl_data->condition.spindle.synchronized = On;   // enable spindle sync for cut and
+        pl_data->overrides.feed_hold_disable = On;      // disable feed hold
+        pl_data->overrides.feed_rate_disable = On;
+        pl_data->overrides.sync = On;                   // Sync overrides update on execution of motion
+
+        mc_dwell(0.01f); // Needed for now since initial spindle sync is done just before st_wake_up
+
+        // Cut thread pass
+
+        // 1. Entry taper
+        if(thread->end_taper_type == Taper_Entry || thread->end_taper_type == Taper_Both) {
+
+            // TODO: move this segment outside of synced motion?
+            target[X_AXIS] += thread->peak - (doc - end_taper_depth) * x_direction;
+            if(!mc_line(target, pl_data))
+                return;
+
+            target[X_AXIS] += end_taper_depth * x_direction;
+            target[Z_AXIS] -= end_taper_length;
+            if(!mc_line(target, pl_data))
+                return;
+        }
+
+        // 2. Main part
+        if(thread_length != 0.0f) {
+            target[X_AXIS] += thread->main_taper_height * x_direction;
+            target[Z_AXIS] += thread_length;
+            if(!mc_line(target, pl_data))
+                return;
+        }
+
+        // 3. Exit taper
+        if(thread->end_taper_type == Taper_Exit || thread->end_taper_type == Taper_Both) {
+            target[X_AXIS] += end_taper_depth * x_direction;
+            target[Z_AXIS] -= end_taper_length;
+            if(!mc_line(target, pl_data))
+                return;
+        }
+
+        //
+
+        // Get DOC of next pass
+        doc = calc_thread_doc(++pass, area, thread->depth, thread->depth_regression);
+
+        pl_data->condition.rapid_motion = On;           // Set rapid motion condition flag and
+        pl_data->condition.spindle.synchronized = Off;  // disable spindle sync for retract & reposition
+
+        pl_data->overrides = overrides;
+        if(passes > 1) {                                                        // If not last pass
+            pl_data->overrides.feed_hold_disable = overrides.feed_hold_disable; // restore disable feed hold status but
+            pl_data->overrides.spindle_rpm_disable = On;                        // still block spindle RPM overrides TODO: fix for last pass!
+        }
+        pl_data->overrides.sync = On;                                           // Sync overrides update on execution of motion
+
+        target[X_AXIS] = position[X_AXIS];
+        if(!mc_line(target, pl_data))
+            return;
+
+        if(passes > 1) {
+            // Add compound slide angle offset when commanded
+            target[Z_AXIS] = position[Z_AXIS] + (z_offset_factor != 0.0f ? (thread->depth - doc) * z_offset_factor : 0.0f);
+            if(!mc_line(target, pl_data))
+                return;
+        }
+    }
 }
 
 // Sets up valid jog motion received from g-code parser, checks for soft-limits, and executes the jog.
@@ -393,7 +620,7 @@ gc_probe_t mc_probe_cycle (float *target, plan_line_data_t *pl_data, gc_parser_f
         return GCProbe_Abort; // Return if system reset has been issued.
 
     // Initialize probing control variables
-    sys.probe_succeeded = false; // Re-initialize probe history before beginning cycle.
+    sys.flags.probe_succeeded = Off; // Re-initialize probe history before beginning cycle.
     hal.probe_configure_invert_mask(parser_flags.probe_is_away);
 
     // After syncing, check if probe is already triggered. If so, halt and issue alarm.
@@ -427,7 +654,7 @@ gc_probe_t mc_probe_cycle (float *target, plan_line_data_t *pl_data, gc_parser_f
         else
             system_set_exec_alarm(Alarm_ProbeFailContact);
     } else
-        sys.probe_succeeded = true; // Indicate to system the probing cycle completed successfully.
+        sys.flags.probe_succeeded = On; // Indicate to system the probing cycle completed successfully.
 
     sys_probe_state = Probe_Off;            // Ensure probe state monitor is disabled.
     hal.probe_configure_invert_mask(false); // Re-initialize invert mask.
@@ -443,7 +670,7 @@ gc_probe_t mc_probe_cycle (float *target, plan_line_data_t *pl_data, gc_parser_f
         report_probe_parameters();
 
     // Successful probe cycle or Failed to trigger probe within travel. With or without error.
-    return sys.probe_succeeded ? GCProbe_Found : GCProbe_FailEnd;
+    return sys.flags.probe_succeeded ? GCProbe_Found : GCProbe_FailEnd;
 }
 
 

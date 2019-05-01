@@ -27,7 +27,7 @@
 system_t sys;
 int32_t sys_position[N_AXIS];               // Real-time machine (aka home) position vector in steps.
 int32_t sys_probe_position[N_AXIS];         // Last probe position in machine coordinates and steps.
-bool mpg_init;                              // Enter MPG mode on startup?
+bool prior_mpg_mode;                              // Enter MPG mode on startup?
 volatile probe_state_t sys_probe_state;     // Probing state value.  Used to coordinate the probing cycle with stepper ISR.
 volatile uint_fast16_t sys_rt_exec_state;   // Global realtime executor bitflag variable for state management. See EXEC bitmasks.
 volatile uint_fast16_t sys_rt_exec_alarm;   // Global realtime executor bitflag variable for setting various alarms.
@@ -119,8 +119,6 @@ int grbl_enter (void)
         while(true);
     }
 
-    mpg_init = sys.mpg_mode;
-
     if(hal.get_position)
         hal.get_position(&sys_position); // TODO:  restore on abort when returns true?
 
@@ -147,7 +145,8 @@ int grbl_enter (void)
         // Reset report entry points
         memcpy(&hal.report, &report_fns, sizeof(report_t));
 
-		// Reset system variables.
+		// Reset system variables, keeping current state and MPG mode.
+		bool prior_mpg_mode = sys.mpg_mode;
 		uint_fast16_t prior_state = sys.state;
 
         if(sys.message)
@@ -156,7 +155,7 @@ int grbl_enter (void)
 		memset(&sys, 0, sizeof(system_t)); // Clear system struct variable.
 		set_state(prior_state);
         sys.override.feed_rate = DEFAULT_FEED_OVERRIDE;          // Set to 100%
-        sys.override.rapid_rate = DEFAULT_RAPID_OVERRIDE;       // Set to 100%
+        sys.override.rapid_rate = DEFAULT_RAPID_OVERRIDE;        // Set to 100%
         sys.override.spindle_rpm = DEFAULT_SPINDLE_RPM_OVERRIDE; // Set to 100%
 
 		if(settings.parking.flags.enabled)
@@ -175,7 +174,9 @@ int grbl_enter (void)
 		hal.limits_enable(settings.limits.flags.hard_enabled, false);
 		plan_reset(); // Clear block buffer and planner variables
 		st_reset(); // Clear stepper subsystem variables.
-
+#ifdef ENABLE_BACKLASH_COMPENSATION
+		mc_backlash_init(); // Init backlash configuration.
+#endif
 		// Sync cleared gcode and planner positions to current system position.
 		plan_sync_position();
 		gc_sync_position();
@@ -188,14 +189,13 @@ int grbl_enter (void)
         else if(sys.state == STATE_ESTOP)
             set_state(STATE_ALARM);
 
-		if((sys.mpg_mode = sys.report.flags.mpg_mode = mpg_init)) {
-		    mpg_init = false;
+		if((sys.mpg_mode = sys.report.flags.mpg_mode = prior_mpg_mode)) {
             report_realtime_status();
 		}
 
 		// Start Grbl main loop. Processes program inputs and executes them.
 		if(!(looping = protocol_main_loop()))
-			looping = hal.driver_release == 0 || hal.driver_release();
+			looping = hal.driver_release == NULL || hal.driver_release();
 
 		sys_rt_exec_state = 0;
     }

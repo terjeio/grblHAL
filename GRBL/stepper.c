@@ -243,6 +243,8 @@ ISR_CODE void st_go_idle ()
 */
 ISR_CODE void stepper_driver_interrupt_handler (void)
 {
+    static bool backlash_motion;
+
     // Start a step pulse when there is a block to execute.
     if(st.exec_block)
         hal.stepper_pulse_start(&st);
@@ -265,7 +267,11 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
                 st.exec_block = st.exec_segment->exec_block;
                 st.step_event_count = st.exec_block->step_event_count;
                 st.dir_outbits = st.exec_block->direction_bits;
+                backlash_motion = st.exec_block->backlash_motion;
                 st.new_block = true;
+
+                if(st.exec_block->overrides.sync)
+                    sys.override.control = st.exec_block->overrides;
 
                 // "Enqueue" any message to be displayed (by foreground process)
                 if(st.exec_block->message) {
@@ -341,21 +347,24 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
     if (st.counter_x > st.step_event_count) {
         step_outbits.x = On;
         st.counter_x -= st.step_event_count;
-        sys_position[X_AXIS] = sys_position[X_AXIS] + (st.dir_outbits.x ? -1 : 1);
+        if(!backlash_motion)
+            sys_position[X_AXIS] = sys_position[X_AXIS] + (st.dir_outbits.x ? -1 : 1);
     }
 
     st.counter_y += st.steps[Y_AXIS];
     if (st.counter_y > st.step_event_count) {
         step_outbits.y = On;
         st.counter_y -= st.step_event_count;
-        sys_position[Y_AXIS] = sys_position[Y_AXIS] + (st.dir_outbits.y ? -1 : 1);
+        if(!backlash_motion)
+            sys_position[Y_AXIS] = sys_position[Y_AXIS] + (st.dir_outbits.y ? -1 : 1);
     }
 
     st.counter_z += st.steps[Z_AXIS];
     if (st.counter_z > st.step_event_count) {
         step_outbits.z = On;
         st.counter_z -= st.step_event_count;
-        sys_position[Z_AXIS] = sys_position[Z_AXIS] + (st.dir_outbits.z ? -1 : 1);
+        if(!backlash_motion)
+            sys_position[Z_AXIS] = sys_position[Z_AXIS] + (st.dir_outbits.z ? -1 : 1);
     }
 
   #ifdef A_AXIS
@@ -363,7 +372,8 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
       if (st.counter_a > st.step_event_count) {
           step_outbits.a = On;
           st.counter_a -= st.step_event_count;
-          sys_position[A_AXIS] = sys_position[A_AXIS] + (st.dir_outbits.a ? -1 : 1);
+          if(!backlash_motion)
+              sys_position[A_AXIS] = sys_position[A_AXIS] + (st.dir_outbits.a ? -1 : 1);
       }
   #endif
 
@@ -372,7 +382,8 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
       if (st.counter_b > st.step_event_count) {
           step_outbits.b = On;
           st.counter_b -= st.step_event_count;
-          sys_position[B_AXIS] = sys_position[B_AXIS] + (st.dir_outbits.b ? -1 : 1);
+          if(!backlash_motion)
+              sys_position[B_AXIS] = sys_position[B_AXIS] + (st.dir_outbits.b ? -1 : 1);
       }
   #endif
 
@@ -381,7 +392,8 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
       if (st.counter_c > st.step_event_count) {
           step_outbits.c = On;
           st.counter_c -= st.step_event_count;
-          sys_position[C_AXIS] = sys_position[C_AXIS] + (st.dir_outbits.c ? -1 : 1);
+          if(!backlash_motion)
+              sys_position[C_AXIS] = sys_position[C_AXIS] + (st.dir_outbits.c ? -1 : 1);
       }
   #endif
 
@@ -561,6 +573,8 @@ void st_prep_buffer()
                 st_prep_block->millimeters = pl_block->millimeters;
                 st_prep_block->steps_per_mm = (float)pl_block->step_event_count / pl_block->millimeters;
                 st_prep_block->message = pl_block->message;
+                st_prep_block->overrides = pl_block->overrides;
+                st_prep_block->backlash_motion = pl_block->condition.backlash_motion;
 
                 // Initialize segment buffer data for generating the segments.
                 prep.steps_per_mm = st_prep_block->steps_per_mm;

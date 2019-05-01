@@ -68,10 +68,13 @@ typedef enum {
     Status_GcodeNoOffsetsInPlane = 35,
     Status_GcodeUnusedWords = 36,
     Status_GcodeG43DynamicAxisError = 37,
-    Status_GcodeMaxValueExceeded = 38,
     Status_GcodeIllegalToolTableEntry = 39,
+    Status_GcodeValueOutOfRange = 39,
     Status_GcodeToolChangePending = 40,
     Status_GcodeSpindleNotRunning = 41,
+    Status_GcodeIllegalPlane = 42,
+    Status_GcodeMaxFeedRateExceeded = 43,
+    Status_GcodeRPMOutOfRange = 44,
 
     Status_EStop = 50,
     Status_Unhandled = 59, // For internal use only
@@ -95,7 +98,7 @@ typedef enum {
 // NOTE: Modal group define values must be sequential and starting from zero.
 typedef enum {
     ModalGroup_G0 = 0,  // [G4,G10,G28,G28.1,G30,G30.1,G53,G92,G92.1] Non-modal
-    ModalGroup_G1,      // [G0,G1,G2,G3,G38.2,G38.3,G38.4,G38.5,G80] Motion
+    ModalGroup_G1,      // [G0,G1,G2,G3,G33,G38.2,G38.3,G38.4,G38.5,G76,G80] Motion
     ModalGroup_G2,      // [G17,G18,G19] Plane selection
     ModalGroup_G3,      // [G90,G91] Distance mode
     ModalGroup_G4,      // [G91.1] Arc IJK distance mode
@@ -119,7 +122,8 @@ typedef enum {
 
 // Define parameter word mapping.
 typedef enum {
-	Word_F = 0,
+    Word_E = 0,
+	Word_F,
     Word_H,
     Word_I,
     Word_J,
@@ -189,6 +193,7 @@ typedef enum {
     MotionMode_CcwArc = 3,                  // G3 (Do not alter value)
     MotionMode_SpindleSynchronized = 33,    // G33 (Do not alter value)
     MotionMode_DrillChipBreak = 73,         // G73 (Do not alter value)
+    MotionMode_Threading = 76,              // G76 (Do not alter value)
     MotionMode_CannedCycle81 = 81,          // G81 (Do not alter value)
     MotionMode_CannedCycle82 = 82,          // G82 (Do not alter value)
     MotionMode_CannedCycle83 = 83,          // G83 (Do not alter value)
@@ -308,7 +313,8 @@ typedef union {
                 feed_hold_disable   :1,
                 spindle_rpm_disable :1,
                 parking_disable     :1,
-                reserved            :4;
+                reserved            :3,
+                sync                :1;
     };
 } gc_override_flags_t;
 
@@ -365,6 +371,7 @@ typedef struct {
 
 typedef struct {
     float d;                   // Max spindle RPM in Constant Surface Speed Mode (G96)
+    float e;                   // Thread taper length (G76)
     float f;                   // Feed
     float ijk[3];              // I,J,K Axis arc offsets
     float k;                   // G33 distance per revolution
@@ -391,6 +398,27 @@ typedef struct {
     cc_return_mode_t return_mode;   // {G98,G99}
     bool change;
 } gc_canned_t;
+
+typedef enum {
+    Taper_None = 0,
+    Taper_Entry,
+    Taper_Exit,
+    Taper_Both
+} gc_taper_type;
+
+typedef struct {
+    float pitch;
+    float z_final;
+    float peak;
+    float initial_depth;
+    float depth;
+    float depth_regression;
+    float main_taper_height;
+    float end_taper_length;
+    float compound_slide_angle;
+    uint_fast16_t spring_passes;
+    gc_taper_type end_taper_type;
+} gc_thread_data;
 
 typedef struct {
     float offset[N_AXIS];
@@ -468,5 +496,8 @@ void gc_set_laser_ppimode (bool on);
 // Gets axes scaling state.
 axes_signals_t gc_get_g51_state (void);
 float *gc_get_scaling (void);
+
+// Get current axis offset.
+float gc_get_offset (uint_fast8_t idx);
 
 #endif
