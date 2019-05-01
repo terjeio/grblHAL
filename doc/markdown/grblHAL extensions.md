@@ -70,23 +70,28 @@ $29=\<n\> : default 0, range 0 - 10.
 Stepper pulse delay in microseconds, replaces #define STEP_PULSE_DELAY.
 
 $33=\<float\> : default 5000.0, range driver dependent.  
-Spindle PWM frequency i Hz, replaces #define DEFAULT_SPINDLE_PWM_FREQ (from LPC port).
+Spindle PWM frequency i Hz, replaces #define DEFAULT_SPINDLE_PWM_FREQ \(from LPC port\).
 
 $34=\<n\> : default 0, range 0 - 100.  
-Spindle off PWM duty cycle in percent, replaces #define DEFAULT_SPINDLE_PWM_OFF_VALUE (from LPC port).
+Spindle off PWM duty cycle in percent, replaces #define DEFAULT_SPINDLE_PWM_OFF_VALUE \(from LPC port\).
 
 $35=\<n\> : default 1, range 0 - 100.  
 Spindle minimum PWM duty cycle in percent, replaces #define SPINDLE_PWM_MIN_VALUE.
 
 $36=\<n\> : default 1, range 0 - 100.  
-Spindle maximum PWM duty cycle in percent, replaces #define DEFAULT_SPINDLE_PWM_MAX_VALUE (from LPC port).
+Spindle maximum PWM duty cycle in percent, replaces #define DEFAULT_SPINDLE_PWM_MAX_VALUE \(from LPC port\).
 
 $37=\<axis mask\> : defaults to all axes.  
 Defines which steppers is to be deenergized when motion completes.
 Driver/hardware dependent which are supported. At least X should be, disables all motors.
 
 $38=\<n\> : default driver dependent.  
-Spindle encoder pulses per revolution. Usage is driver dependent (for spindle synchronized motion).
+Spindle encoder pulses per revolution. Usage is driver dependent \(for spindle synchronized motion\).
+
+$39=\<n\> : default 1, enable printable realtime command characters.  
+Set to 0 to disable, when disabled these characters \(`?`, `!` and `~`\) are ignored as realtime commands and added to the input instead when part of a comment or a $-setting.
+
+__NOTE:__ top bit set alternatives are provided as a safer alternative, see [config.h](../../GRBL/config.h).
 
 $43=\<n\> : default 1, range 0 - 255.  
 Number of homing locate cycles, replaces #define N_HOMING_LOCATE_CYCLE
@@ -128,11 +133,11 @@ $60=\<logical\> : default 1 (on).
 Restore default overrides when program ends. Replaces #define RESTORE_OVERRIDES_AFTER_PROGRAM_END.
 
 $61=\<logical\> : default 0 (off).  
-Ignore safety door signal when idle. If on only the spindle (laser) will be switched off.
+Ignore safety door signal when idle. If on only the spindle \(laser\) will be switched off.
 May be useful if positioning a laser head with the lid open is needed.
 
 $62=\<logical\> : default 0 (off).  
-Enable sleep function. Replaces #define SLEEP_ENABLE (ATMega port)
+Enable sleep function. Replaces #define SLEEP_ENABLE \(ATMega port\)
 
 $63=\<logical\> : default 0 (on).  
 Disable laser during hold. Replaces #define DISABLE_LASER_DURING_HOLD.
@@ -144,9 +149,9 @@ $65=\<logical\> : default 0 (off).
 Check if limit switches are engaged on startup. Replaces #define CHECK_LIMITS_AT_INIT.
 
 $66=\<logical\> : default 0 (off).  
-Require homing sequence to be executed at startup(?). Replaces #define HOMING_INIT_LOCK.
+Require homing sequence to be executed at startup\(?\). Replaces #define HOMING_INIT_LOCK.
 
-$70=\<n\> : default 0, range 0 - 4 (driver dependent).  
+$70=\<n\> : default 0, range 0 - 4 \(driver dependent\).  
 Input stream selection:  
 <pre>
 0: Serial (default)  
@@ -198,4 +203,6 @@ Spindle synced motion PID regulator derivative gain. Usage is driver dependent.
 ENABLE_SOFTWARE_DEBOUNCE
 HARD_LIMIT_FORCE_STATE_CHECK
 SPINDLE_ENABLE_OFF_WITH_ZERO_SPEED
-	
+
+---
+2019-05-01

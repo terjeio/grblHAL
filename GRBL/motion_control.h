@@ -2,7 +2,7 @@
   motion_control.h - high level interface for issuing motion commands
   Part of Grbl
 
-  Copyright (c) 2017-2018 Terje Io
+  Copyright (c) 2017-2019 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -47,6 +47,9 @@ void mc_arc(float *target, plan_line_data_t *pl_data, float *position, float *of
 // Execute canned cycle (drill)
 void mc_canned_drill (motion_mode_t motion, float *target, plan_line_data_t *pl_data, float *position, plane_t plane, uint32_t repeats, gc_canned_t *canned);
 
+// Execute canned cycle (threading)
+void mc_thread (plan_line_data_t *pl_data, float *position, gc_thread_data *g76_data);
+
 // Sets up valid jog motion received from g-code parser, checks for soft-limits, and executes the jog.
 status_code_t mc_jog_execute(plan_line_data_t *pl_data, parser_block_t *gc_block);
 
@@ -67,5 +70,10 @@ bool mc_parking_motion(float *parking_target, plan_line_data_t *pl_data);
 
 // Performs system reset. If in motion state, kills all motion and sets system alarm.
 void mc_reset();
+
+#ifdef ENABLE_BACKLASH_COMPENSATION
+void mc_backlash_init (void);
+void mc_sync_backlash_position (void);
+#endif
 
 #endif

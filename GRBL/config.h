@@ -56,15 +56,18 @@
 #define CMD_EXIT 0x03 // ctrl-C
 #define CMD_RESET 0x18 // ctrl-X
 #define CMD_STOP 0x19 // ctrl-Y
-#define CMD_STATUS_REPORT '?'
-#define CMD_CYCLE_START '~'
-#define CMD_FEED_HOLD '!'
+#define CMD_STATUS_REPORT_LEGACY '?'
+#define CMD_CYCLE_START_LEGACY '~'
+#define CMD_FEED_HOLD_LEGACY '!'
 #define CMD_PROGRAM_DEMARCATION '%'
 
 // NOTE: All override realtime commands must be in the extended ASCII character set, starting
 // at character value 128 (0x80) and up to 255 (0xFF). If the normal set of realtime commands,
 // such as status reports, feed hold, reset, and cycle start, are moved to the extended set
 // space, protocol.c's protocol_process_realtime() will need to be modified to accomodate the change.
+#define CMD_STATUS_REPORT 0x80
+#define CMD_CYCLE_START 0x81
+#define CMD_FEED_HOLD 0x82
 #define CMD_SAFETY_DOOR 0x84
 #define CMD_JOG_CANCEL  0x85
 //#define CMD_DEBUG_REPORT 0x86 // Only when DEBUG enabled, sends debug report in '{}' braces.
@@ -172,6 +175,7 @@
 #define RAPID_OVERRIDE_LOW       25 // Percent of rapid (1-99). Usually 25%.
 // #define RAPID_OVERRIDE_EXTRA_LOW 5 // *NOT SUPPORTED* Percent of rapid (1-99). Usually 5%.
 
+//#define SPINDLE_RPM_PIECES                4
 #define DEFAULT_SPINDLE_RPM_OVERRIDE      100 // 100%. Don't change this value.
 #define MAX_SPINDLE_RPM_OVERRIDE          200 // Percent of programmed spindle speed (100-255). Usually 200%.
 #define MIN_SPINDLE_RPM_OVERRIDE           10 // Percent of programmed spindle speed (1-100). Usually 10%.
@@ -370,5 +374,7 @@
 
 // Max number of entries in log for PID data reporting, to be used for tuning
 //#define PID_LOG 1000 // Default disabled. Uncomment to enable.
+
+//#define ENABLE_BACKLASH_COMPENSATION
 
 #endif

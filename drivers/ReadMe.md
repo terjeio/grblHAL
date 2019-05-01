@@ -25,7 +25,7 @@
 | Laser PPI mode<sup>7</sup>           | no     | no          | yes    | no      | no          | no     | no    | no    | no      |
 | Trinamic support<sup>8</sup>         | no     | no          | TBC<sup>9</sup>    | no      | no          | no     | no    | no    | no      |
 | Runs as FreeRTOS task   | no       | yes         | no     | option  | no          | no     | yes   | no    | no      |
-| CNC BoosterPack support | 1        | 2           | 1      | 2       | 1           | no     | yes<sup>10</sup>   | no<sup>10</sup>  | no      |
+| CNC BoosterPack support | 1        | 2           | 1      | 2       | 1           | no     | yes<sup>10</sup>   | yes<sup>10</sup>  | no      |
 
 <br><sup>1</sup> Not complete and untested, for someone else to finish? Compiles ok.
 <br><sup>2</sup> Should be fairly easy to extend.
@@ -36,7 +36,7 @@
 <br><sup>7</sup> Driver specific M codes added for control. PPI = Pulses Per Inch.
 <br><sup>8</sup> Code ready for verification for TMC2130 drivers, new [CNC BoosterPack](https://github.com/terjeio/CNC_Boosterpack) design for Texas Instrument LaunchPads complete.
 <br><sup>9</sup> Preliminary implementation provided for TMC2130, SPI and [I2C](https://github.com/terjeio/Trinamic_TMC2130_I2C_SPI_Bridge) interfaces. Work in progress.
-<br><sup>10</sup> Via "motherboard" that accommodates [CNC BoosterPack](https://github.com/terjeio/CNC_Boosterpack) and processor board. Prototype made, includes 8-bit I2C GPIO expander. BoosterPack has onboard EEPROM.
+<br><sup>10</sup> Via "motherboard" that accommodates [CNC BoosterPack](https://github.com/terjeio/CNC_Boosterpack) and processor board. Prototype made, includes 8-bit I2C GPIO expander. BoosterPack has an onboard EEPROM and an I2C level shifter.
 
 Please note that some of the capabilities should be fairly easy to port from one driver to another, but be aware some are dependent on MCU peripheral availability and thus not possible, or hard, to port.
 

@@ -120,13 +120,6 @@ typedef union {
     };
 } step_control_t;
 
-#define SIGNAL_RESET       bit(0)
-#define SIGNAL_FEEDHOLD    bit(1)
-#define SIGNAL_CYCLESTART  bit(2)
-#define SIGNAL_SAFETYDOOR  bit(3)
-#define SIGNAL_BLOCKDELETE bit(4)
-#define SIGNAL_MASK (SIGNAL_RESET|SIGNAL_FEEDHOLD|SIGNAL_CYCLESTART|SIGNAL_SAFETYDOOR|SIGNAL_BLOCKDELETE)
-
 typedef union {
     uint8_t value;
     uint8_t mask;
@@ -190,20 +183,30 @@ typedef struct {
     gc_override_flags_t control;    // Tracks override control states.
 } overrides_t;
 
+typedef union {
+    uint8_t value;
+    struct {
+        uint8_t mpg_mode             :1, // MPG mode flag. Set when switched to secondary input stream. (unused for now)
+                probe_succeeded      :1, // Tracks if last probing cycle was successful.
+                is_homed             :1, // Tracks if last homing cycle was successful.
+                soft_limit           :1, // Tracks soft limit errors for the state machine.
+                exit                 :1, // System exit flag. Used in combination with abort to terminate main loop.
+                block_delete_enabled :1, // Set to true to enable block delete
+                reserved             :2; // move block_input_stream here? - Input stream block flag. Set to true to discard all characters except real-time commands.
+    };
+} system_flags_t;
+
 // Define global system variables
 typedef struct {
     uint_fast16_t state;                // Tracks the current system state of Grbl.
                                         // NOTE: Setting the state variable directly is NOT allowed! Use the set_state() function!
     bool abort;                         // System abort flag. Forces exit back to main loop for reset.
-    bool exit;				            // System exit flag. Used in combination with abort to terminate main loop.
     bool cancel;                        // System cancel flag.
-    bool mpg_mode;                      // MPG mode flag. Set when switched to secondary input stream.
-    bool soft_limit;                    // Tracks soft limit errors for the state machine. (boolean)
-    bool block_delete_enabled;          // Set to true to enable block delete
-    volatile bool steppers_deenergize;	// Set to true to deenergize stepperes
-    bool probe_succeeded;               // Tracks if last probing cycle was successful.
     bool suspend;                       // System suspend state flag.
+    volatile bool steppers_deenergize;	// Set to true to deenergize stepperes
     bool block_input_stream;            // Input stream block flag. Set to true to discard all characters except real-time commands.
+    bool mpg_mode;                      // To be moved to system_flags_t
+    system_flags_t flags;               // Assorted state flags
     step_control_t step_control;        // Governs the step segment generator depending on system state.
     axes_signals_t homing_axis_lock;    // Locks axes when limits engage. Used as an axis motion mask in the stepper ISR.
     overrides_t override;               // Override values & states

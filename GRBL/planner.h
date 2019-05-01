@@ -33,12 +33,12 @@ typedef union {
     struct {
         uint8_t rapid_motion         :1,
                 system_motion        :1,
+                backlash_motion      :1,
                 no_feed_override     :1,
                 inverse_time         :1,
 				is_rpm_rate_adjusted :1,
                 is_rpm_pos_adjusted  :1,
-				is_laser_ppi_mode    :1,
-                unassigned           :1;
+				is_laser_ppi_mode    :1;
         spindle_state_t spindle;
         coolant_state_t coolant;
     };
@@ -54,7 +54,8 @@ typedef struct {
     axes_signals_t direction_bits;  // The direction bit set for this block (refers to *_DIRECTION_BIT in config.h)
 
     // Block condition data to ensure correct execution depending on states and overrides.
-    planner_cond_t condition;       // Block bitflag variable defining block run conditions. Copied from pl_line_data.
+    planner_cond_t condition;       // Block bitfield variable defining block run conditions. Copied from pl_line_data.
+    gc_override_flags_t overrides;  // Block bitfield variable for overrides
     int32_t line_number;            // Block line number for real-time reporting. Copied from pl_line_data.
 
     // Fields used by the motion planner to manage acceleration. Some of these values may be updated
@@ -80,11 +81,12 @@ typedef struct {
 
 // Planner data prototype. Must be used when passing new motions to the planner.
 typedef struct {
-    float feed_rate;            // Desired feed rate for line motion. Value is ignored, if rapid motion.
-    spindle_t spindle;          // Desired spindle speed through line motion.
-    planner_cond_t condition;   // Bitflag variable to indicate planner conditions. See defines above.
-    int32_t line_number;        // Desired line number to report when executing.
-    char *message;              // Message to be displayed when block is executed.
+    float feed_rate;                // Desired feed rate for line motion. Value is ignored, if rapid motion.
+    spindle_t spindle;              // Desired spindle speed through line motion.
+    planner_cond_t condition;       // Bitfield variable to indicate planner conditions. See defines above.
+    gc_override_flags_t overrides;  // Block bitfield variable for overrides
+    int32_t line_number;            // Desired line number to report when executing.
+    char *message;                  // Message to be displayed when block is executed.
 } plan_line_data_t;
 
 

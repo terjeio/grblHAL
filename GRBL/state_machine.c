@@ -5,7 +5,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2018 Terje Io
+  Copyright (c) 2018-2019 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -277,6 +277,9 @@ static void state_await_motion_cancel (uint_fast16_t rt_exec)
             st_reset();
             gc_sync_position();
             plan_sync_position();
+#ifdef ENABLE_BACKLASH_COMPENSATION
+            mc_sync_backlash_position();
+#endif
             sys.suspend = false;
         }
         set_state(pending_state);

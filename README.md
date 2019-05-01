@@ -1,6 +1,16 @@
 ## GrblHAL ##
 
-GrblHAL is a no-compromise, high performance, low cost alternative to parallel-port-based motion control for CNC milling based on the Arduino version of grbl. It is mainly aimed at ARM processors \(or other 32-bit MCUs\) with ample amounts of RAM and flash \(compared to AVR 328p\) and requires a hardware driver to be functional.
+---
+
+G76 threading support added to grblHAL in combination with the [MSP432 driver](drivers/MSP432/README.md). Extensive testing is required before it can be regarded as safe.
+
+**WARNING!** This is a potentially dangerous addition. Do NOT use if you do not understand the risks. A proper E-Stop is a must, it should cut power to the steppers and if possible engage any spindle brake. The implementation is based on the [linuxcnc specification](http://linuxcnc.org/docs/2.6/html/gcode/gcode.html#sec:G76-Threading-Canned). Please note that I am not a machinist so my interpretation and implementation may be wrong!
+
+G76 availablity requires a spindle encoder with index pulse, grblHAL configured to [lathe mode](doc/markdown/settings.md#opmode) and tuning of the spindle sync PID loop. NOTE: Feed hold is disabled when cutting, spindle RPM overrides and CSS mode through the whole cycle. 
+
+---
+
+GrblHAL is a no-compromise, high performance, low cost alternative to parallel-port-based motion control for CNC milling based on the Arduino version of grbl. It is mainly aimed at ARM processors \(or other 32-bit MCUs\) with ample amounts of RAM and flash \(compared to AVR 328p\) and requires a [hardware driver](drivers/ReadMe.md) to be functional.
 
 The driver interface \(HAL\) has entry points for extending the supported M-codes (adding user defined M-codes) as well as an entry point for the driver to execute G-code when Grbl is in idle or jog state.
 
@@ -14,11 +24,11 @@ It accepts standards-compliant g-code and has been tested with the output of sev
 
 Grbl includes full acceleration management with look ahead. That means the controller will look up to 16 motions into the future and plan its velocities ahead to deliver smooth acceleration and jerk-free cornering.
 
-* This version is a port/rewrite of [grbl 1.1f](https://github.com/gnea/grbl) and should be compatible with GCode senders compliant with the specifications for that version. It should be possible to change default compile-time configurations if problems arise, eg. the default serial buffer sizes has been increased in some of the drivers provided.
+* This version is a port/rewrite of [grbl 1.1f](https://github.com/gnea/grbl) and should be compatible with GCode senders compliant with the specifications for that version. It should be possible to change default compile-time configurations if problems arise, eg. the default serial buffer sizes has been increased in some of the [drivers](drivers/ReadMe.md) provided.
 
 **NOTE:** As there are many changes to the codebase this version should **not** be regarded as stable. Added features has only undergone light testing if any at all. Also, there is a completely new state machine that is not yet fully verified - it seems to have issues regarding safety door handling when parking is enabled.
 
-I am currently running this version in three CNC machines, a CO2 laser (TM4C123), a router/mill (MSP432) and a lathe (MSP432) The last two are builds in progress.
+I am currently running this version in three CNC machines, a CO2 laser \(TM4C123\), a router/mill \(MSP432\) and a lathe \(MSP432\) The last two are builds in progress.
 
 ***
 
@@ -28,6 +38,7 @@ List of Supported G-Codes in GrblHAL v1.1:
   - Additional Non-Modal Commands: G10L1*, G10L10*, G10L11*
   - Motion Modes: G0, G1, G2, G3, G38.2, G38.3, G38.4, G38.5, G80, G33*
   - Canned cycles: G73, G81, G82, G83, G85, G86, G89, G98, G99
+  - Repetitive cycles: G76*
   - Feed Rate Modes: G93, G94, G95*, G96*, G97*
   - Unit Modes: G20, G21
   - Scaling: G50, G51
@@ -41,7 +52,7 @@ List of Supported G-Codes in GrblHAL v1.1:
   - Program Flow: M0, M1, M2, M30
   - Coolant Control: M7, M8, M9
   - Spindle Control: M3, M4, M5
-  - Tool Change: M6* \(Two modes possible: manual** - supports jogging, ATC\)
+  - Tool Change: M6* (Two modes possible: manual** - supports jogging, ATC)
   - Switches: M49, M50, M51, M53
   - Valid Non-Command Words: A*, B*, C*, F, H*, I, J, K, L, N, P, Q*, R, S, T, X, Y, Z
 

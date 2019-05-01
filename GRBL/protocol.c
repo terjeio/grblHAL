@@ -2,7 +2,7 @@
   protocol.c - controls Grbl execution protocol and procedures
   Part of Grbl
 
-  Copyright (c) 2017-2018 Terje Io
+  Copyright (c) 2017-2019 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -30,7 +30,8 @@ typedef union {
                 comment_parentheses :1,
                 comment_semicolon   :1,
                 block_delete        :1,
-                unassigned          :4;
+                keep_rt_commands         :1,
+                unassigned          :3;
     };
 } line_flags_t;
 
@@ -44,6 +45,7 @@ typedef struct {
 static uint_fast16_t char_counter = 0;
 static char line[LINE_BUFFER_SIZE]; // Line to be executed. Zero-terminated.
 static char xcommand[LINE_BUFFER_SIZE];
+static bool keep_rt_commands = false;
 static user_message_t user_message = {NULL, 0, 0, false};
 static const char *msg = "(MSG,";
 static void protocol_exec_rt_suspend();
@@ -104,7 +106,7 @@ bool protocol_main_loop()
     bool nocaps = false;
 
     xcommand[0] = '\0';
-    user_message.show = false;
+    user_message.show = keep_rt_commands = false;
 
     while(true) {
 
@@ -115,7 +117,7 @@ bool protocol_main_loop()
             if(c == CMD_RESET) {
 
                 eol = xcommand[0] = '\0';
-                nocaps = user_message.show = false;
+                keep_rt_commands = nocaps = user_message.show = false;
                 char_counter = line_flags.value = 0;
 
                 if (sys.state == STATE_JOG) // Block all other states from invoking motion cancel.
@@ -132,7 +134,7 @@ bool protocol_main_loop()
                     eol = (char)c;
 
                 if(!protocol_execute_realtime()) // Runtime command check point.
-                    return !sys.exit;            // Bail to calling function upon system abort
+                    return !sys.flags.exit;            // Bail to calling function upon system abort
 
                 line[char_counter] = '\0'; // Set string termination character.
 
@@ -155,7 +157,7 @@ bool protocol_main_loop()
                 hal.report.status_message(gc_state.last_error);
 
                 // Reset tracking data for next line.
-                nocaps = user_message.show = false;
+                keep_rt_commands = nocaps = user_message.show = false;
                 char_counter = line_flags.value = 0;
 
             } else if (c <= (nocaps ? ' ' - 1 : ' ') || line_flags.value) {
@@ -170,38 +172,55 @@ bool protocol_main_loop()
                     if (c == ')') {
                         // End of '()' comment. Resume line.
                         line_flags.comment_parentheses = Off;
+                        keep_rt_commands = false;
                         user_message.show = user_message.show || user_message.tracker == 5;
                     }
                 }
-            } else if (char_counter == 0 && c == '/') {
-                line_flags.block_delete = sys.block_delete_enabled;
-            } else if (char_counter == 0 && c == '$') {
-               // Do not uppercase system commands here - will destroy passwords etc...
-                nocaps = On;
-                line[char_counter++] = c;
-            } else if (c == '(') {
-                // Enable comments flag and ignore all characters until ')' or EOL unless it is a message.
-                // NOTE: This doesn't follow the NIST definition exactly, but is good enough for now.
-                // In the future, we could simply remove the items within the comments, but retain the
-                // comment control characters, so that the g-code parser can error-check it.
-                if((line_flags.comment_parentheses = !line_flags.comment_semicolon)) {
-                    if(hal.show_message) {
-                        if(user_message.message == NULL)
-                            user_message.message = malloc(LINE_BUFFER_SIZE);
-                        if(user_message.message) {
-                            user_message.idx = 0;
-                            user_message.tracker = 1;
+            } else {
+                switch(c) {
+
+                    case '/':
+                        if(char_counter == 0)
+                            line_flags.block_delete = sys.flags.block_delete_enabled;
+                        break;
+
+                    case '$':
+                        // Do not uppercase system command - will destroy passwords etc...
+                        if(char_counter == 0)
+                            nocaps = keep_rt_commands = true;
+                        break;
+
+                    case '(':
+                        if(!keep_rt_commands) {
+                            // Enable comments flag and ignore all characters until ')' or EOL unless it is a message.
+                            // NOTE: This doesn't follow the NIST definition exactly, but is good enough for now.
+                            // In the future, we could simply remove the items within the comments, but retain the
+                            // comment control characters, so that the g-code parser can error-check it.
+                            if((line_flags.comment_parentheses = !line_flags.comment_semicolon)) {
+                                if(hal.show_message) {
+                                    if(user_message.message == NULL)
+                                        user_message.message = malloc(LINE_BUFFER_SIZE);
+                                    if(user_message.message) {
+                                        user_message.idx = 0;
+                                        user_message.tracker = 1;
+                                    }
+                                }
+                                keep_rt_commands = true;
+                            }
                         }
-                    }
+                        break;
+
+                    case ';':
+                        // NOTE: ';' comment to EOL is a LinuxCNC definition. Not NIST.
+                        if(!keep_rt_commands) {
+                            if((line_flags.comment_semicolon = !line_flags.comment_parentheses))
+                                keep_rt_commands = true;
+                        }
+                        break;
                 }
-            } else if (c == ';') {
-                // NOTE: ';' comment to EOL is a LinuxCNC definition. Not NIST.
-                line_flags.comment_semicolon = !line_flags.comment_parentheses;
-            } else if (char_counter >= (LINE_BUFFER_SIZE - 1)) {
-                // Detect line buffer overflow and set flag.
-                line_flags.overflow = On;
-            } else
-                line[char_counter++] = nocaps ? c : CAPS(c);
+                if (line_flags.value == 0 && !(line_flags.overflow = char_counter >= (LINE_BUFFER_SIZE - 1)))
+                    line[char_counter++] = nocaps ? c : CAPS(c);
+            }
         }
 
         // Handle extra command (internal stream)
@@ -223,7 +242,7 @@ bool protocol_main_loop()
         protocol_auto_cycle_start();
 
         if(!protocol_execute_realtime() && sys.abort) // Runtime command check point.
-            return !sys.exit;                         // Bail to main() program loop to reset system.
+            return !sys.flags.exit;                   // Bail to main() program loop to reset system.
 
         sys.cancel = false;
     }
@@ -548,19 +567,18 @@ static void protocol_exec_rt_suspend ()
 ISR_CODE bool protocol_process_realtime (char c)
 {
     bool add = !sys.block_input_stream;
-/*
-    static bool syscmd = false;
 
-    if(syscmd) {
-        if(c == '\r' || c == '\n')
-            syscmd = false;
-        return true;
-    } else
-        syscmd = c == '$';
-*/
+    // 1. Process characters in the ranges 0x - 1x and 8x-Ax
+    // Characters with functions assigned are always acted upon even when the input stream
+    // is redirected to a non-interactive stream such as from a SD card.
+
     switch ((unsigned char)c) {
 
-        case CMD_STOP: // Set as true
+        case '\n':
+        case '\r':
+            break;
+
+        case CMD_STOP:
             system_set_exec_state_flag(EXEC_STOP);
             char_counter = 0;
             hal.stream.cancel_read_buffer();
@@ -575,40 +593,41 @@ ISR_CODE bool protocol_process_realtime (char c)
 
         case CMD_EXIT: // Call motion control reset routine.
             mc_reset();
-            sys.exit = true;
+            sys.flags.exit = On;
             add = false;
             break;
 
-        case CMD_STATUS_REPORT: // Set as true
+        case CMD_STATUS_REPORT:
             system_set_exec_state_flag(EXEC_STATUS_REPORT);
             add = false;
             break;
 
-        case CMD_PID_REPORT:
-            system_set_exec_state_flag(EXEC_PID_REPORT);
-            add = false;
-            break;
-
-        case CMD_CYCLE_START: // Set as true
+        case CMD_CYCLE_START:
             system_set_exec_state_flag(EXEC_CYCLE_START);
             // Cancel any pending tool change
             gc_state.tool_change = false;
             add = false;
             break;
 
-        case CMD_FEED_HOLD: // Set as true
+        case CMD_FEED_HOLD:
             system_set_exec_state_flag(EXEC_FEED_HOLD);
             add = false;
             break;
 
-        case CMD_SAFETY_DOOR: // Set as true
+        case CMD_SAFETY_DOOR:
             system_set_exec_state_flag(EXEC_SAFETY_DOOR);
             add = false;
             break;
 
-        case CMD_JOG_CANCEL: // Cancel jogging
+        case CMD_JOG_CANCEL:
             char_counter = 0;
+            add = false;
             hal.stream.cancel_read_buffer();
+            break;
+
+        case CMD_PID_REPORT:
+            system_set_exec_state_flag(EXEC_PID_REPORT);
+            add = false;
             break;
 
         case CMD_OVERRIDE_FEED_RESET:
@@ -619,14 +638,61 @@ ISR_CODE bool protocol_process_realtime (char c)
         case CMD_OVERRIDE_RAPID_RESET:
         case CMD_OVERRIDE_RAPID_MEDIUM:
         case CMD_OVERRIDE_RAPID_LOW:
+            add = false;
             enqueue_feed_override(c);
             break;
 
+        case CMD_OVERRIDE_SPINDLE_RESET:
+        case CMD_OVERRIDE_SPINDLE_COARSE_PLUS:
+        case CMD_OVERRIDE_SPINDLE_COARSE_MINUS:
+        case CMD_OVERRIDE_SPINDLE_FINE_PLUS:
+        case CMD_OVERRIDE_SPINDLE_FINE_MINUS:
+        case CMD_OVERRIDE_SPINDLE_STOP:
+        case CMD_OVERRIDE_COOLANT_FLOOD_TOGGLE:
+        case CMD_OVERRIDE_COOLANT_MIST_TOGGLE:
+            add = false;
+            enqueue_accessory_override((uint8_t)c);
+            break;
+
         default:
-            if((unsigned char)c > 0x7F)
-                enqueue_accessory_override((uint8_t)c);
+            if(c < ' ' || (c >= 0x7F && c <= 0xBF))
+                add = false;
             break;
     }
 
-    return add && (unsigned char)c <= 0x7F;
+    // 2. Process printable ASCII characters and top-bit set characters
+    //    If legacy realtime commands are disabled they are returned to the input stream
+    //    when appering in settings ($ commands) or comments
+
+    if(add) switch ((unsigned char)c) {
+
+        case CMD_STATUS_REPORT_LEGACY:
+            if(!keep_rt_commands || settings.legacy_rt_commands) {
+                system_set_exec_state_flag(EXEC_STATUS_REPORT);
+                add = false;
+            }
+            break;
+
+        case CMD_CYCLE_START_LEGACY:
+            if(!keep_rt_commands || settings.legacy_rt_commands) {
+                system_set_exec_state_flag(EXEC_CYCLE_START);
+                // Cancel any pending tool change
+                gc_state.tool_change = false;
+                add = false;
+            }
+            break;
+
+        case CMD_FEED_HOLD_LEGACY:
+            if(!keep_rt_commands || settings.legacy_rt_commands) {
+                system_set_exec_state_flag(EXEC_FEED_HOLD);
+                add = false;
+            }
+            break;
+
+        default: // Strip top bit set characters
+            add = keep_rt_commands || (unsigned char)c < 0x7F;
+            break;
+    }
+
+    return add;
 }
