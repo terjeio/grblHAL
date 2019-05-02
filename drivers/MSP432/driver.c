@@ -1360,7 +1360,7 @@ void LIMIT_X_IRQHandler (void)
 {
     uint32_t iflags = LIMIT_PORT_X->IFG;
 
-    CONTROL_PORT_FH->IFG = 0;
+    LIMIT_PORT_X->IFG = 0;
 
     if(iflags & LIMIT_MASK_X) {
         if(hal.driver_cap.software_debounce)
