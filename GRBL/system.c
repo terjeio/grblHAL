@@ -123,6 +123,7 @@ status_code_t system_execute_line (char *line)
             else
                 // TODO: Move this to realtime commands for GUIs to request this data during suspend-state.
                 report_gcode_modes();
+                sys.report.flags.homed = On; // Report homed state on next realtime report
             break;
 
         case 'B': // Toggle block delete mode
@@ -412,13 +413,13 @@ void system_convert_array_steps_to_mpos (float *position, int32_t *steps)
     } while(idx);
 }
 
-// Checks and reports if target array exceeds machine travel limits. Returns true if check failed.
-bool system_check_travel_limits(float *target)
+// Checks and reports if target array exceeds machine travel limits. Returns false if check failed.
+// NOTE: max_travel is stored as negative
+// TODO: only check homed axes?
+bool system_check_travel_limits (float *target)
 {
     bool failed = false;
     uint_fast8_t idx = N_AXIS;
-
-    // NOTE: max_travel is stored as negative
 
     if(settings.flags.homing_force_set_origin) {
         do {
@@ -433,6 +434,38 @@ bool system_check_travel_limits(float *target)
         failed = target[idx] > 0.0f || target[idx] < settings.max_travel[idx];
     } while(!failed && idx);
 
-  return failed;
+  return !failed;
 }
 
+// Limits jog commands to be within machine limits, homed axes only.
+// When hard limits are enabled pulloff distance is subtracted to avoid triggering limit switches.
+// NOTE: max_travel is stored as negative
+void system_apply_travel_limits (float *target)
+{
+    float pulloff = settings.limits.flags.hard_enabled ? settings.homing.pulloff : 0.0f;
+    uint_fast8_t idx = N_AXIS;
+
+    if(sys.homed.mask) do {
+        idx--;
+        if(bit_istrue(sys.homed.mask, bit(idx))) {
+            if(settings.flags.homing_force_set_origin) {
+                if(bit_isfalse(settings.homing.dir_mask.value, bit(idx))) {
+                    if(target[idx] > 0.0f)
+                        target[idx] = 0.0f;
+                    else if(target[idx] < (settings.max_travel[idx] + pulloff))
+                        target[idx] = (settings.max_travel[idx] + pulloff);
+                } else {
+                    if(target[idx] < 0.0f)
+                        target[idx] = 0.0f;
+                    else if(target[idx] > -(settings.max_travel[idx] + pulloff))
+                        target[idx] = -(settings.max_travel[idx] + pulloff);
+                }
+            } else {
+                if(target[idx] > -pulloff)
+                    target[idx] = -pulloff;
+                else if(target[idx] < (settings.max_travel[idx] + pulloff))
+                    target[idx] = (settings.max_travel[idx] + pulloff);
+            }
+        }
+    } while(idx);
+}

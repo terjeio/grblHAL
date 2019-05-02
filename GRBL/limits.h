@@ -26,10 +26,13 @@
 #include "nuts_bolts.h"
 
 // Perform one portion of the homing cycle based on the input settings.
-void limits_go_home(uint8_t cycle_mask);
+bool limits_go_home(uint8_t cycle_mask);
 
 // Check for soft limit violations
 void limits_soft_check(float *target);
+
+// Set axes to be homed from settings.
+void limits_set_homing_axes (void);
 
 void limit_interrupt_handler (axes_signals_t state);
 

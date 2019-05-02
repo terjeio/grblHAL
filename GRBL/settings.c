@@ -499,6 +499,12 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
                 settings.limits.flags.soft_enabled = int_value != 0;
                 break;
 
+            case Setting_JogSoftLimited:
+                if (int_value && !settings.homing.flags.enabled)
+                    return Status_SoftLimitError;
+                settings.limits.flags.jog_soft_limited = int_value != 0;
+                break;
+
             case Setting_HardLimitsEnable:
                 settings.limits.flags.hard_enabled = int_value != 0;
                 hal.limits_enable(settings.limits.flags.hard_enabled, false); // Change immediately. NOTE: Nice to have but could be problematic later.
@@ -533,9 +539,10 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
                 break;
 
             case Setting_HomingEnable:
-                settings.homing.flags.enabled = int_value != 0;
-                if (!int_value)
-                    settings.limits.flags.soft_enabled = 0; // Force disable soft-limits.
+                if (!(settings.homing.flags.enabled = int_value != 0)) {
+                    settings.limits.flags.soft_enabled = Off; // Force disable soft-limits.
+                    settings.limits.flags.jog_soft_limited = Off;
+                }
                 break;
 
             case Setting_HomingDirMask:
@@ -572,7 +579,8 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
             case Setting_HomingCycle_4:
             case Setting_HomingCycle_5:
             case Setting_HomingCycle_6:
-                settings.homing.cycle[parameter - Setting_HomingCycle_1] = int_value;
+                settings.homing.cycle[parameter - Setting_HomingCycle_1].mask = int_value;
+                limits_set_homing_axes();
                 break;
 
             case Setting_G73Retract:
@@ -735,4 +743,11 @@ void settings_init() {
 #endif
         hal.settings_changed(&settings);
     }
+
+    // Set these here until they get a setting id assigned (otherwhise an EEPROM reset is required...)
+    settings.flags.allow_probing_feed_override = ALLOW_FEED_OVERRIDE_DURING_PROBE_CYCLES;
+    settings.flags.limits_two_switches_on_axes = LIMITS_TWO_SWITCHES_ON_AXES;
+    settings.flags.homing_single_axis_commands = HOMING_SINGLE_AXIS_COMMANDS;
+    settings.flags.homing_force_set_origin = HOMING_FORCE_SET_ORIGIN;
+    settings.flags.force_buffer_sync_on_wco_change = FORCE_BUFFER_SYNC_DURING_WCO_CHANGE;
 }

@@ -66,8 +66,8 @@ bool mc_line (float *target, plan_line_data_t *pl_data)
 
     // If enabled, check for soft limit violations. Placed here all line motions are picked up
     // from everywhere in Grbl.
-    // NOTE: Block jog state. Jogging is a special case and soft limits are handled independently.
-    if (sys.state != STATE_JOG && settings.limits.flags.soft_enabled)
+    // NOTE: Block jog motions. Jogging is a special case and soft limits are handled independently.
+    if (!pl_data->condition.jog_motion && settings.limits.flags.soft_enabled)
         limits_soft_check(target);
 
     // If in check gcode mode, prevent motion by blocking planner. Soft limits still work.
@@ -523,9 +523,12 @@ status_code_t mc_jog_execute (plan_line_data_t *pl_data, parser_block_t *gc_bloc
     // NOTE: Spindle and coolant are allowed to fully function with overrides during a jog.
     pl_data->feed_rate = gc_block->values.f;
     pl_data->condition.no_feed_override = On;
+    pl_data->condition.jog_motion = On;
     pl_data->line_number = gc_block->values.n;
 
-    if (settings.limits.flags.soft_enabled && system_check_travel_limits(gc_block->values.xyz))
+    if(settings.limits.flags.jog_soft_limited)
+        system_apply_travel_limits(gc_block->values.xyz);
+    else if (settings.limits.flags.soft_enabled && !system_check_travel_limits(gc_block->values.xyz))
         return Status_TravelExceeded;
 
     // Valid jog command. Plan, set state, and execute.
@@ -570,18 +573,19 @@ void mc_homing_cycle (uint8_t cycle_mask)
 
     if (cycle_mask) // Perform homing cycle based on mask.
         limits_go_home(cycle_mask);
-
     else {
 
         uint_fast8_t idx = 0;
 
+        sys.homed.mask = 0;
+
         do {
-            if(settings.homing.cycle[idx]) {
-                cycle_mask = settings.homing.cycle[idx];
-                limits_go_home(cycle_mask);
+            if(settings.homing.cycle[idx].mask) {
+                cycle_mask = settings.homing.cycle[idx].mask;
+                if(!limits_go_home(cycle_mask))
+                    break;
             }
         } while(++idx < N_AXIS);
-
     }
 
     if(cycle_mask) {
@@ -595,8 +599,9 @@ void mc_homing_cycle (uint8_t cycle_mask)
         // Sync gcode parser and planner positions to homed position.
         gc_sync_position();
         plan_sync_position();
-
     }
+
+    sys.report.flags.homed = On;
 
     // If hard limits feature enabled, re-enable hard limits pin change register after homing cycle.
     // NOTE: always call at end of homing regadless of setting, may be used to disable

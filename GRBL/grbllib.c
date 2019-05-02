@@ -166,6 +166,7 @@ int grbl_enter (void)
 		sys_rt_exec_state = 0;
 		sys_rt_exec_alarm = 0;
 
+
 		flush_override_buffers();
 
 		// Reset Grbl primary systems.
@@ -174,6 +175,7 @@ int grbl_enter (void)
 		hal.limits_enable(settings.limits.flags.hard_enabled, false);
 		plan_reset(); // Clear block buffer and planner variables
 		st_reset(); // Clear stepper subsystem variables.
+		limits_set_homing_axes(); // Set axes to be homed from settings.
 #ifdef ENABLE_BACKLASH_COMPENSATION
 		mc_backlash_init(); // Init backlash configuration.
 #endif
@@ -188,6 +190,8 @@ int grbl_enter (void)
             set_state(STATE_ESTOP);
         else if(sys.state == STATE_ESTOP)
             set_state(STATE_ALARM);
+
+        sys.report.flags.homed = On;
 
 		if((sys.mpg_mode = sys.report.flags.mpg_mode = prior_mpg_mode)) {
             report_realtime_status();

@@ -313,12 +313,13 @@ void report_grbl_settings (void)
         report_uint_setting(Setting_SpindlePPR, settings.spindle.ppr);
 
     report_uint_setting(Setting_EnableLegacyRTCommands, settings.legacy_rt_commands ? 1 : 0);
+    report_uint_setting(Setting_JogSoftLimited, settings.limits.flags.jog_soft_limited);
     report_uint_setting(Setting_HomingLocateCycles, settings.homing.locate_cycles);
 
     uint_fast8_t idx;
 
     for(idx = 0 ; idx < N_AXIS ; idx++)
-        report_uint_setting((setting_type_t)(Setting_HomingCycle_1 + idx), settings.homing.cycle[idx]);
+        report_uint_setting((setting_type_t)(Setting_HomingCycle_1 + idx), settings.homing.cycle[idx].mask);
 
     if(hal.driver_settings_report)
         hal.driver_settings_report(false, (axis_setting_type_t)0, 0);
@@ -950,6 +951,11 @@ void report_realtime_status (void)
     if(sys.report.flags.mpg_mode) {
         hal.stream.write_all(sys.mpg_mode ? "|MPG:1" : "|MPG:0");
         sys.report.flags.mpg_mode = Off;
+    }
+
+    if(sys.report.flags.homed) {
+        hal.stream.write_all(sys.homing.mask == sys.homed.mask ? "|H:1" : "|H:0");
+        sys.report.flags.homed = Off;
     }
 
     if(hal.driver_rt_report)

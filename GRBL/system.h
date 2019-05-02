@@ -164,7 +164,8 @@ typedef union {
     struct {
         uint8_t mpg_mode   :1,
                 scaling    :1, // Tracks when to add scaling info to status reports.
-                unassigned :5,
+                homed      :1,
+                unassigned :4,
                 add_report :1; // Tracks when info is added to status reports.
     };
 } report_tracking_flags_t;
@@ -188,11 +189,10 @@ typedef union {
     struct {
         uint8_t mpg_mode             :1, // MPG mode flag. Set when switched to secondary input stream. (unused for now)
                 probe_succeeded      :1, // Tracks if last probing cycle was successful.
-                is_homed             :1, // Tracks if last homing cycle was successful.
                 soft_limit           :1, // Tracks soft limit errors for the state machine.
                 exit                 :1, // System exit flag. Used in combination with abort to terminate main loop.
                 block_delete_enabled :1, // Set to true to enable block delete
-                reserved             :2; // move block_input_stream here? - Input stream block flag. Set to true to discard all characters except real-time commands.
+                reserved             :3; // move block_input_stream here? - Input stream block flag. Set to true to discard all characters except real-time commands.
     };
 } system_flags_t;
 
@@ -209,6 +209,8 @@ typedef struct {
     system_flags_t flags;               // Assorted state flags
     step_control_t step_control;        // Governs the step segment generator depending on system state.
     axes_signals_t homing_axis_lock;    // Locks axes when limits engage. Used as an axis motion mask in the stepper ISR.
+    axes_signals_t homing;              // Axes with homing enabled.
+    axes_signals_t homed;               // Indicates which axes has been homed.
     overrides_t override;               // Override values & states
     report_tracking_t report;           // Tracks when to add data to status reports.
     parking_state_t parking_state;      // Tracks parking state
@@ -246,6 +248,9 @@ void system_convert_array_steps_to_mpos(float *position, int32_t *steps);
 
 // Checks and reports if target array exceeds machine travel limits.
 bool system_check_travel_limits(float *target);
+
+// Checks and limit jog commands to within machine travel limits.
+void system_apply_travel_limits (float *target);
 
 // Special handlers for setting and clearing Grbl's real-time execution flags.
 #define system_set_exec_state_flag(mask) hal.set_bits_atomic(&sys_rt_exec_state, (mask))

@@ -30,8 +30,7 @@ typedef union {
                 comment_parentheses :1,
                 comment_semicolon   :1,
                 block_delete        :1,
-                keep_rt_commands         :1,
-                unassigned          :3;
+                unassigned          :4;
     };
 } line_flags_t;
 

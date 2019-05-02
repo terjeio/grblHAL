@@ -321,10 +321,10 @@ static void state_await_hold (uint_fast16_t rt_exec)
                         park.retract_waypoint = min(park.retract_waypoint, settings.parking.target);
                     }
 
-                    // Execute slow pull-out parking retract motion. Parking requires homing enabled, the
+                    // Execute slow pull-out parking retract motion. Parking requires parking axis homed, the
                     // current location not exceeding the parking target location, and laser mode disabled.
                     // NOTE: State is will remain DOOR, until the de-energizing and retract is complete.
-                    if (settings.homing.flags.enabled && (park.target[settings.parking.axis] < settings.parking.target) && !settings.flags.laser_mode && !sys.override.control.parking_disable) {
+                    if (bit_istrue(sys.homed.mask, bit(settings.parking.axis)) && (park.target[settings.parking.axis] < settings.parking.target) && !settings.flags.laser_mode && !sys.override.control.parking_disable) {
                         handler_changed = true;
                         stateHandler = state_await_waypoint_retract;
                         // Retract spindle by pullout distance. Ensure retraction motion moves away from

@@ -2,7 +2,7 @@
 
 #### Realtime report:
 
-\<Status>|\<WPos:|MPos:\><axis positions\>[|Bf:\<block buffers free\>,\<RX characters free>\][|PN:\<signals\>][WPos:][|MPG:\<0|1\>]
+\<Status>|\<WPos:|MPos:\><axis positions\>[|Bf:\<block buffers free\>,\<RX characters free>\][|PN:\<signals\>][WPos:][|MPG:\<0|1\>][|H:\<0|1\>]
 
 New status, __Tool__, for manual tool change, driver dependent.
 If supported the OPT: report contains 'U' and a M6 triggers the new state, if not M6 returns error as before.
@@ -14,6 +14,12 @@ New status message `|MPG:<0|1>` used to inform that a pendant has released/taken
 1 - pendant has taken over input stream, senders should disable UI but still update controls.
 
 New status message `|SD:<pct complete>[,<filename>]` used to inform status when streaming from SD card.
+
+New status message `|H:<0|1>` used to report homing status changes.
+0 - homing is not complete.
+1 - homing complete.
+
+This status is only reported when homing is enabled and then on homing status changes.
 
 #### OPT report:
 

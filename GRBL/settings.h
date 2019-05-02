@@ -126,6 +126,7 @@ typedef enum {
     Setting_StepperDeenergizeMask = 37,
     Setting_SpindlePPR = 38,
     Setting_EnableLegacyRTCommands = 39,
+    Setting_JogSoftLimited = 40,
 
     Setting_HomingLocateCycles = 43,
     Setting_HomingCycle_1 = 44,
@@ -292,7 +293,7 @@ typedef struct {
     uint8_t locate_cycles;
     uint16_t debounce_delay;
     homing_settings_flags_t flags;
-    uint8_t cycle[N_AXIS];
+    axes_signals_t cycle[N_AXIS];
 } homing_settings_t;
 
 typedef struct {
@@ -308,10 +309,11 @@ typedef struct {
 typedef union {
     uint8_t value;
     struct {
-        uint8_t hard_enabled  :1,
-                soft_enabled  :1,
-                check_at_init :1,
-                unassigned    :5;
+        uint8_t hard_enabled     :1,
+                soft_enabled     :1,
+                check_at_init    :1,
+                jog_soft_limited :1,
+                unassigned       :4;
     };
 } limit_settings_flags_t;
 

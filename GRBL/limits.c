@@ -82,7 +82,6 @@ static void limits_set_machine_positions (uint8_t cycle_mask)
             sys_position[idx] = bit_istrue(settings.homing.dir_mask.value, bit(idx))
                                  ? lroundf((settings.max_travel[idx] + settings.homing.pulloff) * settings.steps_per_mm[idx])
                                  : lroundf(-settings.homing.pulloff * settings.steps_per_mm[idx]);
-
     } while(idx);
 }
 
@@ -92,10 +91,10 @@ static void limits_set_machine_positions (uint8_t cycle_mask)
 // mask, which prevents the stepper algorithm from executing step pulses. Homing motions typically
 // circumvent the processes for executing motions in normal operation.
 // NOTE: Only the abort realtime command can interrupt this process.
-void limits_go_home (uint8_t cycle_mask)
+bool limits_go_home (uint8_t cycle_mask)
 {
     if (sys.abort)
-        return;// Block if system reset has been issued.
+        return false;// Block if system reset has been issued.
 
     // Initialize plan data struct for homing motion. Spindle and coolant are disabled.
     plan_line_data_t plan_data;
@@ -219,7 +218,7 @@ void limits_go_home (uint8_t cycle_mask)
                 if (sys_rt_exec_alarm) {
                     mc_reset(); // Stop motors, if they are running.
                     protocol_execute_realtime();
-                    return;
+                    return false;
                 } else {
                     // Pull-off motion complete. Disable CYCLE_STOP from executing.
                     system_clear_exec_state_flag(EXEC_CYCLE_COMPLETE);
@@ -252,22 +251,27 @@ void limits_go_home (uint8_t cycle_mask)
     // set up pull-off maneuver from axes limit switches that have been homed. This provides
     // some initial clearance off the switches and should also help prevent them from falsely
     // triggering when hard limits are enabled or when more than one axes shares a limit pin.
-
+#ifdef HAL_KINEMATICS
+    hal.kinematics.limits_set_machine_positions(cycle_mask);
+#else
     limits_set_machine_positions(cycle_mask);
+#endif
 
 #ifdef ENABLE_BACKLASH_COMPENSATION
     mc_backlash_init();
 #endif
     sys.step_control.flags = 0; // Return step control to normal operation.
-    sys.flags.is_homed = On;
+    sys.homed.mask |= cycle_mask;
+
+    return true;
 }
 
 // Performs a soft limit check. Called from mc_line() only. Assumes the machine has been homed,
 // the workspace volume is in all negative space, and the system is in normal operation.
-// NOTE: Used by jogging to limit travel within soft-limit volume.
+// NOTE: Also used by jogging to block travel outside soft-limit volume.
 void limits_soft_check  (float *target)
 {
-    if (system_check_travel_limits(target)) {
+    if (!system_check_travel_limits(target)) {
         sys.flags.soft_limit = On;
         // Force feed hold if cycle is active. All buffered blocks are guaranteed to be within
         // workspace volume so just come to a controlled stop so position is not lost. When complete
@@ -283,4 +287,18 @@ void limits_soft_check  (float *target)
         system_set_exec_alarm(Alarm_SoftLimit); // Indicate soft limit critical event
         protocol_execute_realtime(); // Execute to enter critical event loop and system abort
     }
+}
+
+// Set axes to be homed from settings.
+void limits_set_homing_axes (void)
+{
+    uint_fast8_t idx = N_AXIS;
+
+    sys.homing.mask = 0;
+
+    do {
+        sys.homing.mask |= settings.homing.cycle[--idx].mask;
+    } while(idx);
+
+    sys.homed.mask &= sys.homing.mask;
 }

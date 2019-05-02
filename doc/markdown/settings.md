@@ -64,8 +64,8 @@ $34=0.
 $35=0.
 $36=100.
 $38=100
-$39=0
-$40=0.
+$39=1
+$40=0
 $41=100.
 $43=1
 $44=0
@@ -339,9 +339,16 @@ Controls which axes to disable when grbl is idle, may be useful in a mill where 
 
 #### $38 - Spindle encoder pulses per revolution
 
-#### $39 - Lathe mode, boolean
+#### $39 - Enable printable realtime command characters.
+Set to 0 to disable, when disabled these characters \(`?`, `!` and `~`\) are ignored as realtime commands and added to the input instead when part of a comment or a $-setting.
 
-When enabled, Grbl will allow the use of `G7`, `G8`, `G96` and `G97` commands. 
+__NOTE:__ top bit set alternatives are provided as a safer alternative, see [config.h](../../GRBL/config.h).
+
+#### $40 - Apply soft limits for jog commands
+
+When enabled jog commands are limited to configured machine volume. Requires homing enabled and only homed axes are restricted.
+Unlike standard soft limits this does not generate an error if limits are exceeded, jogging just stops.
+If hard limits are enabled then the pullback distance is subtracted, this to avoid retriggering limit switches.
 
 #### $43 - Homing cycles
 
@@ -414,4 +421,8 @@ Again, like the max rate setting, the simplest way to determine the values for t
 
 #### $130, $131, $132 - [X,Y,Z] Max travel, mm
 
+
 This sets the maximum travel from end to end for each axis in mm. This is only useful if you have soft limits (and homing) enabled, as this is only used by Grbl's soft limit feature to check if you have exceeded your machine limits with a motion command.
+#### $160, $161, $162 - [X,Y,Z] Backlash compensation, mm
+
+This sets the backlash compensation for each axis in mm. __NOTE:__ Availability of these settings is dependent on a compile-time option in [config.h](../../GRBL/config.h) - `ENABLE_BACKLASH_COMPENSATION`.
