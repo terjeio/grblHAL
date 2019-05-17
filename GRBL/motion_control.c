@@ -156,7 +156,7 @@ bool mc_line (float *target, plan_line_data_t *pl_data)
         }
     }
 
-    return !(sys.abort || sys.cancel);
+    return !ABORTED;
 }
 
 
@@ -367,17 +367,10 @@ void mc_canned_drill (motion_mode_t motion, float *target, plan_line_data_t *pl_
     }
 }
 
-// Calculates depth-of-cut (DOC) for a given threading pass (for 60 degree thread).
-inline float calc_thread_doc (uint_fast16_t pass, float area, float depth, float depth_regression)
+// Calculates depth-of-cut (DOC) for a given threading pass.
+inline float calc_thread_doc (uint_fast16_t pass, float cut_depth, float inv_degression)
 {
-    float doc;
-
-    if(depth_regression == 1.0f)
-        doc = pass * sqrtf(area / TAN_30);
-    else
-        doc = sqrtf(pass * area / TAN_30);
-
-    return doc + 0.01f > depth ? depth : doc;
+    return cut_depth * powf((float)pass, inv_degression);
 }
 
 // Repeated cycle for threading
@@ -387,33 +380,21 @@ inline float calc_thread_doc (uint_fast16_t pass, float area, float depth, float
 
 // TODO: change pitch to follow any tapers
 
-void mc_thread (plan_line_data_t *pl_data, float *position, gc_thread_data *thread)
+void mc_thread (plan_line_data_t *pl_data, float *position, gc_thread_data *thread, bool feed_hold_disabled)
 {
     uint_fast16_t pass = 1, passes = 0;
-    float doc, area, z_offset_factor, thread_length, x_direction = thread->peak > 0.0f ? -1.0f : 1.0f;
+    float doc = thread->initial_depth, inv_degression = 1.0f / thread->depth_degression, thread_length;
     float end_taper_length, end_taper_depth;
     float end_taper_factor = thread->end_taper_type == Taper_None ? 0.0f : (thread->end_taper_type == Taper_Both ? 2.0f : 1.0f);
+    float infeed_factor = tanf(thread->infeed_angle * RADDEG);
     float target[N_AXIS];
-    gc_override_flags_t overrides = sys.override.control; // Save current override status
 
     memcpy(target, position, sizeof(float) * N_AXIS);
 
-    area = thread->initial_depth * thread->initial_depth * TAN_30;
-    z_offset_factor = tanf(thread->compound_slide_angle * RADDEG);
-
     // Calculate number of passes
-    while(calc_thread_doc(++passes, area, thread->depth, thread->depth_regression) < thread->depth);
-
-    pl_data->condition.rapid_motion = On;           // Set rapid motion condition flag and
-    pl_data->condition.is_rpm_pos_adjusted = Off;   // switch off CSS
-    pl_data->overrides = overrides;
-    pl_data->overrides.spindle_rpm_disable = On;
-    pl_data->overrides.sync = On;
-//TODO: Restore overrides on stop?
+    while(calc_thread_doc(++passes, doc, inv_degression) < thread->depth);
 
     passes += thread->spring_passes + 1;
-
-    doc = calc_thread_doc(pass, area, thread->depth, thread->depth_regression);
 
     if((thread_length = thread->z_final - position[Z_AXIS]) > 0.0f)
         thread->end_taper_length = -thread->end_taper_length;
@@ -423,15 +404,17 @@ void mc_thread (plan_line_data_t *pl_data, float *position, gc_thread_data *thre
     if(thread->main_taper_height != 0.0f)
         thread->main_taper_height = thread->main_taper_height * thread_length / (thread_length - thread->end_taper_length * end_taper_factor);
 
+    pl_data->condition.rapid_motion = On; // Set rapid motion condition flag.
+
     // TODO: Add to initial move to compensate for acceleration distance?
     /*
     float acc_distance = pl_data->feed_rate * hal.spindle_get_data(SpindleData_RPM).rpm / settings.acceleration[Z_AXIS];
     acc_distance = acc_distance * acc_distance * settings.acceleration[Z_AXIS] * 0.5f;
      */
 
-    // Initial Z-move for compound slide angle offset
-    if(z_offset_factor != 0.0f) {
-        target[Z_AXIS] += thread->depth * z_offset_factor;
+    // Initial Z-move for compound slide angle offset.
+    if(infeed_factor != 0.0f) {
+        target[Z_AXIS] += thread->depth * infeed_factor;
         if(!mc_line(target, pl_data))
             return;
     }
@@ -443,16 +426,14 @@ void mc_thread (plan_line_data_t *pl_data, float *position, gc_thread_data *thre
         end_taper_length = thread->end_taper_length * end_taper_factor;
 
         if(thread->end_taper_type == Taper_None) {
-            target[X_AXIS] += thread->peak - doc * x_direction;
+            target[X_AXIS] += (thread->peak + doc) * thread->cut_direction;
             if(!mc_line(target, pl_data))
                 return;
         }
 
         pl_data->condition.rapid_motion = Off;          // Clear rapid motion condition flag,
-        pl_data->condition.spindle.synchronized = On;   // enable spindle sync for cut and
-        pl_data->overrides.feed_hold_disable = On;      // disable feed hold
-        pl_data->overrides.feed_rate_disable = On;
-        pl_data->overrides.sync = On;                   // Sync overrides update on execution of motion
+        pl_data->condition.spindle.synchronized = On;   // enable spindle sync for cut
+        pl_data->overrides.feed_hold_disable = On;      // and disable feed hold
 
         mc_dwell(0.01f); // Needed for now since initial spindle sync is done just before st_wake_up
 
@@ -462,11 +443,11 @@ void mc_thread (plan_line_data_t *pl_data, float *position, gc_thread_data *thre
         if(thread->end_taper_type == Taper_Entry || thread->end_taper_type == Taper_Both) {
 
             // TODO: move this segment outside of synced motion?
-            target[X_AXIS] += thread->peak - (doc - end_taper_depth) * x_direction;
+            target[X_AXIS] += (thread->peak + doc - end_taper_depth) * thread->cut_direction;
             if(!mc_line(target, pl_data))
                 return;
 
-            target[X_AXIS] += end_taper_depth * x_direction;
+            target[X_AXIS] += end_taper_depth * thread->cut_direction;
             target[Z_AXIS] -= end_taper_length;
             if(!mc_line(target, pl_data))
                 return;
@@ -474,7 +455,7 @@ void mc_thread (plan_line_data_t *pl_data, float *position, gc_thread_data *thre
 
         // 2. Main part
         if(thread_length != 0.0f) {
-            target[X_AXIS] += thread->main_taper_height * x_direction;
+            target[X_AXIS] += thread->main_taper_height * thread->cut_direction;
             target[Z_AXIS] += thread_length;
             if(!mc_line(target, pl_data))
                 return;
@@ -482,37 +463,35 @@ void mc_thread (plan_line_data_t *pl_data, float *position, gc_thread_data *thre
 
         // 3. Exit taper
         if(thread->end_taper_type == Taper_Exit || thread->end_taper_type == Taper_Both) {
-            target[X_AXIS] += end_taper_depth * x_direction;
+            target[X_AXIS] += end_taper_depth * thread->cut_direction;
             target[Z_AXIS] -= end_taper_length;
             if(!mc_line(target, pl_data))
                 return;
         }
 
-        //
-
-        // Get DOC of next pass
-        doc = calc_thread_doc(++pass, area, thread->depth, thread->depth_regression);
-
         pl_data->condition.rapid_motion = On;           // Set rapid motion condition flag and
         pl_data->condition.spindle.synchronized = Off;  // disable spindle sync for retract & reposition
 
-        pl_data->overrides = overrides;
-        if(passes > 1) {                                                        // If not last pass
-            pl_data->overrides.feed_hold_disable = overrides.feed_hold_disable; // restore disable feed hold status but
-            pl_data->overrides.spindle_rpm_disable = On;                        // still block spindle RPM overrides TODO: fix for last pass!
-        }
-        pl_data->overrides.sync = On;                                           // Sync overrides update on execution of motion
-
+        // 4. Retract
         target[X_AXIS] = position[X_AXIS];
         if(!mc_line(target, pl_data))
             return;
 
         if(passes > 1) {
-            // Add compound slide angle offset when commanded
-            target[Z_AXIS] = position[Z_AXIS] + (z_offset_factor != 0.0f ? (thread->depth - doc) * z_offset_factor : 0.0f);
+
+            // Get DOC of next pass.
+            doc = calc_thread_doc(++pass, thread->initial_depth, inv_degression);
+            doc = min(doc, thread->depth);
+
+            // Restore disable feed hold status for reposition move.
+            pl_data->overrides.feed_hold_disable = feed_hold_disabled;
+
+            // 5. Back to start, add compound slide angle offset when commanded.
+            target[Z_AXIS] = position[Z_AXIS] + (infeed_factor != 0.0f ? (thread->depth - doc) * infeed_factor : 0.0f);
             if(!mc_line(target, pl_data))
                 return;
-        }
+        } else
+            doc = thread->depth;
     }
 }
 
@@ -527,7 +506,7 @@ status_code_t mc_jog_execute (plan_line_data_t *pl_data, parser_block_t *gc_bloc
     pl_data->line_number = gc_block->values.n;
 
     if(settings.limits.flags.jog_soft_limited)
-        system_apply_travel_limits(gc_block->values.xyz);
+        system_apply_jog_limits(gc_block->values.xyz);
     else if (settings.limits.flags.soft_enabled && !system_check_travel_limits(gc_block->values.xyz))
         return Status_TravelExceeded;
 
@@ -601,7 +580,7 @@ void mc_homing_cycle (uint8_t cycle_mask)
         plan_sync_position();
     }
 
-    sys.report.flags.homed = On;
+    sys.report.homed = On;
 
     // If hard limits feature enabled, re-enable hard limits pin change register after homing cycle.
     // NOTE: always call at end of homing regadless of setting, may be used to disable

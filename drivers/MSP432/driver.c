@@ -86,7 +86,12 @@ typedef struct {
 #endif
 } spindle_sync_t;
 
-static volatile uint32_t ms_count = 1, pid_count = 0; // NOTE: initial value 1 is for "resetting" systick timer
+typedef struct {
+    volatile uint32_t ms;
+    void (*callback)(void);
+} delay_t;
+
+static volatile uint32_t pid_count = 0;
 static volatile bool spindleLock = false;
 static bool pwmEnabled = false, IOInitDone = false;
 // Inverts the probe pin state depending on user settings and probing cycle mode.
@@ -96,7 +101,7 @@ static spindle_pwm_t spindle_pwm;
 static spindle_data_t spindle_data;
 static spindle_encoder_t spindle_encoder;
 static spindle_sync_t spindle_tracker;
-static void (*delayCallback)(void) = 0;
+static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
 
 static void stepperPulseStartSynchronized (stepper_t *stepper);
 static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value);
@@ -200,12 +205,12 @@ static inline float pid (pid_t *pid, float command, float actual, float sample_r
 
 static void driver_delay_ms (uint32_t ms, void (*callback)(void))
 {
-    if((ms_count = ms) > 0) {
+    if((delay.ms = ms) > 0) {
         SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
-        if(!(delayCallback = callback))
-            while(ms_count);
-    } else if(callback)
-        callback();
+        if(!(delay.callback = callback))
+            while(delay.ms);
+    } else if(delay.callback)
+        delay.callback();
 }
 
 // Enable/disable stepper motors
@@ -496,7 +501,7 @@ static control_signals_t systemGetState (void)
     if(settings.control_invert.mask)
         signals.value ^= settings.control_invert.mask;
 
-    signals.safety_door_ajar = Off; // for now - annoying that this blocks config
+//    signals.safety_door_ajar = Off; // for now - annoying that this blocks config
 
     return signals;
 }
@@ -588,7 +593,7 @@ static void spindleSetStateVariable (spindle_state_t state, float rpm)
     if (!state.on || rpm == 0.0f) {
         spindle_set_speed(spindle_pwm.off_value);
         spindle_off();
-        if(ms_count == 0)
+        if(delay.ms == 0)
             SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
         spindle_encoder.pid_state = PIDState_Disabled;
     } else {
@@ -716,7 +721,7 @@ static spindle_state_t spindleGetState (void)
         state.ccw = BITBAND_PERI(SPINDLE_DIRECTION_PORT->IN, SPINDLE_DIRECTION_PIN);
     state.value ^= settings.spindle.invert.mask;
     if(pwmEnabled)
-    	state.on = On;
+        state.on = On;
     state.at_speed = rpm >= spindle_data.rpm_low_limit && rpm <= spindle_data.rpm_high_limit;
 
     return state;
@@ -810,13 +815,13 @@ static void modeSelect (bool mpg_mode)
 
     // Report WCO on first status report request from MPG processor
     if(mpg_mode)
-        sys.report.wco_counter = 1;
+        sys.report.wco = On;
 
     // Force a realtime status report
     hal.protocol_process_realtime('?');
 
     sys.mpg_mode = mpg_mode;
-    sys.report.flags.mpg_mode = On;
+    sys.report.mpg_mode = On;
 }
 
 static void modechange (void)
@@ -1350,7 +1355,8 @@ void MODE_IRQHandler (void)
 
     if(iflags) {
         MODE_PORT->IFG &= ~iflags;
-        driver_delay_ms(50, modechange);
+        if(delay.ms == 0) // Ignore if delay is active
+            driver_delay_ms(50, modechange);
     }
 }
 
@@ -1413,9 +1419,10 @@ void CONTROL_SD_MODE_Handler (void)
 
     CONTROL_PORT_SD->IFG = 0;
 
-    if(iflags & MODE_SWITCH_BIT)
-        driver_delay_ms(50, modechange);
-    else
+    if(iflags & MODE_SWITCH_BIT) {
+        if(delay.ms == 0) // Ignore if delay is active
+            driver_delay_ms(50, modechange);
+    } else
         hal.control_interrupt_callback(systemGetState());
 }
 #endif
@@ -1442,12 +1449,12 @@ void SysTick_Handler (void)
             break;
     }
 
-    if(ms_count && !(--ms_count)) {
+    if(delay.ms && !(--delay.ms)) {
         if(spindle_encoder.pid_state == PIDState_Disabled)
             SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
-        if(delayCallback) {
-            delayCallback();
-            delayCallback = 0;
+        if(delay.callback) {
+            delay.callback();
+            delay.callback = 0;
         }
     }
 }

@@ -2,24 +2,30 @@
 
 #### Realtime report:
 
-\<Status>|\<WPos:|MPos:\><axis positions\>[|Bf:\<block buffers free\>,\<RX characters free>\][|PN:\<signals\>][WPos:][|MPG:\<0|1\>][|H:\<0|1\>]
+\<Status>|\<WPos:|MPos:\><axis positions\>[|Bf:\<block buffers free\>,\<RX characters free>\][|PN:\<signals\>][WPos:][|MPG:\<0|1\>][|H:\<0|1\>][|D:\<0|1\>]
 
 New status, __Tool__, for manual tool change, driver dependent.
 If supported the OPT: report contains 'U' and a M6 triggers the new state, if not M6 returns error as before.
-After the sender application receives a __Tool__ state RT report it should suspend sending further blocks and acknowledge by sending `0xA3 (CMD_TOOL_ACK)`. Grbl will then switch to a secondary input buffer allowing jogging commands etc, this until a cycle start is issued. Upon receiving the cycle start command grbl will revert to the primary input buffer and resume normal processing.
+After the sender application receives a __Tool__ state RT report it should suspend sending further blocks and acknowledge by sending `0xA3 (CMD_TOOL_ACK)`. Grbl will then switch to a secondary input buffer allowing jogging commands etc, this until a cycle start is issued. Upon receiving the cycle start command grbl will revert to the primary input buffer and resume normal processing.  
 _NOTE:_ currently state is not saved/restored so spindle stop/start etc. needs to be added to the gcode.
 
-New status message `|MPG:<0|1>` used to inform that a pendant has released/taken control of the input stream.
-0 - pendant has released control, senders should resume normal operation - pendant enters listening mode.
+New status message `|MPG:<0|1>` used to inform that a pendant has released/taken control of the input stream.  
+0 - pendant has released control, senders should resume normal operation - pendant enters listening mode.  
 1 - pendant has taken over input stream, senders should disable UI but still update controls.
 
 New status message `|SD:<pct complete>[,<filename>]` used to inform status when streaming from SD card.
 
-New status message `|H:<0|1>` used to report homing status changes.
-0 - homing is not complete.
+New status message `|H:<0|1>` used to report homing status changes.  
+0 - homing is not complete.  
 1 - homing complete.
 
 This status is only reported when homing is enabled and then on homing status changes.
+
+New status message `|D:<0|1>` used to report radius/diameter mode changes.  
+0 - G8: radius mode \(default\).  
+1 - G7: diameter mode.
+
+This status is only reported when lathe mode is enabled, also G7 and G8 will return an error if not.
 
 #### OPT report:
 
@@ -211,4 +217,4 @@ HARD_LIMIT_FORCE_STATE_CHECK
 SPINDLE_ENABLE_OFF_WITH_ZERO_SPEED
 
 ---
-2019-05-01
+2019-05-13

@@ -869,7 +869,7 @@ void st_prep_buffer()
             // Less than one step to decelerate to zero speed, but already very close. AMASS
             // requires full steps to execute. So, just bail.
             sys.step_control.end_motion = On;
-            if (settings.parking.flags.enabled && prep.recalculate.parking)
+            if (settings.parking.flags.enabled && !prep.recalculate.parking)
                 prep.recalculate.hold_partial_block = On;
             return; // Segment not generated, but current step data still retained.
         }

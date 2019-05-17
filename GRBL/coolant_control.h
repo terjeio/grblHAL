@@ -40,6 +40,6 @@ typedef union {
 void coolant_set_state(coolant_state_t mode);
 
 // G-code parser entry-point for setting coolant states. Checks for and executes additional conditions.
-void coolant_sync(coolant_state_t mode);
+bool coolant_sync(coolant_state_t mode);
 
 #endif

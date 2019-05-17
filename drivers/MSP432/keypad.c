@@ -5,7 +5,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2017-2018 Terje Io
+  Copyright (c) 2017-2019 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -21,10 +21,12 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "keypad.h"
 
 #include "driver.h"
 
+#if KEYPAD_ENABLE
+
+#include "keypad.h"
 #include "GRBL/grbl.h"
 
 #define KEYBUF_SIZE 16
@@ -353,3 +355,5 @@ void KEYPAD_IRQHandler (void)
         driver_keyclick_handler(iflags);
     }
 }
+
+#endif

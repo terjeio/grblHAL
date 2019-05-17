@@ -75,6 +75,7 @@ typedef enum {
     Status_GcodeIllegalPlane = 42,
     Status_GcodeMaxFeedRateExceeded = 43,
     Status_GcodeRPMOutOfRange = 44,
+    Status_LimitsEngaged = 45,
 
     Status_EStop = 50,
     Status_Unhandled = 59, // For internal use only
@@ -293,16 +294,18 @@ typedef enum {
 // Define gcode parser flags for handling special cases.
 
 typedef union {
-    uint8_t value;
+    uint16_t value;
     struct {
-        uint8_t jog_motion          :1,
-                canned_cycle_change :1,
-                arc_is_clockwise    :1,
-                probe_is_away       :1,
-                probe_is_no_error   :1,
-                spindle_force_sync  :1,
-                laser_disable       :1,
-                laser_is_motion     :1;
+        uint16_t jog_motion          :1,
+                 canned_cycle_change :1,
+                 arc_is_clockwise    :1,
+                 probe_is_away       :1,
+                 probe_is_no_error   :1,
+                 spindle_force_sync  :1,
+                 laser_disable       :1,
+                 laser_is_motion     :1,
+                 set_coolant         :1,
+                 reserved            :7;
     };
 } gc_parser_flags_t;
 
@@ -412,10 +415,11 @@ typedef struct {
     float peak;
     float initial_depth;
     float depth;
-    float depth_regression;
+    float depth_degression;
     float main_taper_height;
     float end_taper_length;
-    float compound_slide_angle;
+    float infeed_angle;
+    float cut_direction;
     uint_fast16_t spring_passes;
     gc_taper_type end_taper_type;
 } gc_thread_data;
@@ -451,6 +455,7 @@ typedef struct {
     float g92_coord_offset[N_AXIS];     // Retains the G92 coordinate offset (work coordinates) relative to
                                         // machine zero in mm. Non-persistent. Cleared upon reset and boot.
     int32_t line_number;                // Last line number sent
+    uint8_t tool_pending;               // Tool to be selected on next M6
     tool_data_t *tool;                  // Tracks tool number and offset
     float tool_length_offset[N_AXIS];   // Tracks tool length offset value when enabled
     bool file_run;                      // Tracks % command

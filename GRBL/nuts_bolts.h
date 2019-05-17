@@ -44,6 +44,8 @@
 #define TAN_30 0.57735f         // Used for threading calculations (60 degree inserts)
 #define RADDEG 0.0174532925f    // Radians per degree
 
+#define ABORTED (sys.abort || sys.cancel)
+
 // Convert character to uppercase
 #define CAPS(c) ((c >= 'a' && c <= 'z') ? c & 0x5F : c)
 

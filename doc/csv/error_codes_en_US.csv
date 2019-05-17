@@ -41,6 +41,7 @@ Error Code in v1.1+ ,Error Message in v1.0-, Error Description
 42,Invalid gcode ID:42,Plane must be ZX for threading.
 43,Invalid gcode ID:43,Max. feed rate exceeded.
 44,Invalid gcode ID:44,RPM out of range.
+45,Limit switch engaged,Only homing is allowed when a limit switch is engaged.
 50,E-stop,Emergency stop active.
 60,SD Card,SD Card mount failed.
 61,SD Card,SD Card file open/read failed.

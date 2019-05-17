@@ -506,7 +506,8 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
                 break;
 
             case Setting_HardLimitsEnable:
-                settings.limits.flags.hard_enabled = int_value != 0;
+                settings.limits.flags.hard_enabled = int_value & bit(0);
+                settings.limits.flags.check_at_init = int_value & bit(1);
                 hal.limits_enable(settings.limits.flags.hard_enabled, false); // Change immediately. NOTE: Nice to have but could be problematic later.
                 break;
 
@@ -530,8 +531,12 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
                 settings.flags.force_initialization_alarm = int_value != 0;
                 break;
 
-            case Setting_CheckLimitsAtInit:
-                settings.limits.flags.check_at_init = int_value != 0;
+            case Setting_AssortedFlags: // TODO: remove code at end of this file to enable
+                settings.flags.allow_probing_feed_override = int_value & bit(0);
+                settings.flags.limits_two_switches_on_axes = int_value & bit(1);
+                settings.flags.homing_single_axis_commands = int_value & bit(2);
+                settings.flags.homing_force_set_origin = int_value & bit(3);
+                settings.flags.force_buffer_sync_on_wco_change = int_value & bit(4);
                 break;
 
             case Setting_HomingInitLock:
@@ -750,4 +755,12 @@ void settings_init() {
     settings.flags.homing_single_axis_commands = HOMING_SINGLE_AXIS_COMMANDS;
     settings.flags.homing_force_set_origin = HOMING_FORCE_SET_ORIGIN;
     settings.flags.force_buffer_sync_on_wco_change = FORCE_BUFFER_SYNC_DURING_WCO_CHANGE;
+    settings.parking.flags.enabled = DEFAULT_PARKING_ENABLE;
+    settings.parking.flags.deactivate_upon_init = DEFAULT_DEACTIVATE_PARKING_UPON_INIT;
+    settings.parking.flags.enable_override_control= DEFAULT_ENABLE_PARKING_OVERRIDE_CONTROL;
+    settings.parking.axis = DEFAULT_PARKING_AXIS;
+    settings.parking.target = DEFAULT_PARKING_TARGET;
+    settings.parking.rate = DEFAULT_PARKING_RATE;
+    settings.parking.pullout_rate = DEFAULT_PARKING_PULLOUT_RATE;
+    settings.parking.pullout_increment = DEFAULT_PARKING_PULLOUT_INCREMENT;
 }

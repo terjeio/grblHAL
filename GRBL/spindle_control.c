@@ -34,7 +34,7 @@ void spindle_set_override (uint_fast8_t speed_override)
     if ((uint8_t)speed_override != sys.override.spindle_rpm) {
         sys.step_control.update_spindle_rpm = On;
         sys.override.spindle_rpm = (uint8_t)speed_override;
-        sys.report.override_counter = 0; // Set to report change immediately
+        sys.report.spindle = On; // Set to report change immediately
     }
 }
 
@@ -43,7 +43,7 @@ void spindle_set_override (uint_fast8_t speed_override)
 // sleep, and spindle stop override.
 bool spindle_set_state (spindle_state_t state, float rpm)
 {
-    if (!sys.abort) { // Block during abort.
+    if (!ABORTED) { // Block during abort.
 
         if (!state.on) { // Halt or set spindle direction and rpm.
             sys.spindle_rpm = 0.0f;
@@ -56,21 +56,22 @@ bool spindle_set_state (spindle_state_t state, float rpm)
 
             hal.spindle_set_state(state, spindle_set_rpm(rpm, sys.override.spindle_rpm));
         }
-        sys.report.override_counter = -1; // Set to report change immediately
+        sys.report.spindle = On; // Set to report change immediately
     }
 
-    return !sys.abort;
+    return !ABORTED;
 }
 
 // G-code parser entry-point for setting spindle state. Forces a planner buffer sync and bails
 // if an abort or check-mode is active.
 bool spindle_sync (spindle_state_t state, float rpm)
 {
+    bool ok = true;
     bool at_speed = sys.state == STATE_CHECK_MODE || !hal.driver_cap.spindle_at_speed;
 
     if (sys.state != STATE_CHECK_MODE) {
-        protocol_buffer_synchronize(); // Empty planner buffer to ensure spindle is set when programmed.
-        if(spindle_set_state(state, rpm) && !at_speed) {
+        // Empty planner buffer to ensure spindle is set when programmed.
+        if((ok = protocol_buffer_synchronize()) && spindle_set_state(state, rpm) && !at_speed) {
             float delay = 0.0f;
             while(!sys.abort && !(at_speed = hal.spindle_get_state().at_speed)) {
                 delay_sec(0.1f, DelayMode_Dwell);
@@ -81,7 +82,7 @@ bool spindle_sync (spindle_state_t state, float rpm)
         }
     }
 
-    return at_speed;
+    return ok && at_speed;
 }
 
 // Calculate and set programmed RPM according to override and max/min limits

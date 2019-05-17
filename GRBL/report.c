@@ -34,6 +34,8 @@
 static char buf[(STRLEN_COORDVALUE + 1) * N_AXIS];
 static char *(*get_axis_values)(float *axis_values);
 static char *(*get_rate_value)(float value);
+static uint8_t override_counter = 0; // Tracks when to add override data to status reports.
+static uint8_t wco_counter = 0;      // Tracks when to add work coordinate offset data to status reports.
 
 // Append a number of strings to the static buffer
 // NOTE: do NOT use for several int/float conversions as these share the same underlying buffer!
@@ -243,6 +245,7 @@ void report_feedback_message(message_code_t message_code)
 // Welcome message
 void report_init_message (void)
 {
+    override_counter = wco_counter = 0;
     hal.stream.write("\r\nGrblHAL " GRBL_VERSION " ['$' for help]\r\n");
 }
 
@@ -292,7 +295,7 @@ void report_grbl_settings (void)
     if(hal.probe_configure_invert_mask)
         report_uint_setting(Setting_ProbePullUpDisable, settings.flags.disable_probe_pullup);
     report_uint_setting(Setting_SoftLimitsEnable, settings.limits.flags.soft_enabled);
-    report_uint_setting(Setting_HardLimitsEnable, settings.limits.flags.hard_enabled);
+    report_uint_setting(Setting_HardLimitsEnable, ((settings.limits.flags.hard_enabled & bit(0)) ? bit(0) | (settings.limits.flags.check_at_init ? bit(1) : 0) : 0));
     report_uint_setting(Setting_HomingEnable, settings.homing.flags.enabled);
     report_uint_setting(Setting_HomingDirMask, settings.homing.dir_mask.value);
     report_float_setting(Setting_HomingFeedRate, settings.homing.feed_rate, N_DECIMAL_SETTINGVALUE);
@@ -329,7 +332,6 @@ void report_grbl_settings (void)
     report_uint_setting(Setting_SleepEnable, settings.flags.sleep_enable);
     report_uint_setting(Setting_DisableLaserDuringHold, settings.flags.disable_laser_during_hold);
     report_uint_setting(Setting_ForceInitAlarm, settings.flags.force_initialization_alarm);
-    report_uint_setting(Setting_CheckLimitsAtInit, settings.limits.flags.check_at_init);
     report_uint_setting(Setting_HomingInitLock, settings.homing.flags.init_lock);
     report_uint_setting(Settings_Stream, (uint32_t)settings.stream);
 
@@ -454,10 +456,15 @@ void report_ngc_parameters (void)
     hal.stream.write("]\r\n");
 #ifdef N_TOOLS
     for (idx = 1; idx <= N_TOOLS; idx++) {
-        hal.stream.write("[T");
+        hal.stream.write("[T:");
         hal.stream.write(uitoa((uint32_t)idx));
-        hal.stream.write(":");
+        hal.stream.write("|");
         hal.stream.write(get_axis_values(tool_table[idx].offset));
+        hal.stream.write("|");
+        if(settings.flags.report_inches)
+            hal.stream.write(ftoa(tool_table[idx].radius * INCH_PER_MM, N_DECIMAL_COORDVALUE_INCH));
+        else
+            hal.stream.write(ftoa(tool_table[idx].radius, N_DECIMAL_COORDVALUE_MM));
         hal.stream.write("]\r\n");
     }
 #endif
@@ -468,7 +475,6 @@ void report_ngc_parameters (void)
 
     report_probe_parameters(); // Print probe parameters. Not persistent in memory.
 }
-
 
 // Print current gcode parser mode state
 void report_gcode_modes (void)
@@ -766,6 +772,8 @@ void report_realtime_status (void)
 
         case STATE_CYCLE:
             hal.stream.write_all("Run");
+            if(sys.flags.feed_hold_pending)
+                hal.stream.write_all(":1");
             break;
 
         case STATE_HOLD:
@@ -804,7 +812,7 @@ void report_realtime_status (void)
 
     uint_fast8_t idx;
     float wco[N_AXIS];
-    if (!settings.status_report.machine_position || sys.report.wco_counter == 0) {
+    if (!settings.status_report.machine_position || sys.report.wco) {
         for (idx = 0; idx < N_AXIS; idx++) {
             // Apply work coordinate offsets and tool length offset to current position.
             wco[idx] = gc_get_offset(idx);
@@ -883,85 +891,97 @@ void report_realtime_status (void)
         }
     }
 
-    sys.report.flags.add_report = sys.report.override_counter <= 0;
-
     if(settings.status_report.work_coord_offset) {
 
-        if (sys.report.wco_counter > 0)
-            sys.report.wco_counter--;
-        else {
-            sys.report.wco_counter = sys.state & (STATE_HOMING|STATE_CYCLE|STATE_HOLD|STATE_JOG|STATE_SAFETY_DOOR)
-                                      ? (REPORT_WCO_REFRESH_BUSY_COUNT - 1) // Reset counter for slow refresh
-                                      : (REPORT_WCO_REFRESH_IDLE_COUNT - 1);
-            sys.report.flags.add_report = Off; // Set override on next report.
-            hal.stream.write_all("|WCO:");
-            hal.stream.write_all(get_axis_values(wco));
-        }
-    }
+        if (wco_counter > 0 && !sys.report.wco)
+            wco_counter--;
+        else
+            wco_counter = sys.state & (STATE_HOMING|STATE_CYCLE|STATE_HOLD|STATE_JOG|STATE_SAFETY_DOOR)
+                            ? (REPORT_WCO_REFRESH_BUSY_COUNT - 1) // Reset counter for slow refresh
+                            : (REPORT_WCO_REFRESH_IDLE_COUNT - 1);
+    } else
+        sys.report.wco = Off;
 
     if(settings.status_report.overrrides) {
 
-        if (sys.report.override_counter > 0)
-            sys.report.override_counter--;
-        else if(sys.report.flags.add_report) {
+        if (override_counter > 0 && !sys.report.overrides)
+            override_counter--;
+        else {
+            sys.report.overrides = On;
+            sys.report.spindle = sys.report.spindle || hal.spindle_get_state().on;
+            sys.report.coolant = sys.report.coolant || hal.coolant_get_state().value != 0;
+            override_counter = sys.state & (STATE_HOMING|STATE_CYCLE|STATE_HOLD|STATE_JOG|STATE_SAFETY_DOOR)
+                                 ? (REPORT_OVERRIDE_REFRESH_BUSY_COUNT - 1) // Reset counter for slow refresh
+                                 : (REPORT_OVERRIDE_REFRESH_IDLE_COUNT - 1);
+        }
+    } else
+        sys.report.overrides = Off;
 
+    if(sys.report.value) {
+
+        if(sys.report.wco) {
+            hal.stream.write_all("|WCO:");
+            hal.stream.write_all(get_axis_values(wco));
+        }
+
+        if(sys.report.overrides) {
             hal.stream.write_all(appendbuf(2, "|Ov:", uitoa((uint32_t)sys.override.feed_rate)));
             hal.stream.write_all(appendbuf(2, ",", uitoa((uint32_t)sys.override.rapid_rate)));
             hal.stream.write_all(appendbuf(2, ",", uitoa((uint32_t)sys.override.spindle_rpm)));
+        }
+
+        if(sys.report.spindle || sys.report.coolant || gc_state.tool_change) {
 
             spindle_state_t sp_state = hal.spindle_get_state();
             coolant_state_t cl_state = hal.coolant_get_state();
-            if (sp_state.on || cl_state.value || gc_state.tool_change || sys.report.override_counter < 0) {
 
-                char *append = &buf[3];
+            char *append = &buf[3];
 
-                strcpy(buf, "|A:");
+            strcpy(buf, "|A:");
 
-                if (sp_state.on)
-                    *append++ = sp_state.ccw ? 'C' : 'S';
+            if (sp_state.on)
+                *append++ = sp_state.ccw ? 'C' : 'S';
 
-                if (cl_state.flood)
-                    *append++ = 'F';
+            if (cl_state.flood)
+                *append++ = 'F';
 
-                if (cl_state.mist)
-                    *append++ = 'M';
+            if (cl_state.mist)
+                *append++ = 'M';
 
-                if(gc_state.tool_change)
-                    *append++ = 'T';
+            if(gc_state.tool_change)
+                *append++ = 'T';
 
-                *append = '\0';
-                hal.stream.write_all(buf);
-            }
-
-            sys.report.override_counter = sys.state & (STATE_HOMING|STATE_CYCLE|STATE_HOLD|STATE_JOG|STATE_SAFETY_DOOR)
-                                      ? (REPORT_OVERRIDE_REFRESH_BUSY_COUNT - 1) // Reset counter for slow refresh
-                                      : (REPORT_OVERRIDE_REFRESH_IDLE_COUNT - 1);
-
+            *append = '\0';
+            hal.stream.write_all(buf);
         }
+
+        if(sys.report.scaling) {
+            axis_signals_tostring(buf, gc_get_g51_state());
+            hal.stream.write_all("|Sc:");
+            hal.stream.write_all(buf);
+        }
+
+        if(sys.report.mpg_mode)
+            hal.stream.write_all(sys.mpg_mode ? "|MPG:1" : "|MPG:0");
+
+        if(sys.report.homed && sys.homing.mask)
+            hal.stream.write_all(sys.homing.mask == sys.homed.mask ? "|H:1" : "|H:0");
+
+        if(sys.report.xmode)
+            hal.stream.write_all(gc_state.modal.diameter_mode ? "|D:1" : "|D:0");
+
+        if(sys.report.tool)
+            hal.stream.write_all(appendbuf(2, "|T:", uitoa((uint32_t)gc_state.tool->tool)));
+
+        sys.report.value = 0;
+
     } else if(gc_state.tool_change)
         hal.stream.write_all("|A:T");
 
-    if(sys.report.flags.scaling) {
-        axis_signals_tostring(buf, gc_get_g51_state());
-        hal.stream.write_all("|Sc:");
-        hal.stream.write_all(buf);
-        sys.report.flags.scaling = Off;
-    }
-
-    if(sys.report.flags.mpg_mode) {
-        hal.stream.write_all(sys.mpg_mode ? "|MPG:1" : "|MPG:0");
-        sys.report.flags.mpg_mode = Off;
-    }
-
-    if(sys.report.flags.homed) {
-        hal.stream.write_all(sys.homing.mask == sys.homed.mask ? "|H:1" : "|H:0");
-        sys.report.flags.homed = Off;
-    }
+    sys.report.wco = settings.status_report.work_coord_offset && wco_counter == 0; // Set to report on next request
 
     if(hal.driver_rt_report)
         hal.driver_rt_report(hal.stream.write_all);
-
-    sys.report.flags.add_report = false;
 
     hal.stream.write_all(">\r\n");
 }

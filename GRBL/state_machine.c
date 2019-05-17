@@ -186,12 +186,15 @@ void set_state (uint_fast16_t new_state)
             break;
 
         case STATE_HOLD:
+            if(sys.override.control.sync && sys.override.control.feed_hold_disable)
+                sys.flags.feed_hold_pending = On;
             if(!((sys.state & STATE_JOG) || sys.override.control.feed_hold_disable)) {
                 if(!initiate_hold(new_state)) {
                     sys.holding_state = Hold_Complete;
                     stateHandler = state_await_resume;
                 }
                 sys.state = new_state;
+                sys.flags.feed_hold_pending = Off;
             }
             break;
 
@@ -260,8 +263,9 @@ static void state_await_toolchanged (uint_fast16_t rt_exec)
         // Tool change complete, restore "normal" stream input
         if(hal.stream.suspend_read && hal.stream.suspend_read(false)) {
             sys.state = STATE_CYCLE;    // Force a running state realtime report
-            report_realtime_status();   // to get the streaming going again
+            report_realtime_status();   // to get streaming going again
         }
+        sys.report.tool = On;
         pending_state = STATE_IDLE;
         set_state(STATE_IDLE);
         set_state(STATE_CYCLE);
@@ -458,6 +462,35 @@ static void state_await_resume (uint_fast16_t rt_exec)
     }
 }
 
+static void restart_retract (void)
+{
+    hal.report.feedback_message(Message_SafetyDoorAjar);
+
+    stateHandler = state_await_hold;
+
+    park.restart_retract = true;
+    sys.parking_state = Parking_Retracting;
+
+    if (sys.step_control.execute_sys_motion) {
+        st_update_plan_block_parameters(); // Notify stepper module to recompute for hold deceleration.
+        sys.step_control.execute_hold = On;
+        sys.step_control.execute_sys_motion = On;
+    } else // else NO_MOTION is active.
+        stateHandler(EXEC_CYCLE_COMPLETE);
+}
+
+static void state_await_waypoint_cancel (uint_fast16_t rt_exec)
+{
+    if (rt_exec & EXEC_SAFETY_DOOR)
+        restart_retract();
+
+    else if (rt_exec & EXEC_CYCLE_COMPLETE) {
+        sys.parking_state = Parking_Cancel;
+        sys.step_control.execute_hold = Off;
+        state_restore(rt_exec);
+    }
+}
+
 static void state_await_waypoint_retract (uint_fast16_t rt_exec)
 {
     if (rt_exec & EXEC_CYCLE_COMPLETE) {
@@ -468,11 +501,12 @@ static void state_await_waypoint_retract (uint_fast16_t rt_exec)
         }
 
         // NOTE: Clear accessory state after retract and after an aborted restore motion.
-        park.plan_data.condition.coolant.value = 0;
         park.plan_data.condition.spindle.value = 0;
         park.plan_data.spindle.rpm = 0.0f;
-        hal.spindle_set_state((spindle_state_t){0}, 0.0f); // De-energize
-        hal.coolant_set_state((coolant_state_t){0}); // De-energize
+        hal.spindle_set_state(park.plan_data.condition.spindle, 0.0f); // De-energize
+
+        park.plan_data.condition.coolant.value = 0;
+        hal.coolant_set_state(park.plan_data.condition.coolant); // De-energize
 
         stateHandler = state_await_resume;
 
@@ -486,25 +520,18 @@ static void state_await_waypoint_retract (uint_fast16_t rt_exec)
                 stateHandler(EXEC_CYCLE_COMPLETE);
         } else
             stateHandler(EXEC_CYCLE_COMPLETE);
+
+    } else if (rt_exec & EXEC_CYCLE_START) {
+
+        stateHandler = state_await_waypoint_cancel;
+
+        if (sys.step_control.execute_sys_motion) {
+            st_update_plan_block_parameters(); // Notify stepper module to recompute for hold deceleration.
+            sys.step_control.execute_hold = On;
+            sys.step_control.execute_sys_motion = On;
+        } else // else NO_MOTION is active.
+            stateHandler(EXEC_CYCLE_COMPLETE);
     }
-}
-
-static void restart_retract (void)
-{
-    hal.report.feedback_message(Message_SafetyDoorAjar);
-
-    stateHandler = state_await_hold;
-
-    park.restart_retract = true;
-    sys.parking_state = Parking_Retracting;
-
-    if (sys.step_control.execute_sys_motion) {
-        st_update_plan_block_parameters(); // Notify stepper module to recompute for hold deceleration.
-        sys.step_control.execute_hold = true;
-        sys.step_control.execute_sys_motion = On;
-    } else // else NO_MOTION is active.
-        stateHandler(EXEC_CYCLE_COMPLETE);
-
 }
 
 static void state_restore (uint_fast16_t rt_exec)
@@ -523,7 +550,11 @@ static void state_restore (uint_fast16_t rt_exec)
 
         // Delayed Tasks: Restart spindle and coolant, delay to power-up, then resume cycle.
         // Block if safety door re-opened during prior restore actions.
-        state_restore_conditions(&restore_condition, restore_spindle_rpm);
+        if(sys.parking_state != Parking_Cancel)
+            state_restore_conditions(&restore_condition, restore_spindle_rpm);
+
+        park.restart_retract = false;
+        sys.parking_state = Parking_Resuming;
 
         // Execute slow plunge motion from pull-out position to resume position.
 
@@ -546,7 +577,7 @@ static void state_await_resumed (uint_fast16_t rt_exec)
 
     else if (rt_exec & EXEC_CYCLE_COMPLETE) {
         if(sys.step_control.execute_sys_motion) {
-            sys.step_control.execute_sys_motion = Off;
+            sys.step_control.flags = 0;
             st_parking_restore_buffer(); // Restore step segment buffer to normal run state.
         }
         set_state(STATE_IDLE);

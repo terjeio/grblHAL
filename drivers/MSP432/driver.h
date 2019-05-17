@@ -36,13 +36,13 @@
 // Configuration
 // Set value to 1 to enable, 0 to disable
 
-#define KEYPAD_ENABLE   1 // I2C keypad for jogging etc.
+#define KEYPAD_ENABLE   0 // I2C keypad for jogging etc.
 #define ATC_ENABLE      0 // do not change!
 #define CNC_BOOSTERPACK 1 // do not change!
 
 #if CNC_BOOSTERPACK
   #define EEPROM_ENABLE           1 // only change if BoosterPack does not have EEPROM mounted
-  #define CNC_BOOSTERPACK_SHORTS  0 // shorts added to BoosterPack for some signals (for faster and simpler driver)
+  #define CNC_BOOSTERPACK_SHORTS  1 // shorts added to BoosterPack for some signals (for faster and simpler driver)
   #define CNC_BOOSTERPACK_A4998   1 // using Polulu A4998 drivers - for suppying VDD via GPIO (PE5)
 #else
   #define EEPROM_ENABLE          0 // do not change!
@@ -67,6 +67,7 @@
 #define portQ(p) PORT ## p ## _IRQn
 #define portHANDLER(p) portH(p)
 #define portH(p) PORT ## p ## _IRQHandler
+
 
 #define timer(p) timerN(p)
 #define timerN(p) TIMER_ ## p

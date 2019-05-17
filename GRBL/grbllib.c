@@ -191,9 +191,9 @@ int grbl_enter (void)
         else if(sys.state == STATE_ESTOP)
             set_state(STATE_ALARM);
 
-        sys.report.flags.homed = On;
+        sys.report.homed = On;
 
-		if((sys.mpg_mode = sys.report.flags.mpg_mode = prior_mpg_mode)) {
+		if((sys.mpg_mode = sys.report.mpg_mode = prior_mpg_mode)) {
             report_realtime_status();
 		}
 

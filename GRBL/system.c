@@ -121,9 +121,8 @@ status_code_t system_execute_line (char *line)
             if (line[2] != '\0' )
                 retval = Status_InvalidStatement;
             else
-                // TODO: Move this to realtime commands for GUIs to request this data during suspend-state.
                 report_gcode_modes();
-                sys.report.flags.homed = On; // Report homed state on next realtime report
+                sys.report.homed = On; // Report homed state on next realtime report
             break;
 
         case 'B': // Toggle block delete mode
@@ -152,7 +151,7 @@ status_code_t system_execute_line (char *line)
             break;
 
         case 'X': // Disable alarm lock [ALARM]
-            if (line[2] != '\0' )
+            if (line[2] != '\0')
                 retval = Status_InvalidStatement;
             else if (sys.state & (STATE_ALARM|STATE_ESTOP)) {
 
@@ -167,6 +166,8 @@ status_code_t system_execute_line (char *line)
             	// Block if safety reset is active.
                 else if(control_signals.reset)
                     retval = Status_Reset;
+                else if (settings.limits.flags.hard_enabled && settings.limits.flags.check_at_init && hal.limits_get_state().value)
+                    retval = Status_LimitsEngaged;
                 else {
                     hal.report.feedback_message(Message_AlarmUnlock);
                     set_state(STATE_IDLE);
@@ -394,7 +395,7 @@ void system_flag_wco_change ()
     if(!settings.flags.force_buffer_sync_on_wco_change)
         protocol_buffer_synchronize();
 
-    sys.report.wco_counter = 0;
+    sys.report.wco = On;
 }
 
 // Sets machine position. Must be sent a 'step' array.
@@ -440,7 +441,7 @@ bool system_check_travel_limits (float *target)
 // Limits jog commands to be within machine limits, homed axes only.
 // When hard limits are enabled pulloff distance is subtracted to avoid triggering limit switches.
 // NOTE: max_travel is stored as negative
-void system_apply_travel_limits (float *target)
+void system_apply_jog_limits (float *target)
 {
     float pulloff = settings.limits.flags.hard_enabled ? settings.homing.pulloff : 0.0f;
     uint_fast8_t idx = N_AXIS;

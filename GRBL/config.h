@@ -65,12 +65,14 @@
 // at character value 128 (0x80) and up to 255 (0xFF). If the normal set of realtime commands,
 // such as status reports, feed hold, reset, and cycle start, are moved to the extended set
 // space, protocol.c's protocol_process_realtime() will need to be modified to accomodate the change.
-#define CMD_STATUS_REPORT 0x80
-#define CMD_CYCLE_START 0x81
-#define CMD_FEED_HOLD 0x82
+#define CMD_STATUS_REPORT 0x80 // TODO: use 0x05 ctrl-E ENQ instead?
+#define CMD_CYCLE_START 0x81   // TODO: use 0x06 ctrl-F ACK instead? or SYN/DC2/DC3?
+#define CMD_FEED_HOLD 0x82     // TODO: use 0x15 ctrl-U NAK instead?
+#define CMD_GCODE_REPORT 0x83
 #define CMD_SAFETY_DOOR 0x84
 #define CMD_JOG_CANCEL  0x85
 //#define CMD_DEBUG_REPORT 0x86 // Only when DEBUG enabled, sends debug report in '{}' braces.
+#define CMD_STATUS_REPORT_ALL 0x87
 #define CMD_OVERRIDE_FEED_RESET 0x90         // Restores feed override value to 100%.
 #define CMD_OVERRIDE_FEED_COARSE_PLUS 0x91
 #define CMD_OVERRIDE_FEED_COARSE_MINUS 0x92

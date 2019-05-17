@@ -26,7 +26,11 @@
 // arbitrary value, and some GUIs may require more. So we increased it based on a max safe
 // value when converting a float (7.2 digit precision)s to an integer.
 #define MAX_LINE_NUMBER 10000000
+#ifdef N_TOOLS
+#define MAX_TOOL_NUMBER N_TOOLS // Limited by max unsigned 8-bit value
+#else
 #define MAX_TOOL_NUMBER 255 // Limited by max unsigned 8-bit value
+#endif
 
 #define MACH3_SCALING
 
@@ -78,7 +82,7 @@ static void set_scaling (float factor)
     gc_state.modal.scaling_active = factor != 1.0f;
 
     if(state.value != gc_get_g51_state().value)
-        sys.report.flags.scaling = On;
+        sys.report.scaling = On;
 }
 
 float *gc_get_scaling (void)
@@ -459,17 +463,20 @@ status_code_t gc_execute_block(char *block, char *message)
                         word_bit.group = ModalGroup_M7;
                         gc_block.modal.spindle.on = !(int_value == 5);
                         gc_block.modal.spindle.ccw = int_value == 4;
+                        sys.flags.delay_overrides = On;
                         break;
-#ifndef N_TOOLS
+
                     case 6:
-                        if(hal.stream.suspend_read)
+                        if(hal.stream.suspend_read || hal.tool_change)
                             word_bit.group = ModalGroup_M6;
                         else
                             FAIL(Status_GcodeUnsupportedCommand); // [Unsupported M command]
                         break;
-#endif
+
                     case 7: case 8: case 9:
                         word_bit.group = ModalGroup_M8;
+                        sys.flags.delay_overrides = On;
+                        gc_parser_flags.set_coolant = On;
                         switch(int_value) {
 
                             case 7:
@@ -830,18 +837,14 @@ status_code_t gc_execute_block(char *block, char *message)
     // [5. Select tool ]: NOT SUPPORTED. Only tracks value. T is negative (done.) Not an integer. Greater than max tool value.
     // bit_false(value_words,bit(Word_T)); // NOTE: Single-meaning value word. Set at end of error-checking.
 
-    // [6. Change tool ]:
-#ifdef N_TOOLS
-    if (bit_istrue(command_words, bit(ModalGroup_M6))) {
-        if (bit_isfalse(value_words, bit(Word_T)))
-            gc_block.values.t = gc_state.tool->tool;
-        if(gc_block.values.t == 0 || gc_block.values.t > N_TOOLS)
-            FAIL(Status_GcodeIllegalToolTableEntry); // or ignore?
-    }
-#endif
+    if (bit_isfalse(value_words, bit(Word_T)))
+        gc_block.values.t = gc_state.tool_pending;
+
+    // [6. Change tool ]: N/A
     // [7. Spindle control ]: N/A
     // [8. Coolant control ]: N/A
-    // [9. Override control ]: Not supported except for a Grbl-only parking motion override control.
+
+    // [9. Override control ]:
 
     if (bit_istrue(command_words, bit(ModalGroup_M9))) {
 
@@ -915,8 +918,10 @@ status_code_t gc_execute_block(char *block, char *message)
             gc_block.values.xyz[idx] *= MM_PER_INCH;
     } while(idx);
 
-    if (bit_istrue(command_words, bit(ModalGroup_G15)))
+    if (bit_istrue(command_words, bit(ModalGroup_G15))) {
+        sys.report.xmode = gc_state.modal.diameter_mode != gc_block.modal.diameter_mode;
         gc_state.modal.diameter_mode = gc_block.modal.diameter_mode;
+    }
 
     if(gc_state.modal.diameter_mode && bit_istrue(axis_words, bit(X_AXIS)))
         gc_block.values.xyz[X_AXIS] /= 2.0f;
@@ -938,7 +943,7 @@ status_code_t gc_execute_block(char *block, char *message)
             idx = N_AXIS;
             do {
                 if(bit_istrue(axis_words, bit(--idx))) {
-                    sys.report.flags.scaling = sys.report.flags.scaling || scale_factor.ijk[idx] != gc_block.values.xyz[idx];
+                    sys.report.scaling = sys.report.scaling || scale_factor.ijk[idx] != gc_block.values.xyz[idx];
                     scale_factor.ijk[idx] = gc_block.values.xyz[idx];
                     bit_false(axis_words, bit(idx));
                 }
@@ -978,7 +983,7 @@ status_code_t gc_execute_block(char *block, char *message)
             else
                 bit_false(value_words, bit(Word_I)|bit(Word_J)|bit(Word_K));
 #endif
-            sys.report.flags.scaling = sys.report.flags.scaling || gc_state.modal.scaling_active != gc_block.modal.scaling_active;
+            sys.report.scaling = sys.report.scaling || gc_state.modal.scaling_active != gc_block.modal.scaling_active;
             gc_state.modal.scaling_active = gc_block.modal.scaling_active;
 
         } else
@@ -1003,7 +1008,7 @@ status_code_t gc_execute_block(char *block, char *message)
     //   NOTE: Since cutter radius compensation is never enabled, these G40 errors don't apply. Grbl supports G40
     //   only for the purpose to not error when G40 is sent with a g-code program header to setup the default modes.
 
-    // [14. Cutter length compensation ]: G43 NOT SUPPORTED, but G43.1 and G49 are.
+    // [14. Cutter length compensation ]: G43.1 and G49 are always supported, G43 if N_TOOLS defined.
     // [G43.1 Errors]: Motion command in same line.
     //   NOTE: Although not explicitly stated so, G43.1 should be applied to only one valid
     //   axis that is configured (in config.h). There should be an error if the configured axis
@@ -1013,7 +1018,7 @@ status_code_t gc_execute_block(char *block, char *message)
         switch(gc_block.modal.tool_offset_mode) {
 
             case ToolLengthOffset_EnableDynamic:
-                if (axis_words ^ bit(TOOL_LENGTH_OFFSET_AXIS))
+                if (!axis_words)
                     FAIL(Status_GcodeG43DynamicAxisError);
                 break;
 #ifdef N_TOOLS
@@ -1021,10 +1026,11 @@ status_code_t gc_execute_block(char *block, char *message)
                 if (bit_istrue(value_words, bit(Word_H))) {
                     if(gc_block.values.h > N_TOOLS)
                         FAIL(Status_GcodeIllegalToolTableEntry);
-                    gc_block.values.xyz[TOOL_LENGTH_OFFSET_AXIS] += tool_table[gc_block.values.h].offset[TOOL_LENGTH_OFFSET_AXIS];
                     bit_false(value_words, bit(Word_H));
+                    if(gc_block.values.h == 0)
+                        gc_block.values.h = gc_state.tool->tool;
                 } else
-                    gc_block.values.xyz[TOOL_LENGTH_OFFSET_AXIS] += gc_state.tool->offset[TOOL_LENGTH_OFFSET_AXIS];
+                    gc_block.values.h = gc_block.values.t;
                 break;
 #endif
             default:
@@ -1270,7 +1276,10 @@ status_code_t gc_execute_block(char *block, char *message)
             if (gc_block.modal.motion == MotionMode_SpindleSynchronized) {
 
                 if(gc_block.values.k == 0.0f)
-                    FAIL(Status_GcodeUndefinedFeedRate); // [Feed rate undefined]
+                    FAIL(Status_GcodeValueOutOfRange); // [No distance (pitch) given]
+
+                // Ensure spindle speed is at 100% - any override will be disabled on execute.
+                gc_parser_flags.spindle_force_sync = On;
 
             } else if (gc_block.modal.motion == MotionMode_Threading) {
 
@@ -1302,20 +1311,29 @@ status_code_t gc_execute_block(char *block, char *message)
 
                 if(gc_block.modal.motion != gc_state.modal.motion) {
                     memset(&thread, 0, sizeof(gc_thread_data));
-                    thread.depth_regression = 1.0;
+                    thread.depth_degression = 1.0f;
                 }
 
                 thread.pitch = gc_block.values.p;
                 thread.z_final = gc_block.values.xyz[Z_AXIS];
-                thread.peak = gc_block.values.ijk[I_VALUE];
+                thread.cut_direction = gc_block.values.ijk[I_VALUE] < 0.0f ? -1.0f : 1.0f;
+                thread.peak = fabs(gc_block.values.ijk[I_VALUE]);
                 thread.initial_depth = gc_block.values.ijk[J_VALUE];
                 thread.depth = gc_block.values.ijk[K_VALUE];
+
+                if(gc_block.modal.units_imperial) {
+                    thread.peak *= MM_PER_INCH;
+                    thread.initial_depth *= MM_PER_INCH;
+                    thread.depth *= MM_PER_INCH;
+                }
 
                 if(gc_block.modal.diameter_mode) {
                     thread.peak /= 2.0f;
                     thread.initial_depth /= 2.0f;
                     thread.depth /= 2.0f;
                 }
+
+                //scaling?
 
                 if(bit_istrue(axis_words, bit(X_AXIS))) {
                     thread.main_taper_height = gc_block.values.xyz[X_AXIS] - gc_get_block_offset(&gc_block, X_AXIS);
@@ -1342,10 +1360,13 @@ status_code_t gc_execute_block(char *block, char *message)
                     FAIL(Status_GcodeValueOutOfRange);
 
                 if(bit_istrue(value_words, bit(Word_R)))
-                    thread.depth_regression = gc_block.values.r;
+                    thread.depth_degression = gc_block.values.r;
 
                 if(bit_istrue(value_words, bit(Word_Q)))
-                    thread.compound_slide_angle = gc_block.values.q;
+                    thread.infeed_angle = gc_block.values.q;
+
+                // Ensure spindle speed is at 100% - any override will be disabled on execute.
+                gc_parser_flags.spindle_force_sync = On;
 
                 bit_false(value_words, bit(Word_E)|bit(Word_H)|bit(Word_I)|bit(Word_J)|bit(Word_K)|bit(Word_L)|bit(Word_P)|bit(Word_Q)|bit(Word_R));
 
@@ -1761,6 +1782,7 @@ status_code_t gc_execute_block(char *block, char *message)
         }
     }
 
+
     if ((gc_state.spindle.rpm != gc_block.values.s) || gc_parser_flags.spindle_force_sync) {
         if (gc_state.modal.spindle.on && !gc_parser_flags.laser_is_motion)
             spindle_sync(gc_state.modal.spindle, gc_parser_flags.laser_disable ? 0.0f : gc_block.values.s);
@@ -1772,32 +1794,52 @@ status_code_t gc_execute_block(char *block, char *message)
         memcpy(&plan_data.spindle, &gc_state.spindle, sizeof(spindle_t)); // Record data for planner use.
     // else { plan_data.spindle.speed = 0.0; } // Initialized as zero already.
 
-    // [5. Select tool ]: NOT SUPPORTED. Only tracks tool value.
+    // [5. Select tool ]: Only tracks tool value if ATC or manual tool change is not possible.
+    if(gc_state.tool_pending != gc_block.values.t) {
+      #ifdef N_TOOLS
+        gc_state.tool_pending = gc_block.values.t < N_TOOLS ? gc_block.values.t : 0;
+      #else
+        gc_state.tool_pending = gc_block.values.t;
+      #endif
+
+        // If M6 not available set new tool immediately
+        if(!(hal.stream.suspend_read || hal.tool_change)) {
 #ifdef N_TOOLS
-    gc_state.tool = &tool_table[gc_block.values.t < N_TOOLS ? gc_block.values.t : 0];
+            gc_state.tool = &tool_table[gc_state.tool_pending];
+#else
+            gc_state.tool->tool = gc_state.tool_pending;
 #endif
-    gc_state.tool->tool = gc_block.values.t;
-    if(gc_state.modal.tool_offset_mode == ToolLengthOffset_EnableDynamic) {
-        idx = N_AXIS;
-        do {
-            idx--;
-            gc_state.tool_length_offset[idx] = gc_state.tool->offset[idx];
-        } while(idx);
+            sys.report.tool = On;
+        }
+
+        // Prepare tool carousel when available
+        if(hal.tool_select) {
+#ifdef N_TOOLS
+            hal.tool_select(&tool_table[gc_state.tool_pending]);
+#else
+            hal.tool_select(gc_state.tool);
+#endif
+        }
     }
-    if(hal.tool_select)  // NOTE: M6 needs to be implemented as a user-defined M-code
-        hal.tool_select(gc_state.tool);
 
     // [6. Change tool ]: Delegated to (possible) driver implementation
     if (bit_istrue(command_words, bit(ModalGroup_M6))) {
         protocol_buffer_synchronize();
         gc_state.tool_change = true;
 #ifdef N_TOOLS
-        hal.tool_change(&gc_state);
-        gc_state.tool_change = false;
+        gc_state.tool = &tool_table[gc_state.tool_pending];
 #else
-        system_set_exec_state_flag(EXEC_TOOL_CHANGE);   // Set up program pause for manual tool change
-        protocol_execute_realtime();                    // Execute...
+        gc_state.tool->tool = gc_state.tool_pending;
 #endif
+
+        if(hal.tool_change) { // ATC
+            hal.tool_change(&gc_state);
+            gc_state.tool_change = false;
+            sys.report.tool = On;
+        } else { // Manual
+            system_set_exec_state_flag(EXEC_TOOL_CHANGE);   // Set up program pause for manual tool change
+            protocol_execute_realtime();                    // Execute...
+        }
     }
 
     // [7. Spindle control ]:
@@ -1805,8 +1847,8 @@ status_code_t gc_execute_block(char *block, char *message)
         // Update spindle control and apply spindle speed when enabling it in this block.
         // NOTE: All spindle state changes are synced, even in laser mode. Also, plan_data,
         // rather than gc_state, is used to manage laser state for non-laser motions.
-        spindle_sync(gc_block.modal.spindle, plan_data.spindle.rpm);
-        gc_state.modal.spindle = gc_block.modal.spindle;
+        if(spindle_sync(gc_block.modal.spindle, plan_data.spindle.rpm))
+        	gc_state.modal.spindle = gc_block.modal.spindle;
     }
 
 // TODO: Recheck spindle running in CCS mode (is_rpm_pos_adjusted = On)?
@@ -1816,14 +1858,17 @@ status_code_t gc_execute_block(char *block, char *message)
     plan_data.condition.is_laser_ppi_mode = gc_state.is_rpm_rate_adjusted && gc_state.is_laser_ppi_mode;
 
     // [8. Coolant control ]:
-    if (gc_state.modal.coolant.value != gc_block.modal.coolant.value) {
+
+    if (gc_parser_flags.set_coolant && gc_state.modal.coolant.value != gc_block.modal.coolant.value) {
     // NOTE: Coolant M-codes are modal. Only one command per line is allowed. But, multiple states
     // can exist at the same time, while coolant disable clears all states.
-        coolant_sync(gc_block.modal.coolant);
-        gc_state.modal.coolant = gc_block.modal.coolant;
+        if(coolant_sync(gc_block.modal.coolant))
+        	gc_state.modal.coolant = gc_block.modal.coolant;
     }
 
     plan_data.condition.coolant = gc_state.modal.coolant; // Set condition flag for planner use.
+
+    sys.flags.delay_overrides = Off;
 
     // [9. Override control ]:
 
@@ -1834,7 +1879,7 @@ status_code_t gc_execute_block(char *block, char *message)
             plan_feed_override(0, 0);
 
         if(gc_state.modal.override_ctrl.spindle_rpm_disable)
-            spindle_set_override(0);
+            spindle_set_override(DEFAULT_SPINDLE_RPM_OVERRIDE);
 
         mc_override_ctrl_update(gc_state.modal.override_ctrl); // NOTE: must be called last!
     }
@@ -1852,26 +1897,40 @@ status_code_t gc_execute_block(char *block, char *message)
     // [13. Cutter radius compensation ]: G41/42 NOT SUPPORTED
     // gc_state.modal.cutter_comp = gc_block.modal.cutter_comp; // NOTE: Not needed since always disabled.
 
-    // [14. Cutter length compensation ]: G43, G43.1 and G49 supported. G43 supported when N_TOOLS > 0.
+    // [14. Cutter length compensation ]: G43, G43.1 and G49 supported. G43 supported when N_TOOLS defined.
     // NOTE: If G43 were supported, its operation wouldn't be any different from G43.1 in terms
     // of execution. The error-checking step would simply load the offset value into the correct
     // axis of the block XYZ value array.
     if (axis_command == AxisCommand_ToolLengthOffset ) { // Indicates a change.
         bool tlo_changed = false;
         gc_state.modal.tool_offset_mode = gc_block.modal.tool_offset_mode;
-        if (gc_state.modal.tool_offset_mode == ToolLengthOffset_Cancel) {// G49
-            idx = N_AXIS;
-            do {
-                gc_block.values.xyz[--idx] = 0.0f;
-            } while(idx);
-        }
-        // else G43.1
+
         idx = N_AXIS;
+
         do {
+
             idx--;
-            if (gc_state.tool_length_offset[idx] != gc_block.values.xyz[idx]) {
-                tlo_changed = true;
-                gc_state.tool_length_offset[idx] = gc_block.values.xyz[idx];
+
+            switch(gc_state.modal.tool_offset_mode) {
+
+                case ToolLengthOffset_Cancel: // G49
+                    tlo_changed |= gc_block.values.xyz[idx] != 0.0f;
+                    gc_block.values.xyz[idx] = 0.0f;
+                    break;
+#ifdef N_TOOLS
+                case ToolLengthOffset_Enable: // G43
+                    if (gc_state.tool_length_offset[idx] != tool_table[gc_block.values.h].offset[idx]) {
+                        tlo_changed = true;
+                        gc_state.tool_length_offset[idx] = tool_table[gc_block.values.h].offset[idx];
+                    }
+                    break;
+#endif
+                case ToolLengthOffset_EnableDynamic: // G43.1
+                    if (bit_istrue(axis_words, bit(idx)) && gc_state.tool_length_offset[idx] != gc_block.values.xyz[idx]) {
+                        tlo_changed = true;
+                        gc_state.tool_length_offset[idx] = gc_block.values.xyz[idx];
+                    }
+                    break;
             }
         } while(idx);
 
@@ -1986,38 +2045,72 @@ status_code_t gc_execute_block(char *block, char *message)
                     break;
 
                 case MotionMode_SpindleSynchronized:
-                    plan_data.condition.spindle.synchronized = On;
-                    plan_data.condition.inverse_time = Off;
-                    plan_data.feed_rate = gc_state.distance_per_rev = gc_block.values.k;
-                    // TODO: need for gc_state.distance_per_rev to be reset on modal change?
-                    gc_block.values.k = hal.spindle_get_data(SpindleData_RPM).rpm;
-                    gc_block.values.k = plan_data.feed_rate * gc_block.values.k;
+                    {
+                        protocol_buffer_synchronize(); // Wait until any previous moves are finished.
 
-                    if(gc_block.values.k == 0.0f)
-                        FAIL(Status_GcodeSpindleNotRunning); // [Spindle not running]
+                        gc_override_flags_t overrides = sys.override.control; // Save current override disable status.
 
-                    if(gc_block.values.k > settings.max_rate[plane.axis_linear])
-                        FAIL(Status_GcodeMaxFeedRateExceeded); // [Feed rate too high]
+                        plan_data.condition.inverse_time = Off;
+                        plan_data.feed_rate = gc_state.distance_per_rev = thread.pitch;
+                        plan_data.condition.is_rpm_pos_adjusted = Off;   // Switch off CSS.
+                        plan_data.overrides = overrides;                 // Use current override flags and
+                        plan_data.overrides.sync = On;                   // set to sync overrides on execution of motion.
 
-                    mc_dwell(0.01f); // Needed for now since initial spindle sync is done just before st_wake_up
+                        // Disable feed rate and spindle overrides for the duration of the cycle.
+                        plan_data.overrides.feed_hold_disable = On;
+                        plan_data.overrides.spindle_rpm_disable = sys.override.control.spindle_rpm_disable = On;
+                        plan_data.overrides.feed_rate_disable = sys.override.control.feed_rate_disable = On;
+                        sys.override.spindle_rpm = DEFAULT_SPINDLE_RPM_OVERRIDE;
+                        // TODO: need for gc_state.distance_per_rev to be reset on modal change?
+                        gc_block.values.f = hal.spindle_get_data(SpindleData_RPM).rpm;
+                        gc_block.values.f = plan_data.feed_rate * gc_block.values.f;
 
-                    mc_line(gc_block.values.xyz, &plan_data);
+                        if(gc_block.values.f == 0.0f)
+                            FAIL(Status_GcodeSpindleNotRunning); // [Spindle not running]
+
+                        if(gc_block.values.f > settings.max_rate[Z_AXIS])
+                            FAIL(Status_GcodeMaxFeedRateExceeded); // [Feed rate too high]
+
+                        mc_dwell(0.01f); // Needed for now since initial spindle sync is done just before st_wake_up
+
+                        mc_line(gc_block.values.xyz, &plan_data);
+
+                        protocol_buffer_synchronize();    // Wait until thread is finished,
+                        sys.override.control = overrides; // then restore previous override disable status.
+                    }
                     break;
 
                 case MotionMode_Threading:
-                    plan_data.condition.inverse_time = Off;
-                    plan_data.feed_rate = gc_state.distance_per_rev = thread.pitch;
-                    // TODO: need for gc_state.distance_per_rev to be reset on modal change?
-                    gc_block.values.f = hal.spindle_get_data(SpindleData_RPM).rpm;
-                    gc_block.values.f = plan_data.feed_rate * gc_block.values.f;
+                    {
+                        protocol_buffer_synchronize(); // Wait until any previous moves are finished.
 
-                    if(gc_block.values.f == 0.0f)
-                        FAIL(Status_GcodeSpindleNotRunning); // [Spindle not running]
+                        gc_override_flags_t overrides = sys.override.control; // Save current override disable status.
 
-                    if(gc_block.values.f > settings.max_rate[Z_AXIS])
-                        FAIL(Status_GcodeMaxFeedRateExceeded); // [Feed rate too high]
+                        plan_data.condition.inverse_time = Off;
+                        plan_data.feed_rate = gc_state.distance_per_rev = thread.pitch;
+                        plan_data.condition.is_rpm_pos_adjusted = Off;   // Switch off CSS.
+                        plan_data.overrides = overrides;                 // Use current override flags and
+                        plan_data.overrides.sync = On;                   // set to sync overrides on execution of motion.
 
-                    mc_thread(&plan_data, gc_state.position, &thread);
+                        // Disable feed rate and spindle overrides for the duration of the cycle.
+                        plan_data.overrides.spindle_rpm_disable = sys.override.control.spindle_rpm_disable = On;
+                        plan_data.overrides.feed_rate_disable = sys.override.control.feed_rate_disable = On;
+                        sys.override.spindle_rpm = DEFAULT_SPINDLE_RPM_OVERRIDE;
+                        // TODO: need for gc_state.distance_per_rev to be reset on modal change?
+                        gc_block.values.f = hal.spindle_get_data(SpindleData_RPM).rpm;
+                        gc_block.values.f = plan_data.feed_rate * gc_block.values.f;
+
+                        if(gc_block.values.f == 0.0f)
+                            FAIL(Status_GcodeSpindleNotRunning); // [Spindle not running]
+
+                        if(gc_block.values.f > settings.max_rate[Z_AXIS])
+                            FAIL(Status_GcodeMaxFeedRateExceeded); // [Feed rate too high]
+
+                        mc_thread(&plan_data, gc_state.position, &thread, overrides.feed_hold_disable);
+
+                        protocol_buffer_synchronize();    // Wait until thread is finished,
+                        sys.override.control = overrides; // then restore previous override disable status.
+                    }
                     break;
 
                 case MotionMode_DrillChipBreak:
@@ -2041,6 +2134,10 @@ status_code_t gc_execute_block(char *block, char *message)
                 default:
                     break;
             }
+
+            // Do not update position on cancel (already done in protocol_exec_rt_system)
+            if(sys.cancel)
+                gc_update_pos = GCUpdatePos_None;
 
             // As far as the parser is concerned, the position is now == target. In reality the
             // motion control system might still be processing the action and the real tool position
@@ -2113,7 +2210,8 @@ status_code_t gc_execute_block(char *block, char *message)
                 system_flag_wco_change(); // Set to refresh immediately just in case something altered.
                 hal.spindle_set_state((spindle_state_t){0}, 0.0f);
                 hal.coolant_set_state((coolant_state_t){0});
-                sys.report.override_counter = -1; // Set to report change immediately
+                sys.report.spindle = On; // Set to report change immediately
+                sys.report.coolant = On; // ...
             }
             hal.report.feedback_message(Message_ProgramEnd);
         }

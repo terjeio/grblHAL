@@ -26,19 +26,22 @@
 // parser program end, and g-code parser coolant_sync().
 void coolant_set_state (coolant_state_t mode)
 {
-    if (!sys.abort) { // Block during abort.
+    if (!ABORTED) { // Block during abort.
         hal.coolant_set_state(mode);
-        sys.report.override_counter = -1; // Set to report change immediately
+        sys.report.coolant = On; // Set to report change immediately
     }
 }
 
 
 // G-code parser entry-point for setting coolant state. Forces a planner buffer sync and bails
 // if an abort or check-mode is active.
-void coolant_sync (coolant_state_t mode)
+bool coolant_sync (coolant_state_t mode)
 {
+    bool ok = true;
     if (sys.state != STATE_CHECK_MODE) {
-        protocol_buffer_synchronize(); // Ensure coolant turns on when specified in program.
-        coolant_set_state(mode);
+        if((ok = protocol_buffer_synchronize())) // Ensure coolant changes state when specified in program.
+            coolant_set_state(mode);
     }
+
+    return ok;
 }

@@ -44,7 +44,7 @@ bool protocol_exec_rt_system();
 void protocol_auto_cycle_start();
 
 // Block until all buffered steps are executed
-void protocol_buffer_synchronize();
+bool protocol_buffer_synchronize();
 
 bool protocol_process_realtime (char c);
 bool protocol_enqueue_gcode (char *data);

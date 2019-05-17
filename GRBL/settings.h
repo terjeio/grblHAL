@@ -148,7 +148,7 @@ typedef enum {
     Setting_SleepEnable = 62,
     Setting_DisableLaserDuringHold = 63,
     Setting_ForceInitAlarm = 64,
-    Setting_CheckLimitsAtInit = 65,
+    Setting_AssortedFlags = 65,
     Setting_HomingInitLock = 66,
     Settings_Stream = 70,
 // Optional settings for closed loop spindle speed control

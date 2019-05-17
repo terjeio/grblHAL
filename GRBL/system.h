@@ -40,6 +40,7 @@
 #define EXEC_SLEEP          bit(8)
 #define EXEC_TOOL_CHANGE    bit(9)
 #define EXEC_PID_REPORT     bit(10)
+#define EXEC_GCODE_REPORT   bit(11)
 
 // Define system state bit map. The state variable primarily tracks the individual functions
 // of Grbl to manage each without overlapping. It is also used as a messaging flag for
@@ -90,9 +91,10 @@ typedef enum {
 
 typedef enum {
     Parking_DoorClosed = 0,
-    Parking_DoorAjar = 1,
-    Parking_Retracting = 2,
-    Parking_Resuming = 3
+    Parking_DoorAjar,
+    Parking_Retracting,
+    Parking_Cancel,
+    Parking_Resuming
 } parking_state_t;
 
 typedef enum {
@@ -160,21 +162,20 @@ typedef struct {
 #endif
 
 typedef union {
-    uint8_t value;
+    uint16_t value;
     struct {
-        uint8_t mpg_mode   :1,
-                scaling    :1, // Tracks when to add scaling info to status reports.
-                homed      :1,
-                unassigned :4,
-                add_report :1; // Tracks when info is added to status reports.
+        uint16_t mpg_mode   :1, // MPG mode changed.
+                 scaling    :1, // Scaling (G50/G51) changed.
+                 homed      :1, // Homed state changed.
+                 xmode      :1, // Lathe radius/diameter mode changed.
+                 spindle    :1, // Spindle state changed.
+                 coolant    :1, // Coolant state changed.
+                 overrides  :1, // Overrides changed.
+                 tool       :1, // Tool changed.
+                 wco        :1, // Add work coordinates.
+                 unused     :7;
     };
 } report_tracking_flags_t;
-
-typedef struct {
-    int8_t override_counter;        // Tracks when to add override data to status reports.
-    uint8_t wco_counter;            // Tracks when to add work coordinate offset data to status reports.
-    report_tracking_flags_t flags;  // Tracks when to add assorted info to status reports.
-} report_tracking_t;
 
 typedef struct {
     uint8_t feed_rate;              // Feed rate override value in percent
@@ -192,7 +193,9 @@ typedef union {
                 soft_limit           :1, // Tracks soft limit errors for the state machine.
                 exit                 :1, // System exit flag. Used in combination with abort to terminate main loop.
                 block_delete_enabled :1, // Set to true to enable block delete
-                reserved             :3; // move block_input_stream here? - Input stream block flag. Set to true to discard all characters except real-time commands.
+                feed_hold_pending    :1,
+                delay_overrides      :1,
+                reserved             :2; // move block_input_stream here? - Input stream block flag. Set to true to discard all characters except real-time commands.
     };
 } system_flags_t;
 
@@ -212,7 +215,7 @@ typedef struct {
     axes_signals_t homing;              // Axes with homing enabled.
     axes_signals_t homed;               // Indicates which axes has been homed.
     overrides_t override;               // Override values & states
-    report_tracking_t report;           // Tracks when to add data to status reports.
+    report_tracking_flags_t report;     // Tracks when to add data to status reports.
     parking_state_t parking_state;      // Tracks parking state
     hold_state_t holding_state;         // Tracks holding state
     float spindle_rpm;
@@ -250,7 +253,7 @@ void system_convert_array_steps_to_mpos(float *position, int32_t *steps);
 bool system_check_travel_limits(float *target);
 
 // Checks and limit jog commands to within machine travel limits.
-void system_apply_travel_limits (float *target);
+void system_apply_jog_limits (float *target);
 
 // Special handlers for setting and clearing Grbl's real-time execution flags.
 #define system_set_exec_state_flag(mask) hal.set_bits_atomic(&sys_rt_exec_state, (mask))

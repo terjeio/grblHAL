@@ -1045,13 +1045,13 @@ static void modeSelect (bool mpg_mode)
 
     // Report WCO on first status report request from MPG processor
     if(mpg_mode)
-        sys.report.wco_counter = 1;
+        sys.report.wco = On;
 
     // Force a realtime status report
     hal.protocol_process_realtime('?');
 
     sys.mpg_mode = mpg_mode;
-    sys.report.flags.mpg_mode = true;
+    sys.report.mpg_mode = true;
 }
 
 static void modechange (void)
@@ -1660,9 +1660,9 @@ bool driver_init (void)
     hal.driver_settings_report = driver_settings_report;
     hal.driver_settings_restore = driver_settings_restore;
 
-    hal.driver_mcode_check = trimamic_MCodeCheck;
-    hal.driver_mcode_validate = trimamic_MCodeValidate;
-    hal.driver_mcode_execute = trimamic_MCodeExecute;
+    hal.driver_mcode_check = trinamic_MCodeCheck;
+    hal.driver_mcode_validate = trinamic_MCodeValidate;
+    hal.driver_mcode_execute = trinamic_MCodeExecute;
 #endif
 
     hal.set_bits_atomic = bitsSetAtomic;
