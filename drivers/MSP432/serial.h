@@ -4,7 +4,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2017-2018 Terje Io
+  Copyright (c) 2017-2019 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -24,6 +24,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "driver.h"
 #include "GRBL/config.h"
 
 #define BACKCHANNEL // comment out to use Launchpad Backchannel UART
@@ -73,6 +74,7 @@
 #define SERIAL_RTS_PIN 4
 #define SERIAL_RTS_BIT (1<<SERIAL_RTS_PIN)
 
+#if MPG_MODE_ENABLE
 #define SERIAL2_MOD A2
 #define SERIAL2_MODULE eusci(SERIAL2_MOD)
 #define SERIAL2_MODULE_INT eusciINT(SERIAL2_MOD)
@@ -80,6 +82,7 @@
 #define SERIAL2_PORT P3
 #define SERIAL2_RX BIT2
 #define SERIAL2_TX BIT3
+#endif
 
 //
 

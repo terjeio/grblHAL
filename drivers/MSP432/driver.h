@@ -36,9 +36,11 @@
 // Configuration
 // Set value to 1 to enable, 0 to disable
 
-#define KEYPAD_ENABLE   0 // I2C keypad for jogging etc.
-#define ATC_ENABLE      0 // do not change!
-#define CNC_BOOSTERPACK 1 // do not change!
+#define KEYPAD_ENABLE          0 // I2C keypad for jogging etc.
+#define ATC_ENABLE             0 // do not change!
+#define MPG_MODE_ENABLE        1 // Additional serial input for MPG (with GPIO input for enable)
+#define LIMITS_OVERRIDE_ENABLE 1 // Adds input for overriding limit switches
+#define CNC_BOOSTERPACK        1 // do not change!
 
 #if CNC_BOOSTERPACK
   #define EEPROM_ENABLE           1 // only change if BoosterPack does not have EEPROM mounted
@@ -353,6 +355,7 @@
 #define GPIO2_PIN            2
 #define GPIO2_BIT            (1<<GPIO2_PIN)
 
+// Normally used as limit switches override input
 #define GPIO3_PN             3
 #define GPIO3_PORT           port(GPIO3_PN)
 #define GPIO3_GPIO           portGpio(GPIO3_PN)
@@ -384,14 +387,25 @@
 #define GPIO6_PIN            1
 #define GPIO6_BIT            (1<<GPIO6_PIN)
 
+// Define limit switches override input
+
+#if LIMITS_OVERRIDE_ENABLE
+#define LIMITS_OVERRIDE_PORT        GPIO3_PORT
+#define LIMITS_OVERRIDE_GPIO        GPIO3_GPIO
+#define LIMITS_OVERRIDE_SWITCH_PIN  GPIO3_PIN
+#define LIMITS_OVERRIDE_SWITCH_BIT  GPIO3_BIT
+#endif
+
 // Define MPG mode input (for selecting secondary UART input)
 
+#if MPG_MODE_ENABLE
 #define MODE_PORT           GPIO2_PORT
 #define MODE_GPIO           GPIO2_GPIO
 #define MODE_INT            GPIO2_INT
 #define MODE_SWITCH_PIN     GPIO2_PIN
 #define MODE_SWITCH_BIT     GPIO2_BIT
 #define MODE_IRQHandler     portHANDLER(GPIO2_PN)
+#endif
 
 // to be removed?
 #define MODE_LED_PIN        0
@@ -412,4 +426,3 @@
 bool driver_init (void);
 
 #endif // __DRIVER_H__
-

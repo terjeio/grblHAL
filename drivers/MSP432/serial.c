@@ -4,7 +4,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2017-2018 Terje Io
+  Copyright (c) 2017-2019 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -24,7 +24,6 @@
 #ifndef __serial_h__
 #define __serial_h__
 
-#include "driver.h"
 #include "serial.h"
 #include "GRBL/grbl.h"
 

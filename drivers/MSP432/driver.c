@@ -86,11 +86,6 @@ typedef struct {
 #endif
 } spindle_sync_t;
 
-typedef struct {
-    volatile uint32_t ms;
-    void (*callback)(void);
-} delay_t;
-
 static volatile uint32_t pid_count = 0;
 static volatile bool spindleLock = false;
 static bool pwmEnabled = false, IOInitDone = false;
@@ -462,6 +457,11 @@ inline static axes_signals_t limitsGetState()
     if (settings.limits.invert.mask)
         signals.value ^= settings.limits.invert.mask;
 
+#if LIMITS_OVERRIDE_ENABLE
+    if(!BITBAND_PERI(LIMITS_OVERRIDE_PORT->IN, LIMITS_OVERRIDE_SWITCH_PIN))
+        signals.value = 0;
+#endif
+
     return signals;
 }
 
@@ -784,6 +784,8 @@ static void showMessage (const char *msg)
 //    }
 }
 
+#if MPG_MODE_ENABLE
+
 static void modeSelect (bool mpg_mode)
 {
     BITBAND_PERI(MODE_PORT->IE, MODE_SWITCH_PIN) = 0;
@@ -828,6 +830,8 @@ static void modechange (void)
 {
     modeSelect((MODE_PORT->IN & MODE_SWITCH_BIT) == 0);
 }
+
+#endif
 
 // Configure perhipherals when settings are initialized or changed
 void settings_changed (settings_t *settings)
@@ -968,7 +972,7 @@ void settings_changed (settings_t *settings)
         BITBAND_PERI(CONTROL_PORT_RST->IE, RESET_PIN) = 1;
 #endif
 
-#ifdef SERIAL2_MOD
+#if MPG_MODE_ENABLE
         BITBAND_PERI(MODE_PORT->OUT, MODE_SWITCH_PIN) = 1;
         BITBAND_PERI(MODE_PORT->REN, MODE_SWITCH_PIN) = 1;
         BITBAND_PERI(MODE_PORT->DIR, MODE_LED_PIN) = 1;
@@ -976,6 +980,11 @@ void settings_changed (settings_t *settings)
             modeSelect(true);
         BITBAND_PERI(MODE_PORT->IFG, MODE_SWITCH_PIN) = 0;
         BITBAND_PERI(MODE_PORT->IE, MODE_SWITCH_PIN) = 1;
+#endif
+
+#if LIMITS_OVERRIDE_ENABLE
+        BITBAND_PERI(LIMITS_OVERRIDE_PORT->OUT, LIMITS_OVERRIDE_SWITCH_PIN) = 1;
+        BITBAND_PERI(LIMITS_OVERRIDE_PORT->REN, LIMITS_OVERRIDE_SWITCH_PIN) = 1;
 #endif
 
         /***********************
@@ -1071,7 +1080,7 @@ static bool driver_setup (settings_t *settings)
     NVIC_EnableIRQ(CONTROL_INT_FH);     // Enable limit port Y,Z interrupt
 #endif
 
-#ifdef SERIAL2_MOD
+#if MPG_MODE_ENABLE
     NVIC_EnableIRQ(MODE_INT); // mode switch interrupt
 #endif
 
@@ -1349,6 +1358,8 @@ void LIMIT_IRQHandler (void)
     }
 }
 
+#if MPG_MODE_ENABLE
+
 void MODE_IRQHandler (void)
 {
     uint8_t iflags = MODE_PORT->IFG & MODE_SWITCH_BIT;
@@ -1359,6 +1370,8 @@ void MODE_IRQHandler (void)
             driver_delay_ms(50, modechange);
     }
 }
+
+#endif
 
 #else
 
@@ -1419,10 +1432,12 @@ void CONTROL_SD_MODE_Handler (void)
 
     CONTROL_PORT_SD->IFG = 0;
 
+  #if MPG_MODE_ENABLE
     if(iflags & MODE_SWITCH_BIT) {
         if(delay.ms == 0) // Ignore if delay is active
             driver_delay_ms(50, modechange);
     } else
+  #endif
         hal.control_interrupt_callback(systemGetState());
 }
 #endif
