@@ -70,19 +70,29 @@ bool protocol_enqueue_gcode (char *gcode)
 */
 bool protocol_main_loop()
 {
-    // Perform some machine checks to make sure everything is good to go.
-
-    if (settings.limits.flags.hard_enabled && settings.limits.flags.check_at_init && hal.limits_get_state().value) {
+    if (sys.state & STATE_ESTOP) {
+        // Check for e-stop active. Blocks everything until cleared.
+        hal.report.feedback_message(Message_EStop);
+        set_state(STATE_ESTOP);
+    } else if (settings.homing.flags.enabled && sys.homing.mask && settings.homing.flags.init_lock && sys.homing.mask != sys.homed.mask) {
+        // Check for power-up and set system alarm if homing is enabled to force homing cycle
+        // by setting Grbl's alarm state. Alarm locks out all g-code commands, including the
+        // startup scripts, but allows access to settings and internal commands.
+        // Only a successful homing cycle '$H' will disable the alarm.
+        // NOTE: The startup script will run after successful completion of the homing cycle. Prevents motion startup
+        // blocks from crashing into things uncontrollably. Very bad.
+        set_state(STATE_ALARM); // Ensure alarm state is active.
+        hal.report.feedback_message(Message_HomingCycleRequired);
+    } else if (settings.limits.flags.hard_enabled && settings.limits.flags.check_at_init && hal.limits_get_state().value) {
+        // Check that no limit switches are engaged to make sure everything is good to go.
         set_state(STATE_ALARM); // Ensure alarm state is active.
         hal.report.feedback_message(Message_CheckLimits);
-    }
-
-    // Check for and report alarm state after a reset, error, or an initial power up.
-    // NOTE: Sleep mode disables the stepper drivers and position can't be guaranteed.
-    // Re-initialize the sleep state as an ALARM mode to ensure user homes or acknowledges.
-    if (sys.state & (STATE_ALARM|STATE_ESTOP|STATE_SLEEP)) {
-        hal.report.feedback_message(sys.state == STATE_ESTOP ? Message_EStop : Message_AlarmLock);
-        set_state(sys.state == STATE_ESTOP ? STATE_ESTOP : STATE_ALARM); // Ensure alarm state is set.
+    } else if (sys.state & (STATE_ALARM|STATE_SLEEP)) {
+        // Check for and report alarm state after a reset, error, or an initial power up.
+        // NOTE: Sleep mode disables the stepper drivers and position can't be guaranteed.
+        // Re-initialize the sleep state as an ALARM mode to ensure user homes or acknowledges.
+        hal.report.feedback_message(Message_AlarmLock);
+        set_state(STATE_ALARM); // Ensure alarm state is set.
     } else {
         // Check if the safety door is open.
         set_state(STATE_IDLE);
@@ -146,9 +156,12 @@ bool protocol_main_loop()
                     gc_state.last_error = Status_Overflow;
                 else if ((line[0] == '\0' || char_counter == 0) && !user_message.show) // Empty or comment line. For syncing purposes.
                     gc_state.last_error = Status_OK;
-                else if (line[0] == '$') // Grbl '$' system command
-                    gc_state.last_error = system_execute_line(line);
-                else if (sys.state & (STATE_ALARM|STATE_ESTOP|STATE_JOG)) // Everything else is gcode. Block if in alarm, eStop or jog mode.
+                else if (line[0] == '$') {// Grbl '$' system command
+                    if((gc_state.last_error = system_execute_line(line)) == Status_LimitsEngaged) {
+                        set_state(STATE_ALARM); // Ensure alarm state is active.
+                        hal.report.feedback_message(Message_CheckLimits);
+                    }
+                } else if (sys.state & (STATE_ALARM|STATE_ESTOP|STATE_JOG)) // Everything else is gcode. Block if in alarm, eStop or jog mode.
                     gc_state.last_error = Status_SystemGClock;
                 else  // Parse and execute g-code block.
                     gc_state.last_error = gc_execute_block(line, user_message.show ? user_message.message : NULL);
@@ -350,15 +363,18 @@ bool protocol_exec_rt_system ()
             system_set_exec_alarm(rt_exec);
             hal.report.feedback_message((alarm_code_t)rt_exec == Alarm_EStop ? Message_EStop : Message_CriticalEvent);
             system_clear_exec_state_flag(EXEC_RESET); // Disable any existing reset
-            // Block everything, except reset and status reports, until user issues reset or power
-            // cycles. Hard limits typically occur while unattended or not paying attention. Gives
-            // the user and a GUI time to do what is needed before resetting, like killing the
-            // incoming stream. The same could be said about soft limits. While the position is not
-            // lost, continued streaming could cause a serious crash if by chance it gets executed.
-            while (bit_isfalse(sys_rt_exec_state, EXEC_RESET));
-            system_clear_exec_alarm();
+            while (bit_isfalse(sys_rt_exec_state, EXEC_RESET)) {
+                // Block everything, except reset and status reports, until user issues reset or power
+                // cycles. Hard limits typically occur while unattended or not paying attention. Gives
+                // the user and a GUI time to do what is needed before resetting, like killing the
+                // incoming stream. The same could be said about soft limits. While the position is not
+                // lost, continued streaming could cause a serious crash if by chance it gets executed.
+         //       hal.delay_ms(20, NULL);
+                if (system_clear_exec_state_flag(EXEC_STATUS_REPORT) & EXEC_STATUS_REPORT)
+                    report_realtime_status();
+            }
+            system_clear_exec_alarm(); // Clear alarm
         }
-
     }
 
     if (sys_rt_exec_state && (rt_exec = system_clear_exec_states())) { // Get and clear volatile sys_rt_exec_state atomically.

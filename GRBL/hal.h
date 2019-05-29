@@ -32,7 +32,7 @@
 #include "stepper.h"
 #include "eeprom.h"
 
-#define HAL_VERSION 4
+#define HAL_VERSION 5
 
 // driver capabilities, to be set by driver in driver_init(), flags may be cleared after to switch off option
 typedef union {
@@ -129,10 +129,8 @@ typedef struct HAL {
     control_signals_t (*system_control_get_state)(void);
 
     void (*stepper_wake_up)(void);
-    void (*stepper_go_idle)(void);
+    void (*stepper_go_idle)(bool clear_signals);
     void (*stepper_enable)(axes_signals_t enable);
-    void (*stepper_set_outputs)(axes_signals_t step_outbits);
-    void (*stepper_set_directions)(axes_signals_t dir_outbits);
     void (*stepper_cycles_per_tick)(uint32_t cycles_per_tick);
     void (*stepper_pulse_start)(stepper_t *stepper);
 

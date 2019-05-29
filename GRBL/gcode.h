@@ -68,7 +68,7 @@ typedef enum {
     Status_GcodeNoOffsetsInPlane = 35,
     Status_GcodeUnusedWords = 36,
     Status_GcodeG43DynamicAxisError = 37,
-    Status_GcodeIllegalToolTableEntry = 39,
+    Status_GcodeIllegalToolTableEntry = 38,
     Status_GcodeValueOutOfRange = 39,
     Status_GcodeToolChangePending = 40,
     Status_GcodeSpindleNotRunning = 41,
@@ -76,6 +76,7 @@ typedef enum {
     Status_GcodeMaxFeedRateExceeded = 43,
     Status_GcodeRPMOutOfRange = 44,
     Status_LimitsEngaged = 45,
+    Status_HomingRequired = 46,
 
     Status_EStop = 50,
     Status_Unhandled = 59, // For internal use only
@@ -119,6 +120,7 @@ typedef enum {
     ModalGroup_M7,      // [M3,M4,M5] Spindle turning
     ModalGroup_M8,      // [M7,M8,M9] Coolant control
     ModalGroup_M9,      // [M49,M50,M51,M53,M56] Override control
+    ModalGroup_M10,     // User defined M commands
 } modal_group_t;
 
 // Define parameter word mapping.
@@ -182,8 +184,7 @@ typedef enum {
     NonModal_SetCoordinateOffset = 92,      // G92 (Do not alter value)
     NonModal_ResetCoordinateOffset = 102,   // G92.1 (Do not alter value)
     NonModal_ClearCoordinateOffset = 112,   // G92.2 (Do not alter value)
-    NonModal_RestoreCoordinateOffset = 122, // G92.3 (Do not alter value)
-    NonModal_UserDefinedMCode = 200,        // Mx (Do not alter value)
+    NonModal_RestoreCoordinateOffset = 122  // G92.3 (Do not alter value)
 } non_modal_t;
 
 // Modal Group G1: Motion modes
@@ -236,9 +237,9 @@ typedef enum {
 
 // Modal Group G10: Canned cycle return mode
 typedef enum {
-    CCReturnMode_Previous = 0,  // G98 (Default: Must be zero)
-    CCReturnMode_RPos = 1       // G99 (Do not alter value)
-} cc_return_mode_t;
+    CCRetractMode_Previous = 0,  // G98 (Default: Must be zero)
+    CCRetractMode_RPos = 1       // G99 (Do not alter value)
+} cc_retract_mode_t;
 
 // Modal Group G7: Cutter radius compensation mode
 //#define CUTTER_COMP_DISABLE 0 // G40 (Default: Must be zero)
@@ -248,9 +249,10 @@ typedef enum {
 
 // Modal Group G8: Tool length offset
 typedef enum {
-    ToolLengthOffset_Cancel = 0,        // G49 (Default: Must be zero)
-    ToolLengthOffset_EnableDynamic = 1, // G43.1
-    ToolLengthOffset_Enable = 2         // G43
+    ToolLengthOffset_Cancel = 0,         // G49 (Default: Must be zero)
+    ToolLengthOffset_Enable = 1,         // G43
+    ToolLengthOffset_EnableDynamic = 2,  // G43.1
+    ToolLengthOffset_ApplyAdditional = 3 // G43.2
 } tool_offset_mode_t;
 
 // Modal Group M9: Override control
@@ -368,6 +370,7 @@ typedef struct {
     spindle_state_t spindle;             // {M3,M4,M5}
     gc_override_flags_t override_ctrl;   // {M48,M49,M50,M51,M53,M56}
     spindle_rpm_mode_t spindle_rpm_mode; // {G96,G97}
+    cc_retract_mode_t retract_mode;      // {G98,G99}
     bool scaling_active;                 // {G50,G51}
     bool canned_cycle_active;
 } gc_modal_t;
@@ -398,7 +401,7 @@ typedef struct {
     float retract_position; // Canned cycle retract position
     bool rapid_retract;
     bool spindle_off;
-    cc_return_mode_t return_mode;   // {G98,G99}
+    cc_retract_mode_t retract_mode;
     bool change;
 } gc_canned_t;
 
@@ -487,7 +490,7 @@ typedef struct {
 } parser_block_t;
 
 // Initialize the parser
-void gc_init();
+void gc_init(bool cold_start);
 
 // Execute one block of rs275/ngc/g-code
 status_code_t gc_execute_block(char *block, char *message);

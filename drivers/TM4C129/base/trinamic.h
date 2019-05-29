@@ -48,7 +48,7 @@ bool trinamic_setting (uint_fast16_t setting, float value, char *svalue);
 void trinamic_settings_restore (uint8_t restore_flag);
 void trinamic_settings_report (bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx);
 
-uint_fast16_t trimamic_MCodeCheck (uint_fast16_t mcode);
-status_code_t trimamic_MCodeValidate (parser_block_t *gc_block, uint_fast16_t *value_words);
-void trimamic_MCodeExecute (uint_fast16_t state, parser_block_t *gc_block);
+uint_fast16_t trinamic_MCodeCheck (uint_fast16_t mcode);
+status_code_t trinamic_MCodeValidate (parser_block_t *gc_block, uint_fast16_t *value_words);
+void trinamic_MCodeExecute (uint_fast16_t state, parser_block_t *gc_block);
 #endif

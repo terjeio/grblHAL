@@ -183,7 +183,7 @@ ISR_CODE void st_go_idle ()
 {
     // Disable Stepper Driver Interrupt. Allow Stepper Port Reset Interrupt to finish, if active.
 
-    hal.stepper_go_idle();
+    hal.stepper_go_idle(false);
 
     // Set stepper driver idle state, disabled or enabled, depending on settings and circumstances.
     if (((settings.steppers.idle_lock_time != 0xff) || sys_rt_exec_alarm || sys.state == STATE_SLEEP) && sys.state != STATE_HOMING) {
@@ -429,8 +429,8 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
 // Reset and clear stepper subsystem variables
 void st_reset ()
 {
-    // Initialize stepper driver idle state.
-    st_go_idle();
+    // Initialize stepper driver idle state, clear step and direction port pins.
+    hal.stepper_go_idle(true);
 
     // NOTE: buffer indices starts from 1 for simpler driver coding!
 
@@ -467,10 +467,6 @@ void st_reset ()
 #endif
 
     cycles_per_min = (float)hal.f_step_timer * 60.0f;
-
-    // Initialize step and direction port pins.
-    hal.stepper_set_outputs(st.step_outbits);
-    hal.stepper_set_directions(st.dir_outbits);
 }
 
 // Called by planner_recalculate() when the executing block is updated by the new plan.

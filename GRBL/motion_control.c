@@ -300,7 +300,7 @@ void mc_canned_drill (motion_mode_t motion, float *target, plan_line_data_t *pl_
             return;
     }
 
-    if(canned->return_mode == CCReturnMode_RPos)
+    if(canned->retract_mode == CCRetractMode_RPos)
         canned->prev_position = canned->retract_position;
 
     while(repeats--) {
@@ -359,7 +359,7 @@ void mc_canned_drill (motion_mode_t motion, float *target, plan_line_data_t *pl_
 
     memcpy(target, position, sizeof(float) * N_AXIS);
 
-    if(canned->return_mode == CCReturnMode_Previous && motion != MotionMode_DrillChipBreak && target[plane.axis_linear] < canned->prev_position) {
+    if(canned->retract_mode == CCRetractMode_Previous && motion != MotionMode_DrillChipBreak && target[plane.axis_linear] < canned->prev_position) {
         pl_data->condition.rapid_motion = On;
         target[plane.axis_linear] = canned->prev_position;
         if(!mc_line(target, pl_data))
@@ -534,15 +534,15 @@ void mc_dwell (float seconds)
 // Perform homing cycle to locate and set machine zero. Only '$H' executes this command.
 // NOTE: There should be no motions in the buffer and Grbl must be in an idle state before
 // executing the homing cycle. This prevents incorrect buffered plans after homing.
-void mc_homing_cycle (uint8_t cycle_mask)
+status_code_t mc_homing_cycle (uint8_t cycle_mask)
 {
     // Check and abort homing cycle, if hard limits are already enabled. Helps prevent problems
     // with machines with limits wired on both ends of travel to one limit pin.
     // TODO: Move the pin-specific LIMIT_PIN call to limits.c as a function.
-    if (settings.flags.limits_two_switches_on_axes && hal.limits_get_state().value) {
+    if (settings.limits.flags.two_switches && hal.limits_get_state().value) {
         mc_reset(); // Issue system reset and ensure spindle and coolant are shutdown.
         system_set_exec_alarm(Alarm_HardLimit);
-        return;
+        return Status_Unhandled;
     }
 
     hal.limits_enable(false, true); // Disable hard limits pin change register for cycle duration
@@ -570,7 +570,7 @@ void mc_homing_cycle (uint8_t cycle_mask)
     if(cycle_mask) {
 
         if(!protocol_execute_realtime()) // Check for reset and set system abort.
-            return;                      // Did not complete. Alarm state set by mc_alarm.
+            return Status_Unhandled;     // Did not complete. Alarm state set by mc_alarm.
 
         // Homing cycle complete! Setup system for normal operation.
         // -------------------------------------------------------------------------------------
@@ -586,6 +586,10 @@ void mc_homing_cycle (uint8_t cycle_mask)
     // NOTE: always call at end of homing regadless of setting, may be used to disable
     // sensorless homing or switch back to limit switches input (if different from homing switches)
     hal.limits_enable(settings.limits.flags.hard_enabled, false);
+
+    return settings.limits.flags.hard_enabled && settings.limits.flags.check_at_init && hal.limits_get_state().value
+            ? Status_LimitsEngaged
+            : Status_OK;
 }
 
 

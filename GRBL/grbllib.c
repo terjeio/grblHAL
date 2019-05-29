@@ -27,7 +27,8 @@
 system_t sys;
 int32_t sys_position[N_AXIS];               // Real-time machine (aka home) position vector in steps.
 int32_t sys_probe_position[N_AXIS];         // Last probe position in machine coordinates and steps.
-bool prior_mpg_mode;                              // Enter MPG mode on startup?
+bool prior_mpg_mode;                        // Enter MPG mode on startup?
+bool cold_start = true;
 volatile probe_state_t sys_probe_state;     // Probing state value.  Used to coordinate the probing cycle with stepper ISR.
 volatile uint_fast16_t sys_rt_exec_state;   // Global realtime executor bitflag variable for state management. See EXEC bitmasks.
 volatile uint_fast16_t sys_rt_exec_alarm;   // Global realtime executor bitflag variable for setting various alarms.
@@ -132,8 +133,8 @@ int grbl_enter (void)
     // NOTE: The startup script will run after successful completion of the homing cycle, but
     // not after disabling the alarm locks. Prevents motion startup blocks from crashing into
     // things uncontrollably. Very bad.
-    if (settings.homing.flags.enabled && settings.homing.flags.init_lock)
-        sys.state = STATE_ALARM;
+    // if (settings.homing.flags.enabled && settings.homing.flags.init_lock)
+    //    sys.state = STATE_ALARM;
 
     if(hal.system_control_get_state().reset)
         sys.state = STATE_ALARM;
@@ -171,7 +172,7 @@ int grbl_enter (void)
 
 		// Reset Grbl primary systems.
 		hal.stream.reset_read_buffer(); // Clear input stream buffer
-		gc_init(); // Set g-code parser to default state
+		gc_init(cold_start); // Set g-code parser to default state
 		hal.limits_enable(settings.limits.flags.hard_enabled, false);
 		plan_reset(); // Clear block buffer and planner variables
 		st_reset(); // Clear stepper subsystem variables.
@@ -193,9 +194,11 @@ int grbl_enter (void)
 
         sys.report.homed = On;
 
-		if((sys.mpg_mode = sys.report.mpg_mode = prior_mpg_mode)) {
+		if((sys.mpg_mode = (sys.report.mpg_mode = prior_mpg_mode))) {
             report_realtime_status();
 		}
+
+		cold_start = false;
 
 		// Start Grbl main loop. Processes program inputs and executes them.
 		if(!(looping = protocol_main_loop()))

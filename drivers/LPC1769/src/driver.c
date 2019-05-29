@@ -35,13 +35,12 @@
 #include "sdcard.h"
 #endif
 
-static volatile uint32_t ms_count = 1; // NOTE: initial value 1 is for "resetting" systick timer
 static bool pwmEnabled = false, IOInitDone = false;
 // Inverts the probe pin state depending on user settings and probing cycle mode.
 static uint8_t probe_invert_mask;
 static axes_signals_t next_step_outbits;
 static spindle_pwm_t spindle_pwm;
-static void (*delayCallback)(void) = 0;
+static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
 
 #if STEP_OUTMODE == GPIO_MAP
 
@@ -83,12 +82,12 @@ static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value);
 
 uint32_t cpt;
 
-static void driver_delay_ms (uint32_t ms, void (*callback)(void))
+static void driver_delay (uint32_t ms, void (*callback)(void))
 {
-    if((ms_count = ms) > 0) {
+    if((delay.ms = ms) > 0) {
         SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
-        if(!(delayCallback = callback))
-            while(ms_count);
+        if(!(delay.callback = callback))
+            while(delay.ms);
     } else if(callback)
         callback();
 }
@@ -112,7 +111,7 @@ static void stepperWakeUp (void)
 }
 
 // Disables stepper driver interrupts
-static void stepperGoIdle (void) {
+static void stepperGoIdle (bool clear_signals) {
     STEPPER_TIMER->TCR = 0;   // Stop stepper timer
 }
 
@@ -623,7 +622,7 @@ bool driver_init (void) {
     hal.driver_setup = driver_setup;
     hal.f_step_timer = SystemCoreClock;
     hal.rx_buffer_size = RX_BUFFER_SIZE;
-    hal.delay_ms = &driver_delay_ms;
+    hal.delay_ms = &driver_delay;
     hal.settings_changed = settings_changed;
 
 #if SDCARD_ENABLE
@@ -633,8 +632,6 @@ bool driver_init (void) {
     hal.stepper_wake_up = stepperWakeUp;
     hal.stepper_go_idle = stepperGoIdle;
     hal.stepper_enable = stepperEnable;
-    hal.stepper_set_outputs = stepperSetStepOutputs;
-    hal.stepper_set_directions = stepperSetDirOutputs;
     hal.stepper_cycles_per_tick = stepperCyclesPerTick;
     hal.stepper_pulse_start = stepperPulseStart;
 
@@ -780,11 +777,11 @@ void GPIO_IRQHandler (void)
 // Interrupt handler for 1 ms interval timer
 void SYSTICK_IRQHandler (void)
 {
-    if(!(--ms_count)) {
+    if(!(--delay.ms)) {
         SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
-        if(delayCallback) {
-            delayCallback();
-            delayCallback = 0;
+        if(delay.callback) {
+            delay.callback();
+            delay.callback = NULL;
         }
     }
 }

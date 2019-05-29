@@ -88,6 +88,7 @@ typedef struct {
     planner_cond_t condition;       // Bitfield variable to indicate planner conditions. See defines above.
     gc_override_flags_t overrides;  // Block bitfield variable for overrides
     int32_t line_number;            // Desired line number to report when executing.
+//    void *parameters;               // TODO: pointer to extra parameters, for canned cycles and threading?
     char *message;                  // Message to be displayed when block is executed.
 } plan_line_data_t;
 

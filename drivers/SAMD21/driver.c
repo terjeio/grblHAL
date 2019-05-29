@@ -49,13 +49,12 @@
 uint32_t vectorTable[sizeof(DeviceVectors) / sizeof(uint32_t)] __attribute__(( aligned (0x100ul) ));
 
 static uint32_t lim_IRQMask = 0;
-static volatile uint32_t ms_count = 1; // NOTE: initial value 1 is for "resetting" systick timer
 static bool pwmEnabled = false, IOInitDone = false;
 // Inverts the probe pin state depending on user settings and probing cycle mode.
 static bool probe_invert, sd_detect = false;
 static axes_signals_t next_step_outbits;
 static spindle_pwm_t spindle_pwm;
-static void (*delayCallback)(void) = 0;
+static delay_t delay_ms = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
 
 static axes_signals_t limit_ies; // declare here for now...
 
@@ -87,12 +86,32 @@ void IRQUnRegister(uint32_t IRQnum)
 
 static void driver_delay_ms (uint32_t ms, void (*callback)(void))
 {
-    if((ms_count = ms) > 0) {
+    if((delay_ms.ms = ms) > 0) {
         SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
-        if(!(delayCallback = callback))
-            while(ms_count);
+        if(!(delay_ms.callback = callback))
+            while(delay_ms.ms);
     } else if(callback)
         callback();
+}
+
+// Set stepper pulse output pins
+inline static void set_step_outputs (axes_signals_t step_outbits)
+{
+    step_outbits.value ^= settings.steppers.step_invert.mask;
+
+	pinOut(X_STEP_PIN, step_outbits.x);
+	pinOut(Y_STEP_PIN, step_outbits.y);
+	pinOut(Z_STEP_PIN, step_outbits.z);
+}
+
+// Set stepper direction output pins
+inline static void set_dir_outputs (axes_signals_t dir_outbits)
+{
+    dir_outbits.value ^= settings.steppers.dir_invert.mask;
+
+	pinOut(X_DIRECTION_PIN, dir_outbits.x);
+	pinOut(Y_DIRECTION_PIN, dir_outbits.y);
+	pinOut(Z_DIRECTION_PIN, dir_outbits.z);
 }
 
 // Enable/disable stepper motors
@@ -127,9 +146,14 @@ static void stepperWakeUp (void)
 }
 
 // Disables stepper driver interrupts
-static void stepperGoIdle (void) {
+static void stepperGoIdle (bool clear_signals) {
 	STEPPER_TIMER->COUNT32.CTRLBSET.reg = TC_CTRLBCLR_CMD_STOP;
 	while(STEPPER_TIMER->COUNT32.STATUS.bit.SYNCBUSY);
+
+    if(clear_signals) {
+        set_step_outputs((axes_signals_t){0});
+        set_dir_outputs((axes_signals_t){0});
+    }
 }
 
 // Sets up stepper driver interrupt timeout, AMASS version
@@ -144,36 +168,16 @@ static void stepperCyclesPerTick (uint32_t cycles_per_tick)
 	while(STEPPER_TIMER->COUNT32.STATUS.bit.SYNCBUSY);
 }
 
-// Set stepper pulse output pins
-inline static void stepperSetStepOutputs (axes_signals_t step_outbits)
-{
-    step_outbits.value ^= settings.steppers.step_invert.mask;
-
-	pinOut(X_STEP_PIN, step_outbits.x);
-	pinOut(Y_STEP_PIN, step_outbits.y);
-	pinOut(Z_STEP_PIN, step_outbits.z);
-}
-
-// Set stepper direction output pins
-inline static void stepperSetDirOutputs (axes_signals_t dir_outbits)
-{
-    dir_outbits.value ^= settings.steppers.dir_invert.mask;
-
-	pinOut(X_DIRECTION_PIN, dir_outbits.x);
-	pinOut(Y_DIRECTION_PIN, dir_outbits.y);
-	pinOut(Z_DIRECTION_PIN, dir_outbits.z);
-}
-
 // Sets stepper direction and pulse pins and starts a step pulse
 static void stepperPulseStart (stepper_t *stepper)
 {
     if(stepper->new_block) {
         stepper->new_block = false;
-        stepperSetDirOutputs(stepper->dir_outbits);
+        set_dir_outputs(stepper->dir_outbits);
     }
 
 	if(stepper->step_outbits.value) {
-		stepperSetStepOutputs(stepper->step_outbits);
+		set_step_outputs(stepper->step_outbits);
 
 		STEP_TIMER->COUNT16.COUNT.reg = 0;
 		while(STEP_TIMER->COUNT16.STATUS.bit.SYNCBUSY);
@@ -188,7 +192,7 @@ static void stepperPulseStartDelayed (stepper_t *stepper)
 {
 	if(stepper->new_block) {
         stepper->new_block = false;
-        stepperSetDirOutputs(stepper->dir_outbits);
+        set_dir_outputs(stepper->dir_outbits);
     }
 
 	if(stepper->step_outbits.value) {
@@ -719,9 +723,9 @@ static bool driver_setup (settings_t *settings)
 
     settings_changed(settings);
 
+	hal.stepper_go_idle(true);
     hal.spindle_set_state((spindle_state_t){0}, 0.0f);
     hal.coolant_set_state((coolant_state_t){0});
-    stepperSetDirOutputs((axes_signals_t){0});
 
 #if SDCARD_ENABLE
 	pinMode(SD_CD_PIN, INPUT_PULLUP);
@@ -846,8 +850,6 @@ bool driver_init (void) {
     hal.stepper_wake_up = stepperWakeUp;
     hal.stepper_go_idle = stepperGoIdle;
     hal.stepper_enable = stepperEnable;
-    hal.stepper_set_outputs = stepperSetStepOutputs;
-    hal.stepper_set_directions = stepperSetDirOutputs;
     hal.stepper_cycles_per_tick = stepperCyclesPerTick;
     hal.stepper_pulse_start = stepperPulseStart;
 
@@ -936,7 +938,7 @@ bool driver_init (void) {
 #endif
 
  // no need to move version check before init - compiler will fail any mismatch for existing entries
-    return hal.version == 4;
+    return hal.version == 5;
 }
 
 /* interrupt handlers */
@@ -953,10 +955,10 @@ static void STEPPULSE_IRQHandler (void)
 {	
 	if(STEP_TIMER->COUNT16.INTFLAG.bit.MC1) {
 		STEP_TIMER->COUNT16.INTFLAG.bit.MC1 = 1;
-		stepperSetStepOutputs(next_step_outbits); // Begin step pulse.
+		set_step_outputs(next_step_outbits); // Begin step pulse.
 	} else {
 		STEP_TIMER->COUNT16.INTFLAG.bit.MC0 = 1;
-		stepperSetStepOutputs((axes_signals_t){0}); // End step pulse.
+		set_step_outputs((axes_signals_t){0}); // End step pulse.
 	}
 }
 
@@ -1017,18 +1019,18 @@ static void SysTick_IRQHandler (void)
 		fatfs_ticks = 10;
 	}
 
-    if(ms_count && !(--ms_count)) {
-        if(delayCallback) {
-            delayCallback();
-            delayCallback = NULL;
+    if(delay_ms.ms && !(--delay_ms.ms)) {
+        if(delay_ms.callback) {
+            delay_ms.callback();
+            delay_ms.callback = NULL;
         }
     }
 #else
-    if(!(--ms_count)) {
+    if(!(--delay_ms.ms)) {
         SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
-        if(delayCallback) {
-            delayCallback();
-            delayCallback = NULL;
+        if(delay_ms.callback) {
+            delay_ms.callback();
+            delay_ms.callback = NULL;
         }
     }
 #endif

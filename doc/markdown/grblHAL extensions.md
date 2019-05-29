@@ -5,7 +5,7 @@
 \<Status>|\<WPos:|MPos:\><axis positions\>[|Bf:\<block buffers free\>,\<RX characters free>\][|PN:\<signals\>][WPos:][|MPG:\<0|1\>][|H:\<0|1\>][|D:\<0|1\>]
 
 New status, __Tool__, for manual tool change, driver dependent.
-If supported the OPT: report contains 'U' and a M6 triggers the new state, if not M6 returns error as before.
+If supported the `NEWOPT:` report contains `TC` \(see below\) and a `M6` triggers the new state, if not `M6` returns error as before.
 After the sender application receives a __Tool__ state RT report it should suspend sending further blocks and acknowledge by sending `0xA3 (CMD_TOOL_ACK)`. Grbl will then switch to a secondary input buffer allowing jogging commands etc, this until a cycle start is issued. Upon receiving the cycle start command grbl will revert to the primary input buffer and resume normal processing.  
 _NOTE:_ currently state is not saved/restored so spindle stop/start etc. needs to be added to the gcode.
 
@@ -29,17 +29,35 @@ This status is only reported when lathe mode is enabled, also G7 and G8 will ret
 
 #### OPT report:
 
-OPT:\<options\>,\<block buffer size\>,\<RX buffer size\>[,\<number of axes\>]
+Number of supported axes added to first line:  
+`[OPT:<options>,<block buffer size>,<RX buffer size>,<number of axes>]`
 
-\<options\>:
+A second line of options is added:  
+`NEWOPT:<comma separated list>]`
+
+`<comma separated list>` can contain any of the following values:
 ```
-S - SD Card
-B - Bluetooth
-U - Manual tool change (M6)
-V - Automatic tool change (M6 - ATC)
-- WiFi
-- Ethernet
+SD - SD Card streaming available.
+BT - Bluetooth streaming available.
+WIFI - Wi-Fi streaming available.
+ETH - Ethernet streaming available.
+TC - Manual tool change (M6) available.
+ATC - Automatic tool change (M6) available.
+LATHE - Lathe mode configured.
+SS - Spindle sync available.
+PID - PID log data available.
 ```
+
+#### NGC parameters report:
+
+If scaling is active scaling factors are reported:  
+`[G51:<axis scaling factors>]`
+
+If a tool table is available \(option in config.h\) tool table contents is added.
+
+`[T:<tool number>,<axis offsets>]`
+
+`TLO` parameter includes offsets for all axes.
 
 #### Settings:
 
@@ -47,7 +65,7 @@ Datatypes:
 ```
 <n> = integer value
 <float> = floating point value
-<logical> = 0 = false, 1 = true
+<boolean> = 0 = false, 1 = true
 <string> = ASCII string with some limitations for acceptable characters. To be revised.
 <axis mask> = bitmask where bit 0 = X, 1 = Y, 2 = Z, 3 = A...
 <coolant mask> = bitmask where bit 0 = flood, 1 = mist
@@ -55,43 +73,61 @@ Datatypes:
 <control mask> = bitmask where bit 0 = reset, 1 = feed hold, 2 = cycle start, 3 = safety door, 4 = block delete, 5 = stop disable
 ```
 
-$14=\<control mask\>  
-Invert control input signals, replaces #define INVERT_CONTROL_PIN_MASK.
+$14=\<control mask\> default from `INVERT_CONTROL_PIN_MASK`.  
+Invert control input signals.
 
-$15=\<coolant mask\>  
-Invert coolant output signals, replaces #define INVERT_COOLANT_FLOOD_PIN and #define INVERT_COOLANT_MIST_PIN.
+$15=\<coolant mask\> default from `INVERT_COOLANT_FLOOD_PIN` and `INVERT_COOLANT_MIST_PIN`.  
+Invert coolant output signals.
 
-$16=\<spindle mask\>  
-Invert spindle output signals, replaces #define INVERT_SPINDLE_ENABLE_PIN.
+$16=\<spindle mask\> default from `INVERT_SPINDLE_ENABLE_PIN`.  
+Invert spindle output signals.
 
-$17=\<control mask\>  
-Disable control signal pullup, replaces #define DISABLE_CONTROL_PIN_PULL_UP.
+$17=\<control mask\> default from `DISABLE_CONTROL_PINS_PULL_UP_MASK`.  
+Disable control signal pullup, replaces `#define DISABLE_CONTROL_PIN_PULL_UP`.
 	
-$18=\<axis mask\>  
-Disable limit signals pull up, replaces #define DISABLE_LIMIT_PIN_PULL_UP.
+$18=\<axis mask\> default from `DISABLE_LIMIT_PINS_PULL_UP_MASK`.  
+Disable limit signals pull up, replaces `#define DISABLE_LIMIT_PIN_PULL_UP`.
 Driver may apply pull down instead.
  
-$19=\<logical\>  
-Disable probe pull up, replaces #DISABLE_PROBE_PIN_PULL_UP.
+$19=\<boolean\> default from `DISABLE_PROBE_PIN_PULL_UP`  
+Disable probe pull up.
 Driver may apply pull down instead.
 
-$28=\<float\>  
-Specifies G73 retract distance.
+$21=\<mask\>  
+Changed from original boolean for enabling hard limits.  
+```
+bit0 - enable hard limits.  
+bit1 - enable strict mode when hard limits enabled
+```
 
-$29=\<n\> : default 0, range 0 - 10.  
-Stepper pulse delay in microseconds, replaces #define STEP_PULSE_DELAY.
+`bit 1` replaces `#define CHECK_LIMITS_AT_INIT`.  
+__NOTE:__ In strict mode switches will also be checked when `$X` is issued, if still engaged `error 45` will be reported. Homing is still possible, but for `$X` to work limit switches has to be disengaged or overridden.
 
-$33=\<float\> : default 5000.0, range driver dependent.  
-Spindle PWM frequency i Hz, replaces #define DEFAULT_SPINDLE_PWM_FREQ \(from LPC port\).
+$28=\<float\> default from `DEFAULT_G73_RETRACT`.
+Specifies `G73` retract distance in mm.
 
-$34=\<n\> : default 0, range 0 - 100.  
-Spindle off PWM duty cycle in percent, replaces #define DEFAULT_SPINDLE_PWM_OFF_VALUE \(from LPC port\).
+$29=\<n\> : default from `DEFAULT_STEP_PULSE_DELAY`, range 0 - 10.  
+Stepper pulse delay in microseconds, replaces `#define STEP_PULSE_DELAY`.
 
-$35=\<n\> : default 1, range 0 - 100.  
-Spindle minimum PWM duty cycle in percent, replaces #define SPINDLE_PWM_MIN_VALUE.
+$31=\<n\> default value derived from `DEFAULT_LASER_MODE` and `DEFAULT_LATHE_MODE`.  
+Changed from original boolean for enabling laser mode.  
+```
+0 - normal mode.  
+1 - laser mode.  
+2 - lathe mode.
+```
 
-$36=\<n\> : default 1, range 0 - 100.  
-Spindle maximum PWM duty cycle in percent, replaces #define DEFAULT_SPINDLE_PWM_MAX_VALUE \(from LPC port\).
+$33=\<float\> : default from `DEFAULT_SPINDLE_PWM_FREQ`, range driver dependent.  
+Spindle PWM frequency i Hz \(from LPC port\).
+
+$34=\<n\> : default from `DEFAULT_SPINDLE_PWM_OFF_VALUE`, range 0 - 100.  
+Spindle off PWM duty cycle in percent \(from LPC port\).
+
+$35=\<n\> : default from `DEFAULT_SPINDLE_PWM_MIN_VALUE`, range 0 - 100.  
+Spindle minimum PWM duty cycle in percent.
+
+$36=\<n\> : default from `DEFAULT_SPINDLE_PWM_MAX_VALUE`, range 0 - 100.  
+Spindle maximum PWM duty cycle in percent \(from LPC port\).
 
 $37=\<axis mask\> : defaults to all axes.  
 Defines which steppers is to be deenergized when motion completes.
@@ -105,8 +141,11 @@ Set to 0 to disable, when disabled these characters \(`?`, `!` and `~`\) are ign
 
 __NOTE:__ top bit set alternatives are provided as a safer alternative, see [config.h](../../GRBL/config.h).
 
-$43=\<n\> : default 1, range 0 - 255.  
-Number of homing locate cycles, replaces #define N_HOMING_LOCATE_CYCLE
+$40=\<boolean\> default 0 (off).  
+Enable soft limits for jogging. When enabled jog targets will be limited to machine travel limits for homed axes. 
+
+$43=\<n\> : default from DEFAULT_N_HOMING_LOCATE_CYCLE, range 0 - 255.  
+Number of homing locate cycles
 
 $44=\<axis mask\> : default 0.  
 $45=\<axis mask\> : default 0.  
@@ -141,26 +180,23 @@ $55=\<float\> : default driver dependent.
 Jogging fast distance in mm. Not used by core, indended use by driver and/or sender.
 Senders may query this for keyboard jogging modified by SHIFT key.
 
-$60=\<logical\> : default 1 (on).  
+$60=\<boolean\> : default 1 (on).  
 Restore default overrides when program ends. Replaces #define RESTORE_OVERRIDES_AFTER_PROGRAM_END.
 
-$61=\<logical\> : default 0 (off).  
+$61=\<boolean\> : default 0 (off).  
 Ignore safety door signal when idle. If on only the spindle \(laser\) will be switched off.
 May be useful if positioning a laser head with the lid open is needed.
 
-$62=\<logical\> : default 0 (off).  
+$62=\<boolean\> : default 0 (off).  
 Enable sleep function. Replaces #define SLEEP_ENABLE \(ATMega port\)
 
-$63=\<logical\> : default 0 (on).  
+$63=\<boolean\> : default 0 (on).  
 Disable laser during hold. Replaces #define DISABLE_LASER_DURING_HOLD.
 
-$64=\<logical\> : default 0 (off).  
+$64=\<boolean\> : default 0 (off).  
 Force grbl to enter alarm mode on startup. Replaces #define FORCE_INITIALIZATION_ALARM.
 
-$65=\<logical\> : default 0 (off).  
-Check if limit switches are engaged on startup. Replaces #define CHECK_LIMITS_AT_INIT.
-
-$66=\<logical\> : default 0 (off).  
+$66=\<boolean\> : default 0 (off).  
 Require homing sequence to be executed at startup\(?\). Replaces #define HOMING_INIT_LOCK.
 
 $70=\<n\> : default 0, range 0 - 4 \(driver dependent\).  
@@ -217,4 +253,4 @@ HARD_LIMIT_FORCE_STATE_CHECK
 SPINDLE_ENABLE_OFF_WITH_ZERO_SPEED
 
 ---
-2019-05-13
+2019-05-18

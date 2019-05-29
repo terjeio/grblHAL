@@ -94,17 +94,23 @@ typedef union {
     };
 } axes_signals_t;
 
+typedef enum {
+    DelayMode_Dwell = 0,
+    DelayMode_SysSuspend
+} delaymode_t;
+
+ // Delay struct, currently not used by core - may be used by drivers
+typedef struct {
+    volatile uint32_t ms;
+    void (*callback)(void);
+} delay_t;
+
 // Conversions
 #define MM_PER_INCH (25.40f)
 #define INCH_PER_MM (0.0393701f)
 
 #define MAX_INT_DIGITS 8 // Maximum number of digits in int32 (and float)
 #define STRLEN_COORDVALUE (MAX_INT_DIGITS + N_DECIMAL_COORDVALUE_INCH + 1) // 8.4 format - excluding terminating null
-
-typedef enum {
-    DelayMode_Dwell = 0,
-    DelayMode_SysSuspend
-} delaymode_t;
 
 // Useful macros
 #define clear_vector(a) memset(a, 0, sizeof(a))

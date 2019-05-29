@@ -208,6 +208,42 @@ static void driver_delay_ms (uint32_t ms, void (*callback)(void))
         delay.callback();
 }
 
+// Set stepper pulse output pins
+// NOTE: step_outbits are: bit0 -> X, bit1 -> Y, bit2 -> Z...
+// Mapping to registers can be done by
+// 1. bitbanding. Pros: can assign pins to different ports, no RMW needed. Cons: overhead, pin changes not synchronous
+// 2. bit shift. Pros: fast, Cons: bits must be consecutive
+// 3. lookup table. Pros: signal inversions done at setup, Cons: slower than bit shift
+inline static void set_step_outputs (axes_signals_t step_outbits)
+{
+#if STEP_OUTMODE == GPIO_BITBAND
+    step_outbits.value ^= settings.steppers.step_invert.mask;
+    BITBAND_PERI(STEP_PORT->OUT, X_STEP_PIN) = step_outbits.x;
+    BITBAND_PERI(STEP_PORT->OUT, Y_STEP_PIN) = step_outbits.y;
+    BITBAND_PERI(STEP_PORT->OUT, Z_STEP_PIN) = step_outbits.z;
+#elif STEP_OUTMODE == GPIO_MAP
+    STEP_PORT->OUT = (STEP_PORT->IN & ~STEP_MASK) | step_outmap[step_outbits.value];
+#else
+    STEP_PORT->OUT = (STEP_PORT->IN & ~STEP_MASK) | ((step_outbits.value << STEP_OUTMODE) ^ settings.steppers.step_invert.mask);
+#endif
+}
+
+// Set stepper direction output pins
+// NOTE: see note for set_step_outputs()
+inline static void set_dir_outputs (axes_signals_t dir_outbits)
+{
+#if DIRECTION_OUTMODE == GPIO_BITBAND
+    dir_outbits.value ^= settings.steppers.dir_invert.mask;
+    BITBAND_PERI(DIRECTION_PORT->OUT, X_DIRECTION_PIN) = dir_outbits.x;
+    BITBAND_PERI(DIRECTION_PORT->OUT, Y_DIRECTION_PIN) = dir_outbits.y;
+    BITBAND_PERI(DIRECTION_PORT->OUT, Z_DIRECTION_PIN) = dir_outbits.z;
+#elif DIRECTION_OUTMODE == GPIO_MAP
+    DIRECTION_PORT->OUT = (DIRECTION_PORT->IN & ~DIRECTION_MASK) | dir_outmap[dir_outbits.value];
+#else
+    DIRECTION_PORT->OUT = (DIRECTION_PORT->IN & ~DIRECTION_MASK) | ((dir_outbits.value << DIRECTION_OUTMODE) ^ settings.steppers.dir_invert.mask);
+#endif
+}
+
 // Enable/disable stepper motors
 static void stepperEnable (axes_signals_t enable)
 {
@@ -227,50 +263,18 @@ static void stepperWakeUp (void)
 }
 
 // Disables stepper driver interrupts
-static void stepperGoIdle (void) {
+static void stepperGoIdle (bool clear_signals) {
     STEPPER_TIMER->CONTROL &= ~(TIMER32_CONTROL_ENABLE|TIMER32_CONTROL_IE);
+    if(clear_signals) {
+        set_step_outputs((axes_signals_t){0});
+        set_dir_outputs((axes_signals_t){0});
+    }
 }
 
 // Sets up stepper driver interrupt timeout, limiting the slowest speed
 static void stepperCyclesPerTick (uint32_t cycles_per_tick)
 {
     STEPPER_TIMER->LOAD = cycles_per_tick < (1UL << 20) ? cycles_per_tick : 0x000FFFFFUL;
-}
-
-// Set stepper pulse output pins
-// NOTE: step_outbits are: bit0 -> X, bit1 -> Y, bit2 -> Z...
-// Mapping to registers can be done by
-// 1. bitbanding. Pros: can assign pins to different ports, no RMW needed. Cons: overhead, pin changes not synchronous
-// 2. bit shift. Pros: fast, Cons: bits must be consecutive
-// 3. lookup table. Pros: signal inversions done at setup, Cons: slower than bit shift
-inline static void stepperSetStepOutputs (axes_signals_t step_outbits)
-{
-#if STEP_OUTMODE == GPIO_BITBAND
-    step_outbits.value ^= settings.steppers.step_invert.mask;
-    BITBAND_PERI(STEP_PORT->OUT, X_STEP_PIN) = step_outbits.x;
-    BITBAND_PERI(STEP_PORT->OUT, Y_STEP_PIN) = step_outbits.y;
-    BITBAND_PERI(STEP_PORT->OUT, Z_STEP_PIN) = step_outbits.z;
-#elif STEP_OUTMODE == GPIO_MAP
-    STEP_PORT->OUT = (STEP_PORT->IN & ~STEP_MASK) | step_outmap[step_outbits.value];
-#else
-    STEP_PORT->OUT = (STEP_PORT->IN & ~STEP_MASK) | ((step_outbits.value << STEP_OUTMODE) ^ settings.steppers.step_invert.mask);
-#endif
-}
-
-// Set stepper direction output pins
-// NOTE: see note for stepperSetStepOutputs()
-inline static void stepperSetDirOutputs (axes_signals_t dir_outbits)
-{
-#if DIRECTION_OUTMODE == GPIO_BITBAND
-    dir_outbits.value ^= settings.steppers.dir_invert.mask;
-    BITBAND_PERI(DIRECTION_PORT->OUT, X_DIRECTION_PIN) = dir_outbits.x;
-    BITBAND_PERI(DIRECTION_PORT->OUT, Y_DIRECTION_PIN) = dir_outbits.y;
-    BITBAND_PERI(DIRECTION_PORT->OUT, Z_DIRECTION_PIN) = dir_outbits.z;
-#elif DIRECTION_OUTMODE == GPIO_MAP
-    DIRECTION_PORT->OUT = (DIRECTION_PORT->IN & ~DIRECTION_MASK) | dir_outmap[dir_outbits.value];
-#else
-    DIRECTION_PORT->OUT = (DIRECTION_PORT->IN & ~DIRECTION_MASK) | ((dir_outbits.value << DIRECTION_OUTMODE) ^ settings.steppers.dir_invert.mask);
-#endif
 }
 
 // "Normal" version: Sets stepper direction and pulse pins and starts a step pulse a few nanoseconds later.
@@ -285,11 +289,11 @@ static void stepperPulseStart (stepper_t *stepper)
             return;
         }
         stepper->new_block = false;
-        stepperSetDirOutputs(stepper->dir_outbits);
+        set_dir_outputs(stepper->dir_outbits);
     }
 
     if(stepper->step_outbits.value) {
-        stepperSetStepOutputs(stepper->step_outbits);
+        set_step_outputs(stepper->step_outbits);
         PULSE_TIMER->CTL |= TIMER_A_CTL_CLR|TIMER_A_CTL_MC1;
     } else spindle_tracker.segment_id++;
 }
@@ -307,7 +311,7 @@ static void stepperPulseStartDelayed (stepper_t *stepper)
             return;
         }
         stepper->new_block = false;
-        stepperSetDirOutputs(stepper->dir_outbits);
+        set_dir_outputs(stepper->dir_outbits);
     }
 
     if(stepper->step_outbits.value) {
@@ -340,14 +344,14 @@ static void stepperPulseStartSynchronized (stepper_t *stepper)
             sys.pid_log.setpoint = 100.0f;
 #endif
         }
-        stepperSetDirOutputs(stepper->dir_outbits);
+        set_dir_outputs(stepper->dir_outbits);
     }
 
     if(stepper->step_outbits.value) {
         if(settings.steppers.pulse_delay_microseconds)
             next_step_outbits = stepper->step_outbits; // Store out_bits;
         else
-            stepperSetStepOutputs(stepper->step_outbits);
+            set_step_outputs(stepper->step_outbits);
         PULSE_TIMER->CTL |= TIMER_A_CTL_CLR|TIMER_A_CTL_MC1;
     }
 
@@ -596,6 +600,10 @@ static void spindleSetStateVariable (spindle_state_t state, float rpm)
         if(delay.ms == 0)
             SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
         spindle_encoder.pid_state = PIDState_Disabled;
+        spindle_encoder.pid.error = 0.0f;
+        spindle_encoder.pid.i_error = 0.0f;
+        spindle_encoder.pid.d_error = 0.0f;
+        spindle_encoder.pid.sample_rate_prev = 1.0f;
     } else {
         spindle_dir(state.ccw);
         if(spindle_data.rpm_programmed == 0.0f) {
@@ -604,10 +612,6 @@ static void spindleSetStateVariable (spindle_state_t state, float rpm)
                 spindle_encoder.pid_state = PIDState_Pending;
                 SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
             }
-            spindle_encoder.pid.error = 0.0f;
-            spindle_encoder.pid.i_error = 0.0f;
-            spindle_encoder.pid.d_error = 0.0f;
-            spindle_encoder.pid.sample_rate_prev = 1.0f;
         }
 #ifdef sPID_LOG
         sys.pid_log.idx = 0;
@@ -794,7 +798,7 @@ static void modeSelect (bool mpg_mode)
     BITBAND_PERI(MODE_PORT->IE, MODE_SWITCH_PIN) = 1;
 
     // Deny entering MPG mode if busy
-    if(mpg_mode == sys.mpg_mode || (mpg_mode && (gc_state.file_run || sys.state != STATE_IDLE)))
+    if(mpg_mode == sys.mpg_mode || (mpg_mode && (gc_state.file_run || !(sys.state == STATE_IDLE || (sys.state & (STATE_ALARM|STATE_ESTOP))))))
         return;
 
     BITBAND_PERI(MODE_PORT->OUT, MODE_LED_PIN) = mpg_mode;
@@ -1136,9 +1140,9 @@ static bool driver_setup (settings_t *settings)
 
     settings_changed(settings);
 
+    hal.stepper_go_idle(true);
     hal.spindle_set_state((spindle_state_t){0}, 0.0f);
     hal.coolant_set_state((coolant_state_t){0});
-    stepperSetDirOutputs((axes_signals_t){0});
 
 #if KEYPAD_ENABLE
     keypad_setup();
@@ -1150,8 +1154,8 @@ static bool driver_setup (settings_t *settings)
 // Initialize HAL pointers, setup serial comms and enable EEPROM
 // NOTE: Grbl is not yet configured (from EEPROM data), driver_setup() will be called when done
 
-bool driver_init (void) {
-
+bool driver_init (void)
+{
     // Enable EEPROM and serial port here for Grbl to be able to configure itself and report any errors
 
     SystemInit();
@@ -1179,8 +1183,6 @@ bool driver_init (void) {
     hal.stepper_wake_up = stepperWakeUp;
     hal.stepper_go_idle = stepperGoIdle;
     hal.stepper_enable = stepperEnable;
-    hal.stepper_set_outputs = stepperSetStepOutputs;
-    hal.stepper_set_directions = stepperSetDirOutputs;
     hal.stepper_cycles_per_tick = stepperCyclesPerTick;
     hal.stepper_pulse_start = stepperPulseStart;
 
@@ -1252,7 +1254,7 @@ bool driver_init (void) {
     hal.driver_cap.limits_pull_up = On;
     hal.driver_cap.probe_pull_up = On;
     // no need to move version check before init - compiler will fail any mismatch for existing entries
-    return hal.version == 4;
+    return hal.version == 5;
 }
 
 /* interrupt handlers */
@@ -1282,7 +1284,7 @@ void STEPPER_IRQHandler (void)
 void STEPPULSE_N_IRQHandler (void)
 {
     if(PULSE_TIMER->IV == 0x02) // CCR1 - IV read clears interrupt
-        stepperSetStepOutputs(next_step_outbits); // Begin step pulse.
+        set_step_outputs(next_step_outbits); // Begin step pulse.
 }
 
 // This interrupt is enabled when Grbl sets the motor port bits to execute
@@ -1290,7 +1292,7 @@ void STEPPULSE_N_IRQHandler (void)
 // completing one step cycle.
 void STEPPULSE_0_IRQHandler (void)
 {
-    stepperSetStepOutputs((axes_signals_t){0});
+    set_step_outputs((axes_signals_t){0});
     PULSE_TIMER->CCTL[0] &= ~TIMER_A_CCTLN_CCIFG;
     PULSE_TIMER->CTL &= ~(TIMER_A_CTL_MC0|TIMER_A_CTL_MC1); // Disable Timer0 to prevent re-entering this interrupt when it's not needed.
 }

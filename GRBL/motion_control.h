@@ -57,7 +57,7 @@ status_code_t mc_jog_execute(plan_line_data_t *pl_data, parser_block_t *gc_block
 void mc_dwell(float seconds);
 
 // Perform homing cycle to locate machine zero. Requires limit switches.
-void mc_homing_cycle(uint8_t cycle_mask);
+status_code_t mc_homing_cycle(uint8_t cycle_mask);
 
 // Perform tool length probe cycle. Requires probe switch.
 gc_probe_t mc_probe_cycle(float *target, plan_line_data_t *pl_data, gc_parser_flags_t parser_flags);

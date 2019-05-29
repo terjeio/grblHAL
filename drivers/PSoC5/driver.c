@@ -33,11 +33,10 @@
 #define INTERRUPT_FREQ 1000u
 #define SYSTICK_INTERRUPT_VECTOR_NUMBER 15u
 
-static volatile uint32_t ms_count = 1;
 static bool spindlePWM = false, IOInitDone = false;
 static spindle_pwm_t spindle_pwm;
 static axes_signals_t next_step_outbits;
-static void (*delayCallback)(void) = 0;
+static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
 
 // Interrupt handler prototypes
 static void stepper_driver_isr (void);
@@ -48,10 +47,10 @@ static void systick_isr (void);
 
 static void driver_delay_ms (uint32_t ms, void (*callback)(void))
 {
-    if((ms_count = ms) > 0) {
+    if((delay.ms = ms) > 0) {
 		DelayTimer_Start();
-		if(!(delayCallback = callback))
-		    while(ms_count);
+		if(!(delay.callback = callback))
+		    while(delay.ms);
 	} else if(callback)
 		callback();
 }
@@ -85,13 +84,13 @@ static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
 
 static void spindleUpdateRPM (float rpm)
 {
-    spindle_set_speed(spindle_compute_pwm_value(&spindle_pwm, rpm));
+    spindle_set_speed(spindle_compute_pwm_value(&spindle_pwm, rpm, false));
 }
 
 // Start or stop spindle, called from spindle_run() and protocol_execute_realtime()
 static void spindleSetStateVariable (spindle_state_t state, float rpm)
 {
-    uint32_t new_pwm = spindle_compute_pwm_value(&spindle_pwm, rpm);
+    uint32_t new_pwm = spindle_compute_pwm_value(&spindle_pwm, rpm, false);
 
     if (!state.on || new_pwm == spindle_pwm.off_value)
         SpindleOutput_Write(SpindleOutput_Read() & 0x02); // Keep direction!
@@ -509,11 +508,11 @@ static void control_isr (void)
 static void systick_isr (void)
 {
     DelayTimer_ReadStatusRegister();
-	if(!(--ms_count)) {
+	if(!(--delay.ms)) {
 		DelayTimer_Stop();
-		if(delayCallback) {
-			delayCallback();
-            delayCallback = 0;
+		if(delay.callback) {
+			delay.callback();
+            delay.callback = NULL;
         }
 	}
 }

@@ -118,7 +118,7 @@ typedef enum {
     Setting_PulseDelayMicroseconds = 29,
     Setting_RpmMax = 30,
     Setting_RpmMin = 31,
-    Setting_LaserMode = 32, // TODO: rename - shared with lathe mode
+    Setting_Mode = 32,
     Setting_PWMFreq = 33,
     Setting_PWMOffValue = 34,
     Setting_PWMMinValue = 35,
@@ -127,6 +127,8 @@ typedef enum {
     Setting_SpindlePPR = 38,
     Setting_EnableLegacyRTCommands = 39,
     Setting_JogSoftLimited = 40,
+    Setting_ParkingEnable = 41,
+    Setting_ParkingAxis = 42,
 
     Setting_HomingLocateCycles = 43,
     Setting_HomingCycle_1 = 44,
@@ -143,14 +145,29 @@ typedef enum {
     Setting_JogSlowDistance = 54,
     Setting_JogFastDistance = 55,
 //
+    Setting_ParkingPulloutIncrement = 56,
+    Setting_ParkingPulloutRate = 57,
+    Setting_ParkingTarget = 58,
+    Setting_ParkingFastRate = 59,
+
     Setting_RestoreOverrides = 60,
     Setting_IgnoreDoorWhenIdle = 61,
     Setting_SleepEnable = 62,
     Setting_DisableLaserDuringHold = 63,
     Setting_ForceInitAlarm = 64,
-    Setting_AssortedFlags = 65,
-    Setting_HomingInitLock = 66,
+    Setting_ProbingFeedOverride = 65,
+
     Settings_Stream = 70,
+
+// Optional driver implemented settings for additional streams
+    Settings_WiFiSSID = 71,
+    Settings_WiFiPassword = 72,
+    Settings_WiFiPort = 73,
+    Settings_BlueToothDeviceName = 74,
+    Settings_BlueToothServiceName = 75,
+// 75-79 reserved for streams use
+//
+
 // Optional settings for closed loop spindle speed control
     Setting_SpindlePGain = 80,
     Setting_SpindleIGain = 81,
@@ -206,9 +223,7 @@ typedef union {
                 force_initialization_alarm      :1,
                 wifi_ap_mode                    :1,
                 allow_probing_feed_override     :1,
-                homing_single_axis_commands     :1,
-                homing_force_set_origin         :1,
-                limits_two_switches_on_axes     :1,
+                unassigned                      :3,
                 force_buffer_sync_on_wco_change :1,
                 lathe_mode                      :1;
     };
@@ -223,7 +238,7 @@ typedef union {
 				feed_speed        :1,
 				pin_state         :1,
 				work_coord_offset :1,
-				overrrides        :1,
+				overrides         :1,
 				probe_coordinates :1;
     };
 } reportmask_t;
@@ -279,9 +294,11 @@ typedef struct {
 typedef union {
     uint8_t value;
     struct {
-        uint8_t enabled    :1,
-                init_lock  :1,
-                unassigned :6;
+        uint8_t enabled              :1,
+                single_axis_commands :1,
+                init_lock            :1,
+                force_set_origin     :1,
+                unassigned           :4;
     };
 } homing_settings_flags_t;
 
@@ -313,7 +330,8 @@ typedef union {
                 soft_enabled     :1,
                 check_at_init    :1,
                 jog_soft_limited :1,
-                unassigned       :4;
+                two_switches     :1,
+                unassigned       :3;
     };
 } limit_settings_flags_t;
 
@@ -397,10 +415,10 @@ void settings_write_coord_data(uint8_t idx, float (*coord_data)[N_AXIS]);
 // Reads selected coordinate data from persistent storage
 bool settings_read_coord_data(uint8_t idx, float (*coord_data)[N_AXIS]);
 
-// Writes selected tool data from persistent storage
-bool settings_write_tool_data (uint8_t idx, tool_data_t *tool_data);
+// Writes selected tool data to persistent storage
+bool settings_write_tool_data (tool_data_t *tool_data);
 
 // Read selected tool data from persistent storage
-bool settings_read_tool_data (uint8_t idx, tool_data_t *tool_data);
+bool settings_read_tool_data (uint8_t tool, tool_data_t *tool_data);
 
 #endif

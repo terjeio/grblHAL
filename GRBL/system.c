@@ -168,6 +168,8 @@ status_code_t system_execute_line (char *line)
                     retval = Status_Reset;
                 else if (settings.limits.flags.hard_enabled && settings.limits.flags.check_at_init && hal.limits_get_state().value)
                     retval = Status_LimitsEngaged;
+                else if (settings.homing.flags.enabled && settings.homing.flags.init_lock && sys.homed.mask != sys.homing.mask)
+                    retval = Status_HomingRequired;
                 else {
                     hal.report.feedback_message(Message_AlarmUnlock);
                     set_state(STATE_IDLE);
@@ -189,7 +191,7 @@ status_code_t system_execute_line (char *line)
                 else if (!settings.homing.flags.enabled)
                     retval = Status_SettingDisabled;
                 // Block if safety door is ajar.
-                else if (control_signals.safety_door_ajar)
+                else if (control_signals.safety_door_ajar && !settings.flags.safety_door_ignore_when_idle)
                     retval = Status_CheckDoor;
                 // Block if safety reset is active.
                 else if(control_signals.reset)
@@ -201,33 +203,33 @@ status_code_t system_execute_line (char *line)
                 set_state(STATE_HOMING); // Set system state variable
 
                 if (line[2] == '\0')
-                    mc_homing_cycle(0); // Home axes according to configuration
+                    retval = mc_homing_cycle(0); // Home axes according to configuration
 
-                else if (settings.flags.homing_single_axis_commands && line[3] == '\0') {
+                else if (settings.homing.flags.single_axis_commands && line[3] == '\0') {
 
                     switch (line[2]) {
                         case 'X':
-                            mc_homing_cycle(X_AXIS_BIT);
+                            retval = mc_homing_cycle(X_AXIS_BIT);
                             break;
                         case 'Y':
-                            mc_homing_cycle(Y_AXIS_BIT);
+                            retval = mc_homing_cycle(Y_AXIS_BIT);
                             break;
                         case 'Z':
-                            mc_homing_cycle(Z_AXIS_BIT);
+                            retval = mc_homing_cycle(Z_AXIS_BIT);
                             break;
                       #ifdef A_AXIS
                         case 'A':
-                            mc_homing_cycle(A_AXIS_BIT);
+                            retval = mc_homing_cycle(A_AXIS_BIT);
                             break;
                       #endif
                       #ifdef B_AXIS
                         case 'B':
-                            mc_homing_cycle(B_AXIS_BIT);
+                            retval = mc_homing_cycle(B_AXIS_BIT);
                             break;
                       #endif
                       #ifdef C_AXIS
                         case 'C':
-                            mc_homing_cycle(C_AXIS_BIT);
+                            retval = mc_homing_cycle(C_AXIS_BIT);
                             break;
                       #endif
                       default:
@@ -242,7 +244,7 @@ status_code_t system_execute_line (char *line)
                 set_state(STATE_IDLE); // Set to IDLE when complete.
                 st_go_idle(); // Set steppers to the settings idle state before returning.
                 if (line[2] == '\0')
-                    system_execute_startup(line);
+                    system_execute_startup(line); // TODO: only after all configured axes homed?
             }
             break;
 
@@ -422,7 +424,7 @@ bool system_check_travel_limits (float *target)
     bool failed = false;
     uint_fast8_t idx = N_AXIS;
 
-    if(settings.flags.homing_force_set_origin) {
+    if(settings.homing.flags.force_set_origin) {
         do {
             idx--;
         // When homing forced set origin is enabled, soft limits checks need to account for directionality.
@@ -435,7 +437,7 @@ bool system_check_travel_limits (float *target)
         failed = target[idx] > 0.0f || target[idx] < settings.max_travel[idx];
     } while(!failed && idx);
 
-  return !failed;
+    return !failed;
 }
 
 // Limits jog commands to be within machine limits, homed axes only.
@@ -449,7 +451,7 @@ void system_apply_jog_limits (float *target)
     if(sys.homed.mask) do {
         idx--;
         if(bit_istrue(sys.homed.mask, bit(idx))) {
-            if(settings.flags.homing_force_set_origin) {
+            if(settings.homing.flags.force_set_origin) {
                 if(bit_isfalse(settings.homing.dir_mask.value, bit(idx))) {
                     if(target[idx] > 0.0f)
                         target[idx] = 0.0f;

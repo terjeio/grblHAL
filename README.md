@@ -6,7 +6,8 @@ G76 threading support added to grblHAL in combination with the [MSP432 driver](d
 
 **WARNING!** This is a potentially dangerous addition. Do NOT use if you do not understand the risks. A proper E-Stop is a must, it should cut power to the steppers and if possible engage any spindle brake. The implementation is based on the [linuxcnc specification](http://linuxcnc.org/docs/2.6/html/gcode/gcode.html#sec:G76-Threading-Canned). Please note that I am not a machinist so my interpretation and implementation may be wrong!
 
-G76 availablity requires a spindle encoder with index pulse, grblHAL configured to [lathe mode](doc/markdown/settings.md#opmode) and tuning of the spindle sync PID loop. NOTE: Feed hold is disabled when cutting, spindle RPM overrides and CSS mode through the whole cycle. 
+G76 availablity requires a spindle encoder with index pulse, grblHAL configured to [lathe mode](doc/markdown/settings.md#opmode) and tuning of the spindle sync PID loop.  
+__NOTE:__ Feed hold is delayed until spindle synced cut is complete, spindle RPM overrides and CSS mode disabled through the whole cycle. 
 
 ---
 
@@ -42,17 +43,18 @@ List of Supported G-Codes in GrblHAL v1.1:
   - Feed Rate Modes: G93, G94, G95*, G96*, G97*
   - Unit Modes: G20, G21
   - Scaling: G50, G51
+  - Lathe modes: G7*, G8*
   - Distance Modes: G90, G91
   - Arc IJK Distance Modes: G91.1
   - Plane Select Modes: G17, G18, G19
-  - Tool Length Offset Modes: G43.1, G49
+  - Tool Length Offset Modes: G43*, G43.1, G43.2*, G49
   - Cutter Compensation Modes: G40
   - Coordinate System Modes: G54, G55, G56, G57, G58, G59, G59.1, G59.2, G59.3
   - Control Modes: G61
   - Program Flow: M0, M1, M2, M30
   - Coolant Control: M7, M8, M9
   - Spindle Control: M3, M4, M5
-  - Tool Change: M6* (Two modes possible: manual** - supports jogging, ATC)
+  - Tool Change: M6* (Two modes possible: manual** - supports jogging, ATC), M61
   - Switches: M49, M50, M51, M53
   - Valid Non-Command Words: A*, B*, C*, F, H*, I, J, K, L, N, P, Q*, R, S, T, X, Y, Z
 

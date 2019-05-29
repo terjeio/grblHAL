@@ -330,6 +330,46 @@ static void debug_out (bool enable)
 }
 #endif
 
+
+// Set stepper pulse output pins
+inline IRAM_ATTR static void set_step_outputs (axes_signals_t step_outbits)
+{
+#ifdef xDEBUGOUT
+	if(step_outbits.value)
+		hal.debug_out(true);
+#endif
+    if(step_outbits.x) {
+        RMT.conf_ch[0].conf1.mem_rd_rst = 1;
+        RMT.conf_ch[0].conf1.tx_start = 1;
+    }
+
+    if(step_outbits.y) {
+        RMT.conf_ch[1].conf1.mem_rd_rst = 1;
+        RMT.conf_ch[1].conf1.tx_start = 1;
+    }
+
+    if(step_outbits.z) {
+        RMT.conf_ch[2].conf1.mem_rd_rst = 1;
+        RMT.conf_ch[2].conf1.tx_start = 1;
+    }
+/*
+    step_outbits.value ^= settings.steppers.step_invert.mask;
+    gpio_set_level(X_STEP_PIN, step_outbits.x);
+    gpio_set_level(Y_STEP_PIN, step_outbits.y);
+    gpio_set_level(Z_STEP_PIN, step_outbits.z);
+*/
+}
+
+// Set stepper direction output pins
+// NOTE: see note for set_step_outputs()
+inline IRAM_ATTR static void set_dir_outputs (axes_signals_t dir_outbits)
+{
+    dir_outbits.value ^= settings.steppers.dir_invert.mask;
+    gpio_set_level(X_DIRECTION_PIN, dir_outbits.x);
+    gpio_set_level(Y_DIRECTION_PIN, dir_outbits.y);
+    gpio_set_level(Z_DIRECTION_PIN, dir_outbits.z);
+}
+
 // Enable/disable steppers
 static void stepperEnable (axes_signals_t enable)
 {
@@ -363,9 +403,13 @@ static void stepperWakeUp (void)
 }
 
 // Disables stepper driver interrupts
-IRAM_ATTR static void stepperGoIdle (void)
+IRAM_ATTR static void stepperGoIdle (bool clear_signals)
 {
 	timer_pause(STEP_TIMER_GROUP, STEP_TIMER_INDEX);
+    if(clear_signals) {
+        set_step_outputs((axes_signals_t){0});
+        set_dir_outputs((axes_signals_t){0});
+    }
 }
 
 // Sets up stepper driver interrupt timeout
@@ -383,55 +427,16 @@ IRAM_ATTR static void stepperCyclesPerTick (uint32_t cycles_per_tick)
 #endif
 }
 
-// Set stepper pulse output pins
-inline IRAM_ATTR static void stepperSetStepOutputs (axes_signals_t step_outbits)
-{
-#ifdef xDEBUGOUT
-	if(step_outbits.value)
-		hal.debug_out(true);
-#endif
-    if(step_outbits.x) {
-        RMT.conf_ch[0].conf1.mem_rd_rst = 1;
-        RMT.conf_ch[0].conf1.tx_start = 1;
-    }
-
-    if(step_outbits.y) {
-        RMT.conf_ch[1].conf1.mem_rd_rst = 1;
-        RMT.conf_ch[1].conf1.tx_start = 1;
-    }
-
-    if(step_outbits.z) {
-        RMT.conf_ch[2].conf1.mem_rd_rst = 1;
-        RMT.conf_ch[2].conf1.tx_start = 1;
-    }
-/*
-    step_outbits.value ^= settings.steppers.step_invert.mask;
-    gpio_set_level(X_STEP_PIN, step_outbits.x);
-    gpio_set_level(Y_STEP_PIN, step_outbits.y);
-    gpio_set_level(Z_STEP_PIN, step_outbits.z);
-*/
-}
-
-// Set stepper direction output pins
-// NOTE: see note for stepperSetStepOutputs()
-inline IRAM_ATTR static void stepperSetDirOutputs (axes_signals_t dir_outbits)
-{
-    dir_outbits.value ^= settings.steppers.dir_invert.mask;
-    gpio_set_level(X_DIRECTION_PIN, dir_outbits.x);
-    gpio_set_level(Y_DIRECTION_PIN, dir_outbits.y);
-    gpio_set_level(Z_DIRECTION_PIN, dir_outbits.z);
-}
-
 // Sets stepper direction and pulse pins and starts a step pulse
 IRAM_ATTR static void stepperPulseStart (stepper_t *stepper)
 {
     if(stepper->new_block) {
         stepper->new_block = false;
-        stepperSetDirOutputs(stepper->dir_outbits);
+        set_dir_outputs(stepper->dir_outbits);
     }
 
     if(stepper->step_outbits.value) {
-		stepperSetStepOutputs(stepper->step_outbits);
+		set_step_outputs(stepper->step_outbits);
 #ifdef DEBUGOUT
 		hal.debug_out(false);
 #endif
@@ -1030,9 +1035,9 @@ static bool driver_setup (settings_t *settings)
 
     settings_changed(settings);
 
+    hal.stepper_go_idle(true);
     hal.spindle_set_state((spindle_state_t){0}, 0.0f);
     hal.coolant_set_state((coolant_state_t){0});
-    hal.stepper_set_directions((axes_signals_t){0});
 
     return IOInitDone;
 }
@@ -1138,8 +1143,6 @@ bool driver_init (void)
     hal.stepper_wake_up = stepperWakeUp;
     hal.stepper_go_idle = stepperGoIdle;
     hal.stepper_enable = stepperEnable;
-    hal.stepper_set_outputs = stepperSetStepOutputs;
-    hal.stepper_set_directions = stepperSetDirOutputs;
     hal.stepper_cycles_per_tick = stepperCyclesPerTick;
     hal.stepper_pulse_start = stepperPulseStart;
 
@@ -1231,7 +1234,7 @@ bool driver_init (void)
 #endif
 
    // no need to move version check before init - compiler will fail any mismatch for existing entries
-    return hal.version == 4;
+    return hal.version == 5;
 }
 
 /* interrupt handlers */

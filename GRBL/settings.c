@@ -44,9 +44,6 @@ const settings_t defaults = {
     .flags.force_initialization_alarm = DEFAULT_FORCE_INITIALIZATION_ALARM,
     .flags.disable_probe_pullup = DISABLE_PROBE_PIN_PULL_UP,
     .flags.allow_probing_feed_override = ALLOW_FEED_OVERRIDE_DURING_PROBE_CYCLES,
-    .flags.limits_two_switches_on_axes = LIMITS_TWO_SWITCHES_ON_AXES,
-    .flags.homing_single_axis_commands = HOMING_SINGLE_AXIS_COMMANDS,
-    .flags.homing_force_set_origin = HOMING_FORCE_SET_ORIGIN,
     .flags.force_buffer_sync_on_wco_change = FORCE_BUFFER_SYNC_DURING_WCO_CHANGE,
 
     .steppers.pulse_microseconds = DEFAULT_STEP_PULSE_MICROSECONDS,
@@ -59,26 +56,29 @@ const settings_t defaults = {
 
     .homing.flags.enabled = DEFAULT_HOMING_ENABLE,
     .homing.flags.init_lock = DEFAULT_HOMING_INIT_LOCK,
+    .homing.flags.single_axis_commands = HOMING_SINGLE_AXIS_COMMANDS,
+    .homing.flags.force_set_origin = HOMING_FORCE_SET_ORIGIN,
     .homing.dir_mask.value = DEFAULT_HOMING_DIR_MASK,
     .homing.feed_rate = DEFAULT_HOMING_FEED_RATE,
     .homing.seek_rate = DEFAULT_HOMING_SEEK_RATE,
     .homing.debounce_delay = DEFAULT_HOMING_DEBOUNCE_DELAY,
     .homing.pulloff = DEFAULT_HOMING_PULLOFF,
     .homing.locate_cycles = DEFAULT_N_HOMING_LOCATE_CYCLE,
-    .homing.cycle[X_AXIS] = 0, // indexing references of these are a bit of a misnomer...
-    .homing.cycle[Y_AXIS] = 0,
-    .homing.cycle[Z_AXIS] = 0,
+    .homing.cycle[X_AXIS].mask = 0, // indexing references of these are a bit of a misnomer...
+    .homing.cycle[Y_AXIS].mask = 0,
+    .homing.cycle[Z_AXIS].mask = 0,
 
     .status_report.buffer_state = REPORT_FIELD_BUFFER_STATE,
     .status_report.line_numbers = REPORT_FIELD_LINE_NUMBERS,
     .status_report.feed_speed = REPORT_FIELD_CURRENT_FEED_SPEED,
     .status_report.pin_state = REPORT_FIELD_PIN_STATE,
     .status_report.work_coord_offset = REPORT_FIELD_WORK_COORD_OFFSET,
-    .status_report.overrrides = REPORT_FIELD_OVERRIDES,
+    .status_report.overrides = REPORT_FIELD_OVERRIDES,
 
     .limits.flags.hard_enabled = DEFAULT_HARD_LIMIT_ENABLE,
     .limits.flags.soft_enabled = DEFAULT_SOFT_LIMIT_ENABLE,
     .limits.flags.check_at_init = DEFAULT_CHECK_LIMITS_AT_INIT,
+    .limits.flags.two_switches = LIMITS_TWO_SWITCHES_ON_AXES,
     .limits.invert.mask = INVERT_LIMIT_PIN_MASK,
     .limits.disable_pullup.mask = DISABLE_LIMIT_PINS_PULL_UP_MASK,
 
@@ -98,6 +98,9 @@ const settings_t defaults = {
     .spindle.pid.i_gain = DEFAULT_SPINDLE_I_GAIN,
     .spindle.pid.d_gain = DEFAULT_SPINDLE_D_GAIN,
     .spindle.pid.i_max_error = DEFAULT_SPINDLE_I_MAX,
+
+    .coolant_invert.flood = INVERT_COOLANT_FLOOD_PIN,
+    .coolant_invert.mist = INVERT_COOLANT_MIST_PIN,
 
     .steps_per_mm[X_AXIS] = DEFAULT_X_STEPS_PER_MM,
     .steps_per_mm[Y_AXIS] = DEFAULT_Y_STEPS_PER_MM,
@@ -219,14 +222,13 @@ bool settings_read_coord_data (uint8_t idx, float (*coord_data)[N_AXIS])
 }
 
 // Write selected tool data to persistent storage.
-bool settings_write_tool_data (uint8_t idx, tool_data_t *tool_data)
+bool settings_write_tool_data (tool_data_t *tool_data)
 {
 #ifdef N_TOOLS
-    assert(idx > 0 && idx <= N_TOOLS); // NOTE: idx 0 is a non-persistent entry for tools not in tool table
+    assert(tool_data->tool > 0 && tool_data->tool <= N_TOOLS); // NOTE: idx 0 is a non-persistent entry for tools not in tool table
 
-    idx--;
     if(hal.eeprom.type != EEPROM_None)
-        hal.eeprom.memcpy_to_with_checksum(EEPROM_ADDR_TOOL_TABLE + idx * (sizeof(tool_data_t) + 1), (uint8_t *)tool_data, sizeof(tool_data_t));
+        hal.eeprom.memcpy_to_with_checksum(EEPROM_ADDR_TOOL_TABLE + (tool_data->tool - 1) * (sizeof(tool_data_t) + 1), (uint8_t *)tool_data, sizeof(tool_data_t));
 
     return true;
 #else
@@ -235,16 +237,17 @@ bool settings_write_tool_data (uint8_t idx, tool_data_t *tool_data)
 }
 
 // Read selected tool data from persistent storage.
-bool settings_read_tool_data (uint8_t idx, tool_data_t *tool_data)
+bool settings_read_tool_data (uint8_t tool, tool_data_t *tool_data)
 {
 #ifdef N_TOOLS
-    assert(idx > 0 && idx <= N_TOOLS); // NOTE: idx 0 is a non-persistent entry for tools not in tool table
+    assert(tool > 0 && tool <= N_TOOLS); // NOTE: idx 0 is a non-persistent entry for tools not in tool table
 
-    idx--;
-    if (!(hal.eeprom.type != EEPROM_None && hal.eeprom.memcpy_from_with_checksum((uint8_t *)tool_data, EEPROM_ADDR_TOOL_TABLE + idx * (sizeof(tool_data_t) + 1), sizeof(tool_data_t))))
+    if (!(hal.eeprom.type != EEPROM_None && hal.eeprom.memcpy_from_with_checksum((uint8_t *)tool_data, EEPROM_ADDR_TOOL_TABLE + (tool - 1) * (sizeof(tool_data_t) + 1), sizeof(tool_data_t)) && tool_data->tool == tool)) {
         memset(tool_data, 0, sizeof(tool_data_t));
+        tool_data->tool = tool;
+    }
 
-    return tool_data->tool == idx + 1;
+    return tool_data->tool == tool;
 #else
     return false;
 #endif
@@ -312,8 +315,10 @@ void settings_restore (uint8_t restore_flag) {
 #ifdef N_TOOLS
         tool_data_t tool_data;
         memset(&tool_data, 0, sizeof(tool_data_t));
-        for (idx = 1; idx <= N_TOOLS; idx++)
-            settings_write_tool_data(idx, &tool_data);
+        for (idx = 1; idx <= N_TOOLS; idx++) {
+            tool_data.tool = idx;
+            settings_write_tool_data(&tool_data);
+        }
 #endif
     }
 
@@ -347,7 +352,7 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
     if (svalue[set_idx] != '\0')
         return Status_InvalidStatement;
 
-    if (value < 0.0f)
+    if (value < 0.0f && (setting_type_t)parameter != Setting_ParkingTarget)
         return Status_NegativeValue;
 
     if ((setting_type_t)parameter >= Setting_AxisSettingsBase && (setting_type_t)parameter <= Setting_AxisSettingsMax) {
@@ -403,7 +408,7 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
 
     } else {
         // Store non-axis Grbl settings
-        uint8_t int_value = (uint8_t)truncf(value);
+        uint_fast16_t int_value = (uint_fast16_t)truncf(value);
         switch((setting_type_t)parameter) {
 
             case Setting_PulseMicroseconds:
@@ -446,7 +451,8 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
                 break;
 
             case Setting_StatusReportMask:
-                settings.status_report.mask = int_value;
+                settings.status_report.mask = int_value & 0xFF;
+                settings.flags.force_buffer_sync_on_wco_change = bit_istrue(int_value, bit(8));
                 break;
 
             case Setting_JunctionDeviation:
@@ -506,8 +512,8 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
                 break;
 
             case Setting_HardLimitsEnable:
-                settings.limits.flags.hard_enabled = int_value & bit(0);
-                settings.limits.flags.check_at_init = int_value & bit(1);
+                settings.limits.flags.hard_enabled = bit_istrue(int_value, bit(0));
+                settings.limits.flags.check_at_init = bit_istrue(int_value, bit(1));
                 hal.limits_enable(settings.limits.flags.hard_enabled, false); // Change immediately. NOTE: Nice to have but could be problematic later.
                 break;
 
@@ -531,20 +537,16 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
                 settings.flags.force_initialization_alarm = int_value != 0;
                 break;
 
-            case Setting_AssortedFlags: // TODO: remove code at end of this file to enable
-                settings.flags.allow_probing_feed_override = int_value & bit(0);
-                settings.flags.limits_two_switches_on_axes = int_value & bit(1);
-                settings.flags.homing_single_axis_commands = int_value & bit(2);
-                settings.flags.homing_force_set_origin = int_value & bit(3);
-                settings.flags.force_buffer_sync_on_wco_change = int_value & bit(4);
-                break;
-
-            case Setting_HomingInitLock:
-                settings.homing.flags.init_lock = int_value != 0;
+            case Setting_ProbingFeedOverride:
+                settings.flags.allow_probing_feed_override = int_value != 0;
                 break;
 
             case Setting_HomingEnable:
-                if (!(settings.homing.flags.enabled = int_value != 0)) {
+                if (bit_istrue(int_value, bit(0))) {
+                    settings.homing.flags.value = int_value & 0x0F;
+                    settings.limits.flags.two_switches = bit_istrue(int_value, bit(4));
+                } else {
+                    settings.homing.flags.value = 0;
                     settings.limits.flags.soft_enabled = Off; // Force disable soft-limits.
                     settings.limits.flags.jog_soft_limited = Off;
                 }
@@ -600,7 +602,7 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
                 settings.spindle.rpm_min = value;
                 break;
 
-            case Setting_LaserMode:
+            case Setting_Mode:
                 switch(int_value) {
                     case 1:
                         if(!hal.driver_cap.variable_spindle)
@@ -628,6 +630,30 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
                 settings.spindle.pwm_off_value = value;
                 break;
 */
+            case Setting_ParkingEnable:
+                if (bit_istrue(int_value, bit(0)))
+                    settings.parking.flags.value = bit_istrue(int_value, bit(0)) ? (int_value & 0x07) : 0;
+                break;
+
+            case Setting_ParkingAxis:
+                settings.parking.axis = int_value;
+                break;
+
+            case Setting_ParkingPulloutIncrement:
+                settings.parking.pullout_increment = value;
+                break;
+
+            case Setting_ParkingPulloutRate:
+                settings.parking.pullout_rate = value;
+                break;
+
+            case Setting_ParkingTarget:
+                settings.parking.target = value;
+                break;
+
+            case Setting_ParkingFastRate:
+                settings.parking.rate = value;
+                break;
 
             case Setting_PWMMinValue:
                 settings.spindle.pwm_min_value = value;
@@ -748,19 +774,4 @@ void settings_init() {
 #endif
         hal.settings_changed(&settings);
     }
-
-    // Set these here until they get a setting id assigned (otherwhise an EEPROM reset is required...)
-    settings.flags.allow_probing_feed_override = ALLOW_FEED_OVERRIDE_DURING_PROBE_CYCLES;
-    settings.flags.limits_two_switches_on_axes = LIMITS_TWO_SWITCHES_ON_AXES;
-    settings.flags.homing_single_axis_commands = HOMING_SINGLE_AXIS_COMMANDS;
-    settings.flags.homing_force_set_origin = HOMING_FORCE_SET_ORIGIN;
-    settings.flags.force_buffer_sync_on_wco_change = FORCE_BUFFER_SYNC_DURING_WCO_CHANGE;
-    settings.parking.flags.enabled = DEFAULT_PARKING_ENABLE;
-    settings.parking.flags.deactivate_upon_init = DEFAULT_DEACTIVATE_PARKING_UPON_INIT;
-    settings.parking.flags.enable_override_control= DEFAULT_ENABLE_PARKING_OVERRIDE_CONTROL;
-    settings.parking.axis = DEFAULT_PARKING_AXIS;
-    settings.parking.target = DEFAULT_PARKING_TARGET;
-    settings.parking.rate = DEFAULT_PARKING_RATE;
-    settings.parking.pullout_rate = DEFAULT_PARKING_PULLOUT_RATE;
-    settings.parking.pullout_increment = DEFAULT_PARKING_PULLOUT_INCREMENT;
 }

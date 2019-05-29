@@ -106,7 +106,7 @@ const io_stream_t ethernet_stream = {
 
 typedef struct {
     volatile uint32_t ms_cfg;
-    volatile uint32_t ms_count;
+    volatile uint32_t delay.ms;
     int32_t pwm_current;
     int32_t pwm_target;
     int32_t pwm_step;
@@ -182,7 +182,7 @@ state_signal_t inputpin[] = {
 static bool pwmEnabled = false, IOInitDone = false;
 static axes_signals_t next_step_outbits;
 static spindle_pwm_t spindle_pwm;
-static void (*delayCallback)(void) = NULL;
+static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
 
 // Inverts the probe pin state depending on user settings and probing cycle mode.
 static uint8_t probe_invert;
@@ -313,8 +313,8 @@ boolean bCalledFromInterrupt (void)
 
 void vTimerCallback (TimerHandle_t xTimer)
 {
-    if(delayCallback)
-        delayCallback();
+    if(delay.callback)
+        delay.callback();
 }
 
 static void driver_delay_ms (uint32_t ms, void (*callback)(void))
@@ -327,10 +327,10 @@ static void driver_delay_ms (uint32_t ms, void (*callback)(void))
 
         xTimerStopFromISR(xDelayTimer, &xHigherPriorityTaskWoken);
 
-        if(delayCallback)
-            delayCallback();
+        if(delay.callback)
+            delay.callback();
 
-        delayCallback = callback;
+        delay.callback = callback;
 
         xTimerChangePeriodFromISR(xDelayTimer, pdMS_TO_TICKS(ms), &xHigherPriorityTaskWoken);
         xTimerStartFromISR(xDelayTimer, &xHigherPriorityTaskWoken);
@@ -339,26 +339,99 @@ static void driver_delay_ms (uint32_t ms, void (*callback)(void))
 }
 #else
 
-static volatile uint32_t ms_count = 1; // NOTE: initial value 1 is for "resetting" systick timer
+static volatile uint32_t delay.ms = 1; // NOTE: initial value 1 is for "resetting" systick timer
 static void systick_isr (void);
 
 static void driver_delay_ms (uint32_t ms, void (*callback)(void))
 {
     if(ms) {
-        ms_count = ms;
+        delay.ms = ms;
         SysTickEnable();
-        if(!(delayCallback = callback))
-            while(ms_count);
+        if(!(delay.callback = callback))
+            while(delay.ms);
     } else {
-        if(ms_count) {
-            delayCallback = 0;
-            ms_count = 1;
+        if(delay.ms) {
+            delay.callback = 0;
+            delay.ms = 1;
         }
         if(callback)
             callback();
     }
 }
 #endif
+
+// Set stepper pulse output pins
+// NOTE: step_outbits are: bit0 -> X, bit1 -> Y, bit2 -> Z...
+// Mapping to registers can be done by
+// 1. bitbanding. Pros: can assign pins to different ports, no RMW needed. Cons: overhead, pin changes not synchronous
+// 2. bit shift. Pros: fast, Cons: bits must be consecutive
+// 3. lookup table. Pros: signal inversions done at setup, Cons: slower than bit shift
+inline static void set_step_outputs (axes_signals_t step_outbits)
+{
+#if STEP_OUTMODE == GPIO_BITBAND
+    step_outbits.value ^= settings.steppers.step_invert.mask;
+    HWREGBITW(&STEP_OUT_X->DATA, X_STEP_BIT) = step_outbits.x;
+    HWREGBITW(&STEP_OUT_Y->DATA, Y_STEP_BIT) = step_outbits.y;
+    HWREGBITW(&STEP_OUT_Z->DATA, Z_STEP_BIT) = step_outbits.z;
+#ifdef A_AXIS
+    HWREGBITW(&STEP_OUT_A->DATA, A_STEP_BIT) = step_outbits.a;
+#endif
+#ifdef B_AXIS
+    HWREGBITW(&STEP_OUT_B->DATA, B_STEP_BIT) = step_outbits.b;
+#endif
+#ifdef C_AXIS
+    HWREGBITW(&STEP_OUT_C->DATA, C_STEP_BIT) = step_outbits.c;
+#endif
+#else
+#if CNC_BOOSTERPACK2
+    step_outbits.value ^= settings.steppers.step_invert.mask;
+    GPIOPinWrite(STEP_PORT, HWSTEP_MASK, step_outbits.value << STEP_OUTMODE);
+    GPIOPinWrite(STEP_PORT_AB, HWSTEP_MASK_AB, step_outbits.value >> (3 - STEP_OUTMODE_2));
+  #ifdef C_AXIS
+    GPIOPinWrite(STEP_PORT_C, C_STEP_PIN, step_outbits.c ? C_STEP_PIN : 0);
+  #endif
+#else
+  #if STEP_OUTMODE == GPIO_MAP
+    GPIOPinWrite(STEP_PORT, HWSTEP_MASK, step_outmap[step_outbits.value]);
+  #else
+    GPIOPinWrite(STEP_PORT, HWSTEP_MASK, (step_outbits.value ^ settings.steppers.step_invert.mask) << STEP_OUTMODE);
+  #endif
+#endif
+#endif
+}
+
+// Set stepper direction output pins
+// NOTE: see note for set_step_outputs()
+inline static void set_dir_outputs (axes_signals_t dir_outbits)
+{
+#if STEP_OUTMODE == GPIO_BITBAND
+    dir_outbits.value ^= settings.steppers.dir_invert.mask;
+    HWREGBITW(&DIRECTION_OUT_X->DATA, X_DIRECTION_BIT) = dir_outbits.x;
+    HWREGBITW(&DIRECTION_OUT_Y->DATA, Y_DIRECTION_BIT) = dir_outbits.y;
+    HWREGBITW(&DIRECTION_OUT_Z->DATA, Z_DIRECTION_BIT) = dir_outbits.z;
+#ifdef A_AXIS
+    HWREGBITW(&DIRECTION_OUT_A->DATA, A_DIRECTION_BIT) = dir_outbits.a;
+#endif
+#ifdef B_AXIS
+    HWREGBITW(&DIRECTION_OUT_B->DATA, B_DIRECTION_BIT) = dir_outbits.b;
+#endif
+#ifdef C_AXIS
+    HWREGBITW(&DIRECTION_OUT_C->DATA, C_DIRECTION_BIT) = dir_outbits.c;
+#endif
+#else
+#if CNC_BOOSTERPACK2
+    dir_outbits.value ^= settings.steppers.dir_invert.mask;
+    GPIOPinWrite(DIRECTION_PORT, HWDIRECTION_MASK, dir_outmap[dir_outbits.value & 0x07]);
+    GPIOPinWrite(DIRECTION_PORT2, HWDIRECTION_MASK2, dir_outmap2[dir_outbits.value >> 3]);
+#else
+  #if DIRECTION_OUTMODE == GPIO_MAP
+    GPIOPinWrite(DIRECTION_PORT, HWDIRECTION_MASK, dir_outmap[dir_outbits.value]);
+  #else
+    GPIOPinWrite(DIRECTION_PORT, HWDIRECTION_MASK, (dir_outbits.value ^ settings.steppers.dir_invert.mask) << DIRECTION_OUTMODE);
+  #endif
+#endif
+#endif
+}
 
 // Enable/disable steppers
 static void stepperEnable (axes_signals_t enable)
@@ -398,10 +471,15 @@ static void stepperWakeUp (void)
     hal.stepper_interrupt_callback(); // Start the show...
 }
 
-// Disables stepper driver interrupts
-static void stepperGoIdle (void)
+// Disables stepper driver interrupts and reset outputs
+static void stepperGoIdle (bool clear_signals)
 {
     TimerDisable(STEPPER_TIMER_BASE, STEPPER_TIMER);
+
+    if(clear_signals) {
+        set_step_outputs((axes_signals_t){0});
+        set_dir_outputs((axes_signals_t){0});
+    }
 }
 
 // Sets up stepper driver interrupt timeout, AMASS version
@@ -449,79 +527,6 @@ static void stepperCyclesPerTickPrescaled (uint32_t cycles_per_tick)
 }
 #endif
 
-// Set stepper pulse output pins
-// NOTE: step_outbits are: bit0 -> X, bit1 -> Y, bit2 -> Z...
-// Mapping to registers can be done by
-// 1. bitbanding. Pros: can assign pins to different ports, no RMW needed. Cons: overhead, pin changes not synchronous
-// 2. bit shift. Pros: fast, Cons: bits must be consecutive
-// 3. lookup table. Pros: signal inversions done at setup, Cons: slower than bit shift
-inline static void stepperSetStepOutputs (axes_signals_t step_outbits)
-{
-#if STEP_OUTMODE == GPIO_BITBAND
-    step_outbits.value ^= settings.steppers.step_invert.mask;
-    HWREGBITW(&STEP_OUT_X->DATA, X_STEP_BIT) = step_outbits.x;
-    HWREGBITW(&STEP_OUT_Y->DATA, Y_STEP_BIT) = step_outbits.y;
-    HWREGBITW(&STEP_OUT_Z->DATA, Z_STEP_BIT) = step_outbits.z;
-#ifdef A_AXIS
-    HWREGBITW(&STEP_OUT_A->DATA, A_STEP_BIT) = step_outbits.a;
-#endif
-#ifdef B_AXIS
-    HWREGBITW(&STEP_OUT_B->DATA, B_STEP_BIT) = step_outbits.b;
-#endif
-#ifdef C_AXIS
-    HWREGBITW(&STEP_OUT_C->DATA, C_STEP_BIT) = step_outbits.c;
-#endif
-#else
-#if CNC_BOOSTERPACK2
-    step_outbits.value ^= settings.steppers.step_invert.mask;
-    GPIOPinWrite(STEP_PORT, HWSTEP_MASK, step_outbits.value << STEP_OUTMODE);
-    GPIOPinWrite(STEP_PORT_AB, HWSTEP_MASK_AB, step_outbits.value >> (3 - STEP_OUTMODE_2));
-  #ifdef C_AXIS
-    GPIOPinWrite(STEP_PORT_C, C_STEP_PIN, step_outbits.c ? C_STEP_PIN : 0);
-  #endif
-#else
-  #if STEP_OUTMODE == GPIO_MAP
-    GPIOPinWrite(STEP_PORT, HWSTEP_MASK, step_outmap[step_outbits.value]);
-  #else
-    GPIOPinWrite(STEP_PORT, HWSTEP_MASK, (step_outbits.value ^ settings.steppers.step_invert.mask) << STEP_OUTMODE);
-  #endif
-#endif
-#endif
-}
-
-// Set stepper direction output pins
-// NOTE: see note for stepperSetStepOutputs()
-inline static void stepperSetDirOutputs (axes_signals_t dir_outbits)
-{
-#if STEP_OUTMODE == GPIO_BITBAND
-    dir_outbits.value ^= settings.steppers.dir_invert.mask;
-    HWREGBITW(&DIRECTION_OUT_X->DATA, X_DIRECTION_BIT) = dir_outbits.x;
-    HWREGBITW(&DIRECTION_OUT_Y->DATA, Y_DIRECTION_BIT) = dir_outbits.y;
-    HWREGBITW(&DIRECTION_OUT_Z->DATA, Z_DIRECTION_BIT) = dir_outbits.z;
-#ifdef A_AXIS
-    HWREGBITW(&DIRECTION_OUT_A->DATA, A_DIRECTION_BIT) = dir_outbits.a;
-#endif
-#ifdef B_AXIS
-    HWREGBITW(&DIRECTION_OUT_B->DATA, B_DIRECTION_BIT) = dir_outbits.b;
-#endif
-#ifdef C_AXIS
-    HWREGBITW(&DIRECTION_OUT_C->DATA, C_DIRECTION_BIT) = dir_outbits.c;
-#endif
-#else
-#if CNC_BOOSTERPACK2
-    dir_outbits.value ^= settings.steppers.dir_invert.mask;
-    GPIOPinWrite(DIRECTION_PORT, HWDIRECTION_MASK, dir_outmap[dir_outbits.value & 0x07]);
-    GPIOPinWrite(DIRECTION_PORT2, HWDIRECTION_MASK2, dir_outmap2[dir_outbits.value >> 3]);
-#else
-  #if DIRECTION_OUTMODE == GPIO_MAP
-    GPIOPinWrite(DIRECTION_PORT, HWDIRECTION_MASK, dir_outmap[dir_outbits.value]);
-  #else
-    GPIOPinWrite(DIRECTION_PORT, HWDIRECTION_MASK, (dir_outbits.value ^ settings.steppers.dir_invert.mask) << DIRECTION_OUTMODE);
-  #endif
-#endif
-#endif
-}
-
 // "Normal" version: Sets stepper direction and pulse pins and starts a step pulse a few nanoseconds later.
 // If spindle synchronized motion switch to PID version.
 static void stepperPulseStart (stepper_t *stepper)
@@ -535,17 +540,17 @@ static void stepperPulseStart (stepper_t *stepper)
             return;
         }
         stepper->new_block = false;
-        stepperSetDirOutputs(stepper->dir_outbits);
+        set_dir_outputs(stepper->dir_outbits);
     }
 #else
     if(stepper->new_block) {
         stepper->new_block = false;
-        stepperSetDirOutputs(stepper->dir_outbits);
+        set_dir_outputs(stepper->dir_outbits);
     }
 #endif
 
     if(stepper->step_outbits.value) {
-        stepperSetStepOutputs(stepper->step_outbits);
+        set_step_outputs(stepper->step_outbits);
         TimerEnable(PULSE_TIMER_BASE, TIMER_A);
     }
 }
@@ -564,12 +569,12 @@ static void stepperPulseStartDelayed (stepper_t *stepper)
             return;
         }
         stepper->new_block = false;
-        stepperSetDirOutputs(stepper->dir_outbits);
+        set_dir_outputs(stepper->dir_outbits);
     }
 #else
     if(stepper->new_block) {
         stepper->new_block = false;
-        stepperSetDirOutputs(stepper->dir_outbits);
+        set_dir_outputs(stepper->dir_outbits);
     }
 #endif
 
@@ -604,11 +609,11 @@ static void stepperPulseStartSyncronized (stepper_t *stepper)
             spindle_sync.segment_id = stepper->exec_segment->id + 1; // force recalc
         }
         stepper->new_block = false;
-        stepperSetDirOutputs(stepper->dir_outbits);
+        set_dir_outputs(stepper->dir_outbits);
     }
 
     if(stepper->step_outbits.value) {
-        stepperSetStepOutputs(stepper->step_outbits);
+        set_step_outputs(stepper->step_outbits);
         TimerEnable(PULSE_TIMER_BASE, TIMER_A);
     }
 
@@ -642,7 +647,7 @@ static void stepperPulseStartCSS (stepper_t *stepper)
 
     if(stepper->new_block) {
         stepper->new_block = false;
-        stepperSetDirOutputs(stepper->dir_outbits);
+        set_dir_outputs(stepper->dir_outbits);
         pwm_offset = 0.0f;
         pwm_delta = stepper->exec_block->pwm_adjust;
         current_pwm = new_pwm = spindle_set_speed(stepper->spindle_pwm);
@@ -652,7 +657,7 @@ static void stepperPulseStartCSS (stepper_t *stepper)
             current_pwm = spindle_set_speed(new_pwm + (int16_t)pwm_offset);
     }
 
-    stepperSetStepOutputs(stepper->step_outbits);
+    set_step_outputs(stepper->step_outbits);
     TimerEnable(PULSE_TIMER_BASE, TIMER_A);
 }
 
@@ -670,7 +675,7 @@ static void stepperPulseStartPPI (stepper_t *stepper)
 
     if(stepper->new_block) {
         stepper->new_block = false;
-        stepperSetDirOutputs(stepper->dir_outbits);
+        set_dir_outputs(stepper->dir_outbits);
         uint_fast16_t steps_per_pulse = stepper->exec_block->steps_per_mm * 25.4f / laser.ppi;
         if(laser.next_pulse && laser.steps_per_pulse)
             laser.next_pulse = laser.next_pulse * steps_per_pulse / laser.steps_per_pulse;
@@ -693,7 +698,7 @@ static void stepperPulseStartPPI (stepper_t *stepper)
         } else
             laser.next_pulse--;
 
-        stepperSetStepOutputs(stepper->step_outbits);
+        set_step_outputs(stepper->step_outbits);
         TimerEnable(PULSE_TIMER_BASE, TIMER_A);
     }
 }
@@ -851,7 +856,7 @@ static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
     if (pwm_value == spindle_pwm.off_value) {
         pwm_ramp.pwm_target = 0;
         pwm_ramp.pwm_step = -SPINDLE_RAMP_STEP_INCR;
-        pwm_ramp.ms_count = 0;
+        pwm_ramp.delay.ms = 0;
         pwm_ramp.ms_cfg = SPINDLE_RAMP_STEP_TIME;
         SysTickEnable();
      } else {
@@ -860,7 +865,7 @@ static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
             spindle_on();
             pwmEnabled = true;
             pwm_ramp.pwm_current = spindle_pwm.min_value;
-            pwm_ramp.ms_count = 0;
+            pwm_ramp.delay.ms = 0;
             TimerMatchSet(SPINDLE_PWM_TIMER_BASE, TIMER_B, spindle_pwm.period - pwm_ramp.pwm_current + 15);
             TimerLoadSet(SPINDLE_PWM_TIMER_BASE, TIMER_B, spindle_pwm.period);
             TimerEnable(SPINDLE_PWM_TIMER_BASE, TIMER_B); // Ensure PWM output is enabled.
@@ -1051,7 +1056,7 @@ static void modeSelect (bool mpg_mode)
     hal.protocol_process_realtime('?');
 
     sys.mpg_mode = mpg_mode;
-    sys.report.mpg_mode = true;
+    sys.report.mpg_mode = On;
 }
 
 static void modechange (void)
@@ -1502,9 +1507,10 @@ static bool driver_setup (settings_t *settings)
 
     settings_changed(settings);
 
+    hal.stepper_go_idle(true);
     hal.spindle_set_state((spindle_state_t){0}, 0.0f);
     hal.coolant_set_state((coolant_state_t){0});
-    stepperSetDirOutputs((axes_signals_t){0});
+    set_dir_outputs((axes_signals_t){0});
 
     return IOInitDone;
 }
@@ -1614,8 +1620,6 @@ bool driver_init (void)
     hal.stepper_wake_up = stepperWakeUp;
     hal.stepper_go_idle = stepperGoIdle;
     hal.stepper_enable = stepperEnable;
-    hal.stepper_set_outputs = stepperSetStepOutputs;
-    hal.stepper_set_directions = stepperSetDirOutputs;
     hal.stepper_cycles_per_tick = stepperCyclesPerTick;
     hal.stepper_pulse_start = stepperPulseStart;
 
@@ -1729,7 +1733,7 @@ bool driver_init (void)
 #endif
 
     // no need to move version check before init - compiler will fail any mismatch for existing entries
-    return hal.version == 4;
+    return hal.version == 5;
 }
 
 /* interrupt handlers */
@@ -1756,14 +1760,14 @@ static void stepper_driver_isr (void)
 static void stepper_pulse_isr (void)
 {
     TimerIntClear(PULSE_TIMER_BASE, TIMER_TIMA_TIMEOUT); // clear interrupt flag
-    stepperSetStepOutputs(settings.steppers.step_invert);
+    set_step_outputs(settings.steppers.step_invert);
 }
 
 static void stepper_pulse_isr_delayed (void)
 {
     uint32_t iflags = TimerIntStatus(PULSE_TIMER_BASE, true);
     TimerIntClear(PULSE_TIMER_BASE, iflags); // clear interrupt flags
-    stepperSetStepOutputs(iflags & TIMER_TIMA_MATCH ? next_step_outbits : settings.steppers.step_invert);
+    set_step_outputs(iflags & TIMER_TIMA_MATCH ? next_step_outbits : settings.steppers.step_invert);
 }
 
 #if LASER_PPI
@@ -2017,9 +2021,9 @@ static void control_isr_sd (void)
 static void systick_isr (void)
 {
     if(pwm_ramp.ms_cfg) {
-        if(++pwm_ramp.ms_count == pwm_ramp.ms_cfg) {
+        if(++pwm_ramp.delay.ms == pwm_ramp.ms_cfg) {
 
-            pwm_ramp.ms_count = 0;
+            pwm_ramp.delay.ms = 0;
             pwm_ramp.pwm_current += pwm_ramp.pwm_step;
 
             if(pwm_ramp.pwm_step < 0) { // decrease speed
@@ -2047,22 +2051,22 @@ static void systick_isr (void)
         }
     }
 
-    if(ms_count && !(--ms_count) && delayCallback) {
-        delayCallback();
-        delayCallback = 0;
+    if(delay.ms && !(--delay.ms) && delay.callback) {
+        delay.callback();
+        delay.callback = 0;
     }
 
-    if(!(ms_count || pwm_ramp.ms_cfg))
+    if(!(delay.ms || pwm_ramp.ms_cfg))
         SysTickDisable();
 }
 #else
 static void systick_isr (void)
 {
-    if(!(--ms_count)) {
+    if(!(--delay.ms)) {
         SysTickDisable();
-        if(delayCallback) {
-            delayCallback();
-            delayCallback = NULL;
+        if(delay.callback) {
+            delay.callback();
+            delay.callback = NULL;
         }
     }
 }

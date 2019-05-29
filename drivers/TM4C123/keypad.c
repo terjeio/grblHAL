@@ -5,7 +5,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2017-2018 Terje Io
+  Copyright (c) 2017-2019 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -237,9 +237,12 @@ void process_keypress (uint_fast16_t state)
             enqueue_accessory_override(CMD_OVERRIDE_COOLANT_FLOOD_TOGGLE);
             break;
 
-        case CMD_FEED_HOLD:                         // Feed hold
-        case CMD_CYCLE_START:                       // Cycle start
-            protocol_process_realtime(keycode);
+        case CMD_FEED_HOLD_LEGACY:                  // Feed hold
+            protocol_process_realtime(CMD_FEED_HOLD);
+            break;
+
+        case CMD_CYCLE_START_LEGACY:                // Cycle start
+            protocol_process_realtime(CMD_CYCLE_START);
             break;
 
         case '0':

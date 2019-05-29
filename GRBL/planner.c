@@ -367,13 +367,13 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
     if(block->condition.is_rpm_pos_adjusted) {
         float pos;
         if((pos = (float)position_steps[block->spindle.css.axis] / settings.steps_per_mm[block->spindle.css.axis] - block->spindle.css.tool_offset) > 0.0f) {
-            block->spindle.rpm = block->spindle.css.surface_speed / (pos * 2.0f * M_PI);
+            block->spindle.rpm = block->spindle.css.surface_speed / (pos * (float)(2.0f * M_PI));
             if(block->spindle.rpm > block->spindle.css.max_rpm)
                 block->spindle.rpm = block->spindle.css.max_rpm;
         } else
             block->spindle.rpm = block->spindle.css.max_rpm;
         if((pos = target[block->spindle.css.axis] - block->spindle.css.tool_offset) > 0.0f) {
-            block->spindle.css.target_rpm = block->spindle.css.surface_speed / (pos * 2.0f * M_PI);
+            block->spindle.css.target_rpm = block->spindle.css.surface_speed / (pos * (float)(2.0f * M_PI));
             if(block->spindle.css.target_rpm > block->spindle.css.max_rpm)
                 block->spindle.css.target_rpm = block->spindle.css.max_rpm;
         } else

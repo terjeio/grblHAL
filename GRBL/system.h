@@ -72,7 +72,8 @@ typedef enum {
     Message_RestoreDefaults = 9,
     Message_SpindleRestore = 10,
     Message_SleepMode = 11,
-    Message_EStop = 12
+    Message_EStop = 12,
+    Message_HomingCycleRequired = 13
 } message_code_t;
 
 // Alarm executor codes. Valid values (1-255). Zero is reserved.
@@ -173,7 +174,8 @@ typedef union {
                  overrides  :1, // Overrides changed.
                  tool       :1, // Tool changed.
                  wco        :1, // Add work coordinates.
-                 unused     :7;
+                 gwco       :1, // Add work coordinate.
+                 unused     :6;
     };
 } report_tracking_flags_t;
 

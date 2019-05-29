@@ -115,16 +115,24 @@ inline float gc_get_block_offset (parser_block_t *gc_block, uint_fast8_t idx)
     return gc_block->modal.coord_system.xyz[idx] + gc_state.g92_coord_offset[idx] + gc_state.tool_length_offset[idx];
 }
 
-void gc_init()
+void gc_init(bool cold_start)
 {
+    tool_data_t *tool = gc_state.tool;
+
     memset(&gc_state, 0, sizeof(parser_state_t));
 
-#ifndef N_TOOLS
-    memset(&tool_table, 0, sizeof(tool_table));
-    gc_state.tool = &tool_table;
-#else
-    gc_state.tool = &tool_table[0];
-#endif
+    if(cold_start) {
+      #ifdef N_TOOLS
+        gc_state.tool = &tool_table[0];
+      #else
+        memset(&tool_table, 0, sizeof(tool_table));
+        gc_state.tool = &tool_table;
+      #endif
+    } else {
+        gc_state.tool = tool;
+        gc_state.tool_pending = tool->tool;
+        // TODO: restore offsets
+    }
 
     // Load default override status
     gc_state.modal.override_ctrl = sys.override.control;
@@ -178,6 +186,7 @@ status_code_t gc_execute_block(char *block, char *message)
     memset(&gc_block, 0, sizeof(gc_block));                           // Initialize the parser block struct.
     memcpy(&gc_block.modal, &gc_state.modal, sizeof(gc_state.modal)); // Copy current modes
 
+    bool set_tool = false;
     axis_command_t axis_command = AxisCommand_None;
     plane_t plane;
 
@@ -196,6 +205,7 @@ status_code_t gc_execute_block(char *block, char *message)
         gc_parser_flags.jog_motion = On;
         gc_block.modal.motion = MotionMode_Linear;
         gc_block.modal.feed_mode = FeedMode_UnitsPerMin;
+        gc_block.modal.spindle_rpm_mode = SpindleSpeedMode_RPM;
         gc_block.values.n = JOG_LINE_NUMBER; // Initialize default line number reported during jog.
     }
 
@@ -377,6 +387,8 @@ status_code_t gc_execute_block(char *block, char *message)
 #ifdef N_TOOLS
                         else if (mantissa == 0) // G43
                             gc_block.modal.tool_offset_mode = ToolLengthOffset_Enable;
+                        else if (mantissa == 20) // G43.2
+                            gc_block.modal.tool_offset_mode = ToolLengthOffset_ApplyAdditional;
 #endif
                         else if (mantissa == 10) // G43.1
                             gc_block.modal.tool_offset_mode = ToolLengthOffset_EnableDynamic;
@@ -413,7 +425,7 @@ status_code_t gc_execute_block(char *block, char *message)
 
                     case 98: case 99:
                         word_bit.group = ModalGroup_G11;
-                        gc_state.canned.return_mode = (cc_return_mode_t)(int_value - 98);
+                        gc_block.modal.retract_mode = (cc_retract_mode_t)(int_value - 98);
                         break;
 
                     case 50: case 51:
@@ -504,13 +516,15 @@ status_code_t gc_execute_block(char *block, char *message)
                         gc_block.override_command = (override_mode_t)int_value;
                         break;
 
+                    case 61:
+                        set_tool = true;
+                        word_bit.group = ModalGroup_M6; //??
+                        break;
+
                     default:
-                        if(hal.driver_mcode_check && (gc_block.driver_mcode = hal.driver_mcode_check(int_value))) {
-                            if(int_value == 6) // M6
-                                word_bit.group = ModalGroup_M6;
-                            else
-                                gc_block.non_modal_command = NonModal_UserDefinedMCode;
-                        } else
+                        if(hal.driver_mcode_check && (gc_block.driver_mcode = hal.driver_mcode_check(int_value)))
+                            word_bit.group = ModalGroup_M10;
+                        else
                             FAIL(Status_GcodeUnsupportedCommand); // [Unsupported M command]
                 } // end M-value switch
 
@@ -611,7 +625,7 @@ status_code_t gc_execute_block(char *block, char *message)
                         gc_block.values.p = value;
                         break;
 
-                    case 'Q': // may be used for user defined mcodes or for G76
+                    case 'Q': // may be used for user defined mcodes or G61,G76
                         word_bit.parameter = Word_Q;
                         gc_block.values.q = value;
                         break;
@@ -629,9 +643,9 @@ status_code_t gc_execute_block(char *block, char *message)
                     case 'T':
                         if (mantissa > 0)
                             FAIL(Status_GcodeCommandValueNotInteger);
-                        word_bit.parameter = Word_T;
-                        if (value > MAX_TOOL_NUMBER)
+                        if (int_value > MAX_TOOL_NUMBER)
                             FAIL(Status_GcodeIllegalToolTableEntry);
+                        word_bit.parameter = Word_T;
                         gc_block.values.t = int_value;
                         break;
 
@@ -809,7 +823,6 @@ status_code_t gc_execute_block(char *block, char *message)
     // bit_false(value_words,bit(Word_F)); // NOTE: Single-meaning value word. Set at end of error-checking.
 
     // [4. Set spindle speed ]: S or D is negative (done.)
-
     if (bit_istrue(command_words, bit(ModalGroup_G14))) {
         if(gc_block.modal.spindle_rpm_mode == SpindleSpeedMode_CSS) {
             if (bit_isfalse(value_words, bit(Word_S))) // TODO: add check for S0?
@@ -834,18 +847,28 @@ status_code_t gc_execute_block(char *block, char *message)
 
     // bit_false(value_words,bit(Word_S)); // NOTE: Single-meaning value word. Set at end of error-checking.
 
-    // [5. Select tool ]: NOT SUPPORTED. Only tracks value. T is negative (done.) Not an integer. Greater than max tool value.
-    // bit_false(value_words,bit(Word_T)); // NOTE: Single-meaning value word. Set at end of error-checking.
+    // [5. Select tool ]: If not supported then only tracks value. T is negative (done.) Not an integer (done).
+    if(set_tool) { // G61
+        if(bit_isfalse(value_words, bit(Word_Q)))
+            FAIL(Status_ExpectedCommandLetter);
+        if (floorf(gc_block.values.q) - gc_block.values.q != 0.0f)
+            FAIL(Status_GcodeCommandValueNotInteger);
+        if ((int32_t)gc_block.values.q < 1 || (int32_t)gc_block.values.q > MAX_TOOL_NUMBER)
+            FAIL(Status_GcodeIllegalToolTableEntry);
 
-    if (bit_isfalse(value_words, bit(Word_T)))
+        gc_block.values.t = (uint8_t)gc_block.values.q;
+
+        bit_false(value_words, bit(Word_Q));
+    } else if (bit_isfalse(value_words, bit(Word_T)))
         gc_block.values.t = gc_state.tool_pending;
+
+    // bit_false(value_words,bit(Word_T)); // NOTE: Single-meaning value word. Set at end of error-checking.
 
     // [6. Change tool ]: N/A
     // [7. Spindle control ]: N/A
     // [8. Coolant control ]: N/A
 
     // [9. Override control ]:
-
     if (bit_istrue(command_words, bit(ModalGroup_M9))) {
 
         if(bit_isfalse(value_words, bit(Word_P)))
@@ -880,6 +903,13 @@ status_code_t gc_execute_block(char *block, char *message)
             default:
                 break;
         }
+    }
+
+    // [9a. User defined M commands ]:
+    if (bit_istrue(command_words, bit(ModalGroup_M10))) {
+        if((int_value = (uint_fast8_t)hal.driver_mcode_validate(&gc_block, &value_words)))
+            FAIL((status_code_t)int_value);
+        axis_words = ijk_words = 0;
     }
 
     // [10. Dwell ]: P value missing. P is negative (done.) NOTE: See below.
@@ -1008,8 +1038,9 @@ status_code_t gc_execute_block(char *block, char *message)
     //   NOTE: Since cutter radius compensation is never enabled, these G40 errors don't apply. Grbl supports G40
     //   only for the purpose to not error when G40 is sent with a g-code program header to setup the default modes.
 
-    // [14. Cutter length compensation ]: G43.1 and G49 are always supported, G43 if N_TOOLS defined.
+    // [14. Tool length compensation ]: G43.1 and G49 are always supported, G43 and G43.2 if N_TOOLS defined.
     // [G43.1 Errors]: Motion command in same line.
+    // [G43.2 Errors]: Motion command in same line. Tool number not in the tool table,
     //   NOTE: Although not explicitly stated so, G43.1 should be applied to only one valid
     //   axis that is configured (in config.h). There should be an error if the configured axis
     //   is absent or if any of the other axis words are present.
@@ -1024,13 +1055,22 @@ status_code_t gc_execute_block(char *block, char *message)
 #ifdef N_TOOLS
             case ToolLengthOffset_Enable:
                 if (bit_istrue(value_words, bit(Word_H))) {
-                    if(gc_block.values.h > N_TOOLS)
+                    if(gc_block.values.h > MAX_TOOL_NUMBER)
                         FAIL(Status_GcodeIllegalToolTableEntry);
                     bit_false(value_words, bit(Word_H));
                     if(gc_block.values.h == 0)
-                        gc_block.values.h = gc_state.tool->tool;
+                        gc_block.values.h = gc_block.values.t;
                 } else
                     gc_block.values.h = gc_block.values.t;
+                break;
+
+            case ToolLengthOffset_ApplyAdditional:
+                if (bit_istrue(value_words, bit(Word_H))) {
+                    if(gc_block.values.h == 0 || gc_block.values.h > MAX_TOOL_NUMBER)
+                        FAIL(Status_GcodeIllegalToolTableEntry);
+                    bit_false(value_words, bit(Word_H));
+                } else
+                    FAIL(Status_GcodeValueWordMissing);
                 break;
 #endif
             default:
@@ -1067,11 +1107,12 @@ status_code_t gc_execute_block(char *block, char *message)
         case NonModal_SetCoordinateData:
 
             // [G10 Errors]: L missing and is not 2 or 20. P word missing. (Negative P value done.)
-            // [G10 L2 Errors]: R word NOT SUPPORTED. P value not 0 to nCoordSys(max 9). Axis words missing.
-            // [G10 L20 Errors]: P must be 0 to nCoordSys(max 9). Axis words missing.
+            // [G10 L2 Errors]: R word NOT SUPPORTED. P value not 0 to N_COORDINATE_SYSTEM (max 9). Axis words missing.
+            // [G10 L20 Errors]: P must be 0 to N_COORDINATE_SYSTEM (max 9). Axis words missing.
+            // [G10 L1, L10, L11 Errors]: P must be 0 to MAX_TOOL_NUMBER (max 9). Axis words or R word missing.
 
-            if (!axis_words)
-                FAIL(Status_GcodeNoAxisWords); // [No axis words]
+            if (!(axis_words || (gc_block.values.l != 20 && bit_istrue(value_words, bit(Word_R)))))
+                FAIL(Status_GcodeNoAxisWords); // [No axis words (or R word for tool offsets)]
 
             if (bit_isfalse(value_words, bit(Word_P)|bit(Word_L)))
                 FAIL(Status_GcodeValueWordMissing); // [P/L word missing]
@@ -1115,8 +1156,8 @@ status_code_t gc_execute_block(char *block, char *message)
 
 #ifdef N_TOOLS
                 case 1: case 10: case 11:;
-                    if(p_value == 0 || p_value > N_TOOLS)
-                       FAIL(Status_GcodeIllegalToolTableEntry); // [Greater than N tools]
+                    if(p_value == 0 || p_value > MAX_TOOL_NUMBER)
+                       FAIL(Status_GcodeIllegalToolTableEntry); // [Greater than MAX_TOOL_NUMBER]
 
                     tool_table[p_value].tool = p_value;
 
@@ -1145,7 +1186,7 @@ status_code_t gc_execute_block(char *block, char *message)
                     } while(idx);
 
                     if(gc_block.values.l == 1)
-                        settings_write_tool_data(p_value, &tool_table[p_value]);
+                        settings_write_tool_data(&tool_table[p_value]);
 
                     break;
 #endif
@@ -1235,12 +1276,6 @@ status_code_t gc_execute_block(char *block, char *message)
                         FAIL(Status_GcodeG53InvalidMotionMode); // [G53 G0/1 not active]
                     break;
 
-                case NonModal_UserDefinedMCode:
-                    if((int_value = (uint_fast8_t)hal.driver_mcode_validate(&gc_block, &value_words)))
-                        FAIL((status_code_t)int_value);
-                    axis_words = ijk_words = 0;
-                    break;
-
                 default:
 					break;
             }
@@ -1253,6 +1288,8 @@ status_code_t gc_execute_block(char *block, char *message)
         // NOTE: Even non-modal commands or TLO that use axis words will throw this strict error.
         if (axis_words) // [No axis words allowed]
             FAIL(Status_GcodeAxisWordsExist);
+
+        gc_block.modal.retract_mode = CCRetractMode_Previous;
 
     // Check remaining motion modes, if axis word are implicit (exist and not used by G10/28/30/92), or
     // was explicitly commanded in the g-code block.
@@ -1267,6 +1304,9 @@ status_code_t gc_execute_block(char *block, char *message)
         // All remaining motion modes (all but G0 and G80), require a valid feed rate value. In units per mm mode,
         // the value must be positive. In inverse time mode, a positive value must be passed with each block.
         } else {
+
+            if(!gc_block.modal.canned_cycle_active)
+                gc_block.modal.retract_mode = CCRetractMode_Previous;
 
             // Initial(?) check for spindle running for moves in G96 mode
             if(gc_block.modal.spindle_rpm_mode == SpindleSpeedMode_CSS && (!gc_block.modal.spindle.on || gc_block.values.s == 0.0f))
@@ -1317,7 +1357,7 @@ status_code_t gc_execute_block(char *block, char *message)
                 thread.pitch = gc_block.values.p;
                 thread.z_final = gc_block.values.xyz[Z_AXIS];
                 thread.cut_direction = gc_block.values.ijk[I_VALUE] < 0.0f ? -1.0f : 1.0f;
-                thread.peak = fabs(gc_block.values.ijk[I_VALUE]);
+                thread.peak = fabsf(gc_block.values.ijk[I_VALUE]);
                 thread.initial_depth = gc_block.values.ijk[J_VALUE];
                 thread.depth = gc_block.values.ijk[K_VALUE];
 
@@ -1337,7 +1377,7 @@ status_code_t gc_execute_block(char *block, char *message)
 
                 if(bit_istrue(axis_words, bit(X_AXIS))) {
                     thread.main_taper_height = gc_block.values.xyz[X_AXIS] - gc_get_block_offset(&gc_block, X_AXIS);
-                    gc_block.values.p = fabs(thread.z_final - gc_state.position[Z_AXIS]);
+                    gc_block.values.p = fabsf(thread.z_final - gc_state.position[Z_AXIS]);
                     thread.pitch = thread.pitch * hypot_f(thread.main_taper_height, gc_block.values.p) / gc_block.values.p;
                 }
 
@@ -1771,7 +1811,7 @@ status_code_t gc_execute_block(char *block, char *message)
             gc_state.spindle.css.axis = plane.axis_1;
             gc_state.spindle.css.tool_offset = gc_get_offset(gc_state.spindle.css.axis);
             float pos = gc_state.position[gc_state.spindle.css.axis] - gc_state.spindle.css.tool_offset;
-            gc_block.values.s = pos <= 0.0f ? gc_state.spindle.css.max_rpm : min(gc_state.spindle.css.max_rpm, gc_state.spindle.css.surface_speed / (pos * 2.0f * M_PI));
+            gc_block.values.s = pos <= 0.0f ? gc_state.spindle.css.max_rpm : min(gc_state.spindle.css.max_rpm, gc_state.spindle.css.surface_speed / (pos * (float)(2.0f * M_PI)));
             gc_parser_flags.spindle_force_sync = On;
         } else {
             if(gc_state.spindle.css.active) {
@@ -1796,14 +1836,11 @@ status_code_t gc_execute_block(char *block, char *message)
 
     // [5. Select tool ]: Only tracks tool value if ATC or manual tool change is not possible.
     if(gc_state.tool_pending != gc_block.values.t) {
-      #ifdef N_TOOLS
-        gc_state.tool_pending = gc_block.values.t < N_TOOLS ? gc_block.values.t : 0;
-      #else
-        gc_state.tool_pending = gc_block.values.t;
-      #endif
 
-        // If M6 not available set new tool immediately
-        if(!(hal.stream.suspend_read || hal.tool_change)) {
+        gc_state.tool_pending = gc_block.values.t;
+
+        // If M6 not available or M61 commanded set new tool immediately
+        if(set_tool || !(hal.stream.suspend_read || hal.tool_change)) {
 #ifdef N_TOOLS
             gc_state.tool = &tool_table[gc_state.tool_pending];
 #else
@@ -1819,11 +1856,12 @@ status_code_t gc_execute_block(char *block, char *message)
 #else
             hal.tool_select(gc_state.tool);
 #endif
-        }
+        } else
+            sys.report.tool = On;
     }
 
     // [6. Change tool ]: Delegated to (possible) driver implementation
-    if (bit_istrue(command_words, bit(ModalGroup_M6))) {
+    if (bit_istrue(command_words, bit(ModalGroup_M6)) && !set_tool) {
         protocol_buffer_synchronize();
         gc_state.tool_change = true;
 #ifdef N_TOOLS
@@ -1858,7 +1896,6 @@ status_code_t gc_execute_block(char *block, char *message)
     plan_data.condition.is_laser_ppi_mode = gc_state.is_rpm_rate_adjusted && gc_state.is_laser_ppi_mode;
 
     // [8. Coolant control ]:
-
     if (gc_parser_flags.set_coolant && gc_state.modal.coolant.value != gc_block.modal.coolant.value) {
     // NOTE: Coolant M-codes are modal. Only one command per line is allowed. But, multiple states
     // can exist at the same time, while coolant disable clears all states.
@@ -1871,7 +1908,6 @@ status_code_t gc_execute_block(char *block, char *message)
     sys.flags.delay_overrides = Off;
 
     // [9. Override control ]:
-
     if (gc_state.modal.override_ctrl.value != gc_block.modal.override_ctrl.value) {
         gc_state.modal.override_ctrl = gc_block.modal.override_ctrl;
 
@@ -1882,6 +1918,15 @@ status_code_t gc_execute_block(char *block, char *message)
             spindle_set_override(DEFAULT_SPINDLE_RPM_OVERRIDE);
 
         mc_override_ctrl_update(gc_state.modal.override_ctrl); // NOTE: must be called last!
+    }
+
+    // [9a. User defined M commands ]:
+    if(gc_block.driver_mcode != 0 && sys.state != STATE_CHECK_MODE) {
+
+        if(gc_block.driver_mcode_sync)
+            protocol_buffer_synchronize(); // Ensure user defined mcode is executed when specified in program.
+
+        hal.driver_mcode_execute(sys.state, &gc_block);
     }
 
     // [10. Dwell ]:
@@ -1897,15 +1942,16 @@ status_code_t gc_execute_block(char *block, char *message)
     // [13. Cutter radius compensation ]: G41/42 NOT SUPPORTED
     // gc_state.modal.cutter_comp = gc_block.modal.cutter_comp; // NOTE: Not needed since always disabled.
 
-    // [14. Cutter length compensation ]: G43, G43.1 and G49 supported. G43 supported when N_TOOLS defined.
+    // [14. Tool length compensation ]: G43, G43.1 and G49 supported. G43 supported when N_TOOLS defined.
     // NOTE: If G43 were supported, its operation wouldn't be any different from G43.1 in terms
     // of execution. The error-checking step would simply load the offset value into the correct
     // axis of the block XYZ value array.
-    if (axis_command == AxisCommand_ToolLengthOffset ) { // Indicates a change.
+    if (axis_command == AxisCommand_ToolLengthOffset) { // Indicates a change.
+
         bool tlo_changed = false;
-        gc_state.modal.tool_offset_mode = gc_block.modal.tool_offset_mode;
 
         idx = N_AXIS;
+        gc_state.modal.tool_offset_mode = gc_block.modal.tool_offset_mode;
 
         do {
 
@@ -1914,8 +1960,8 @@ status_code_t gc_execute_block(char *block, char *message)
             switch(gc_state.modal.tool_offset_mode) {
 
                 case ToolLengthOffset_Cancel: // G49
-                    tlo_changed |= gc_block.values.xyz[idx] != 0.0f;
-                    gc_block.values.xyz[idx] = 0.0f;
+                    tlo_changed |= gc_state.tool_length_offset[idx] != 0.0f;
+                    gc_state.tool_length_offset[idx] = 0.0f;
                     break;
 #ifdef N_TOOLS
                 case ToolLengthOffset_Enable: // G43
@@ -1924,6 +1970,11 @@ status_code_t gc_execute_block(char *block, char *message)
                         gc_state.tool_length_offset[idx] = tool_table[gc_block.values.h].offset[idx];
                     }
                     break;
+
+                case ToolLengthOffset_ApplyAdditional: // G43.2
+                    tlo_changed |= tool_table[gc_block.values.h].offset[idx] != 0.0f;
+                    gc_state.tool_length_offset[idx] += tool_table[gc_block.values.h].offset[idx];
+                    break;
 #endif
                 case ToolLengthOffset_EnableDynamic: // G43.1
                     if (bit_istrue(axis_words, bit(idx)) && gc_state.tool_length_offset[idx] != gc_block.values.xyz[idx]) {
@@ -1931,6 +1982,9 @@ status_code_t gc_execute_block(char *block, char *message)
                         gc_state.tool_length_offset[idx] = gc_block.values.xyz[idx];
                     }
                     break;
+
+                default:
+                	break;
             }
         } while(idx);
 
@@ -1941,6 +1995,7 @@ status_code_t gc_execute_block(char *block, char *message)
     // [15. Coordinate system selection ]:
     if (gc_state.modal.coord_system.idx != gc_block.modal.coord_system.idx) {
         memcpy(&gc_state.modal.coord_system, &gc_block.modal.coord_system, sizeof(gc_state.modal.coord_system));
+        sys.report.gwco = On;
         system_flag_wco_change();
     }
 
@@ -1950,7 +2005,8 @@ status_code_t gc_execute_block(char *block, char *message)
     // [17. Set distance mode ]:
     gc_state.modal.distance_incremental = gc_block.modal.distance_incremental;
 
-    // [18. Set retract mode ]: NOT N/A
+    // [18. Set retract mode ]:
+    gc_state.modal.retract_mode = gc_block.modal.retract_mode;
 
     // [19. Go to predefined position, Set G10, or Set axis offsets ]:
     switch(gc_block.non_modal_command) {
@@ -2118,6 +2174,7 @@ status_code_t gc_execute_block(char *block, char *message)
                 case MotionMode_CannedCycle82:
                 case MotionMode_CannedCycle83:;
                     plan_data.spindle.rpm = gc_block.values.s;
+                    gc_state.canned.retract_mode = gc_state.modal.retract_mode;
                     mc_canned_drill(gc_state.modal.motion, gc_block.values.xyz, &plan_data, gc_state.position, plane, gc_block.values.l, &gc_state.canned);
                     break;
 
@@ -2177,14 +2234,14 @@ status_code_t gc_execute_block(char *block, char *message)
             gc_block.modal.canned_cycle_active = false;
             gc_state.modal.plane_select = PlaneSelect_XY;
 //            gc_state.modal.plane_select = settings.flags.lathe_mode ? PlaneSelect_ZX : PlaneSelect_XY;
-//            gc_state.modal.spindle_rpm_mode = SpindleSpeedMode_RPM;
+            gc_state.modal.spindle_rpm_mode = SpindleSpeedMode_RPM; // NOTE: not compliant with linuxcnc (?)
             gc_state.modal.distance_incremental = false;
             gc_state.modal.feed_mode = FeedMode_UnitsPerMin;
 // TODO: check           gc_state.distance_per_rev = 0.0f;
             // gc_state.modal.cutter_comp = CUTTER_COMP_DISABLE; // Not supported.
             gc_state.modal.coord_system.idx = 0; // G54
-            gc_state.modal.spindle.value = 0;
-            gc_state.modal.coolant.value = 0;
+            gc_state.modal.spindle = (spindle_state_t){0};
+            gc_state.modal.coolant = (coolant_state_t){0};
             gc_state.modal.override_ctrl.feed_rate_disable = Off;
             gc_state.modal.override_ctrl.spindle_rpm_disable = Off;
             if(settings.parking.flags.enabled)
@@ -2208,22 +2265,14 @@ status_code_t gc_execute_block(char *block, char *message)
                 if (!(settings_read_coord_data(gc_state.modal.coord_system.idx, &gc_state.modal.coord_system.xyz)))
                     FAIL(Status_SettingReadFail);
                 system_flag_wco_change(); // Set to refresh immediately just in case something altered.
-                hal.spindle_set_state((spindle_state_t){0}, 0.0f);
-                hal.coolant_set_state((coolant_state_t){0});
+                hal.spindle_set_state(gc_state.modal.spindle, 0.0f);
+                hal.coolant_set_state(gc_state.modal.coolant);
                 sys.report.spindle = On; // Set to report change immediately
                 sys.report.coolant = On; // ...
             }
             hal.report.feedback_message(Message_ProgramEnd);
         }
         gc_state.modal.program_flow = ProgramFlow_Running; // Reset program flow.
-    }
-
-    if(gc_block.non_modal_command == NonModal_UserDefinedMCode && sys.state != STATE_CHECK_MODE) {
-
-        if(gc_block.driver_mcode_sync)
-            protocol_buffer_synchronize(); // Ensure user defined mcode is executed when specified in program.
-
-        hal.driver_mcode_execute(sys.state, &gc_block);
     }
 
     // TODO: % to denote start of program.

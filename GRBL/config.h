@@ -237,11 +237,6 @@
 // NOTE: For now disabled, will enable if flash space permits.
 // #define MAX_STEP_RATE_HZ 30000 // Hz
 
-// Sets which axis the tool length offset is applied. Assumes the spindle is always parallel with
-// the selected axis with the tool oriented toward the negative direction. In other words, a positive
-// tool length offset value is subtracted from the current location.
-#define TOOL_LENGTH_OFFSET_AXIS Z_AXIS // Default z-axis. Valid values are X_AXIS, Y_AXIS, or Z_AXIS.
-
 // With this enabled, Grbl sends back an echo of the line it has received, which has been pre-parsed (spaces
 // removed, capitalized letters, no comments) and is to be immediately executed by Grbl. Echoes will not be
 // sent upon a line buffer overflow, but should for all normal lines sent to Grbl. For example, if a user

@@ -72,7 +72,7 @@ static void limits_set_machine_positions (uint8_t cycle_mask)
 {
     uint_fast8_t idx = N_AXIS;
 
-    if(settings.flags.homing_force_set_origin) {
+    if(settings.homing.flags.force_set_origin) {
         do {
             if (cycle_mask & bit(--idx))
                 sys_position[idx] = 0;

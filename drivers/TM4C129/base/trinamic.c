@@ -429,13 +429,13 @@ static bool check_params (parser_block_t *gc_block, uint_fast16_t *value_words)
     return ok;
 }
 
-uint_fast16_t trimamic_MCodeCheck (uint_fast16_t mcode)
+uint_fast16_t trinamic_MCodeCheck (uint_fast16_t mcode)
 {
     return driver_settings.trinamic.driver_enable.mask &&
             (mcode == 121 || mcode == 906 || mcode == 911 || mcode == 912 || mcode == 913 || mcode == 914) ? mcode : 0;
 }
 
-status_code_t trimamic_MCodeValidate (parser_block_t *gc_block, uint_fast16_t *value_words)
+status_code_t trinamic_MCodeValidate (parser_block_t *gc_block, uint_fast16_t *value_words)
 {
     status_code_t state = Status_GcodeValueWordMissing;
 
@@ -485,7 +485,7 @@ status_code_t trimamic_MCodeValidate (parser_block_t *gc_block, uint_fast16_t *v
     return state;
 }
 
-void trimamic_MCodeExecute (uint_fast16_t state, parser_block_t *gc_block)
+void trinamic_MCodeExecute (uint_fast16_t state, parser_block_t *gc_block)
 {
     uint_fast8_t idx = N_AXIS;
 
