@@ -1,12 +1,12 @@
 //
 // TCPStream.c - lw-IP/FreeRTOS stream implementation
 //
-// v1.0 / 2018-09-21 / Io Engineering / Terje
+// v1.0 / 2019-06-03 / Io Engineering / Terje
 //
 
 /*
 
-Copyright (c) 2018, Terje Io
+Copyright (c) 2018-2019, Terje Io
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -239,9 +239,9 @@ static void streamBufferRX (char c) {
     if(bptr == rx_tail) {                           // If buffer full TODO: remove this check?
         rx_overflow = 1;                            // flag overlow
     } else {
-        if(!hal.protocol_process_realtime || hal.protocol_process_realtime(c)) {
+        if(!hal.stream.enqueue_realtime_command(c)) {
             rxbuf[rx_head] = c;   // Add data to buffer
-            rx_head = bptr;                         // and update pointer
+            rx_head = bptr;       // and update pointer
         }
     }
 }

@@ -58,7 +58,11 @@ typedef union {
                  wifi                    :1,
                  spindle_pwm_invert      :1,
                  spindle_pid             :1,
-                 unassigned              :11;
+                 axis_ganged_x           :1,
+                 axis_ganged_y           :1,
+                 axis_ganged_z           :1,
+                 mpg_mode                :1,
+                 unassigned              :7;
     };
 } driver_cap_t;
 
@@ -72,7 +76,7 @@ typedef struct {
     int32_t (*plan_calc_position) (uint_fast8_t idx, float *target, int32_t *position_steps, int32_t *target_steps);
     uint_fast8_t (*limits_get_axis_mask)(uint_fast8_t idx);
     void (*limits_set_target_pos)(uint_fast8_t idx);
-    void (*limits_set_machine_positions)(uint8_t cycle_mask);
+    void (*limits_set_machine_positions)(axes_signals_t cycle);
 } HAL_kinematics_t;
 
 /* TODO: add to HAL so that a different formatting (xml, json etc) of reports may be implemented by driver? */
@@ -107,6 +111,7 @@ typedef struct {
     void (*reset_read_buffer)(void);
     void (*cancel_read_buffer)(void);
     bool (*suspend_read)(bool await);
+    bool (*enqueue_realtime_command)(char data); // NOTE: set by grbl at startup
 } io_stream_t;
 
 typedef struct HAL {
@@ -131,8 +136,10 @@ typedef struct HAL {
     void (*stepper_wake_up)(void);
     void (*stepper_go_idle)(bool clear_signals);
     void (*stepper_enable)(axes_signals_t enable);
+    void (*stepper_disable_motors)(axes_signals_t axes, squaring_mode_t mode);
     void (*stepper_cycles_per_tick)(uint32_t cycles_per_tick);
     void (*stepper_pulse_start)(stepper_t *stepper);
+
 
     io_stream_t stream; // pointers to current I/O stream handlers
 
@@ -155,8 +162,8 @@ typedef struct HAL {
     void (*driver_feedback_message)(stream_write_ptr stream_write);
     status_code_t (*driver_sys_command_execute)(uint_fast16_t state, char *line, char *lcline); // return Status_Unhandled
     bool (*get_position)(int32_t (*position)[N_AXIS]);
-    void (*tool_select)(tool_data_t *tool);
-    void (*tool_change)(parser_state_t *gc_state);
+    void (*tool_select)(tool_data_t *tool, bool next);
+    status_code_t (*tool_change)(parser_state_t *gc_state);
     void (*show_message)(const char *msg);
     void (*report_options)(void);
     void (*driver_reset)(void);
@@ -180,7 +187,6 @@ typedef struct HAL {
 
     // callbacks - set up by grbl before MCU init
     bool (*protocol_enqueue_gcode)(char *data);
-    bool (*protocol_process_realtime)(char data);
     bool (*stream_blocking_callback)(void);
     void (*stepper_interrupt_callback)(void);
     void (*limit_interrupt_callback)(axes_signals_t state);

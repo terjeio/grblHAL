@@ -223,7 +223,8 @@ typedef union {
                 force_initialization_alarm      :1,
                 wifi_ap_mode                    :1,
                 allow_probing_feed_override     :1,
-                unassigned                      :3,
+                report_alarm_substate           :1,
+                unassigned                      :2,
                 force_buffer_sync_on_wco_change :1,
                 lathe_mode                      :1;
     };

@@ -25,7 +25,6 @@
 #define __serial_h__
 
 #include "serial.h"
-#include "GRBL/grbl.h"
 
 #define BUFCOUNT(head, tail, size) ((head >= tail) ? (head - tail) : (size - tail + head))
 
@@ -288,7 +287,7 @@ void SERIAL_IRQHandler (void)
                 rxbuffer.tail = rxbuffer.head;
                 hal.stream.read = serialGetC; // restore normal input
 
-            } else if(!hal.protocol_process_realtime || hal.protocol_process_realtime((char)data)) {
+            } else if(!hal.stream.enqueue_realtime_command((char)data)) {
 
                 bptr = (rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1);  // Get next head pointer
 
@@ -370,14 +369,14 @@ void SERIAL2_IRQHandler (void)
     switch(SERIAL2_MODULE->IV) {
 
         case 0x02:
-            data = SERIAL2_MODULE->RXBUF;             // Read character received
-            bptr = (rx2_head + 1) & (RX_BUFFER_SIZE - 1);            // Temp head position (to avoid volatile overhead)
-            if(bptr == rx2_tail) {                                   // If buffer full
-                rx2_overflow = 1;                                    // flag overflow
+            data = SERIAL2_MODULE->RXBUF;                   // Read character received
+            bptr = (rx2_head + 1) & (RX_BUFFER_SIZE - 1);   // Temp head position (to avoid volatile overhead)
+            if(bptr == rx2_tail) {                          // If buffer full
+                rx2_overflow = 1;                           // flag overflow
             } else {
-                if(!hal.protocol_process_realtime|| hal.protocol_process_realtime((char)data)) {
-                    rx2buf[rx2_head] = data;                          // Add data to buffer
-                    rx2_head = bptr;                                 // and update pointer
+                if(!hal.stream.enqueue_realtime_command((char)data)) {
+                    rx2buf[rx2_head] = data;                // Add data to buffer
+                    rx2_head = bptr;                        // and update pointer
                 }
             }
             break;

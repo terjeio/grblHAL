@@ -1,13 +1,13 @@
 //
-// serial.c - serial (UART) port library including MCP4725 DAC support, for PCB laser
+// serial.c - serial (UART) port library
 //
-// v1.0 / 2016-06-03 / Io Engineering / Terje
+// v1.0 / 2019-06-03 / Io Engineering / Terje
 //
 //
 
 /*
 
-Copyright (c) 2015, Terje Io
+Copyright (c) 2015-2019, Terje Io
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -40,7 +40,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <msp430.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include "GRBL\grbl.h"
 
 #include "serial.h"
 
@@ -204,7 +203,7 @@ __interrupt void USCI1RX_ISR(void)
             next_head = UCA1RXBUF; 				// and do dummy read to clear interrupt
         } else {
             char data = UCA1RXBUF;
-            if(!hal.protocol_process_realtime || hal.protocol_process_realtime(data)) {
+            if(!hal.stream.enqueue_realtime_command(data)) {
                 rxbuf[rx_head] = data;                  // Add data to buffer
                 rx_head = next_head;                    // and update pointer
             }

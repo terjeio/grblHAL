@@ -5,7 +5,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2017-2018 Terje Io
+  Copyright (c) 2017-2019 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -24,22 +24,10 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "grbl/stream.h"
+
 #define BACKCHANNEL // comment out to use UART1 instead of UART0 (Tiva C Backchannel)
 #define SERIAL2_MOD
-
-#define ASCII_ETX  0x03
-#define ASCII_ACK  0x06
-#define ASCII_BS   0x08
-#define ASCII_LF   0x0A
-#define ASCII_CR   0x0D
-#define ASCII_XON  0x11
-#define ASCII_XOFF 0x13
-#define ASCII_NAK  0x15
-#define ASCII_EOF  0x1A
-#define ASCII_CAN  0x18
-#define ASCII_EM   0x19
-#define ASCII_DEL  0x7F
-#define ASCII_EOL  "\r\n"
 
 #define uartSysctl(n) uartS(n)
 #define uartS(n) SYSCTL_PERIPH_UART ## n
@@ -58,8 +46,8 @@
 #define uartIOpins(r, t) uartP(r, t)
 #define uartP(r, t) (GPIO_PIN_ ## r | GPIO_PIN_ ## t)
 
-#define XONOK (XON|0x80)
-#define XOFFOK (XOFF|0x80)
+#define XONOK (ASCII_XON|0x80)
+#define XOFFOK (ASCII_XOFF|0x80)
 #define TX_BUFFER_SIZE 512      // must be a power of 2
 #define RX_BUFFER_SIZE 1024     // must be a power of 2
 #define RX_BUFFER_HWM 900

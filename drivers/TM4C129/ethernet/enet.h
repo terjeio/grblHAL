@@ -39,6 +39,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __ENET_H__
 #define __ENET_H__
 
+#include <stdbool.h>
+
 bool enet_init (uint16_t port);
 char *enet_ip_address (void);
 

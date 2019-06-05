@@ -36,6 +36,7 @@ static char *(*get_axis_values)(float *axis_values);
 static char *(*get_rate_value)(float value);
 static uint8_t override_counter = 0; // Tracks when to add override data to status reports.
 static uint8_t wco_counter = 0;      // Tracks when to add work coordinate offset data to status reports.
+alarm_code_t current_alarm = Alarm_None;
 
 // Append a number of strings to the static buffer
 // NOTE: do NOT use for several int/float conversions as these share the same underlying buffer!
@@ -157,6 +158,7 @@ static inline char *axis_signals_tostring (char *buf, axes_signals_t signals)
 
 void report_init (void)
 {
+    current_alarm = Alarm_None;
     get_axis_values = settings.flags.report_inches ? get_axis_values_inches : get_axis_values_mm;
     get_rate_value = settings.flags.report_inches ? get_rate_value_inch : get_rate_value_mm;
 }
@@ -185,6 +187,7 @@ void report_status_message (status_code_t status_code)
 // Prints alarm messages.
 void report_alarm_message (alarm_code_t alarm_code)
 {
+    current_alarm = alarm_code;
     hal.stream.write_all(appendbuf(3, "ALARM:", uitoa((uint32_t)alarm_code), "\r\n"));
     hal.delay_ms(500, 0); // Force delay to ensure message clears output stream buffer.
 }
@@ -303,7 +306,9 @@ void report_grbl_settings (void)
     report_uint_setting(Setting_LimitPinsInvertMask, settings.limits.invert.mask);
     if(hal.probe_configure_invert_mask)
         report_uint_setting(Setting_InvertProbePin, settings.flags.invert_probe_pin);
-    report_uint_setting(Setting_StatusReportMask, settings.status_report.mask | (settings.flags.force_buffer_sync_on_wco_change ? bit(8) : 0));
+    report_uint_setting(Setting_StatusReportMask, settings.status_report.mask |
+                                                   (settings.flags.force_buffer_sync_on_wco_change ? bit(8) : 0) |
+                                                    (settings.flags.report_alarm_substate ? bit(9) : 0));
     report_float_setting(Setting_JunctionDeviation, settings.junction_deviation, N_DECIMAL_SETTINGVALUE);
     report_float_setting(Setting_ArcTolerance, settings.arc_tolerance, N_DECIMAL_SETTINGVALUE);
     report_uint_setting(Setting_ReportInches, settings.flags.report_inches);
@@ -439,7 +444,7 @@ void report_probe_parameters (void)
 // Prints Grbl NGC parameters (coordinate offsets, probing, tool table)
 void report_ngc_parameters (void)
 {
-    uint8_t idx;
+    uint_fast8_t idx;
     float coord_data[N_AXIS];
 
     if(gc_state.modal.scaling_active) {
@@ -728,6 +733,9 @@ void report_build_info (char *line)
     if(hal.driver_cap.ethernet)
         strcat(buf, "ETH,");
 
+    if(hal.driver_cap.mpg_mode)
+        strcat(buf, "MPG,");
+
     if(hal.driver_cap.wifi)
         strcat(buf, "WIFI,");
 
@@ -814,7 +822,10 @@ void report_realtime_status (void)
 
         case STATE_ESTOP:
         case STATE_ALARM:
-            hal.stream.write_all("Alarm");
+            if(settings.flags.report_alarm_substate)
+                hal.stream.write_all(appendbuf(2, "Alarm:", uitoa((uint32_t)current_alarm)));
+            else
+                hal.stream.write_all("Alarm");
             break;
 
         case STATE_CHECK_MODE:
@@ -990,13 +1001,13 @@ void report_realtime_status (void)
             hal.stream.write_all(buf);
         }
 
-        if(sys.report.mpg_mode)
+        if(sys.report.mpg_mode && hal.driver_cap.mpg_mode)
             hal.stream.write_all(sys.mpg_mode ? "|MPG:1" : "|MPG:0");
 
         if(sys.report.homed && sys.homing.mask)
             hal.stream.write_all(sys.homing.mask == sys.homed.mask ? "|H:1" : "|H:0");
 
-        if(sys.report.xmode)
+        if(sys.report.xmode && settings.flags.lathe_mode)
             hal.stream.write_all(gc_state.modal.diameter_mode ? "|D:1" : "|D:0");
 
         if(sys.report.tool)

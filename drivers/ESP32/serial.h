@@ -5,7 +5,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2018 Terje Io
+  Copyright (c) 2018-2019 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -26,8 +26,6 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-
-#define ASCII_EOL "\r\n"
 
 #define TX_BUFFER_SIZE 512      // must be a power of 2
 #define RX_BUFFER_SIZE 1024     // must be a power of 2

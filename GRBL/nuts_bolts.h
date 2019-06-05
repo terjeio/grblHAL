@@ -114,7 +114,6 @@ typedef struct {
 
 // Useful macros
 #define clear_vector(a) memset(a, 0, sizeof(a))
-#define clear_coord_data(a) memset(a, 0.0f, sizeof(coord_data_t))
 #ifndef max
 #define max(a,b) (((a) > (b)) ? (a) : (b))
 #endif

@@ -68,12 +68,13 @@ bool protocol_enqueue_gcode (char *gcode)
 /*
   GRBL PRIMARY LOOP:
 */
-bool protocol_main_loop()
+bool protocol_main_loop(bool cold_start)
 {
-    if (sys.state & STATE_ESTOP) {
+    if (hal.system_control_get_state().e_stop) {
         // Check for e-stop active. Blocks everything until cleared.
-        hal.report.feedback_message(Message_EStop);
         set_state(STATE_ESTOP);
+        report_alarm_message(Alarm_EStop);
+        hal.report.feedback_message(Message_EStop);
     } else if (settings.homing.flags.enabled && sys.homing.mask && settings.homing.flags.init_lock && sys.homing.mask != sys.homed.mask) {
         // Check for power-up and set system alarm if homing is enabled to force homing cycle
         // by setting Grbl's alarm state. Alarm locks out all g-code commands, including the
@@ -82,17 +83,22 @@ bool protocol_main_loop()
         // NOTE: The startup script will run after successful completion of the homing cycle. Prevents motion startup
         // blocks from crashing into things uncontrollably. Very bad.
         set_state(STATE_ALARM); // Ensure alarm state is active.
+        report_alarm_message(Alarm_HomingRequried);
         hal.report.feedback_message(Message_HomingCycleRequired);
     } else if (settings.limits.flags.hard_enabled && settings.limits.flags.check_at_init && hal.limits_get_state().value) {
         // Check that no limit switches are engaged to make sure everything is good to go.
         set_state(STATE_ALARM); // Ensure alarm state is active.
+        report_alarm_message(Alarm_LimitsEngaged);
         hal.report.feedback_message(Message_CheckLimits);
+    } else if(cold_start && (settings.flags.force_initialization_alarm || hal.system_control_get_state().reset)) {
+        set_state(STATE_ALARM); // Ensure alarm state is set.
+        hal.report.feedback_message(Message_AlarmLock);
     } else if (sys.state & (STATE_ALARM|STATE_SLEEP)) {
         // Check for and report alarm state after a reset, error, or an initial power up.
         // NOTE: Sleep mode disables the stepper drivers and position can't be guaranteed.
         // Re-initialize the sleep state as an ALARM mode to ensure user homes or acknowledges.
-        hal.report.feedback_message(Message_AlarmLock);
         set_state(STATE_ALARM); // Ensure alarm state is set.
+        hal.report.feedback_message(Message_AlarmLock);
     } else {
         // Check if the safety door is open.
         set_state(STATE_IDLE);
@@ -112,7 +118,7 @@ bool protocol_main_loop()
     int16_t c;
     char eol = '\0';
     line_flags_t line_flags = {0};
-    bool nocaps = false;
+    bool nocaps = false, gcode_error = false;
 
     xcommand[0] = '\0';
     user_message.show = keep_rt_commands = false;
@@ -123,11 +129,12 @@ bool protocol_main_loop()
         // initial filtering by removing spaces and comments and capitalizing all letters.
         while((c = hal.stream.read()) != SERIAL_NO_DATA) {
 
-            if(c == CMD_RESET) {
+            if(c == ASCII_CAN) {
 
                 eol = xcommand[0] = '\0';
-                keep_rt_commands = nocaps = user_message.show = false;
+                keep_rt_commands = nocaps = gcode_error = user_message.show = false;
                 char_counter = line_flags.value = 0;
+                gc_state.last_error = Status_OK;
 
                 if (sys.state == STATE_JOG) // Block all other states from invoking motion cancel.
                     system_set_exec_state_flag(EXEC_MOTION_CANCEL);
@@ -143,7 +150,7 @@ bool protocol_main_loop()
                     eol = (char)c;
 
                 if(!protocol_execute_realtime()) // Runtime command check point.
-                    return !sys.flags.exit;            // Bail to calling function upon system abort
+                    return !sys.flags.exit;      // Bail to calling function upon system abort
 
                 line[char_counter] = '\0'; // Set string termination character.
 
@@ -157,15 +164,18 @@ bool protocol_main_loop()
                 else if ((line[0] == '\0' || char_counter == 0) && !user_message.show) // Empty or comment line. For syncing purposes.
                     gc_state.last_error = Status_OK;
                 else if (line[0] == '$') {// Grbl '$' system command
+                    gcode_error = false;
                     if((gc_state.last_error = system_execute_line(line)) == Status_LimitsEngaged) {
                         set_state(STATE_ALARM); // Ensure alarm state is active.
+                        report_alarm_message(Alarm_LimitsEngaged);
                         hal.report.feedback_message(Message_CheckLimits);
                     }
                 } else if (sys.state & (STATE_ALARM|STATE_ESTOP|STATE_JOG)) // Everything else is gcode. Block if in alarm, eStop or jog mode.
                     gc_state.last_error = Status_SystemGClock;
-                else  // Parse and execute g-code block.
+                else if(!gcode_error) { // Parse and execute g-code block.
                     gc_state.last_error = gc_execute_block(line, user_message.show ? user_message.message : NULL);
-
+                    gcode_error = gc_state.last_error != Status_OK;
+                }
                 hal.report.status_message(gc_state.last_error);
 
                 // Reset tracking data for next line.
@@ -601,11 +611,13 @@ static void protocol_exec_rt_suspend ()
     }
 }
 
-// Checks for and process real-time commands in input stream.
+// Pick off (drop) real-time command characters from input stream.
+// These characters are not passed into the main buffer,
+// but rather sets system state flag bits for later execution by protocol_exec_rt_system().
 // Called from input stream interrupt handler.
-ISR_CODE bool protocol_process_realtime (char c)
+ISR_CODE bool protocol_enqueue_realtime_command (char c)
 {
-    bool add = !sys.block_input_stream;
+    bool drop = false;
 
     // 1. Process characters in the ranges 0x - 1x and 8x-Ax
     // Characters with functions assigned are always acted upon even when the input stream
@@ -621,19 +633,19 @@ ISR_CODE bool protocol_process_realtime (char c)
             system_set_exec_state_flag(EXEC_STOP);
             char_counter = 0;
             hal.stream.cancel_read_buffer();
-            add = false;
+            drop = true;
             break;
 
         case CMD_RESET: // Call motion control reset routine.
             if(!hal.system_control_get_state().e_stop)
                 mc_reset();
-            add = false;
+            drop = true;
             break;
 
         case CMD_EXIT: // Call motion control reset routine.
             mc_reset();
             sys.flags.exit = On;
-            add = false;
+            drop = true;
             break;
 
         case CMD_STATUS_REPORT_ALL: // Add all statuses to report
@@ -643,42 +655,42 @@ ISR_CODE bool protocol_process_realtime (char c)
         case CMD_STATUS_REPORT:
         case 0x05:
             system_set_exec_state_flag(EXEC_STATUS_REPORT);
-            add = false;
+            drop = true;
             break;
 
         case CMD_CYCLE_START:
             system_set_exec_state_flag(EXEC_CYCLE_START);
             // Cancel any pending tool change
             gc_state.tool_change = false;
-            add = false;
+            drop = true;
             break;
 
         case CMD_FEED_HOLD:
             system_set_exec_state_flag(EXEC_FEED_HOLD);
-            add = false;
+            drop = true;
             break;
 
         case CMD_SAFETY_DOOR:
             if(!hal.driver_cap.safety_door) {
                 system_set_exec_state_flag(EXEC_SAFETY_DOOR);
-                add = false;
+                drop = true;
             }
             break;
 
         case CMD_JOG_CANCEL:
             char_counter = 0;
-            add = false;
+            drop = true;
             hal.stream.cancel_read_buffer();
             break;
 
         case CMD_GCODE_REPORT:
             system_set_exec_state_flag(EXEC_GCODE_REPORT);
-            add = false;
+            drop = true;
             break;
 
         case CMD_PID_REPORT:
             system_set_exec_state_flag(EXEC_PID_REPORT);
-            add = false;
+            drop = true;
             break;
 
         case CMD_OVERRIDE_FEED_RESET:
@@ -689,7 +701,7 @@ ISR_CODE bool protocol_process_realtime (char c)
         case CMD_OVERRIDE_RAPID_RESET:
         case CMD_OVERRIDE_RAPID_MEDIUM:
         case CMD_OVERRIDE_RAPID_LOW:
-            add = false;
+            drop = true;
             enqueue_feed_override(c);
             break;
 
@@ -701,13 +713,13 @@ ISR_CODE bool protocol_process_realtime (char c)
         case CMD_OVERRIDE_SPINDLE_STOP:
         case CMD_OVERRIDE_COOLANT_FLOOD_TOGGLE:
         case CMD_OVERRIDE_COOLANT_MIST_TOGGLE:
-            add = false;
+            drop = true;
             enqueue_accessory_override((uint8_t)c);
             break;
 
         default:
             if(c < ' ' || (c >= 0x7F && c <= 0xBF))
-                add = false;
+                drop = true;
             break;
     }
 
@@ -715,12 +727,12 @@ ISR_CODE bool protocol_process_realtime (char c)
     //    If legacy realtime commands are disabled they are returned to the input stream
     //    when appering in settings ($ commands) or comments
 
-    if(add) switch ((unsigned char)c) {
+    if(!drop) switch ((unsigned char)c) {
 
         case CMD_STATUS_REPORT_LEGACY:
             if(!keep_rt_commands || settings.legacy_rt_commands) {
                 system_set_exec_state_flag(EXEC_STATUS_REPORT);
-                add = false;
+                drop = true;
             }
             break;
 
@@ -729,21 +741,21 @@ ISR_CODE bool protocol_process_realtime (char c)
                 system_set_exec_state_flag(EXEC_CYCLE_START);
                 // Cancel any pending tool change
                 gc_state.tool_change = false;
-                add = false;
+                drop = true;
             }
             break;
 
         case CMD_FEED_HOLD_LEGACY:
             if(!keep_rt_commands || settings.legacy_rt_commands) {
                 system_set_exec_state_flag(EXEC_FEED_HOLD);
-                add = false;
+                drop = true;
             }
             break;
 
-        default: // Strip top bit set characters
-            add = keep_rt_commands || (unsigned char)c < 0x7F;
+        default: // Drop top bit set characters
+            drop = !(keep_rt_commands || (unsigned char)c < 0x7F);
             break;
     }
 
-    return add;
+    return drop;
 }

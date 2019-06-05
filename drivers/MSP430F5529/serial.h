@@ -1,13 +1,13 @@
 //
-// serial.h - serial (UART) port library including MCP4725 DAC support, for PCB laser
+// serial.h - serial (UART) port library
 //
-// v1.0 / 2015-01-26 / Io Engineering / Terje
+// v1.0 / 2019-06-03 / Io Engineering / Terje
 //
 //
 
 /*
 
-Copyright (c) 2015-2018, Terje Io
+Copyright (c) 2015-2019, Terje Io
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -41,20 +41,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdint.h>
 
 #include "portmacros.h"
-
-#define ASCII_ETX  0x03
-#define ASCII_ACK  0x06
-#define ASCII_BS   0x08
-#define ASCII_LF   0x0A
-#define ASCII_CR   0x0D
-#define ASCII_XON  0x11
-#define ASCII_XOFF 0x13
-#define ASCII_NAK  0x15
-#define ASCII_EOF  0x1A
-#define ASCII_CAN  0x18
-#define ASCII_EM   0x19
-#define ASCII_DEL  0x7F
-#define ASCII_EOL  "\r\n"
+#include "GRBL/grbl.h"
 
 #define XONOK (ASCII_XON|0x80)
 #define XOFFOK (ASCII_XOFF|0x80)

@@ -225,9 +225,12 @@ void process_keypress (uint_fast16_t state)
             enqueue_accessory_override(CMD_OVERRIDE_COOLANT_FLOOD_TOGGLE);
             break;
 
-        case CMD_FEED_HOLD:                         // Feed hold
-        case CMD_CYCLE_START:                       // Cycle start
-            protocol_process_realtime(keycode);
+        case CMD_FEED_HOLD_LEGACY:                  // Feed hold
+            hal.stream.enqueue_realtime_command(CMD_FEED_HOLD);
+            break;
+
+        case CMD_CYCLE_START_LEGACY:                // Cycle start
+            hal.stream.enqueue_realtime_command(CMD_CYCLE_START);
             break;
 
         case '0':
@@ -339,7 +342,7 @@ static void driver_keyclick_handler (bool keydown)
 
 	else if(jogging) {
 		jogging = false;
-		hal.protocol_process_realtime(CMD_JOG_CANCEL);
+		hal.stream.enqueue_realtime_command(CMD_JOG_CANCEL);
 		keybuf_tail = keybuf_head = 0; // flush keycode buffer
 	}
 }

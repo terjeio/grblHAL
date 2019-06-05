@@ -163,11 +163,11 @@ void keypad_process_keypress (uint_fast16_t state)
             break;
 
         case CMD_FEED_HOLD_LEGACY:             		// Feed hold
-            protocol_process_realtime(CMD_FEED_HOLD);
-            break
+            hal.stream.enqueue_realtime_command(CMD_FEED_HOLD);
+            break;
 
         case CMD_CYCLE_START_LEGACY:              	// Cycle start
-            protocol_process_realtime(CMD_CYCLE_START);
+            hal.stream.enqueue_realtime_command(CMD_CYCLE_START);
             break;
 
         case '0':
@@ -285,7 +285,7 @@ void keypad_keyclick_handler (bool keydown)
 		xQueueSendFromISR(i2cQueue, (void *)&i2c_task, &xHigherPriorityTaskWoken);
 	} else if(jogging) {
 		jogging = false;
-		hal.protocol_process_realtime(CMD_JOG_CANCEL);
+		hal.stream.enqueue_realtime_command(CMD_JOG_CANCEL);
 		keybuf_tail = keybuf_head = 0; // flush keycode buffer TODO: queue as well?
 	}
 }

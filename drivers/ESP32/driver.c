@@ -105,7 +105,8 @@ const io_stream_t serial_stream = {
     .get_rx_buffer_available = uartRXFree,
     .reset_read_buffer = uartFlush,
     .cancel_read_buffer = uartCancel,
-    .suspend_read = uartSuspendInput
+    .suspend_read = uartSuspendInput,
+    .enqueue_realtime_command = protocol_enqueue_realtime_command
 };
 
 #if WIFI_ENABLE
@@ -124,7 +125,8 @@ const io_stream_t wifi_stream = {
     .get_rx_buffer_available = TCPStreamRxFree,
     .reset_read_buffer = TCPStreamRxFlush,
     .cancel_read_buffer = TCPStreamRxCancel,
-    .suspend_read = uartSuspendInput
+    .suspend_read = uartSuspendInput,
+    .enqueue_realtime_command = protocol_enqueue_realtime_command
 };
 
 #endif
@@ -143,7 +145,8 @@ const io_stream_t bluetooth_stream = {
     .get_rx_buffer_available = BTStreamRXFree,
     .reset_read_buffer = BTStreamFlush,
     .cancel_read_buffer = BTStreamCancel,
-    .suspend_read = uartSuspendInput
+    .suspend_read = uartSuspendInput,
+    .enqueue_realtime_command = protocol_enqueue_realtime_command
 };
 
 #endif

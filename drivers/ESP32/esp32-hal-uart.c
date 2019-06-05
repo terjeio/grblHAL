@@ -1,5 +1,5 @@
 // Copyright 2015-2016 Espressif Systems (Shanghai) PTE LTD
-// Copyright 2018 Terje Io : Modifications for grbl
+// Copyright 2018-2019 Terje Io : Modifications for grbl
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -97,7 +97,7 @@ static void IRAM_ATTR _uart_isr (void *arg)
 			rxbuffer.tail = rxbuffer.head;
 			hal.stream.read = uartRead; // restore normal input
 
-		} else if(hal.protocol_process_realtime && hal.protocol_process_realtime(c)) {
+		} else if(!hal.stream.enqueue_realtime_command(c)) {
 
 			uint32_t bptr = (rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1);  // Get next head pointer
 
@@ -305,7 +305,7 @@ void uartFlush (void)
 IRAM_ATTR void uartCancel (void)
 {
 //    UART_MUTEX_LOCK();
-    rxbuffer.data[rxbuffer.head] = CMD_RESET;
+    rxbuffer.data[rxbuffer.head] = ASCII_CAN;
     rxbuffer.tail = rxbuffer.head;
     rxbuffer.head = (rxbuffer.tail + 1) & (RX_BUFFER_SIZE - 1);
 //    UART_MUTEX_UNLOCK();

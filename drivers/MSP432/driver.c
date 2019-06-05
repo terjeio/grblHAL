@@ -798,8 +798,10 @@ static void modeSelect (bool mpg_mode)
     BITBAND_PERI(MODE_PORT->IE, MODE_SWITCH_PIN) = 1;
 
     // Deny entering MPG mode if busy
-    if(mpg_mode == sys.mpg_mode || (mpg_mode && (gc_state.file_run || !(sys.state == STATE_IDLE || (sys.state & (STATE_ALARM|STATE_ESTOP))))))
+    if(mpg_mode == sys.mpg_mode || (mpg_mode && (gc_state.file_run || !(sys.state == STATE_IDLE || (sys.state & (STATE_ALARM|STATE_ESTOP)))))) {
+        hal.stream.enqueue_realtime_command(CMD_STATUS_REPORT_ALL);
         return;
+    }
 
     BITBAND_PERI(MODE_PORT->OUT, MODE_LED_PIN) = mpg_mode;
 
@@ -819,15 +821,11 @@ static void modeSelect (bool mpg_mode)
 
     hal.stream.reset_read_buffer();
 
-    // Report WCO on first status report request from MPG processor
-    if(mpg_mode)
-        sys.report.wco = On;
-
-    // Force a realtime status report
-    hal.protocol_process_realtime('?');
-
     sys.mpg_mode = mpg_mode;
     sys.report.mpg_mode = On;
+
+    // Force a realtime status report, all reports when MPG mode active
+    hal.stream.enqueue_realtime_command(mpg_mode ? CMD_STATUS_REPORT_ALL : CMD_STATUS_REPORT);
 }
 
 static void modechange (void)
@@ -977,13 +975,15 @@ void settings_changed (settings_t *settings)
 #endif
 
 #if MPG_MODE_ENABLE
-        BITBAND_PERI(MODE_PORT->OUT, MODE_SWITCH_PIN) = 1;
-        BITBAND_PERI(MODE_PORT->REN, MODE_SWITCH_PIN) = 1;
-        BITBAND_PERI(MODE_PORT->DIR, MODE_LED_PIN) = 1;
-        if(sys.mpg_mode != !BITBAND_PERI(MODE_PORT->IN, MODE_SWITCH_PIN))
-            modeSelect(true);
-        BITBAND_PERI(MODE_PORT->IFG, MODE_SWITCH_PIN) = 0;
-        BITBAND_PERI(MODE_PORT->IE, MODE_SWITCH_PIN) = 1;
+        if(hal.driver_cap.mpg_mode) {
+            BITBAND_PERI(MODE_PORT->OUT, MODE_SWITCH_PIN) = 1;
+            BITBAND_PERI(MODE_PORT->REN, MODE_SWITCH_PIN) = 1;
+            BITBAND_PERI(MODE_PORT->DIR, MODE_LED_PIN) = 1;
+            if(sys.mpg_mode != !BITBAND_PERI(MODE_PORT->IN, MODE_SWITCH_PIN))
+                modeSelect(true);
+            BITBAND_PERI(MODE_PORT->IFG, MODE_SWITCH_PIN) = 0;
+            BITBAND_PERI(MODE_PORT->IE, MODE_SWITCH_PIN) = 1;
+        }
 #endif
 
 #if LIMITS_OVERRIDE_ENABLE
@@ -1253,6 +1253,10 @@ bool driver_init (void)
     hal.driver_cap.control_pull_up = On;
     hal.driver_cap.limits_pull_up = On;
     hal.driver_cap.probe_pull_up = On;
+#if MPG_MODE_ENABLE
+    hal.driver_cap.mpg_mode = On;
+#endif
+
     // no need to move version check before init - compiler will fail any mismatch for existing entries
     return hal.version == 5;
 }

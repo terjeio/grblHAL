@@ -151,12 +151,12 @@ static void corexy_limits_set_target_pos (uint_fast8_t idx) // fn name?
 
 // Set machine positions for homed limit switches. Don't update non-homed axes.
 // NOTE: settings.max_travel[] is stored as a negative value.
-static void corexy_limits_set_machine_positions (uint8_t cycle_mask)
+static void corexy_limits_set_machine_positions (axes_signals_t cycle)
 {
     uint_fast8_t idx = N_AXIS;
 
-    if(settings.flags.homing_force_set_origin) {
-        if (cycle_mask & bit(--idx)) do {
+    if(settings.homing.flags.force_set_origin) {
+        if (cycle.mask & bit(--idx)) do {
             switch(--idx) {
                 case X_AXIS:
                     sys_position[A_MOTOR] = corexy_convert_to_y_axis_steps(sys_position);
@@ -172,7 +172,7 @@ static void corexy_limits_set_machine_positions (uint8_t cycle_mask)
             }
         } while (idx);
     } else do {
-         if (cycle_mask & bit(--idx)) {
+         if (cycle.mask & bit(--idx)) {
              int32_t off_axis_position;
              int32_t set_axis_position = bit_istrue(settings.homing.dir_mask.value, bit(idx))
                                           ? lroundf((settings.max_travel[idx] + settings.homing.pulloff) * settings.steps_per_mm[idx])

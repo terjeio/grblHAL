@@ -34,7 +34,7 @@
 
 // Starts Grbl main loop. It handles all incoming characters from the input stream and executes
 // them as they complete. It is also responsible for finishing the initialization procedures.
-bool protocol_main_loop();
+bool protocol_main_loop(bool cold_start);
 
 // Checks and executes a realtime command at various stop points in main program
 bool protocol_execute_realtime();
@@ -46,7 +46,7 @@ void protocol_auto_cycle_start();
 // Block until all buffered steps are executed
 bool protocol_buffer_synchronize();
 
-bool protocol_process_realtime (char c);
+bool protocol_enqueue_realtime_command (char c);
 bool protocol_enqueue_gcode (char *data);
 void protocol_message (char *message);
 

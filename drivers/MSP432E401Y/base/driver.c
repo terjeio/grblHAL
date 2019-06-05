@@ -71,6 +71,7 @@ const io_stream_t serial_stream = {
     .get_rx_buffer_available = serialRxFree,
     .reset_read_buffer = serialRxFlush,
     .cancel_read_buffer = serialRxCancel,
+    .enqueue_realtime_command = protocol_enqueue_realtime_command,
 #if M6_ENABLE
     .suspend_read = serialSuspendInput
 #else
@@ -90,6 +91,7 @@ const io_stream_t ethernet_stream = {
     .get_rx_buffer_available = TCPStreamRxFree,
     .reset_read_buffer = TCPStreamRxFlush,
     .cancel_read_buffer = TCPStreamRxCancel,
+    .enqueue_realtime_command = protocol_enqueue_realtime_command,
 #if M6_ENABLE
     .suspend_read = NULL // for now...
 #else
@@ -1032,8 +1034,10 @@ static void modeSelect (bool mpg_mode)
     static stream_setting_t normal_stream = StreamSetting_Serial;
 
     // Deny entering MPG mode if busy
-    if(mpg_mode == sys.mpg_mode || (mpg_mode && (gc_state.file_run || sys.state != STATE_IDLE)))
+    if(mpg_mode == sys.mpg_mode || (mpg_mode && (gc_state.file_run || !(sys.state == STATE_IDLE || (sys.state & (STATE_ALARM|STATE_ESTOP)))))) {
+        hal.stream.enqueue_realtime_command(CMD_STATUS_REPORT_ALL);
         return;
+    }
 
     serialSelect(mpg_mode);
 
@@ -1048,15 +1052,11 @@ static void modeSelect (bool mpg_mode)
 
     hal.stream.reset_read_buffer();
 
-    // Report WCO on first status report request from MPG processor
-    if(mpg_mode)
-        sys.report.wco = On;
-
-    // Force a realtime status report
-    hal.protocol_process_realtime('?');
-
     sys.mpg_mode = mpg_mode;
     sys.report.mpg_mode = On;
+
+    // Force a realtime status report, all reports when MPG mode active
+    hal.stream.enqueue_realtime_command(mpg_mode ? CMD_STATUS_REPORT_ALL : CMD_STATUS_REPORT);
 }
 
 static void modechange (void)

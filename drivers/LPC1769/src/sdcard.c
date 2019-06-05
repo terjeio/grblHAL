@@ -5,7 +5,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2018 Terje Io
+  Copyright (c) 2018-2019 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -179,6 +179,14 @@ static bool file_open (char *filename)
     return file.handle != NULL;
 }
 
+// Drop input from current stream except realtime commands
+bool drop_input_stream (char c)
+{
+    active_stream.enqueue_realtime_command(c);
+
+    return true;
+}
+
 static int16_t file_read (void)
 {
     signed char c;
@@ -225,7 +233,6 @@ static void sdcard_end_job (void)
     hal.driver_rt_report = NULL;
     hal.report_status_message = report_status_message;
     hal.report.feedback_message = report_feedback_message;
-    sys.block_input_stream = false;
 }
 
 void trap_status_report (status_code_t status_code)
@@ -282,13 +289,14 @@ static void sdcard_report (stream_write_ptr stream_write)
 
 static bool sdcard_suspend (bool suspend)
 {
-    sys.block_input_stream = !suspend;
     if(suspend) {
         hal.stream.reset_read_buffer();
         hal.stream.read = readfn;                           // Restore serial input for tool change (jog etc)
+        hal.stream.enqueue_realtime_command = active_stream.enqueue_realtime_command;
         hal.report.status_message = report_status_message;  // as well as normal status messages reporting
     } else {
         hal.stream.read = sdcard_read;                      // Resume reading from SD card
+        hal.stream.enqueue_realtime_command = drop_input_stream;
         hal.report.status_message = trap_status_report;     // and redirect status messages back to us
     }
 
@@ -319,12 +327,12 @@ static status_code_t sdcard_parse (uint_fast16_t state, char *line, char *lcline
                     hal.report_status_message(Status_OK);           			// and confirm command to originator
                     memcpy(&active_stream, &hal.stream, sizeof(io_stream_t));   // Save current stream pointers
                     hal.stream.type = StreamSetting_SDCard;                     // then redirect to read from SD card instead
-                    hal.stream.read = sdcard_read;                  			// then redirect to read from SD card instead
+                    hal.stream.read = sdcard_read;                  			// ...
+                    hal.stream.enqueue_realtime_command = drop_input_stream;    // Drop input from current stream except realtime commands
                     hal.stream.suspend_read = sdcard_suspend;       			// ...
                     hal.driver_rt_report = sdcard_report;      					// Add percent complete to real time report
                     hal.report.status_message = trap_status_report;             // Redirect status message and feedback message
                     hal.report.feedback_message = trap_feedback_message;        // reports here
-                    sys.block_input_stream = true;                  			// Block serial input other than real time commands TODO: remove?
                     retval = Status_OK;
                 } else
                     retval = Status_SDReadError;

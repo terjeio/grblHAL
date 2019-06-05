@@ -77,6 +77,7 @@ typedef enum {
     Status_GcodeRPMOutOfRange = 44,
     Status_LimitsEngaged = 45,
     Status_HomingRequired = 46,
+    Status_GCodeToolError = 47,
 
     Status_EStop = 50,
     Status_Unhandled = 59, // For internal use only

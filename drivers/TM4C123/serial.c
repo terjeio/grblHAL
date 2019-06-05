@@ -1,12 +1,12 @@
 //
 // serial.c - (UART) port library for Tiva
 //
-// v1.0 / 2017-04-01 / Io Engineering / Terje
+// v1.00 / 2019-06-03 / Io Engineering / Terje
 //
 
 /*
 
-Copyright (c) 2017, Terje Io
+Copyright (c) 2017-2019, Terje Io
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -38,7 +38,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "tiva.h"
 #include "serial.h"
-#include "GRBL/grbl.h"
 
 #define BUFCOUNT(head, tail, size) ((head >= tail) ? (head - tail) : (size - tail + head))
 
@@ -243,7 +242,7 @@ static void uart_interrupt_handler (void) {
             UARTCharGet(UARTCH);                        // and do dummy read to clear interrupt;
         } else {
             data = UARTCharGet(UARTCH);
-            if(!hal.protocol_process_realtime || hal.protocol_process_realtime((char)data)) {
+            if(!hal.stream.enqueue_realtime_command((char)data)) {
                 rxbuf[rx_head] = (char)data;   // Add data to buffer
                 rx_head = bptr;                // and update pointer
             }

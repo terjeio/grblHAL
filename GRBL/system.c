@@ -120,9 +120,10 @@ status_code_t system_execute_line (char *line)
         case 'G': // Prints gcode parser state
             if (line[2] != '\0' )
                 retval = Status_InvalidStatement;
-            else
+            else {
                 report_gcode_modes();
                 sys.report.homed = On; // Report homed state on next realtime report
+            }
             break;
 
         case 'B': // Toggle block delete mode
@@ -200,36 +201,38 @@ status_code_t system_execute_line (char *line)
 
             if(retval == Status_OK) {
 
-                set_state(STATE_HOMING); // Set system state variable
+                set_state(STATE_HOMING);                                // Set homing system state,
+                hal.stream.enqueue_realtime_command(CMD_STATUS_REPORT); // force a status report and
+                delay_sec(0.1f, DelayMode_Dwell);                       // delay a bit to get it sent (or perhaps wait a bit for a request?)
 
                 if (line[2] == '\0')
-                    retval = mc_homing_cycle(0); // Home axes according to configuration
+                    retval = mc_homing_cycle((axes_signals_t){0}); // Home axes according to configuration
 
                 else if (settings.homing.flags.single_axis_commands && line[3] == '\0') {
 
                     switch (line[2]) {
                         case 'X':
-                            retval = mc_homing_cycle(X_AXIS_BIT);
+                            retval = mc_homing_cycle((axes_signals_t){X_AXIS_BIT});
                             break;
                         case 'Y':
-                            retval = mc_homing_cycle(Y_AXIS_BIT);
+                            retval = mc_homing_cycle((axes_signals_t){Y_AXIS_BIT});
                             break;
                         case 'Z':
-                            retval = mc_homing_cycle(Z_AXIS_BIT);
+                            retval = mc_homing_cycle((axes_signals_t){Z_AXIS_BIT});
                             break;
                       #ifdef A_AXIS
                         case 'A':
-                            retval = mc_homing_cycle(A_AXIS_BIT);
+                            retval = mc_homing_cycle((axes_signals_t){A_AXIS_BIT});
                             break;
                       #endif
                       #ifdef B_AXIS
                         case 'B':
-                            retval = mc_homing_cycle(B_AXIS_BIT);
+                            retval = mc_homing_cycle((axes_signals_t){B_AXIS_BIT});
                             break;
                       #endif
                       #ifdef C_AXIS
                         case 'C':
-                            retval = mc_homing_cycle(C_AXIS_BIT);
+                            retval = mc_homing_cycle((axes_signals_t){C_AXIS_BIT});
                             break;
                       #endif
                       default:

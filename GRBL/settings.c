@@ -213,7 +213,6 @@ bool settings_read_coord_data (uint8_t idx, float (*coord_data)[N_AXIS])
 
     if (!(hal.eeprom.type != EEPROM_None && hal.eeprom.memcpy_from_with_checksum((uint8_t *)coord_data, EEPROM_ADDR_PARAMETERS + idx * (sizeof(coord_data_t) + 1), sizeof(coord_data_t)))) {
         // Reset with default zero vector
-        clear_coord_data(coord_data);
         memset(coord_data, 0, sizeof(coord_data_t));
         settings_write_coord_data(idx, coord_data);
         return false;
@@ -453,6 +452,7 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
             case Setting_StatusReportMask:
                 settings.status_report.mask = int_value & 0xFF;
                 settings.flags.force_buffer_sync_on_wco_change = bit_istrue(int_value, bit(8));
+                settings.flags.report_alarm_substate = bit_istrue(int_value, bit(9));
                 break;
 
             case Setting_JunctionDeviation:

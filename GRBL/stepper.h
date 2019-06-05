@@ -29,6 +29,12 @@
   #define SEGMENT_BUFFER_SIZE 10
 #endif
 
+typedef enum {
+    SquaringMode_Both = 0,
+    SquaringMode_A,
+    SquaringMode_B,
+} squaring_mode_t;
+
 // Holds the planner block Bresenham algorithm execution data for the segments in the segment buffer.
 // NOTE: This data is copied from the prepped planner blocks so that the planner blocks may be
 // discarded when entirely consumed and completed by the segment buffer. Also, AMASS alters this

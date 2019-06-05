@@ -68,17 +68,17 @@ ISR_CODE void limit_interrupt_handler (axes_signals_t state) // DEFAULT: Limit p
 
 // Set machine positions for homed limit switches. Don't update non-homed axes.
 // NOTE: settings.max_travel[] is stored as a negative value.
-static void limits_set_machine_positions (uint8_t cycle_mask)
+static void limits_set_machine_positions (axes_signals_t cycle)
 {
     uint_fast8_t idx = N_AXIS;
 
     if(settings.homing.flags.force_set_origin) {
         do {
-            if (cycle_mask & bit(--idx))
+            if (cycle.mask & bit(--idx))
                 sys_position[idx] = 0;
         } while(idx);
     } else do {
-        if (cycle_mask & bit(--idx))
+        if (cycle.mask & bit(--idx))
             sys_position[idx] = bit_istrue(settings.homing.dir_mask.value, bit(idx))
                                  ? lroundf((settings.max_travel[idx] + settings.homing.pulloff) * settings.steps_per_mm[idx])
                                  : lroundf(-settings.homing.pulloff * settings.steps_per_mm[idx]);
@@ -91,7 +91,7 @@ static void limits_set_machine_positions (uint8_t cycle_mask)
 // mask, which prevents the stepper algorithm from executing step pulses. Homing motions typically
 // circumvent the processes for executing motions in normal operation.
 // NOTE: Only the abort realtime command can interrupt this process.
-bool limits_go_home (uint8_t cycle_mask)
+static bool limits_homing_cycle (axes_signals_t cycle)
 {
     if (sys.abort)
         return false;// Block if system reset has been issued.
@@ -106,7 +106,8 @@ bool limits_go_home (uint8_t cycle_mask)
     float max_travel = 0.0f;
     bool approach = true;
     float homing_rate = settings.homing.seek_rate;
-    uint_fast8_t limit_state, axislock, n_active_axis;
+    uint_fast8_t limit_state, n_active_axis;
+    axes_signals_t axislock;
 
     memset(pl_data,0,sizeof(plan_line_data_t));
     pl_data->condition.system_motion = On;
@@ -124,22 +125,22 @@ bool limits_go_home (uint8_t cycle_mask)
 #endif
         // Set target based on max_travel setting. Ensure homing switches engaged with search scalar.
         // NOTE: settings.max_travel[] is stored as a negative value.
-        if (bit_istrue(cycle_mask, bit(idx)))
+        if (bit_istrue(cycle.mask, bit(idx)))
             max_travel = max(max_travel,(-HOMING_AXIS_SEARCH_SCALAR) * settings.max_travel[idx]);
     } while(idx);
 
-    // Set search mode with approach at seek rate to quickly engage the specified cycle_mask limit switches.
+    // Set search mode with approach at seek rate to quickly engage the specified cycle.mask limit switches.
     do {
 
         // Initialize and declare variables needed for homing routine.
         system_convert_array_steps_to_mpos(target, sys_position);
-        axislock = 0;
+        axislock = (axes_signals_t){0};
         n_active_axis = 0;
 
         idx = N_AXIS;
         do {
             // Set target location for active axes and setup computation for homing rate.
-            if (bit_istrue(cycle_mask, bit(--idx))) {
+            if (bit_istrue(cycle.mask, bit(--idx))) {
                 n_active_axis++;
 
 #ifdef HAL_KINEMATICS
@@ -155,12 +156,12 @@ bool limits_go_home (uint8_t cycle_mask)
                     target[idx] = approach ? max_travel : - max_travel;
 
                 // Apply axislock to the step port pins active in this cycle.
-                axislock |= step_pin[idx];
+                axislock.mask |= step_pin[idx];
             }
         } while(idx);
 
         homing_rate *= sqrtf(n_active_axis); // [sqrt(N_AXIS)] Adjust so individual axes all move at homing rate.
-        sys.homing_axis_lock.mask = axislock;
+        sys.homing_axis_lock.mask = axislock.mask;
 
         // Perform homing cycle. Planner buffer should be empty, as required to initiate the homing cycle.
         pl_data->feed_rate = homing_rate; // Set current homing rate.
@@ -180,16 +181,16 @@ bool limits_go_home (uint8_t cycle_mask)
                 idx = N_AXIS;
                 do {
                     idx--;
-                    if ((axislock & step_pin[idx]) && (limit_state & bit(idx))) {
+                    if ((axislock.mask & step_pin[idx]) && (limit_state & bit(idx))) {
 #ifdef HAL_KINEMATICS
-                        axislock &= ~hal.kinematics.limits_get_axis_mask(idx);
+                        axislock.mask &= ~hal.kinematics.limits_get_axis_mask(idx);
 #else
-                        axislock &= ~bit(idx);
+                        axislock.mask &= ~bit(idx);
 #endif
                     }
                 } while(idx);
 
-                sys.homing_axis_lock.mask = axislock;
+                sys.homing_axis_lock.mask = axislock.mask;
             }
 
             st_prep_buffer(); // Check and prep segment buffer. NOTE: Should take no longer than 200us.
@@ -208,7 +209,7 @@ bool limits_go_home (uint8_t cycle_mask)
                     system_set_exec_alarm(Alarm_HomingFailDoor);
 
                 // Homing failure condition: Limit switch still engaged after pull-off motion
-                if (!approach && (hal.limits_get_state().value & cycle_mask))
+                if (!approach && (hal.limits_get_state().value & cycle.mask))
                     system_set_exec_alarm(Alarm_FailPulloff);
 
                 // Homing failure condition: Limit switch not found during approach.
@@ -226,7 +227,7 @@ bool limits_go_home (uint8_t cycle_mask)
                 }
             }
 
-        } while (AXES_BITMASK & axislock);
+        } while (axislock.mask & AXES_BITMASK);
 
         st_reset(); // Immediately force kill steppers and reset step segment buffer.
         hal.delay_ms(settings.homing.debounce_delay, 0); // Delay to allow transient dynamics to dissipate.
@@ -252,18 +253,45 @@ bool limits_go_home (uint8_t cycle_mask)
     // some initial clearance off the switches and should also help prevent them from falsely
     // triggering when hard limits are enabled or when more than one axes shares a limit pin.
 #ifdef HAL_KINEMATICS
-    hal.kinematics.limits_set_machine_positions(cycle_mask);
+    hal.kinematics.limits_set_machine_positions(cycle);
 #else
-    limits_set_machine_positions(cycle_mask);
+    limits_set_machine_positions(cycle);
 #endif
 
 #ifdef ENABLE_BACKLASH_COMPENSATION
     mc_backlash_init();
 #endif
     sys.step_control.flags = 0; // Return step control to normal operation.
-    sys.homed.mask |= cycle_mask;
+    sys.homed.mask |= cycle.mask;
 
     return true;
+}
+
+// Perform homing cycle(s) according to configuration
+bool limits_go_home (axes_signals_t cycle)
+{
+    axes_signals_t ganged = {
+      .x = hal.driver_cap.axis_ganged_x,
+      .y = hal.driver_cap.axis_ganged_y,
+      .z = hal.driver_cap.axis_ganged_z
+    };
+
+    bool homed = limits_homing_cycle(cycle);
+
+    ganged.mask &= cycle.mask;
+
+    if(homed && ganged.mask && hal.stepper_disable_motors) {
+        sys.homed.mask &= ~ganged.mask;
+        hal.stepper_disable_motors(ganged, SquaringMode_A);
+        if((homed = limits_homing_cycle(cycle))) {
+            sys.homed.mask &= ~ganged.mask;
+            hal.stepper_disable_motors(ganged, SquaringMode_B);
+            homed = limits_homing_cycle(cycle);
+        }
+        hal.stepper_disable_motors((axes_signals_t){0}, SquaringMode_Both);
+    }
+
+    return homed;
 }
 
 // Performs a soft limit check. Called from mc_line() only. Assumes the machine has been homed,

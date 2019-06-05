@@ -4,7 +4,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2017-2018 Terje Io
+  Copyright (c) 2017-2019 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -67,14 +67,13 @@ void USB_ReadCallback(const char* data, unsigned len)
 
 		bptr = (rx_head + 1) & (RX_BUFFER_SIZE - 1);    // Get next head pointer
 
-        if(bptr == rx_tail) {                           // If buffer full
-            rx_overflow = 1;                            // flag overflow
-                                    // and do dummy read to clear interrupt;
+        if(bptr == rx_tail) {   // If buffer full
+            rx_overflow = 1;    // flag overflow
         } else {
             rxdata = *data++;
-            if(!hal.protocol_process_realtime || hal.protocol_process_realtime(rxdata)) {
-                rxbuf[rx_head] = rxdata;            	// Add data to buffer
-                rx_head = bptr;                         // and update pointer
+            if(!hal.stream.enqueue_realtime_command(rxdata)) {
+                rxbuf[rx_head] = rxdata;    // Add data to buffer
+                rx_head = bptr;             // and update pointer
             }
         }
 	}
@@ -150,7 +149,7 @@ void serialRxFlush (void)
 //
 void serialRxCancel (void)
 {
-    rxbuf[rx_head] = CMD_RESET;
+    rxbuf[rx_head] = ASCII_CAN;
     rx_tail = rx_head;
     rx_head = (rx_tail + 1) & (RX_BUFFER_SIZE - 1);
 #ifdef RTS_PORT

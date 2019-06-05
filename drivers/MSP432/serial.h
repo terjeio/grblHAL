@@ -25,7 +25,7 @@
 #include <stdbool.h>
 
 #include "driver.h"
-#include "GRBL/config.h"
+#include "GRBL/grbl.h"
 
 #define BACKCHANNEL // comment out to use Launchpad Backchannel UART
 
@@ -36,22 +36,8 @@
 #define eusciHANDLER(p) eusciH(p)
 #define eusciH(p) EUSCI ## p ## _IRQHandler
 
-#define ASCII_ETX  0x03
-#define ASCII_ACK  0x06
-#define ASCII_BS   0x08
-#define ASCII_LF   0x0A
-#define ASCII_CR   0x0D
-#define ASCII_XON  0x11
-#define ASCII_XOFF 0x13
-#define ASCII_NAK  0x15
-#define ASCII_EOF  0x1A
-#define ASCII_CAN  0x18
-#define ASCII_EM   0x19
-#define ASCII_DEL  0x7F
-#define ASCII_EOL  "\r\n"
-
-#define XONOK (XON|0x80)
-#define XOFFOK (XOFF|0x80)
+#define XONOK (ASCII_XON|0x80)
+#define XOFFOK (ASCII_XON|0x80)
 #define TX_BUFFER_SIZE 256      // must be a power of 2
 #define RX_BUFFER_SIZE 1024     // must be a power of 2
 #define RX_BUFFER_HWM 900

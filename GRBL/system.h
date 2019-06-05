@@ -78,6 +78,7 @@ typedef enum {
 
 // Alarm executor codes. Valid values (1-255). Zero is reserved.
 typedef enum {
+    Alarm_None = 0,
     Alarm_HardLimit = 1,
     Alarm_SoftLimit = 2,
     Alarm_AbortCycle = 3,
@@ -87,7 +88,9 @@ typedef enum {
     Alarm_HomingFailDoor = 7,
     Alarm_FailPulloff = 8,
     Alarm_HomingFailApproach = 9,
-    Alarm_EStop = 10
+    Alarm_EStop = 10,
+    Alarm_HomingRequried = 11,
+    Alarm_LimitsEngaged = 12
 } alarm_code_t;
 
 typedef enum {
@@ -119,7 +122,7 @@ typedef union {
                 execute_hold       :1,
                 execute_sys_motion :1,
                 update_spindle_rpm :1,
-				unassigned         :4;
+                unassigned         :4;
     };
 } step_control_t;
 
@@ -131,10 +134,10 @@ typedef union {
                 feed_hold           :1,
                 cycle_start         :1,
                 safety_door_ajar    :1,
-				block_delete		:1,
-        		stop_disable        :1, // M1
-				e_stop              :1,
-				deasserted          :1; // this flag is set if signals are deasserted. Note: do NOT pass on to Grbl control_interrupt_handler if set.
+                block_delete        :1,
+                stop_disable        :1, // M1
+                e_stop              :1,
+                deasserted          :1; // this flag is set if signals are deasserted. Note: do NOT pass on to Grbl control_interrupt_handler if set.
     };
 } control_signals_t;
 
@@ -146,7 +149,7 @@ typedef union {
                 initiate      :1,
                 restore       :1,
                 restore_cycle :1,
-				unassigned    :4;
+                unassigned    :4;
     };
 } spindle_stop_t;
 
@@ -208,8 +211,7 @@ typedef struct {
     bool abort;                         // System abort flag. Forces exit back to main loop for reset.
     bool cancel;                        // System cancel flag.
     bool suspend;                       // System suspend state flag.
-    volatile bool steppers_deenergize;	// Set to true to deenergize stepperes
-    bool block_input_stream;            // Input stream block flag. Set to true to discard all characters except real-time commands.
+    volatile bool steppers_deenergize;  // Set to true to deenergize stepperes
     bool mpg_mode;                      // To be moved to system_flags_t
     system_flags_t flags;               // Assorted state flags
     step_control_t step_control;        // Governs the step segment generator depending on system state.

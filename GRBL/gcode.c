@@ -907,7 +907,7 @@ status_code_t gc_execute_block(char *block, char *message)
 
     // [9a. User defined M commands ]:
     if (bit_istrue(command_words, bit(ModalGroup_M10))) {
-        if((int_value = (uint_fast8_t)hal.driver_mcode_validate(&gc_block, &value_words)))
+        if((int_value = (uint_fast16_t)hal.driver_mcode_validate(&gc_block, &value_words)))
             FAIL((status_code_t)int_value);
         axis_words = ijk_words = 0;
     }
@@ -1754,7 +1754,7 @@ status_code_t gc_execute_block(char *block, char *message)
         plan_data.condition.coolant = gc_state.modal.coolant;
         plan_data.condition.is_rpm_rate_adjusted = gc_state.is_rpm_rate_adjusted;
 
-        if ((status_code_t)(int_value = (uint_fast8_t)mc_jog_execute(&plan_data, &gc_block)) == Status_OK)
+        if ((status_code_t)(int_value = (uint_fast16_t)mc_jog_execute(&plan_data, &gc_block)) == Status_OK)
             memcpy(gc_state.position, gc_block.values.xyz, sizeof(gc_state.position));
 
         return (status_code_t)int_value;
@@ -1852,9 +1852,9 @@ status_code_t gc_execute_block(char *block, char *message)
         // Prepare tool carousel when available
         if(hal.tool_select) {
 #ifdef N_TOOLS
-            hal.tool_select(&tool_table[gc_state.tool_pending]);
+            hal.tool_select(&tool_table[gc_state.tool_pending], !set_tool);
 #else
-            hal.tool_select(gc_state.tool);
+            hal.tool_select(gc_state.tool, !set_tool);
 #endif
         } else
             sys.report.tool = On;
@@ -1863,18 +1863,17 @@ status_code_t gc_execute_block(char *block, char *message)
     // [6. Change tool ]: Delegated to (possible) driver implementation
     if (bit_istrue(command_words, bit(ModalGroup_M6)) && !set_tool) {
         protocol_buffer_synchronize();
-        gc_state.tool_change = true;
 #ifdef N_TOOLS
         gc_state.tool = &tool_table[gc_state.tool_pending];
 #else
         gc_state.tool->tool = gc_state.tool_pending;
 #endif
-
         if(hal.tool_change) { // ATC
-            hal.tool_change(&gc_state);
-            gc_state.tool_change = false;
+            if((int_value = (uint_fast16_t)hal.tool_change(&gc_state)) != Status_OK)
+                FAIL((status_code_t)int_value);
             sys.report.tool = On;
         } else { // Manual
+            gc_state.tool_change = true;
             system_set_exec_state_flag(EXEC_TOOL_CHANGE);   // Set up program pause for manual tool change
             protocol_execute_realtime();                    // Execute...
         }

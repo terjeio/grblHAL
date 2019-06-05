@@ -534,7 +534,7 @@ void mc_dwell (float seconds)
 // Perform homing cycle to locate and set machine zero. Only '$H' executes this command.
 // NOTE: There should be no motions in the buffer and Grbl must be in an idle state before
 // executing the homing cycle. This prevents incorrect buffered plans after homing.
-status_code_t mc_homing_cycle (uint8_t cycle_mask)
+status_code_t mc_homing_cycle (axes_signals_t cycle)
 {
     // Check and abort homing cycle, if hard limits are already enabled. Helps prevent problems
     // with machines with limits wired on both ends of travel to one limit pin.
@@ -550,8 +550,8 @@ status_code_t mc_homing_cycle (uint8_t cycle_mask)
     // -------------------------------------------------------------------------------------
     // Perform homing routine. NOTE: Special motion case. Only system reset works.
 
-    if (cycle_mask) // Perform homing cycle based on mask.
-        limits_go_home(cycle_mask);
+    if (cycle.mask) // Perform homing cycle based on mask.
+        limits_go_home(cycle);
     else {
 
         uint_fast8_t idx = 0;
@@ -560,14 +560,14 @@ status_code_t mc_homing_cycle (uint8_t cycle_mask)
 
         do {
             if(settings.homing.cycle[idx].mask) {
-                cycle_mask = settings.homing.cycle[idx].mask;
-                if(!limits_go_home(cycle_mask))
+                cycle.mask = settings.homing.cycle[idx].mask;
+                if(!limits_go_home(cycle))
                     break;
             }
         } while(++idx < N_AXIS);
     }
 
-    if(cycle_mask) {
+    if(cycle.mask) {
 
         if(!protocol_execute_realtime()) // Check for reset and set system abort.
             return Status_Unhandled;     // Did not complete. Alarm state set by mc_alarm.

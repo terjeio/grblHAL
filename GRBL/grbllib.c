@@ -76,7 +76,7 @@ int grbl_enter (void)
 	hal.limit_interrupt_callback = limit_interrupt_handler;
 	hal.control_interrupt_callback = control_interrupt_handler;
 	hal.stepper_interrupt_callback = stepper_driver_interrupt_handler;
-	hal.protocol_process_realtime = protocol_process_realtime;
+	hal.stream.enqueue_realtime_command = protocol_enqueue_realtime_command;
 	hal.stream_blocking_callback = stream_tx_blocking;
 	hal.protocol_enqueue_gcode = protocol_enqueue_gcode;
 	memcpy(&hal.report, &report_fns, sizeof(report_t));
@@ -123,22 +123,6 @@ int grbl_enter (void)
     if(hal.get_position)
         hal.get_position(&sys_position); // TODO:  restore on abort when returns true?
 
-    // Initialize system state.
-    sys.state = settings.flags.force_initialization_alarm ? STATE_ALARM : STATE_IDLE;
-
-    // Check for power-up and set system alarm if homing is enabled to force homing cycle
-    // by setting Grbl's alarm state. Alarm locks out all g-code commands, including the
-    // startup scripts, but allows access to settings and internal commands. Only a homing
-    // cycle '$H' or kill alarm locks '$X' will disable the alarm.
-    // NOTE: The startup script will run after successful completion of the homing cycle, but
-    // not after disabling the alarm locks. Prevents motion startup blocks from crashing into
-    // things uncontrollably. Very bad.
-    // if (settings.homing.flags.enabled && settings.homing.flags.init_lock)
-    //    sys.state = STATE_ALARM;
-
-    if(hal.system_control_get_state().reset)
-        sys.state = STATE_ALARM;
-
     // Grbl initialization loop upon power-up or a system abort. For the latter, all processes
     // will return to this loop to be cleanly re-initialized.
     while(looping) {
@@ -167,7 +151,6 @@ int grbl_enter (void)
 		sys_rt_exec_state = 0;
 		sys_rt_exec_alarm = 0;
 
-
 		flush_override_buffers();
 
 		// Reset Grbl primary systems.
@@ -187,23 +170,19 @@ int grbl_enter (void)
 		// Print welcome message. Indicates an initialization has occured at power-up or with a reset.
 		report_init_message();
 
-        if(hal.system_control_get_state().e_stop)
-            set_state(STATE_ESTOP);
-        else if(sys.state == STATE_ESTOP)
+        if(sys.state == STATE_ESTOP)
             set_state(STATE_ALARM);
 
-        sys.report.homed = On;
-
-		if((sys.mpg_mode = (sys.report.mpg_mode = prior_mpg_mode))) {
-            report_realtime_status();
+		if(hal.driver_cap.mpg_mode) {
+            sys.mpg_mode = prior_mpg_mode;
+            hal.stream.enqueue_realtime_command(sys.mpg_mode ? CMD_STATUS_REPORT_ALL : CMD_STATUS_REPORT);
 		}
 
-		cold_start = false;
-
 		// Start Grbl main loop. Processes program inputs and executes them.
-		if(!(looping = protocol_main_loop()))
+		if(!(looping = protocol_main_loop(cold_start)))
 			looping = hal.driver_release == NULL || hal.driver_release();
 
+        cold_start = false;
 		sys_rt_exec_state = 0;
     }
 

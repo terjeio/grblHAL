@@ -4,7 +4,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2017-2018 Terje Io
+  Copyright (c) 2017-2019 Terje Io
   Some parts:
   Copyright (c) 2015 Arduino LLC.  All right reserved.
 
@@ -22,9 +22,6 @@
   License along with this library; if not, write to the Free Software
   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
-
-#ifndef __serial_h__
-#define __serial_h__
 
 #include "Arduino.h"
 
@@ -260,7 +257,7 @@ void serialRxFlush (void)
 //
 void serialRxCancel (void)
 {
-    rxbuffer.data[rxbuffer.head] = ASCII_EOL;
+    rxbuffer.data[rxbuffer.head] = ASCII_CAN;
     rxbuffer.tail = rxbuffer.head;
     rxbuffer.head = (rxbuffer.tail + 1) & (RX_BUFFER_SIZE - 1);
 }
@@ -381,7 +378,7 @@ static void SERIAL_IRQHandler (void)
 			rxbuffer.tail = rxbuffer.head;
 			hal.stream.read = serialGetC; // restore normal input
 
-		} else if(hal.protocol_process_realtime(data)) {
+		} else if(!hal.stream.enqueue_realtime_command(data)) {
 
 			bptr = (rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1);  // Get next head pointer
 
@@ -403,5 +400,3 @@ static void SERIAL_IRQHandler (void)
 			sercom->USART.INTENCLR.reg = SERCOM_USART_INTENCLR_DRE;  // when buffer empty
 	}
 }
-
-#endif // __serial_h__

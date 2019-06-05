@@ -5,7 +5,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2018 Terje Io
+  Copyright (c) 2018-2019 Terje Io
 
   Some parts of the code is based on example code by Espressif, in the public domain
 
@@ -147,7 +147,7 @@ void BTStreamFlush (void)
 IRAM_ATTR void BTStreamCancel (void)
 {
 //    BT_MUTEX_LOCK();
-    rxbuffer.data[rxbuffer.head] = CMD_RESET;
+    rxbuffer.data[rxbuffer.head] = ASCII_CAN;
     rxbuffer.tail = rxbuffer.head;
     rxbuffer.head = (rxbuffer.tail + 1) & (RX_BUFFER_SIZE - 1);
 //    UART_MUTEX_UNLOCK();
@@ -202,15 +202,15 @@ static void esp_spp_cb (esp_spp_cb_event_t event, esp_spp_cb_param_t *param)
 					rxbuffer.tail = rxbuffer.head;
 					hal.stream.read = BTStreamGetC; // restore normal input
 
-				} else if(hal.protocol_process_realtime && hal.protocol_process_realtime(c)) {
+				} else if(!hal.stream.enqueue_realtime_command(c)) {
 
 					uint32_t bptr = (rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1);  // Get next head pointer
 
-					if(bptr == rxbuffer.tail)                           // If buffer full
-						rxbuffer.overflow = 1;                          // flag overflow,
+					if(bptr == rxbuffer.tail)                   // If buffer full
+						rxbuffer.overflow = 1;                  // flag overflow,
 					else {
-						rxbuffer.data[rxbuffer.head] = (char)c;      // else add data to buffer
-						rxbuffer.head = bptr;                           // and update pointer
+						rxbuffer.data[rxbuffer.head] = (char)c; // else add data to buffer
+						rxbuffer.head = bptr;                   // and update pointer
 					}
 				}
 				param->data_ind.len--;

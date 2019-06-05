@@ -4,7 +4,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2018 Terje Io
+  Copyright (c) 2018-2019 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -163,7 +163,7 @@ void usb_execute_realtime (uint_fast16_t state)
 			usb_rxbuffer.backup = true;
 			usb_rxbuffer.tail = usb_rxbuffer.head;
 			hal.stream.read = usb_serialGetC; // restore normal input
-		} else if(hal.protocol_process_realtime(data) && usb_serialRxFree()) {
+		} else if(!hal.stream.enqueue_realtime_command(data) && usb_serialRxFree()) {
 			Serial.read();
 			uint32_t bptr = (usb_rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1);	// Get next head pointer,
 			usb_rxbuffer.data[usb_rxbuffer.head] = data;      				// add data to buffer

@@ -24,7 +24,7 @@
 
 // Grbl versioning system
 #define GRBL_VERSION "1.1f"
-#define GRBL_VERSION_BUILD "20190523"
+#define GRBL_VERSION_BUILD "20190601"
 
 // Define standard libraries used by Grbl.
 #include <math.h>
@@ -58,6 +58,7 @@
 #include "system.h"
 #include "override.h"
 #include "sleep.h"
+#include "stream.h"
 
 // ---------------------------------------------------------------------------------------
 // COMPILE-TIME ERROR CHECKING OF DEFINE VALUES:
