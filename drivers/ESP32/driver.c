@@ -1051,24 +1051,24 @@ static bool driver_setting (uint_fast16_t param, float value, char *svalue)
 
 	if(svalue) switch(param) {
 
-		case 71:
+		case Settings_WiFiSSID:
 			claimed = strlcpy(driver_settings.wifi.ssid, svalue, sizeof(driver_settings.wifi.ssid)) <= sizeof(driver_settings.wifi.ssid);
 			break;
 
-		case 72:
+		case Settings_WiFiPassword:
 			claimed = strlcpy(driver_settings.wifi.password, svalue, sizeof(driver_settings.wifi.password)) <= sizeof(driver_settings.wifi.password);
 			break;
 
-		case 73:
+		case Settings_WiFiPort:
 			if((claimed = (value != NAN && value > 0.0f && value < 65536.0f)))
 				driver_settings.wifi.port = (uint16_t)value;
 			break;
 
-		case 74:
+		case Settings_BlueToothDeviceName:
 			claimed = strlcpy(driver_settings.bluetooth.device_name, svalue, sizeof(driver_settings.bluetooth.device_name)) <= sizeof(driver_settings.bluetooth.device_name);
 			break;
 
-		case 75:
+		case Settings_BlueToothServiceName:
 			claimed = strlcpy(driver_settings.bluetooth.service_name, svalue, sizeof(driver_settings.bluetooth.service_name)) <= sizeof(driver_settings.bluetooth.service_name);
 			break;
 	}
@@ -1102,13 +1102,13 @@ static void driver_settings_report (bool axis_setting, axis_setting_type_t setti
     	keypad_settings_report(axis_setting, setting_type, axis_idx);
 #endif
 #if WIFI_ENABLE
-		report_string_setting(71, driver_settings.wifi.ssid);
-		report_string_setting(72, driver_settings.wifi.password);
-		report_uint_setting(73, driver_settings.wifi.port);
+		report_string_setting(Settings_WiFiSSID, driver_settings.wifi.ssid);
+		report_string_setting(Settings_WiFiPassword, driver_settings.wifi.password);
+		report_uint_setting(Settings_WiFiPort, driver_settings.wifi.port);
 #endif
 #if BLUETOOTH_ENABLE
-		report_string_setting(74, driver_settings.bluetooth.device_name);
-		report_string_setting(75, driver_settings.bluetooth.service_name);
+		report_string_setting(Settings_BlueToothDeviceName, driver_settings.bluetooth.device_name);
+		report_string_setting(Settings_BlueToothServiceName, driver_settings.bluetooth.service_name);
 #endif
     }
 }
