@@ -158,7 +158,7 @@ void serialRxCancel (void)
 //
 // Attempt to send a character bypassing buffering
 //
-static inline bool serialPutCNonBlocking (const char c)
+inline static bool serialPutCNonBlocking (const char c)
 {
     bool ok;
 

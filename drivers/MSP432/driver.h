@@ -40,7 +40,7 @@
 #define ATC_ENABLE             0 // do not change!
 #define MPG_MODE_ENABLE        1 // Additional serial input for MPG (with GPIO input for enable)
 #define LIMITS_OVERRIDE_ENABLE 1 // Adds input for overriding limit switches
-#define CNC_BOOSTERPACK        1 // do not change!
+#define CNC_BOOSTERPACK        0 // do not change!
 
 #if CNC_BOOSTERPACK
   #define EEPROM_ENABLE           1 // only change if BoosterPack does not have EEPROM mounted

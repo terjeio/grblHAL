@@ -422,7 +422,7 @@ void settings_changed (settings_t *settings)
 
 #if DIRECTION_OUTMODE == GPIO_MAP
     for(i = 0; i < sizeof(dir_outmap) / sizeof(uint32_t); i++)
-        dir_outmap[i] = c_dir_outmap[i] ^ c_dir_outmap[settings->dir_invert.value];
+        dir_outmap[i] = c_dir_outmap[i] ^ c_dir_outmap[settings->steppers.dir_invert.value];
 #endif
 
     if(IOInitDone) {

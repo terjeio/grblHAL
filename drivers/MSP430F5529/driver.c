@@ -32,7 +32,7 @@
 
 static volatile uint16_t debounce_count = 0;
 static bool pwmEnabled = false, IOInitDone = false, busy = false;
-static axes_signals_t step_port_invert, dir_port_invert, next_step_outbits;
+static axes_signals_t next_step_outbits;
 static spindle_pwm_t spindle_pwm;
 static uint16_t step_pulse_ticks;
 static delay_t delay = { .ms = 0, .callback = NULL };
@@ -58,14 +58,14 @@ static void driver_delay_ms (uint32_t ms, void (*callback)(void))
 // NOTE: step_outbits are: bit0 -> X, bit1 -> Y, bit2 -> Z, needs to be mapped to physical pins by bit shifting or other means
 inline static void set_step_outputs (axes_signals_t step_outbits)
 {
-    STEP_PORT_OUT = (STEP_PORT_OUT & ~HWSTEP_MASK) | (step_outbits.value ^ step_port_invert.value) << 1;
+    STEP_PORT_OUT = (STEP_PORT_OUT & ~HWSTEP_MASK) | (step_outbits.mask ^ settings.steppers.step_invert.mask) << 1;
 }
 
 // Set stepper direction output pins
 // NOTE1: step_outbits are: bit0 -> X, bit1 -> Y, bit2 -> Z, needs to be mapped to physical pins by bit shifting or other means
 inline static void set_dir_outputs (axes_signals_t dir_outbits)
 {
-    DIRECTION_PORT_OUT = (DIRECTION_PORT_OUT & ~HWDIRECTION_MASK) | (dir_outbits.value ^ dir_port_invert.value);
+    DIRECTION_PORT_OUT = (DIRECTION_PORT_OUT & ~HWDIRECTION_MASK) | (dir_outbits.mask ^ settings.steppers.dir_invert.mask);
 }
 
 // Enable/disable stepper motors
@@ -379,9 +379,6 @@ static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t 
 // Configures perhipherals when settings are initialized or changed
 static void settings_changed (settings_t *settings)
 {
-    step_port_invert = settings->steppers.step_invert;
-    dir_port_invert = settings->steppers.dir_invert;
-
     hal.driver_cap.variable_spindle = spindle_precompute_pwm_values(&spindle_pwm, 3125000UL);
 
     if(IOInitDone) {
@@ -745,7 +742,7 @@ __interrupt void stepper_driver_isr (void)
 #pragma vector=PULSE_TIMER0_VECTOR
 __interrupt void stepper_pulse_isr (void)
 {
-    set_step_outputs(step_port_invert);
+    set_step_outputs(settings.steppers.step_invert);
     PULSE_TIMER_CTL &= ~(MC0|MC1);
 }
 

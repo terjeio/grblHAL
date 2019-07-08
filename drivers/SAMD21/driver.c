@@ -730,7 +730,7 @@ static bool driver_setup (settings_t *settings)
 #if SDCARD_ENABLE
 	pinMode(SD_CD_PIN, INPUT_PULLUP);
 
-// This does not work, the card detect pin is not intetrupt capable(!) and inserting a card causes a hard reset...
+// This does not work, the card detect pin is not interrupt capable(!) and inserting a card causes a hard reset...
 // The bootloader needs modifying for it to work? Or perhaps the schematic is plain wrong?
 // attachInterrupt(SD_CD_PIN, SD_IRQHandler, CHANGE);
 
