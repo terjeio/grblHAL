@@ -58,25 +58,16 @@ static void state_restore_conditions (planner_cond_t *condition, float rpm)
 {
     if(!settings.parking.flags.enabled || !park.restart_retract) {
 
-        if (gc_state.modal.spindle.on) {
-            if (settings.flags.laser_mode)
-            // When in laser mode, ignore spindle spin-up delay. Set to turn on laser when cycle starts.
-                sys.step_control.update_spindle_rpm = On;
-            else if(spindle_set_state(condition->spindle, rpm)) {
-                if(hal.driver_cap.spindle_at_speed) {
-                    while(!hal.spindle_get_state().at_speed)
-                        delay_sec(0.1f, DelayMode_SysSuspend);
-                } else
-                    delay_sec(SAFETY_DOOR_SPINDLE_DELAY, DelayMode_SysSuspend);
-            }
-        }
+        spindle_restore(condition->spindle, rpm);
 
         // Block if safety door re-opened during prior restore actions.
-        if (gc_state.modal.coolant.value) {
+        if (gc_state.modal.coolant.value != hal.coolant_get_state().value) {
             // NOTE: Laser mode will honor this delay. An exhaust system is often controlled by this pin.
             coolant_set_state(condition->coolant);
             delay_sec(SAFETY_DOOR_COOLANT_DELAY, DelayMode_SysSuspend);
         }
+
+        sys.override.spindle_stop.value = 0; // Clear spindle stop override states
     }
 }
 
@@ -124,7 +115,6 @@ bool initiate_hold (uint_fast16_t new_state)
 bool state_door_reopened (void)
 {
     return settings.parking.flags.enabled && park.restart_retract;
-
 }
 
 void update_state (uint_fast16_t rt_exec)
@@ -219,8 +209,41 @@ void set_state (uint_fast16_t new_state)
         case STATE_HOMING:
         case STATE_CHECK_MODE:
             sys.state = new_state;
+            sys.suspend = false;
             stateHandler = state_noop;
             break;
+    }
+}
+
+// Suspend manager. Controls spindle overrides in hold states.
+void state_suspend_manager (void)
+{
+    if(stateHandler != state_await_resume || !gc_state.modal.spindle.on)
+        return;
+
+    if (sys.override.spindle_stop.value) {
+
+        // Handles beginning of spindle stop
+        if (sys.override.spindle_stop.initiate) {
+            sys.override.spindle_stop.value = 0; // Clear stop override state
+            spindle_set_state((spindle_state_t){0}, 0.0f); // De-energize
+            sys.override.spindle_stop.enabled = On; // Set stop override state to enabled, if de-energized.
+        }
+
+        // Handles restoring of spindle state
+        if (sys.override.spindle_stop.restore) {
+            hal.report.feedback_message(Message_SpindleRestore);
+            if (settings.flags.laser_mode) // When in laser mode, ignore spindle spin-up delay. Set to turn on laser when cycle starts.
+                sys.step_control.update_spindle_rpm = On;
+            else
+                spindle_set_state(restore_condition.spindle, restore_spindle_rpm);
+            sys.override.spindle_stop.value = 0; // Clear stop override state
+        }
+
+    } else if (sys.step_control.update_spindle_rpm && hal.spindle_get_state().on) {
+        // Handles spindle state during hold. NOTE: Spindle speed overrides may be altered during hold state.
+        spindle_set_state(restore_condition.spindle, restore_spindle_rpm);
+        sys.step_control.update_spindle_rpm = Off;
     }
 }
 
@@ -236,6 +259,9 @@ static void state_idle (uint_fast16_t rt_exec)
         hal.stream.suspend_read(true); // Block reading from input stream until tool change state is acknowledged
         set_state(STATE_TOOL_CHANGE);
     }
+
+    if (rt_exec & EXEC_SLEEP)
+        set_state(STATE_SLEEP);
 }
 
 static void state_cycle (uint_fast16_t rt_exec)
@@ -358,18 +384,7 @@ static void state_await_hold (uint_fast16_t rt_exec)
                 break;
 
             default:
-                // Feed hold manager. Controls spindle stop override states.
-                // NOTE: Hold ensured as completed by condition check at the beginning of suspend routine.
-                // Handles beginning of spindle stop
-                if (sys.override.spindle_stop.initiate) {
-                    sys.override.spindle_stop.value = 0; // Clear stop override state
-                    if (gc_state.modal.spindle.on) {
-                        hal.spindle_set_state((spindle_state_t){0}, 0.0f); // De-energize
-                        sys.override.spindle_stop.enabled = On; // Set stop override state to enabled, if de-energized.
-                    }
-                }
                 break;
-
         }
 
         if(!handler_changed) {
@@ -401,8 +416,10 @@ static void state_await_resume (uint_fast16_t rt_exec)
             case STATE_TOOL_CHANGE:
                 break;
 
-            // Resume door state when parking motion has retracted and door has been closed.
             case STATE_SLEEP:
+                break;
+
+            // Resume door state when parking motion has retracted and door has been closed.
             case STATE_SAFETY_DOOR:
 
                 if(settings.parking.flags.enabled) {
@@ -431,35 +448,35 @@ static void state_await_resume (uint_fast16_t rt_exec)
                 break;
 
             default:
-                // Feed hold manager. Controls spindle stop override states.
-                // NOTE: Hold ensured as completed by condition check at the beginning of suspend routine.
-                if (sys.override.spindle_stop.value) {
-                    // Handles restoring of spindle state
-                    if (sys.override.spindle_stop.restore || sys.override.spindle_stop.restore_cycle) {
-                        if (gc_state.modal.spindle.on) {
-                            hal.report.feedback_message(Message_SpindleRestore);
-                            if (settings.flags.laser_mode) // When in laser mode, ignore spindle spin-up delay. Set to turn on laser when cycle starts.
-                                sys.step_control.update_spindle_rpm = On;
-                            else
-                                spindle_set_state(restore_condition.spindle, restore_spindle_rpm);
-                        }
-                        sys.override.spindle_stop.value = 0; // Clear stop override state
+                if (!settings.flags.restore_after_feed_hold) {
+                    if(!hal.spindle_get_state().on) {
+                        gc_state.spindle.rpm = 0.0f;
+                        gc_state.modal.spindle.on = gc_state.modal.spindle.ccw = Off;
                     }
-                } else if (sys.step_control.update_spindle_rpm) {
-                    // Handles spindle state during hold. NOTE: Spindle speed overrides may be altered during hold state.
-                    // NOTE: sys.step_control.update_spindle_rpm is automatically reset upon resume in step generator.
-                    spindle_set_state(restore_condition.spindle, restore_spindle_rpm);
-                    sys.step_control.update_spindle_rpm = Off;
+                } else {
+                    if (restore_condition.spindle.on != hal.spindle_get_state().on) {
+                        hal.report.feedback_message(Message_SpindleRestore);
+                        spindle_restore(restore_condition.spindle, restore_spindle_rpm);
+                    }
+                    if (gc_state.modal.coolant.value != hal.coolant_get_state().value) {
+                        // NOTE: Laser mode will honor this delay. An exhaust system is often controlled by this pin.
+                        coolant_set_state(restore_condition.coolant);
+                        delay_sec(SAFETY_DOOR_COOLANT_DELAY, DelayMode_SysSuspend);
+                    }
                 }
+                sys.override.spindle_stop.value = 0; // Clear spindle stop override states
                 break;
         }
 
         // Restart cycle if there is no further processing to take place
-        if(!handler_changed) {
+        if(!(handler_changed || sys.state == STATE_SLEEP)) {
             set_state(STATE_IDLE);
             set_state(STATE_CYCLE);
         }
     }
+
+    if (rt_exec & EXEC_SLEEP)
+        set_state(STATE_SLEEP);
 }
 
 static void restart_retract (void)

@@ -32,9 +32,12 @@ void spindle_set_override (uint_fast8_t speed_override)
     speed_override = max(min(speed_override, MAX_SPINDLE_RPM_OVERRIDE), MIN_SPINDLE_RPM_OVERRIDE);
 
     if ((uint8_t)speed_override != sys.override.spindle_rpm) {
-        sys.step_control.update_spindle_rpm = On;
         sys.override.spindle_rpm = (uint8_t)speed_override;
-        sys.report.spindle = On; // Set to report change immediately
+        if(sys.state == STATE_IDLE)
+            spindle_set_state(gc_state.modal.spindle, gc_state.spindle.rpm);
+        else
+            sys.step_control.update_spindle_rpm = On;
+       sys.report.overrides = On; // Set to report change immediately
     }
 }
 
@@ -73,16 +76,41 @@ bool spindle_sync (spindle_state_t state, float rpm)
         // Empty planner buffer to ensure spindle is set when programmed.
         if((ok = protocol_buffer_synchronize()) && spindle_set_state(state, rpm) && !at_speed) {
             float delay = 0.0f;
-            while(!sys.abort && !(at_speed = hal.spindle_get_state().at_speed)) {
+            while(!(at_speed = hal.spindle_get_state().at_speed)) {
                 delay_sec(0.1f, DelayMode_Dwell);
                 delay += 0.1f;
-                if(delay > 3.0f) // TODO: add configurable timeout?
+                if(ABORTED || delay >= SAFETY_DOOR_SPINDLE_DELAY)
                     break;
             }
         }
     }
 
     return ok && at_speed;
+}
+
+// Restore spindle running state with direction, enable, spindle RPM and appropriate delay.
+bool spindle_restore (spindle_state_t state, float rpm)
+{
+    bool ok = true;
+
+    if(settings.flags.laser_mode) // When in laser mode, ignore spindle spin-up delay. Set to turn on laser when cycle starts.
+        sys.step_control.update_spindle_rpm = On;
+    else { // TODO: add check for current spindle state matches restore state?
+        spindle_set_state(state, rpm);
+        if((ok = !hal.driver_cap.spindle_at_speed))
+            delay_sec(SAFETY_DOOR_SPINDLE_DELAY, DelayMode_Dwell);
+        else {
+            float delay = 0.0f;
+            while(!(ok = hal.spindle_get_state().at_speed)) {
+                delay_sec(0.1f, DelayMode_Dwell);
+                delay += 0.1f;
+                if(ABORTED || delay >= SAFETY_DOOR_SPINDLE_DELAY)
+                    break;
+            }
+        }
+    }
+
+    return ok;
 }
 
 // Calculate and set programmed RPM according to override and max/min limits

@@ -125,7 +125,7 @@ static char *get_rate_value_inch (float value)
 
 // Convert axes signals bits to string representation
 // NOTE: returns pointer to null terminator!
-static inline char *axis_signals_tostring (char *buf, axes_signals_t signals)
+inline static char *axis_signals_tostring (char *buf, axes_signals_t signals)
 {
     if(signals.x)
         *buf++ = 'X';
@@ -363,7 +363,7 @@ void report_grbl_settings (void)
     report_uint_setting(Setting_RestoreOverrides, settings.flags.restore_overrides);
     report_uint_setting(Setting_IgnoreDoorWhenIdle, settings.flags.safety_door_ignore_when_idle);
     report_uint_setting(Setting_SleepEnable, settings.flags.sleep_enable);
-    report_uint_setting(Setting_DisableLaserDuringHold, settings.flags.disable_laser_during_hold);
+    report_uint_setting(Setting_HoldActions, (settings.flags.disable_laser_during_hold ? bit(0) : 0) | (settings.flags.restore_after_feed_hold ? bit(1) : 0));
     report_uint_setting(Setting_ForceInitAlarm, settings.flags.force_initialization_alarm);
     report_uint_setting(Setting_ProbingFeedOverride, settings.flags.allow_probing_feed_override);
 
@@ -724,6 +724,9 @@ void report_build_info (char *line)
 
     strcpy(buf, "[NEWOPT:");
 
+    if(hal.driver_cap.program_stop)
+        strcat(buf, "OS,");
+
     if(hal.driver_cap.sd_card)
         strcat(buf, "SD,");
 
@@ -918,7 +921,7 @@ void report_realtime_status (void)
                     *append++ = 'E';
                 if (ctrl_pin_state.block_delete && sys.flags.block_delete_enabled)
                     *append++ = 'B';
-                if (ctrl_pin_state.stop_disable)
+                if (hal.driver_cap.program_stop ? ctrl_pin_state.stop_disable : sys.flags.optional_stop_disable)
                     *append++ = 'T';
             }
             *append = '\0';

@@ -73,6 +73,7 @@
 #define CMD_JOG_CANCEL  0x85
 //#define CMD_DEBUG_REPORT 0x86 // Only when DEBUG enabled, sends debug report in '{}' braces.
 #define CMD_STATUS_REPORT_ALL 0x87
+#define CMD_OPTIONAL_STOP_TOGGLE 0x88
 #define CMD_OVERRIDE_FEED_RESET 0x90         // Restores feed override value to 100%.
 #define CMD_OVERRIDE_FEED_COARSE_PLUS 0x91
 #define CMD_OVERRIDE_FEED_COARSE_MINUS 0x92
@@ -356,13 +357,13 @@
 #define FORCE_BUFFER_SYNC_DURING_WCO_CHANGE 1 // Default 1 (enabled). Set to 0 to disable.
 
 // Used if sleep mode is enabled
-#define SLEEP_DURATION 5.0f // Float (0.25 - 61.0) seconds before sleep mode is executed.
+#define SLEEP_DURATION 5.0f // Number of minutes before sleep mode is entered.
 
 // Max length of gcode lines (blocks) stored in EEPROM, do not set > 80 unless EEPROM space is reallocated
 #define MAX_STORED_LINE_LENGTH 80
 
 // Number of tools in ATC tool table, comment out to disable
-//#define N_TOOLS 8
+#define N_TOOLS 8
 
 // Enable EEPROM emulation/buffering in RAM (allocated from heap)
 // Can be used for MCUs with no EEPROM or as buffer in order to avoid writing to EEPROM when not in idle state.

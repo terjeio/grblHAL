@@ -183,6 +183,11 @@
 // to ensure the laser doesn't inadvertently remain powered while at a stop and cause a fire.
 #define DEFAULT_DISABLE_LASER_DURING_HOLD 1 // Default enabled. Set to 0 to disable.
 
+// This option is for what should happen on resume from feed hold.
+// Default action is to restore spindle and coolant status (if overridden), this contradicts the
+// behaviour of industrial controllers but is in line with earlier versions of Grbl.
+#define DEFAULT_RESTORE_AFTER_FEED_HOLD 1 // Default enabled. Set to 0 to disable.
+
 // When Grbl powers-cycles or is hard reset with the MCU reset button, Grbl boots up with no ALARM
 // by default. This is to make it as simple as possible for new users to start using Grbl. When homing
 // is enabled and a user has installed limit switches, Grbl will boot up in an ALARM state to indicate
@@ -201,6 +206,39 @@
 // the user to perform the homing cycle (or override the locks) before doing anything else. This is
 // mainly a safety feature to remind the user to home, since position is unknown to Grbl.
 #define DEFAULT_HOMING_INIT_LOCK 0 // Default disabled. Set to 1 to enable.
+
+// Define the homing cycle patterns with bitmasks. The homing cycle first performs a search mode
+// to quickly engage the limit switches, followed by a slower locate mode, and finished by a short
+// pull-off motion to disengage the limit switches. The following HOMING_CYCLE_x defines are executed
+// in order starting with suffix 0 and completes the homing routine for the specified-axes only. If
+// an axis is omitted from the defines, it will not home, nor will the system update its position.
+// Meaning that this allows for users with non-standard cartesian machines, such as a lathe (x then z,
+// with no y), to configure the homing cycle behavior to their needs.
+// NOTE: The homing cycle is designed to allow sharing of limit pins, if the axes are not in the same
+// cycle, but this requires some pin settings changes in cpu_map.h file. For example, the default homing
+// cycle can share the Z limit pin with either X or Y limit pins, since they are on different cycles.
+// By sharing a pin, this frees up a precious IO pin for other purposes. In theory, all axes limit pins
+// may be reduced to one pin, if all axes are homed with seperate cycles, or vice versa, all three axes
+// on separate pin, but homed in one cycle. Also, it should be noted that the function of hard limits
+// will not be affected by pin sharing.
+// NOTE: Defaults are set for a traditional 3-axis CNC machine. Z-axis first to clear, followed by X & Y.
+#if DEFAULT_HOMING_ENABLE
+#define HOMING_CYCLE_0 (Z_AXIS_BIT)             // REQUIRED: First move Z to clear workspace.
+#define HOMING_CYCLE_1 (X_AXIS_BIT|Y_AXIS_BIT)  // OPTIONAL: Then move X,Y at the same time.
+#define HOMING_CYCLE_2 0                        // OPTIONAL: Uncomment and add axes mask to enable
+#if N_AXIS > 3
+#define HOMING_CYCLE_3 0                        // OPTIONAL: Uncomment and add axes mask to enable
+#define HOMING_CYCLE_4 0                        // OPTIONAL: Uncomment and add axes mask to enable
+#define HOMING_CYCLE_5 0                        // OPTIONAL: Uncomment and add axes mask to enable
+#endif
+#else
+#define HOMING_CYCLE_0 0                        // Do not change
+#define HOMING_CYCLE_1 0                        // Do not change
+#define HOMING_CYCLE_2 0                        // Do not change
+#define HOMING_CYCLE_3 0                        // Do not change
+#define HOMING_CYCLE_4 0                        // Do not change
+#define HOMING_CYCLE_5 0                        // Do not change
+#endif
 
 // Enables and configures parking motion methods upon a safety door state. Primarily for OEMs
 // that desire this feature for their integrated machines. At the moment, Grbl assumes that

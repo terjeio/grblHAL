@@ -41,6 +41,7 @@ const settings_t defaults = {
     .flags.invert_probe_pin = DEFAULT_INVERT_PROBE_PIN,
     .flags.sleep_enable = DEFAULT_SLEEP_ENABLE,
     .flags.disable_laser_during_hold = DEFAULT_DISABLE_LASER_DURING_HOLD,
+    .flags.restore_after_feed_hold = DEFAULT_RESTORE_AFTER_FEED_HOLD,
     .flags.force_initialization_alarm = DEFAULT_FORCE_INITIALIZATION_ALARM,
     .flags.disable_probe_pullup = DISABLE_PROBE_PIN_PULL_UP,
     .flags.allow_probing_feed_override = ALLOW_FEED_OVERRIDE_DURING_PROBE_CYCLES,
@@ -64,9 +65,9 @@ const settings_t defaults = {
     .homing.debounce_delay = DEFAULT_HOMING_DEBOUNCE_DELAY,
     .homing.pulloff = DEFAULT_HOMING_PULLOFF,
     .homing.locate_cycles = DEFAULT_N_HOMING_LOCATE_CYCLE,
-    .homing.cycle[X_AXIS].mask = 0, // indexing references of these are a bit of a misnomer...
-    .homing.cycle[Y_AXIS].mask = 0,
-    .homing.cycle[Z_AXIS].mask = 0,
+    .homing.cycle[0].mask = HOMING_CYCLE_0,
+    .homing.cycle[1].mask = HOMING_CYCLE_1,
+    .homing.cycle[2].mask = HOMING_CYCLE_2,
 
     .status_report.buffer_state = REPORT_FIELD_BUFFER_STATE,
     .status_report.line_numbers = REPORT_FIELD_LINE_NUMBERS,
@@ -120,21 +121,21 @@ const settings_t defaults = {
     .max_rate[A_AXIS] = DEFAULT_A_MAX_RATE,
     .acceleration[A_AXIS] = DEFAULT_A_ACCELERATION,
     .max_travel[A_AXIS] = (-DEFAULT_A_MAX_TRAVEL),
-    .homing.cycle[A_AXIS] = 0,
+    .homing.cycle[3].mask = HOMING_CYCLE_3,
   #endif
   #ifdef B_AXIS
     .steps_per_mm[B_AXIS] = DEFAULT_B_STEPS_PER_MM,
     .max_rate[B_AXIS] = DEFAULT_B_MAX_RATE,
     .acceleration[B_AXIS] = DEFAULT_B_ACCELERATION,
     .max_travel[B_AXIS] = (-DEFAULT_B_MAX_TRAVEL),
-    .homing.cycle[B_AXIS] = 0,
+    .homing.cycle[4].mask = HOMING_CYCLE_4,
   #endif
   #ifdef C_AXIS
     .steps_per_mm[C_AXIS] = DEFAULT_C_STEPS_PER_MM,
     .acceleration[C_AXIS] = DEFAULT_C_ACCELERATION,
     .max_rate[C_AXIS] = DEFAULT_C_MAX_RATE,
     .max_travel[C_AXIS] = (-DEFAULT_C_MAX_TRAVEL),
-    .homing.cycle[C_AXIS] = 0,
+    .homing.cycle[5].mask = HOMING_CYCLE_5,
   #endif
 
     .parking.flags.enabled = DEFAULT_PARKING_ENABLE,
@@ -529,8 +530,9 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
                 settings.flags.sleep_enable = int_value != 0;
                 break;
 
-            case Setting_DisableLaserDuringHold:
-                settings.flags.disable_laser_during_hold = int_value != 0;
+            case Setting_HoldActions:
+                settings.flags.disable_laser_during_hold =  bit_istrue(int_value, bit(0));
+                settings.flags.restore_after_feed_hold =  bit_istrue(int_value, bit(1));
                 break;
 
             case Setting_ForceInitAlarm:

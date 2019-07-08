@@ -62,7 +62,7 @@ static scale_factor_t scale_factor;
 static gc_thread_data thread;
 
 // Simple hypotenuse computation function.
-inline float hypot_f (float x, float y)
+inline static float hypot_f (float x, float y)
 {
     return sqrtf(x*x + y*y);
 }
@@ -110,7 +110,7 @@ float gc_get_offset (uint_fast8_t idx)
     return gc_state.modal.coord_system.xyz[idx] + gc_state.g92_coord_offset[idx] + gc_state.tool_length_offset[idx];
 }
 
-inline float gc_get_block_offset (parser_block_t *gc_block, uint_fast8_t idx)
+inline static float gc_get_block_offset (parser_block_t *gc_block, uint_fast8_t idx)
 {
     return gc_block->modal.coord_system.xyz[idx] + gc_state.g92_coord_offset[idx] + gc_state.tool_length_offset[idx];
 }
@@ -462,7 +462,7 @@ status_code_t gc_execute_block(char *block, char *message)
                                 break;
 
                             case 1: // M1 - program pause
-                                if(hal.driver_cap.program_stop && !hal.system_control_get_state().stop_disable)
+                                if(hal.driver_cap.program_stop ? !hal.system_control_get_state().stop_disable : !sys.flags.optional_stop_disable)
                                     gc_block.modal.program_flow = ProgramFlow_OptionalStop;
                                 break;
 

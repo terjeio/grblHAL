@@ -267,6 +267,10 @@ bool protocol_main_loop(bool cold_start)
             return !sys.flags.exit;                   // Bail to main() program loop to reset system.
 
         sys.cancel = false;
+
+        // Check for sleep conditions and execute auto-park, if timeout duration elapses.
+        if(settings.flags.sleep_enable)
+            sleep_check();
     }
 }
 
@@ -391,6 +395,10 @@ bool protocol_exec_rt_system ()
 
         // Execute system abort.
         if (rt_exec & EXEC_RESET) {
+
+            if(hal.driver_reset)
+                hal.driver_reset();
+
             sys.abort = !hal.system_control_get_state().e_stop;  // Only place this is set true.
             return !sys.abort; // Nothing else to do but exit.
         }
@@ -566,7 +574,7 @@ bool protocol_exec_rt_system ()
                 gc_state.modal.coolant = coolant_state;
             }
 
-            if (spindle_stop && sys.state == STATE_HOLD) {
+            if (spindle_stop && sys.state == STATE_HOLD && gc_state.modal.spindle.on) {
                 // Spindle stop override allowed only while in HOLD state.
                 // NOTE: Report flag is set in spindle_set_state() when spindle stop is executed.
                 if (!sys.override.spindle_stop.value)
@@ -596,6 +604,9 @@ static void protocol_exec_rt_suspend ()
 
         if (sys.abort)
             return;
+
+        // Handle spindle overrides during suspend
+        state_suspend_manager();
 
         // If door closed keep issuing cycle start requests until resumed
         if(sys.state == STATE_SAFETY_DOOR && !hal.system_control_get_state().safety_door_ajar)
@@ -686,6 +697,11 @@ ISR_CODE bool protocol_enqueue_realtime_command (char c)
         case CMD_GCODE_REPORT:
             system_set_exec_state_flag(EXEC_GCODE_REPORT);
             drop = true;
+            break;
+
+        case CMD_OPTIONAL_STOP_TOGGLE:
+            if(!hal.driver_cap.program_stop) // Not available as realtime command if HAL supports physical switch
+                sys.flags.optional_stop_disable = !sys.flags.optional_stop_disable;
             break;
 
         case CMD_PID_REPORT:

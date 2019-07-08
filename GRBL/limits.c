@@ -93,26 +93,27 @@ static void limits_set_machine_positions (axes_signals_t cycle)
 // NOTE: Only the abort realtime command can interrupt this process.
 static bool limits_homing_cycle (axes_signals_t cycle)
 {
-    if (sys.abort)
-        return false;// Block if system reset has been issued.
+    if (ABORTED) // Block if system reset has been issued.
+        return false;
 
-    // Initialize plan data struct for homing motion. Spindle and coolant are disabled.
-    plan_line_data_t plan_data;
-    plan_line_data_t *pl_data = &plan_data;
-    // Initialize variables used for homing computations.
+    bool approach = true;
     uint_fast8_t n_cycle = (2 * settings.homing.locate_cycles + 1);
-    uint_fast8_t step_pin[N_AXIS];
+    uint_fast8_t step_pin[N_AXIS], limit_state, n_active_axis;
     float target[N_AXIS];
     float max_travel = 0.0f;
-    bool approach = true;
     float homing_rate = settings.homing.seek_rate;
-    uint_fast8_t limit_state, n_active_axis;
     axes_signals_t axislock;
+    plan_line_data_t plan_data;
 
-    memset(pl_data,0,sizeof(plan_line_data_t));
-    pl_data->condition.system_motion = On;
-    pl_data->condition.no_feed_override = On;
-    pl_data->line_number = HOMING_CYCLE_LINE_NUMBER;
+    // Initialize plan data struct for homing motion.
+
+    memset(&plan_data, 0, sizeof(plan_line_data_t));
+    plan_data.condition.system_motion = On;
+    plan_data.condition.no_feed_override = On;
+    plan_data.line_number = HOMING_CYCLE_LINE_NUMBER;
+    memcpy(&plan_data.spindle, &gc_state.spindle, sizeof(spindle_t));
+    plan_data.condition.spindle = gc_state.modal.spindle;
+    plan_data.condition.coolant = gc_state.modal.coolant;
 
     uint_fast8_t idx = N_AXIS;
     do {
@@ -164,8 +165,8 @@ static bool limits_homing_cycle (axes_signals_t cycle)
         sys.homing_axis_lock.mask = axislock.mask;
 
         // Perform homing cycle. Planner buffer should be empty, as required to initiate the homing cycle.
-        pl_data->feed_rate = homing_rate; // Set current homing rate.
-        plan_buffer_line(target, pl_data); // Bypass mc_line(). Directly plan homing motion.
+        plan_data.feed_rate = homing_rate; // Set current homing rate.
+        plan_buffer_line(target, &plan_data); // Bypass mc_line(). Directly plan homing motion.
 
         sys.step_control.flags = 0;
         sys.step_control.execute_sys_motion = On; // Set to execute homing motion and clear existing flags.

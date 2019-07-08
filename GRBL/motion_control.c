@@ -368,7 +368,7 @@ void mc_canned_drill (motion_mode_t motion, float *target, plan_line_data_t *pl_
 }
 
 // Calculates depth-of-cut (DOC) for a given threading pass.
-inline float calc_thread_doc (uint_fast16_t pass, float cut_depth, float inv_degression)
+inline static float calc_thread_doc (uint_fast16_t pass, float cut_depth, float inv_degression)
 {
     return cut_depth * powf((float)pass, inv_degression);
 }
@@ -547,6 +547,14 @@ status_code_t mc_homing_cycle (axes_signals_t cycle)
 
     hal.limits_enable(false, true); // Disable hard limits pin change register for cycle duration
 
+    // Turn off spindle and coolant (and update parser state)
+    gc_state.spindle.rpm = 0.0f;
+    gc_state.modal.spindle.on = gc_state.modal.spindle.ccw = Off;
+    spindle_set_state(gc_state.modal.spindle, 0.0f);
+
+    gc_state.modal.coolant.mask = 0;
+    coolant_set_state(gc_state.modal.coolant);
+
     // -------------------------------------------------------------------------------------
     // Perform homing routine. NOTE: Special motion case. Only system reset works.
 
@@ -705,9 +713,6 @@ ISR_CODE void mc_reset ()
         // Kill spindle and coolant.
         hal.spindle_set_state((spindle_state_t){0}, 0.0f);
         hal.coolant_set_state((coolant_state_t){0});
-
-        if(hal.driver_reset)
-            hal.driver_reset();
 
         if(hal.stream.suspend_read)
             hal.stream.suspend_read(false);

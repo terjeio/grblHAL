@@ -38,7 +38,7 @@ typedef enum {
 typedef union {
     uint8_t flags;
     struct {
-        uint8_t recalculate        :1,
+        uint8_t velocity_profile   :1,
                 hold_partial_block :1,
                 parking            :1,
                 decel_override     :1,
@@ -473,7 +473,7 @@ void st_reset ()
 void st_update_plan_block_parameters ()
 {
     if (pl_block != NULL) { // Ignore if at start of a new block.
-        prep.recalculate.recalculate = On;
+        prep.recalculate.velocity_profile = On;
         pl_block->entry_speed_sqr = prep.current_speed * prep.current_speed; // Update entry speed.
         pl_block = NULL; // Flag st_prep_segment() to load and check active velocity profile.
     }
@@ -491,7 +491,7 @@ void st_parking_setup_buffer()
     }
     // Set flags to execute a parking motion
     prep.recalculate.parking = On;
-    prep.recalculate.recalculate = Off;
+    prep.recalculate.velocity_profile = Off;
     pl_block = NULL; // Always reset parking motion to reload new block.
 }
 
@@ -506,7 +506,7 @@ void st_parking_restore_buffer()
         prep.dt_remainder = prep.last_dt_remainder;
         prep.steps_per_mm = prep.last_steps_per_mm;
         prep.recalculate.flags = 0;
-        prep.recalculate.hold_partial_block = prep.recalculate.recalculate = On;
+        prep.recalculate.hold_partial_block = prep.recalculate.velocity_profile = On;
         prep.req_mm_increment = REQ_MM_INCREMENT_SCALAR / prep.steps_per_mm; // Recompute this value.
     } else
         prep.recalculate.flags = 0;
@@ -546,10 +546,10 @@ void st_prep_buffer()
                 return; // No planner blocks. Exit.
 
             // Check if we need to only recompute the velocity profile or load a new block.
-            if (prep.recalculate.recalculate) {
+            if (prep.recalculate.velocity_profile) {
                 if(settings.parking.flags.enabled) {
                     if (prep.recalculate.parking)
-                        prep.recalculate.recalculate = Off;
+                        prep.recalculate.velocity_profile = Off;
                     else
                         prep.recalculate.flags = 0;
                 } else
@@ -602,11 +602,13 @@ void st_prep_buffer()
                 } else
                     prep.current_speed = sqrtf(pl_block->entry_speed_sqr);
 
-                // Setup laser mode variables. PWM rate adjusted motions will always complete a motion with the
+                // Setup laser mode variables. RPM rate adjusted motions will always complete a motion with the
                 // spindle off.
-                if ((st_prep_block->dynamic_rpm = pl_block->condition.is_rpm_rate_adjusted || pl_block->condition.is_rpm_pos_adjusted))
-                    // Pre-compute inverse programmed rate to speed up PWM updating per step segment.
+                if ((st_prep_block->dynamic_rpm = pl_block->condition.is_rpm_rate_adjusted))
+                    // Pre-compute inverse programmed rate to speed up RPM updating per step segment.
                     prep.inv_feedrate = pl_block->condition.is_laser_ppi_mode ? 1.0f : 1.0f / pl_block->programmed_rate;
+                else
+                    st_prep_block->dynamic_rpm = pl_block->condition.is_rpm_pos_adjusted;
             }
 
             /* ---------------------------------------------------------------------------------
@@ -701,7 +703,9 @@ void st_prep_buffer()
                     prep.maximum_speed = prep.exit_speed;
                 }
             }
-            sys.step_control.update_spindle_rpm = On; // Force update whenever updating block. TODO: On -> !pl_block->condition.rapid_motion
+
+            if(sys.state != STATE_HOMING)
+                sys.step_control.update_spindle_rpm |= settings.flags.laser_mode; // Force update whenever updating block in laser mode.
         }
 
         // Initialize new segment

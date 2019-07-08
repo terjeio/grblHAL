@@ -88,12 +88,12 @@ static const emap_t target[] = {
     {0, 0, 0} // list termination - do not remove
 };
 
-static inline uint8_t ram_get_byte (uint32_t addr)
+inline static uint8_t ram_get_byte (uint32_t addr)
 {
     return noepromdata[addr];
 }
 
-static inline void ram_put_byte (uint32_t addr, uint8_t new_value)
+inline static void ram_put_byte (uint32_t addr, uint8_t new_value)
 {
     dirty = dirty || noepromdata[addr] != new_value;
     noepromdata[addr] = new_value;

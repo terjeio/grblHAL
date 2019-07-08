@@ -193,14 +193,14 @@ typedef struct {
 typedef union {
     uint8_t value;
     struct {
-        uint8_t mpg_mode             :1, // MPG mode flag. Set when switched to secondary input stream. (unused for now)
-                probe_succeeded      :1, // Tracks if last probing cycle was successful.
-                soft_limit           :1, // Tracks soft limit errors for the state machine.
-                exit                 :1, // System exit flag. Used in combination with abort to terminate main loop.
-                block_delete_enabled :1, // Set to true to enable block delete
-                feed_hold_pending    :1,
-                delay_overrides      :1,
-                reserved             :2; // move block_input_stream here? - Input stream block flag. Set to true to discard all characters except real-time commands.
+        uint8_t mpg_mode              :1, // MPG mode flag. Set when switched to secondary input stream. (unused for now)
+                probe_succeeded       :1, // Tracks if last probing cycle was successful.
+                soft_limit            :1, // Tracks soft limit errors for the state machine.
+                exit                  :1, // System exit flag. Used in combination with abort to terminate main loop.
+                block_delete_enabled  :1, // Set to true to enable block delete
+                feed_hold_pending     :1,
+                delay_overrides       :1,
+                optional_stop_disable :1; // Set to true to disable M1 (optional stop), via realtime command
     };
 } system_flags_t;
 

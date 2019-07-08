@@ -2,7 +2,7 @@
   sleep.c - determines and executes sleep procedures
   Part of Grbl
 
-  Copyright (c) 2018 Terje Io
+  Copyright (c) 2018-2019 Terje Io
   Copyright (c) 2016 Sungeun K. Jeon
 
   Grbl is free software: you can redistribute it and/or modify
@@ -33,7 +33,7 @@ static void sleep_execute()
 {
     // Enable sleep timeout
     slumber = true;
-    hal.delay_ms((uint32_t)(SLEEP_DURATION * 1000.0f), fall_asleep);
+    hal.delay_ms((uint32_t)(SLEEP_DURATION * 1000.0f * 60.0f), fall_asleep);
 
     // Fetch current number of buffered characters in input stream buffer.
     uint16_t rx_initial = hal.stream.get_rx_buffer_available();
@@ -42,7 +42,7 @@ static void sleep_execute()
         // Monitor for any new input stream data or external events (queries, buttons, alarms) to exit.
         if ((hal.stream.get_rx_buffer_available() != rx_initial) || sys_rt_exec_state || sys_rt_exec_alarm ) {
             // Disable sleep timeout and return to normal operation.
-            hal.delay_ms(0, 0);
+            hal.delay_ms(0, NULL);
             return;
         }
     } while(slumber);
@@ -65,13 +65,22 @@ void sleep_check()
     // has any powered components enabled.
     // NOTE: With overrides or in laser mode, modal spindle and coolant state are not guaranteed. Need
     // to directly monitor and record running state during parking to ensure proper function.
-    if ((gc_state.modal.spindle.value || gc_state.modal.coolant.value) && !sys.steppers_deenergize) {
-        if (sys.state == STATE_IDLE) {
-            sleep_execute();
-        } else if ((sys.state & STATE_HOLD) && (sys.holding_state == Hold_Complete)) {
-            sleep_execute();
-        } else if (sys.state == STATE_SAFETY_DOOR && (sys.parking_state == Parking_DoorAjar)) {
-            sleep_execute();
+    if (!sys.steppers_deenergize && (gc_state.modal.spindle.value || gc_state.modal.coolant.value)) {
+        switch(sys.state) {
+
+            case STATE_IDLE:
+                sleep_execute();
+                break;
+
+            case STATE_HOLD:
+                if(sys.holding_state == Hold_Complete)
+                    sleep_execute();
+                break;
+
+            case STATE_SAFETY_DOOR:
+                if(sys.parking_state == Parking_DoorAjar)
+                    sleep_execute();
+                break;
         }
     }
 }

@@ -24,3 +24,4 @@
 void set_state (uint_fast16_t state);
 void update_state (uint_fast16_t rt_exec);
 bool state_door_reopened (void);
+void state_suspend_manager (void);

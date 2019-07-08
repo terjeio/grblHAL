@@ -62,10 +62,11 @@ typedef struct {
     volatile uint32_t index_count;
     volatile uint32_t pulse_count;
     float rpm;
-    float rpm_programmed;
     float rpm_low_limit;
     float rpm_high_limit;
     float angular_position; // Number of revolutions since last reset
+    float rpm_programmed;
+    spindle_state_t state_programmed;
 } spindle_data_t;
 
 typedef enum {
@@ -88,6 +89,9 @@ bool spindle_set_state (spindle_state_t state, float rpm);
 
 // Spindle speed calculation and limit handling
 float spindle_set_rpm (float rpm, uint8_t speed_override);
+
+// Restore spindle running state with direction, enable, spindle RPM and appropriate delay.
+bool spindle_restore (spindle_state_t state, float rpm);
 
 //
 // The following functions are not called by the core, may be called by driver code.

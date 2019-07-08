@@ -153,7 +153,7 @@ typedef enum {
     Setting_RestoreOverrides = 60,
     Setting_IgnoreDoorWhenIdle = 61,
     Setting_SleepEnable = 62,
-    Setting_DisableLaserDuringHold = 63,
+    Setting_HoldActions = 63,
     Setting_ForceInitAlarm = 64,
     Setting_ProbingFeedOverride = 65,
 
@@ -224,7 +224,8 @@ typedef union {
                 wifi_ap_mode                    :1,
                 allow_probing_feed_override     :1,
                 report_alarm_substate           :1,
-                unassigned                      :2,
+                restore_after_feed_hold         :1,
+                unassigned                      :1,
                 force_buffer_sync_on_wco_change :1,
                 lathe_mode                      :1;
     };
