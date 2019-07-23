@@ -1,12 +1,12 @@
 /*
  * trinamic2130.h - register and message (datagram) descriptors for Trinamic TMC2130 stepper driver
  *
- * v0.0.1 / 2018-11-14 / ©Io Engineering / Terje
+ * v0.0.3 / 2019-07-23 / ©Io Engineering / Terje
  */
 
 /*
 
-Copyright (c) 2018, Terje Io
+Copyright (c) 2018-2019, Terje Io
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -44,6 +44,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 //#define TMC2130_COMPLETE // comment out for minimum set of registers
 
+#pragma pack(push, 1)
+
 typedef enum {
     TMC2130_Microsteps_1 = 1,
     TMC2130_Microsteps_2 = 2,
@@ -59,43 +61,50 @@ typedef enum {
 // default values
 
 // General
-#define TMC2130_F_CLK 13200000 // typical value @ 50C for internal osc - see datasheet for calibration procedure if required
-#define TMC2130_MICROSTEPS TMC2130_Microsteps_16
-#define TMC2130_R_SENSE 110
-#define TMC2130_CURRENT 500
+#define TMC2130_F_CLK 13200000      // typical value @ 50C for internal osc - see datasheet for calibration procedure if required
+#define TMC2130_MICROSTEPS TMC2130_Microsteps_4
+#define TMC2130_R_SENSE 110         // mOhm
+#define TMC2130_CURRENT 500         // mA RMS
 #define TMC2130_HOLD_CURRENT_PCT 50
+
 // CHOPCONF
-#define TMC2130_INTERPOLATE 0
-#define TMC2130_CONSTANT_OFF_TIME 5 // 5
-#define TMC2130_BLANK_TIME 1 // 24 = 1
-#define TMC2130_RANDOM_TOFF 1 // 1
-#define TMC2130_CHOPPER_MODE 1 // 1
-#if TMC2130_CHOPPER_MODE == 0
-#define TMC2130_HSTRT 3
-#define TMC2130_HEND 2
-#else
-#define TMC2130_FAST_DECAY_TIME 13 // 13
-#define TMC2130_SINE_WAVE_OFFSET 2 // 2 - hend
-#endif
+#define TMC2130_INTERPOLATE 1       // intpol: 0 = off, 1 = on
+#define TMC2130_CONSTANT_OFF_TIME 5 // toff: 1 - 15
+#define TMC2130_BLANK_TIME 1        // tbl: 0 = 16, 1 = 24, 2 = 36, 3 = 54 clocks
+#define TMC2130_RANDOM_TOFF 1       // rndtf: 0 = fixed, 1 = random
+#define TMC2130_CHOPPER_MODE 0      // chm: 0 = spreadCycle, 1 = constant off time
+// TMC2130_CHOPPER_MODE 0 defaults
+#define TMC2130_HSTRT 3             // hstrt: 0 … 7
+#define TMC2130_HEND 2              // hend: -3 … 12
+// TMC2130_CHOPPER_MODE 1 defaults
+#define TMC2130_FAST_DECAY_TIME 13  // fd3 & hstrt: 0 - 15
+#define TMC2130_SINE_WAVE_OFFSET 2  // hend: -3 … 12
+
 // IHOLD_IRUN
-#define TMC2130_IRUN 31 // max. current
+#define TMC2130_IRUN 31             // max. current
 #define TMC2130_IHOLD ((TMC2130_IRUN * TMC2130_HOLD_CURRENT_PCT) / 100)
 #define TMC2130_IHOLDDELAY 6
+
 // TPOWERDOWN
-#define TMC2130_TPOWERDOWN 128 // 128
+#define TMC2130_TPOWERDOWN 128      // 0 … ((2^8)-1) * 2^18 tCLK
+
 // EN_PWM_MODE
-#define TMC2130_EN_PWM_MODE 1  // stealthChop enable
-// TPWM_THRS
-#define TMC2130_TPWM_THRS 0
+#define TMC2130_EN_PWM_MODE 1       // en_pwm_ mode: 0 = stealthChop off, 1 = stealthChop on
+
+// TPWMTHRS
+#define TMC2130_TPWM_THRS 0         // tpwmthrs: 0 … 2^20 - 1 (20 bits)
+
 // PWM_CONF
-#define TMC2130_PWM_AUTOSCALE 1
-#define TMC2130_PWM_FREQ 1 // 1 2/683 fCLK
-#define TMC2130_PWM_AMPL 255 // 255
-#define TMC2130_PWM_GRAD 5 // 5
-// COOLSTEP
-#define  TMC2130_COOLSTEP_ENABLE 0
-#define  TMC2130_COOLSTEP_SEMIN 1
-#define  TMC2130_COOLSTEP_SEMAX 1
+#define TMC2130_PWM_AUTOSCALE 1     // pwm_autoscale: 0 = forward controlled mode, 1 = automatic scaling
+#define TMC2130_PWM_FREQ 1          // pwm_freq: 0 = 1/1024, 1 = 2/683, 2 = 2/512, 3 = 2/410 fCLK
+#define TMC2130_PWM_AMPL 255        // pwm_ampl: 0 … 255
+#define TMC2130_PWM_GRAD 5          // pwm_autoscale = 1: 1 … 15, pwm_autoscale = 0: 0 … 255
+
+// COOLCONF
+#define TMC2130_COOLSTEP_ENABLE 0
+// TMC2130_COOLSTEP_ENABLE = 1 defaults
+#define TMC2130_COOLSTEP_SEMIN 1    // semin: 0 = coolStep off, 1 … 15 = coolStep on
+#define TMC2130_COOLSTEP_SEMAX 1    // semax: 0 … 15
 
 // end of default values
 
@@ -123,7 +132,10 @@ typedef enum {
     TMC2130Reg_PWMCONF = 0x70,
     TMC2130Reg_PWM_SCALE = 0x71,
     TMC2130Reg_ENCM_CTRL = 0x72,
-    TMC2130Reg_LOST_STEPS = 0x73
+    TMC2130Reg_LOST_STEPS = 0x73,
+// Custom registers used by I2C <> SPI bridge
+    TMC_I2CReg_MON_STATE = 0x7D,
+    TMC_I2CReg_ENABLE = 0x7E
 } tmc2130_regaddr_t;
 
 typedef union {
@@ -608,6 +620,7 @@ typedef struct {
 
 typedef union {
     uint32_t value;
+    uint8_t data[4];
     TMC2130_gconf_reg_t gconf;
     TMC2130_ioin_reg_t ioin;
     TMC2130_ihold_irun_reg_t ihold_irun;
@@ -680,17 +693,23 @@ typedef struct {
 typedef struct {
     TMC2130_status_t (*WriteRegister)(TMC2130_t *driver, TMC2130_datagram_t *reg);
     TMC2130_status_t (*ReadRegister)(TMC2130_t *driver, TMC2130_datagram_t *reg);
-} SPI_driver_t;
+} TMC_io_driver_t;
 
+#pragma pack(pop)
+
+void TMC_IOInit (void);
 void TMC2130_Init(TMC2130_t *driver);
 void TMC2130_SetDefaults (TMC2130_t *driver);
 void TMC2130_SetCurrent (TMC2130_t *driver, uint16_t mA, uint8_t hold_pct);
+uint16_t TMC2130_GetCurrent (TMC2130_t *driver);
+bool TMC2130_MicrostepsIsValid (uint16_t usteps);
 void TMC2130_SetMicrosteps(TMC2130_t *driver, tmc2130_microsteps_t usteps);
 void TMC2130_SetHybridThreshold (TMC2130_t *driver, uint32_t threshold, float steps_mm);
 void TMC2130_SetConstantOffTimeChopper(TMC2130_t *driver, uint8_t constant_off_time, uint8_t blank_time, uint8_t fast_decay_time, int8_t sine_wave_offset, bool use_current_comparator);
+TMC2130_datagram_t *TMC2130_GetRegPtr (TMC2130_t *driver, tmc2130_regaddr_t reg);
 TMC2130_status_t TMC2130_WriteRegister (TMC2130_t *driver, TMC2130_datagram_t *reg);
 TMC2130_status_t TMC2130_ReadRegister (TMC2130_t *driver, TMC2130_datagram_t *reg);
 
-extern void SPI_DriverInit (SPI_driver_t *drv);
+extern void TMC_DriverInit (TMC_io_driver_t *drv);
 
 #endif

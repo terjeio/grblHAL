@@ -1,12 +1,12 @@
 /*
  * TMC2130_I2C_map.c - I1C <> SPI command mapping for Trinamic TMC2130 stepper driver
  *
- * v0.0.1 / 2018-10-27 / ©Io Engineering / Terje
+ * v0.0.3 / 2019-07-23 / ©Io Engineering / Terje
  */
 
 /*
 
-Copyright (c) 2018, Terje Io
+Copyright (c) 2018-2019, Terje Io
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -37,7 +37,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 #include "TMC2130_I2C_map.h"
-#include "trinamic2130.h"
 
 #define WR 0x80
 
@@ -64,5 +63,23 @@ const uint8_t TMC2130_I2C_regmap[] = {
     TMC2130Reg_PWM_SCALE,
     TMC2130Reg_ENCM_CTRL|WR,
     TMC2130Reg_LOST_STEPS,
+    TMC_I2CReg_MON_STATE,
+    TMC_I2CReg_ENABLE|WR,
     0xFF // terminator
 };
+
+TMCI2C_map_addr_t TMCI2C_GetMapAddress (uint8_t axis, TMC2130_addr_t regaddr)
+{
+    uint_fast8_t i = 0;
+    TMCI2C_map_addr_t map = {0xFF};
+
+    do {
+        if(TMC2130_I2C_regmap[i] == regaddr.value) {
+            map.axis = axis;
+            map.mapaddr = i;
+        }
+    } while(TMC2130_I2C_regmap[++i] != 0xFF && map.value == 0xFF);
+
+    return map;
+}
+

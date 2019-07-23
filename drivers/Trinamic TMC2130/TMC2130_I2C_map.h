@@ -1,12 +1,12 @@
 /*
- * TMC2130_I2C_map.c - I1C <> SPI command mapping for Trinamic TMC2130 stepper driver
+ * TMC2130_I2C_map.h - I2C <> SPI command mappings and datagrams for Trinamic TMC2130 stepper driver
  *
- * v0.0.1 / 2018-10-27 / ©Io Engineering / Terje
+ * v0.0.3 / 2019-07-23 / ©Io Engineering / Terje
  */
 
 /*
 
-Copyright (c) 2018, Terje Io
+Copyright (c) 2018-2019, Terje Io
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -36,7 +36,14 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 */
 
+#ifndef _TRINAMIC_I2C_H_
+#define _TRINAMIC_I2C_H_
+
 #include <stdint.h>
+
+#include "trinamic2130.h"
+
+#pragma pack(push, 1)
 
 typedef union {
     uint8_t value;
@@ -45,6 +52,65 @@ typedef union {
         mapaddr :5,
         axis    :3;
     };
-} TMC2130_map_addr_t;
+} TMCI2C_map_addr_t;
+
+typedef union {
+    uint8_t mask;
+    struct {
+        uint8_t x :1,
+                y :1,
+                z :1,
+                a :1,
+                b :1,
+                c :1,
+       unassigned :2;
+    };
+} tmc_axes_t;
+
+typedef union {
+    uint8_t value;
+    tmc_axes_t stalled;
+} TMCI2C_status_t;
+
+typedef union {
+    uint32_t value;
+    uint8_t data[4];
+    struct {
+        tmc_axes_t enable;
+        tmc_axes_t monitor;
+        tmc_axes_t u1; // R
+        tmc_axes_t u2;
+    };
+} TMCI2C_enable_reg_t;
+
+// I2C_MONSTAT : R
+
+typedef union {
+    uint32_t value;
+    uint8_t data[4];
+    struct {
+        tmc_axes_t ot;
+        tmc_axes_t otpw;
+        tmc_axes_t otpw_cnt;
+        tmc_axes_t error;
+    };
+} TMCI2C_monitor_status_reg_t;
+
+
+typedef struct {
+    TMC2130_addr_t addr;
+    TMCI2C_enable_reg_t reg;
+} TMCI2C_enable_dgr_t;
+
+typedef struct {
+    TMC2130_addr_t addr;
+    TMCI2C_monitor_status_reg_t reg;
+} TMCI2C_monitor_status_dgr_t;
+
+#pragma pack(pop)
 
 extern const uint8_t TMC2130_I2C_regmap[];
+
+TMCI2C_map_addr_t TMCI2C_GetMapAddress (uint8_t axis, TMC2130_addr_t regaddr);
+
+#endif
