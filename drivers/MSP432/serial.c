@@ -25,6 +25,7 @@
 #define __serial_h__
 
 #include "serial.h"
+#include "GRBL/grbl.h"
 
 #define BUFCOUNT(head, tail, size) ((head >= tail) ? (head - tail) : (size - tail + head))
 
@@ -79,10 +80,10 @@ void serialInit (void)
     SERIAL_MODULE->CTLW0 &= ~EUSCI_A_CTLW0_SWRST;
     SERIAL_MODULE->IE = EUSCI_A_IE_RXIE;
 
-	NVIC_EnableIRQ(SERIAL_MODULE_INT);
-    NVIC_SetPriority(SERIAL_MODULE_INT, 0x40);
+    NVIC_EnableIRQ(SERIAL_MODULE_INT);
+    NVIC_SetPriority(SERIAL_MODULE_INT, 3);
 
-	SERIAL_PORT->SEL0 = SERIAL_RX|SERIAL_TX;    // set 2-UART pins as second function
+    SERIAL_PORT->SEL0 = SERIAL_RX|SERIAL_TX;    // set 2-UART pins as second function
 
 #ifdef SERIAL2_MOD
     SERIAL2_MODULE->CTLW0 = EUSCI_A_CTLW0_SWRST|EUSCI_A_CTLW0_SSEL__SMCLK;
@@ -92,14 +93,14 @@ void serialInit (void)
     SERIAL2_MODULE->CTLW0 &= ~EUSCI_A_CTLW0_SWRST;
 
     NVIC_EnableIRQ(SERIAL2_MODULE_INT);
-    NVIC_SetPriority(SERIAL2_MODULE_INT, 0x40);
+    NVIC_SetPriority(SERIAL2_MODULE_INT, 3);
 
     SERIAL2_PORT->SEL0 = SERIAL_RX|SERIAL_TX;    // set 2-UART pins as second function
 #endif
-	__enable_interrupts();
+    __enable_interrupts();
 
 #ifdef RTS_PORT
-	RTS_PORT->DIR |= RTS_BIT;
+    RTS_PORT->DIR |= RTS_BIT;
     BITBAND_PERI(RTS_PORT->OUT, RTS_PIN) = 0;
 #endif
 }
@@ -158,7 +159,7 @@ void serialRxCancel (void)
 //
 // Attempt to send a character bypassing buffering
 //
-inline static bool serialPutCNonBlocking (const char c)
+static inline bool serialPutCNonBlocking (const char c)
 {
     bool ok;
 
@@ -265,9 +266,9 @@ bool serialSuspendInput (bool suspend)
 //
 void SERIAL_IRQHandler (void)
 {
-	uint32_t bptr;
+    uint32_t bptr;
 
-	switch(SERIAL_MODULE->IV) {
+    switch(SERIAL_MODULE->IV) {
 
         case 0x04:
             bptr = tx_tail;                             // Temp tail position (to avoid volatile overhead)
@@ -373,11 +374,9 @@ void SERIAL2_IRQHandler (void)
             bptr = (rx2_head + 1) & (RX_BUFFER_SIZE - 1);   // Temp head position (to avoid volatile overhead)
             if(bptr == rx2_tail) {                          // If buffer full
                 rx2_overflow = 1;                           // flag overflow
-            } else {
-                if(!hal.stream.enqueue_realtime_command((char)data)) {
-                    rx2buf[rx2_head] = data;                // Add data to buffer
-                    rx2_head = bptr;                        // and update pointer
-                }
+            } else if(!hal.stream.enqueue_realtime_command((char)data)) {
+                rx2buf[rx2_head] = data;                    // Add data to buffer
+                rx2_head = bptr;                            // and update pointer
             }
             break;
     }

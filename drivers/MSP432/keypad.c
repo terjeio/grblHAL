@@ -31,122 +31,77 @@
 
 #define KEYBUF_SIZE 16
 
-typedef struct {
-    float fast_speed;
-    float slow_speed;
-    float step_speed;
-    float fast_distance;
-    float slow_distance;
-    float step_distance;
-} jog_config_t;
-
 static bool jogging = false, keyreleased = true;
 static char keybuf_buf[KEYBUF_SIZE];
 static jogmode_t jogMode = JogMode_Fast;
-static jog_config_t jog_config;
 static volatile uint32_t keybuf_head = 0, keybuf_tail = 0;
 
-static void claim_eeprom (void)
-{
-    if(hal.eeprom.driver_area.size == 0) {
-        assert(EEPROM_ADDR_TOOL_TABLE - (sizeof(jog_config_t) + 2) > EEPROM_ADDR_GLOBAL + sizeof(settings_t) + 1);
-
-        hal.eeprom.driver_area.address = EEPROM_ADDR_TOOL_TABLE - (sizeof(jog_config_t) + 2);
-        hal.eeprom.driver_area.size = sizeof(jog_config_t);
-    }
-}
-
-// Read selected coordinate data from persistent storage.
-bool keypad_read_settings (void)
-{
-    return hal.eeprom.type != EEPROM_None && hal.eeprom.memcpy_from_with_checksum((uint8_t *)&jog_config, hal.eeprom.driver_area.address, hal.eeprom.driver_area.size);
-}
-
-// Read jog configuration data from persistent storage.
-void keypad_write_settings (void)
-{
-    if (hal.eeprom.type != EEPROM_None) {
-        claim_eeprom();
-        hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&jog_config, hal.eeprom.driver_area.size);
-    }
-}
-
-bool driver_setting (uint_fast16_t setting, float value, char *svalue)
+bool keypad_setting (setting_type_t setting, float value, char *svalue)
 {
     bool ok = false;
 
     switch(setting) {
 
         case Setting_JogStepSpeed:
-            jog_config.step_speed = value;
+            driver_settings.jog.step_speed = value;
             ok = true;
             break;
 
         case Setting_JogSlowSpeed:
-            jog_config.slow_speed = value;
+            driver_settings.jog.slow_speed = value;
             ok = true;
             break;
 
         case Setting_JogFastSpeed:
-            jog_config.fast_speed = value;
+            driver_settings.jog.fast_speed = value;
             ok = true;
             break;
 
         case Setting_JogStepDistance:
-            jog_config.step_distance = value;
+            driver_settings.jog.step_distance = value;
             ok = true;
             break;
 
         case Setting_JogSlowDistance:
-            jog_config.slow_distance = value;
+            driver_settings.jog.slow_distance = value;
             ok = true;
             break;
 
         case Setting_JogFastDistance:
-            jog_config.fast_distance = value;
+            driver_settings.jog.fast_distance = value;
             ok = true;
             break;
     }
 
-    if(ok)
-        keypad_write_settings();
-
     return ok;
 }
 
-void driver_settings_restore (uint8_t restore_flag)
+void keypad_settings_restore (uint8_t restore_flag)
 {
     if(restore_flag & SETTINGS_RESTORE_DRIVER_PARAMETERS) {
-        jog_config.step_speed    = 100.0f;
-        jog_config.slow_speed    = 600.0f;
-        jog_config.fast_speed    = 3000.0f;
-        jog_config.step_distance = 0.25f;
-        jog_config.slow_distance = 500.0f;
-        jog_config.fast_distance = 3000.0f;
-
-        keypad_write_settings();
+        driver_settings.jog.step_speed    = 100.0f;
+        driver_settings.jog.slow_speed    = 600.0f;
+        driver_settings.jog.fast_speed    = 3000.0f;
+        driver_settings.jog.step_distance = 0.25f;
+        driver_settings.jog.slow_distance = 500.0f;
+        driver_settings.jog.fast_distance = 3000.0f;
     }
 }
 
-void driver_settings_report (bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx)
+void keypad_settings_report (bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx)
 {
     if(!axis_settings) {
-        report_float_setting(Setting_JogStepSpeed, jog_config.step_speed, 0);
-        report_float_setting(Setting_JogSlowSpeed, jog_config.slow_speed, 0);
-        report_float_setting(Setting_JogFastSpeed, jog_config.fast_speed, 0);
-        report_float_setting(Setting_JogStepDistance, jog_config.step_distance, N_DECIMAL_SETTINGVALUE);
-        report_float_setting(Setting_JogSlowDistance, jog_config.slow_distance, 0);
-        report_float_setting(Setting_JogFastDistance, jog_config.fast_distance, 0);
+        report_float_setting(Setting_JogStepSpeed, driver_settings.jog.step_speed, 0);
+        report_float_setting(Setting_JogSlowSpeed, driver_settings.jog.slow_speed, 0);
+        report_float_setting(Setting_JogFastSpeed, driver_settings.jog.fast_speed, 0);
+        report_float_setting(Setting_JogStepDistance, driver_settings.jog.step_distance, N_DECIMAL_SETTINGVALUE);
+        report_float_setting(Setting_JogSlowDistance, driver_settings.jog.slow_distance, 0);
+        report_float_setting(Setting_JogFastDistance, driver_settings.jog.fast_distance, 0);
     }
 }
 
 void keypad_setup (void)
 {
-    claim_eeprom();
-
-    if(!keypad_read_settings())
-        driver_settings_restore(SETTINGS_RESTORE_DRIVER_PARAMETERS);
-
     NVIC_EnableIRQ(KEYPAD_INT);  // Enable limit port interrupt
 
     BITBAND_PERI(KEYPAD_PORT->OUT, KEYPAD_IRQ_PIN) = 1;
@@ -196,17 +151,17 @@ static char keypad_get_keycode (void)
 // BE WARNED: this function may be dangerous to use...
 static char *strrepl (char *str, int c, char *str3)
 {
-	char tmp[30];
-	char *s = strrchr(str, c);
+    char tmp[30];
+    char *s = strrchr(str, c);
 
-	while(s) {
-		strcpy(tmp, str3);
-		strcat(tmp, s + 1);
-		strcpy(s, tmp);
-		s = strrchr(str, c);
-	}
+    while(s) {
+        strcpy(tmp, str3);
+        strcat(tmp, s + 1);
+        strcpy(s, tmp);
+        s = strrchr(str, c);
+    }
 
-	return str;
+    return str;
 }
 
 void process_keypress (uint_fast16_t state)
@@ -310,18 +265,18 @@ void process_keypress (uint_fast16_t state)
         if((jogCommand = (command[0] == '$' && command[1] == 'J'))) switch(jogMode) {
 
             case JogMode_Slow:
-                strrepl(command, '?', ftoa(jog_config.slow_distance, 0));
-                strcat(command, ftoa(jog_config.slow_speed, 0));
+                strrepl(command, '?', ftoa(driver_settings.jog.slow_distance, 0));
+                strcat(command, ftoa(driver_settings.jog.slow_speed, 0));
                 break;
 
             case JogMode_Step:
-                strrepl(command, '?', ftoa(jog_config.step_distance, 3));
-                strcat(command, ftoa(jog_config.step_speed, 0));
+                strrepl(command, '?', ftoa(driver_settings.jog.step_distance, 3));
+                strcat(command, ftoa(driver_settings.jog.step_speed, 0));
                 break;
 
             default:
-                strrepl(command, '?', ftoa(jog_config.fast_distance, 0));
-                strcat(command, ftoa(jog_config.fast_speed, 0));
+                strrepl(command, '?', ftoa(driver_settings.jog.fast_distance, 0));
+                strcat(command, ftoa(driver_settings.jog.fast_speed, 0));
                 break;
 
         }
@@ -333,29 +288,17 @@ void process_keypress (uint_fast16_t state)
     }
 }
 
-static void driver_keyclick_handler (bool keydown)
+void keypad_keyclick_handler (bool keydown)
 {
-	keyreleased = !keydown;
+    keyreleased = !keydown;
 
-	if(keydown)
-		I2C_GetKeycode();
+    if(keydown)
+        I2C_GetKeycode();
 
-	else if(jogging) {
-		jogging = false;
-		hal.stream.enqueue_realtime_command(CMD_JOG_CANCEL);
-		keybuf_tail = keybuf_head = 0; // flush keycode buffer
-	}
-}
-
-void KEYPAD_IRQHandler (void)
-{
-    uint8_t iflags = KEYPAD_PORT->IFG & KEYPAD_IRQ_BIT;
-
-    if(iflags) {
-        KEYPAD_PORT->IFG &= ~iflags;
-        iflags = (KEYPAD_PORT->IN & KEYPAD_IRQ_BIT) ? 1 : 0;
-        BITBAND_PERI(KEYPAD_PORT->IES, KEYPAD_IRQ_PIN) = iflags;
-        driver_keyclick_handler(iflags);
+    else if(jogging) {
+        jogging = false;
+        hal.stream.enqueue_realtime_command(CMD_JOG_CANCEL);
+        keybuf_tail = keybuf_head = 0; // flush keycode buffer
     }
 }
 

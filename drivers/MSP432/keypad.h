@@ -5,7 +5,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2017-2018 Terje Io
+  Copyright (c) 2017-2019 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -48,16 +48,17 @@
 #define JOG_XLZD 'x'
 
 typedef enum {
-	JogMode_Fast = 0,
-	JogMode_Slow,
-	JogMode_Step
+    JogMode_Fast = 0,
+    JogMode_Slow,
+    JogMode_Step
 } jogmode_t;
 
 void keypad_setup (void);
 void process_keypress (uint_fast16_t state);
+void keypad_keyclick_handler (bool keydown);
 
-bool driver_setting (uint_fast16_t setting, float value, char *svalue);
-void driver_settings_restore (uint8_t restore_flag);
-void driver_settings_report (bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx);
+bool keypad_setting (setting_type_t setting, float value, char *svalue);
+void keypad_settings_restore (uint8_t restore_flag);
+void keypad_settings_report (bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx);
 
 #endif

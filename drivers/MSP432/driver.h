@@ -36,15 +36,18 @@
 // Configuration
 // Set value to 1 to enable, 0 to disable
 
-#define KEYPAD_ENABLE          0 // I2C keypad for jogging etc.
+#define KEYPAD_ENABLE          1 // I2C keypad for jogging etc.
 #define ATC_ENABLE             0 // do not change!
 #define MPG_MODE_ENABLE        1 // Additional serial input for MPG (with GPIO input for enable)
 #define LIMITS_OVERRIDE_ENABLE 1 // Adds input for overriding limit switches
-#define CNC_BOOSTERPACK        0 // do not change!
+#define TRINAMIC_ENABLE        0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
+#define TRINAMIC_I2C           0 // Trinamic I2C - SPI bridge interface.
+#define TRINAMIC_DEV           0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
+#define CNC_BOOSTERPACK        1 // do not change!
 
 #if CNC_BOOSTERPACK
   #define EEPROM_ENABLE           1 // only change if BoosterPack does not have EEPROM mounted
-  #define CNC_BOOSTERPACK_SHORTS  1 // shorts added to BoosterPack for some signals (for faster and simpler driver)
+  #define CNC_BOOSTERPACK_SHORTS  0 // shorts added to BoosterPack for some signals (for faster and simpler driver)
   #define CNC_BOOSTERPACK_A4998   1 // using Polulu A4998 drivers - for suppying VDD via GPIO (PE5)
 #else
   #define EEPROM_ENABLE          0 // do not change!
@@ -60,6 +63,27 @@
 #include "msp.h"
 
 #include "GRBL\grbl.h"
+
+#if TRINAMIC_ENABLE || KEYPAD_ENABLE
+#define DRIVER_SETTINGS
+#endif
+
+#ifdef DRIVER_SETTINGS
+
+#include "tmc2130/trinamic.h"
+
+typedef struct {
+#if TRINAMIC_ENABLE
+    trinamic_settings_t trinamic;
+#endif
+#if KEYPAD_ENABLE
+    jog_settings_t jog;
+#endif
+} driver_settings_t;
+
+extern driver_settings_t driver_settings;
+
+#endif
 
 #define port(p) portI(p)
 #define portI(p) P ## p
@@ -183,6 +207,22 @@
 #define STEPPERS_DISABLE_Y_PIN   5
 #define STEPPERS_DISABLE_X_BIT   (1<<STEPPERS_DISABLE_X_PIN)
 #define STEPPERS_DISABLE_Y_BIT   (1<<STEPPERS_DISABLE_Y_PIN)
+
+// Trinamic drivers in I2C mode uses STEPPERS_DISABLE_XY_PIN as interrupt input for DIAG1 signal
+#if TRINAMIC_ENABLE && TRINAMIC_I2C
+#define TRINAMIC_DIAG_IRQ_PN     4
+#define TRINAMIC_DIAG_IRQ_PORT   port(TRINAMIC_DIAG_IRQ_PN)
+#define TRINAMIC_DIAG_IRQ_PIN    5
+#define TRINAMIC_DIAG_IRQ_BIT    (1<<TRINAMIC_DIAG_IRQ_PIN)
+#define TRINAMIC_DIAG_INT        portINT(TRINAMIC_DIAG_IRQ_PN)
+#define TRINAMIC_DIAG_IRQHandler portHANDLER(TRINAMIC_DIAG_IRQ_PN)
+#define TRINAMIC_WARN_IRQ_PN     5
+#define TRINAMIC_WARN_IRQ_PORT   port(TRINAMIC_WARN_IRQ_PN)
+#define TRINAMIC_WARN_IRQ_PIN    7
+#define TRINAMIC_WARN_IRQ_BIT    (1<<TRINAMIC_WARN_IRQ_PIN)
+#define TRINAMIC_WARN_INT        portINT(TRINAMIC_WARN_IRQ_PN)
+//#define TRINAMIC_WARN_IRQHandler portHANDLER(TRINAMIC_WARN_IRQ_PN)
+#endif
 
 #if CNC_BOOSTERPACK_A4998
 

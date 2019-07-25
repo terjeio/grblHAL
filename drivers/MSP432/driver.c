@@ -36,6 +36,10 @@
 #include "atc.h"
 #endif
 
+#ifdef DRIVER_SETTINGS
+driver_settings_t driver_settings;
+#endif
+
 typedef enum {
     PIDState_Disabled = 0,
     PIDState_Pending,
@@ -248,8 +252,18 @@ inline static void set_dir_outputs (axes_signals_t dir_outbits)
 static void stepperEnable (axes_signals_t enable)
 {
     enable.value ^= settings.steppers.enable_invert.mask;
+#if TRINAMIC_ENABLE && TRINAMIC_I2C
+    axes_signals_t tmc_enable = trinamic_stepper_enable(enable);
+  #if !CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
+    if(!tmc_enable.z)
+        BITBAND_PERI(STEPPERS_DISABLE_Z_PORT->OUT, STEPPERS_DISABLE_Z_PIN) = enable.z;
+    if(!tmc_enable.x)
+        BITBAND_PERI(STEPPERS_DISABLE_XY_PORT->OUT, STEPPERS_DISABLE_X_PIN) = enable.x;
+  #endif
+#else
     BITBAND_PERI(STEPPERS_DISABLE_Z_PORT->OUT, STEPPERS_DISABLE_Z_PIN) = enable.z;
     BITBAND_PERI(STEPPERS_DISABLE_XY_PORT->OUT, STEPPERS_DISABLE_X_PIN) = enable.x;
+#endif
 }
 
 // Starts stepper driver ISR timer and forces a stepper driver interrupt callback
@@ -259,12 +273,13 @@ static void stepperWakeUp (void)
     STEPPER_TIMER->LOAD = 0x000FFFFFUL;
     STEPPER_TIMER->CONTROL |= TIMER32_CONTROL_ENABLE|TIMER32_CONTROL_IE;
     spindle_tracker.segment_id = 0;
-    hal.stepper_interrupt_callback();   // start the show
+//    hal.stepper_interrupt_callback();   // start the show
 }
 
 // Disables stepper driver interrupts
 static void stepperGoIdle (bool clear_signals) {
     STEPPER_TIMER->CONTROL &= ~(TIMER32_CONTROL_ENABLE|TIMER32_CONTROL_IE);
+    STEPPER_TIMER->INTCLR = 0;
     if(clear_signals) {
         set_step_outputs((axes_signals_t){0});
         set_dir_outputs((axes_signals_t){0});
@@ -422,6 +437,10 @@ static void limitsEnable (bool on, bool homing) {
     BITBAND_PERI(LIMIT_PORT_Y->IE, Y_LIMIT_PIN) = on;
     BITBAND_PERI(LIMIT_PORT_Z->IE, Z_LIMIT_PIN) = on;
 #endif
+
+#if TRINAMIC_ENABLE
+    trinamic_homing(homing);
+#endif
 }
 
 
@@ -505,7 +524,7 @@ static control_signals_t systemGetState (void)
     if(settings.control_invert.mask)
         signals.value ^= settings.control_invert.mask;
 
-//    signals.safety_door_ajar = Off; // for now - annoying that this blocks config
+    signals.safety_door_ajar = Off; // for now - annoying that this blocks config
 
     return signals;
 }
@@ -529,28 +548,21 @@ bool probeGetState (void)
 
 // Static spindle (off, on cw & on ccw)
 
-inline static bool spindle_is_ccw (void)
+inline static void spindle_off (void)
 {
-    return hal.driver_cap.spindle_dir && (BITBAND_PERI(SPINDLE_DIRECTION_PORT->OUT, SPINDLE_DIRECTION_PIN) ^ settings.spindle.invert.ccw);
+    BITBAND_PERI(SPINDLE_ENABLE_PORT->OUT, SPINDLE_ENABLE_PIN) = settings.spindle.invert.on;
+}
+
+inline static void spindle_on (void)
+{
+    BITBAND_PERI(SPINDLE_ENABLE_PORT->OUT, SPINDLE_ENABLE_PIN) = !settings.spindle.invert.on;
+    spindleDataReset();
 }
 
 inline static void spindle_dir (bool ccw)
 {
     if(hal.driver_cap.spindle_dir)
         BITBAND_PERI(SPINDLE_DIRECTION_PORT->OUT, SPINDLE_DIRECTION_PIN) = ccw ^ settings.spindle.invert.ccw;
-}
-
-inline static void spindle_off (void)
-{
-    BITBAND_PERI(SPINDLE_ENABLE_PORT->OUT, SPINDLE_ENABLE_PIN) = settings.spindle.invert.on;
-    spindle_dir(false);
-}
-
-inline static void spindle_on (void)
-{
-    if(settings.spindle.invert.mutex && !spindle_is_ccw())
-        BITBAND_PERI(SPINDLE_ENABLE_PORT->OUT, SPINDLE_ENABLE_PIN) = !settings.spindle.invert.on;
-    spindleDataReset();
 }
 
 // Start or stop spindle
@@ -578,10 +590,8 @@ static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
         SPINDLE_PWM_TIMER->CCTL[2] = settings.spindle.invert.pwm ? TIMER_A_CCTLN_OUT : 0; // Set PWM output according to invert setting
         spindle_encoder.pid.error = 0.0f;
     } else {
-        if(!pwmEnabled) {
-            spindle_dir(spindle_data.state_programmed.ccw);
+        if(!pwmEnabled)
             spindle_on();
-        }
         pwmEnabled = true;
         SPINDLE_PWM_TIMER->CCR[2] = pwm_value;
         SPINDLE_PWM_TIMER->CCTL[2] = TIMER_A_CCTLN_OUTMOD_2;
@@ -603,14 +613,9 @@ static void spindleUpdateRPM (float rpm)
 // Start or stop spindle
 static void spindleSetStateVariable (spindle_state_t state, float rpm)
 {
-    spindle_data.rpm_low_limit = rpm / 1.1f;
-    spindle_data.rpm_high_limit = rpm * 1.1f;
-    spindle_data.rpm_programmed = spindle_data.rpm = rpm;
-    spindle_data.state_programmed = state;
-
     if (!state.on || rpm == 0.0f) {
-        spindle_off();
         spindle_set_speed(spindle_pwm.off_value);
+        spindle_off();
         if(delay.ms == 0)
             SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
         spindle_encoder.pid_state = PIDState_Disabled;
@@ -619,6 +624,7 @@ static void spindleSetStateVariable (spindle_state_t state, float rpm)
         spindle_encoder.pid.d_error = 0.0f;
         spindle_encoder.pid.sample_rate_prev = 1.0f;
     } else {
+        spindle_dir(state.ccw);
         if(spindle_data.rpm_programmed == 0.0f) {
             if(spindle_encoder.pid.enabled) {
                 pid_count = 0;
@@ -631,6 +637,10 @@ static void spindleSetStateVariable (spindle_state_t state, float rpm)
 #endif
         spindle_set_speed(spindle_compute_pwm_value(&spindle_pwm, rpm + spindle_encoder.pid.error, spindle_encoder.pid.error != 0.0f));
     }
+
+    spindle_data.rpm_low_limit = rpm / 1.1f;
+    spindle_data.rpm_high_limit = rpm * 1.1f;
+    spindle_data.rpm_programmed = spindle_data.rpm = rpm;
 }
 
 inline static float spindle_calc_rpm (void)
@@ -725,18 +735,17 @@ static void spindleDataReset (void)
 // Returns spindle state in a spindle_state_t variable
 static spindle_state_t spindleGetState (void)
 {
+    float rpm = spindleGetData(SpindleData_RPM).rpm;
     spindle_state_t state = {0};
 
-    state.on = BITBAND_PERI(SPINDLE_ENABLE_PORT->IN, SPINDLE_ENABLE_PIN) ^ settings.spindle.invert.on;
-    state.ccw = spindle_is_ccw();
-
-    if(settings.spindle.invert.mutex && hal.driver_cap.spindle_dir)
-        state.on = state.ccw;
-
-    if(hal.driver_cap.spindle_at_speed) {
-        float rpm = spindleGetData(SpindleData_RPM).rpm;
-        state.at_speed = rpm >= spindle_data.rpm_low_limit && rpm <= spindle_data.rpm_high_limit;
-    }
+//    state.on = (SPINDLE_ENABLE_PORT->IN & SPINDLE_ENABLE_BIT) != 0;
+    state.on = BITBAND_PERI(SPINDLE_ENABLE_PORT->IN, SPINDLE_ENABLE_PIN);
+    if(hal.driver_cap.spindle_dir)
+        state.ccw = BITBAND_PERI(SPINDLE_DIRECTION_PORT->IN, SPINDLE_DIRECTION_PIN);
+    state.value ^= settings.spindle.invert.mask;
+    if(pwmEnabled)
+        state.on = On;
+    state.at_speed = rpm >= spindle_data.rpm_low_limit && rpm <= spindle_data.rpm_high_limit;
 
     return state;
 }
@@ -903,6 +912,10 @@ void settings_changed (settings_t *settings)
 
     if(IOInitDone) {
 
+      #if TRINAMIC_ENABLE
+        trinamic_configure();
+      #endif
+
         stepperEnable(settings->steppers.deenergize);
 
         if(hal.driver_cap.variable_spindle) {
@@ -1050,12 +1063,28 @@ static bool driver_setup (settings_t *settings)
 
     FPU->FPCCR = (FPU->FPCCR & ~FPU_FPCCR_LSPEN_Msk) | FPU_FPCCR_ASPEN_Msk;  // enable lazy stacking
 
+    /********************************************************
+     * Read driver specific setting from persistent storage *
+     ********************************************************/
+
+#ifdef DRIVER_SETTINGS
+    if(hal.eeprom.driver_area.address != 0) {
+        if(!hal.eeprom.memcpy_from_with_checksum((uint8_t *)&driver_settings, hal.eeprom.driver_area.address, sizeof(driver_settings)))
+            hal.driver_settings_restore(SETTINGS_RESTORE_DRIVER_PARAMETERS);
+      #if TRINAMIC_ENABLE && CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
+        driver_settings.trinamic.driver_enable.mask = AXES_BITMASK;
+      #endif
+    }
+#endif
+
  // Stepper init
 
     STEP_PORT->DIR |= STEP_MASK;
     DIRECTION_PORT->DIR |= DIRECTION_MASK;
+#if !(TRINAMIC_ENABLE && TRINAMIC_I2C)
     STEPPERS_DISABLE_Z_PORT->DIR |= STEPPERS_DISABLE_Z_BIT;
     STEPPERS_DISABLE_XY_PORT->DIR |= STEPPERS_DISABLE_X_BIT;
+#endif
 
 #if CNC_BOOSTERPACK_A4998
     STEPPERS_VDD_PORT->DIR |= STEPPERS_VDD_BIT;
@@ -1073,9 +1102,9 @@ static bool driver_setup (settings_t *settings)
     NVIC_EnableIRQ(PULSE_TIMER_INT0);   // step pulse interrupts
     NVIC_EnableIRQ(PULSE_TIMER_INTN);   // ...
 
-    NVIC_SetPriority(PULSE_TIMER_INT0, 0x00);
-    NVIC_SetPriority(PULSE_TIMER_INTN, 0x00);
-    NVIC_SetPriority(STEPPER_TIMER_INT, 0x20);
+    NVIC_SetPriority(PULSE_TIMER_INT0, 0);
+    NVIC_SetPriority(PULSE_TIMER_INTN, 0);
+    NVIC_SetPriority(STEPPER_TIMER_INT, 1);
 
  // Limit pins init
 #if CNC_BOOSTERPACK_SHORTS
@@ -1109,16 +1138,13 @@ static bool driver_setup (settings_t *settings)
  // Spindle init
 
     SPINDLE_ENABLE_PORT->DIR |= SPINDLE_ENABLE_BIT;
-    if(hal.driver_cap.spindle_dir)
-        SPINDLE_DIRECTION_PORT->DIR |= SPINDLE_DIRECTION_BIT; // Configure as output pin.
+    SPINDLE_DIRECTION_PORT->DIR |= SPINDLE_DIRECTION_BIT; // Configure as output pin.
 
-    if(hal.driver_cap.variable_spindle) {
-        SPINDLE_PWM_PORT->DIR |= SPINDLE_PWM_BIT;
-        SPINDLE_PWM_PORT->SEL1 &= ~SPINDLE_PWM_BIT;
-        SPINDLE_PWM_PORT->SEL0 |= SPINDLE_PWM_BIT;
-        SPINDLE_PWM_TIMER->CTL = TIMER_A_CTL_SSEL__SMCLK;
-        SPINDLE_PWM_TIMER->EX0 = 0;
-    }
+    SPINDLE_PWM_PORT->DIR |= SPINDLE_PWM_BIT;
+    SPINDLE_PWM_PORT->SEL1 &= ~SPINDLE_PWM_BIT;
+    SPINDLE_PWM_PORT->SEL0 |= SPINDLE_PWM_BIT;
+    SPINDLE_PWM_TIMER->CTL = TIMER_A_CTL_SSEL__SMCLK;
+    SPINDLE_PWM_TIMER->EX0 = 0;
 
     if(hal.spindle_index_callback || true) {
         RPM_INDEX_PORT->OUT |= RPM_INDEX_BIT;
@@ -1149,6 +1175,14 @@ static bool driver_setup (settings_t *settings)
 
 // Set defaults
 
+#if KEYPAD_ENABLE
+    keypad_setup();
+#endif
+
+#if TRINAMIC_ENABLE
+    trinamic_init();
+#endif
+
     IOInitDone = settings->version == 14;
 
     settings_changed(settings);
@@ -1157,12 +1191,54 @@ static bool driver_setup (settings_t *settings)
     hal.spindle_set_state((spindle_state_t){0}, 0.0f);
     hal.coolant_set_state((coolant_state_t){0});
 
-#if KEYPAD_ENABLE
-    keypad_setup();
-#endif
-
     return IOInitDone;
 }
+
+#ifdef DRIVER_SETTINGS
+
+static bool driver_setting (setting_type_t param, float value, char *svalue)
+{
+    bool claimed = false;
+
+#if KEYPAD_ENABLE
+    claimed = keypad_setting(param, value, svalue);
+#endif
+
+#if TRINAMIC_ENABLE
+    if(!claimed)
+        claimed = trinamic_setting(param, value, svalue);
+#endif
+
+    if(claimed)
+        hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
+
+    return claimed;
+}
+
+static void driver_settings_report (bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx)
+{
+#if KEYPAD_ENABLE
+    keypad_settings_report(axis_settings, setting_type, axis_idx);
+#endif
+#if TRINAMIC_ENABLE
+    trinamic_settings_report(axis_settings, setting_type, axis_idx);
+#endif
+}
+
+void driver_settings_restore (uint8_t restore_flag)
+{
+    if(restore_flag & SETTINGS_RESTORE_DRIVER_PARAMETERS) {
+#if KEYPAD_ENABLE
+        keypad_settings_restore(restore_flag);
+#endif
+#if TRINAMIC_ENABLE
+        trinamic_settings_restore(restore_flag);
+#endif
+        hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
+    }
+}
+
+#endif
 
 // Initialize HAL pointers, setup serial comms and enable EEPROM
 // NOTE: Grbl is not yet configured (from EEPROM data), driver_setup() will be called when done
@@ -1176,6 +1252,9 @@ bool driver_init (void)
     CS->KEY = CS_KEY_VAL;                                  // Unlock CS module for register access
     CS->CTL1 |= CS_CTL1_DIVS__4;                           // Set SMCLK divider - 48Mhz / 4 = 12MHz
     CS->KEY = 0;
+
+    // Set SysTick IRQ to lowest priority
+    NVIC_SetPriority(SysTick_IRQn, (1 << __NVIC_PRIO_BITS) - 1);
 
     SysTick->LOAD = (SystemCoreClock / 1000) - 1;
     SysTick->VAL = 0;
@@ -1233,6 +1312,26 @@ bool driver_init (void)
     hal.eeprom.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
 #else
     hal.eeprom.type = EEPROM_None;
+#endif
+
+#ifdef DRIVER_SETTINGS
+//    assert(EEPROM_ADDR_TOOL_TABLE - (sizeof(driver_settings_t) + 2) > EEPROM_ADDR_GLOBAL + sizeof(settings_t) + 1);
+
+    hal.eeprom.driver_area.address = 1024; //EEPROM_ADDR_TOOL_TABLE - (sizeof(driver_settings_t) + 2);
+    hal.eeprom.driver_area.size = sizeof(driver_settings_t);
+    hal.eeprom.size = GRBL_EEPROM_SIZE + sizeof(driver_settings_t) + 1;
+
+    hal.driver_setting = driver_setting;
+    hal.driver_settings_report = driver_settings_report;
+    hal.driver_settings_restore = driver_settings_restore;
+
+#endif
+
+#if TRINAMIC_ENABLE
+    hal.user_mcode_check = trinamic_MCodeCheck;
+    hal.user_mcode_validate = trinamic_MCodeValidate;
+    hal.user_mcode_execute = trinamic_MCodeExecute;
+    hal.driver_rt_report = trinamic_RTReport;
 #endif
 
     hal.set_bits_atomic = bitsSetAtomic;
@@ -1448,7 +1547,7 @@ void CONTROL_FH_CS_IRQHandler (void)
 
 void CONTROL_SD_MODE_Handler (void)
 {
-    uint8_t iflags = CONTROL_PORT_SD->IFG & (SAFETY_DOOR_BIT|MODE_SWITCH_BIT);
+    uint8_t iflags = CONTROL_PORT_SD->IFG & (SAFETY_DOOR_BIT|MODE_SWITCH_BIT|TRINAMIC_WARN_IRQ_BIT);
 
     CONTROL_PORT_SD->IFG = 0;
 
@@ -1458,7 +1557,46 @@ void CONTROL_SD_MODE_Handler (void)
             driver_delay_ms(50, modechange);
     } else
   #endif
+  #if TRINAMIC_I2C
+        if(iflags & TRINAMIC_WARN_IRQ_BIT)
+            trinamic_warn_handler();
+        else
+  #endif
         hal.control_interrupt_callback(systemGetState());
+}
+#endif
+
+#if KEYPAD_ENABLE
+
+void KEYPAD_IRQHandler (void)
+{
+    uint8_t iflags = KEYPAD_PORT->IFG;
+
+    KEYPAD_PORT->IFG &= ~iflags;
+
+#elif TRINAMIC_ENABLE && TRINAMIC_I2C
+
+void TRINAMIC_DIAG_IRQHandler (void)
+{
+    uint8_t iflags = TRINAMIC_DIAG_IRQ_PORT->IFG;
+
+    TRINAMIC_DIAG_IRQ_PORT->IFG &= ~iflags;
+#endif
+
+#if TRINAMIC_ENABLE && TRINAMIC_I2C
+    if(iflags & TRINAMIC_DIAG_IRQ_BIT)
+        trinamic_fault_handler();
+#endif
+
+#if KEYPAD_ENABLE
+    if(iflags & KEYPAD_IRQ_BIT) {
+        iflags = (KEYPAD_PORT->IN & KEYPAD_IRQ_BIT) ? 1 : 0;
+        BITBAND_PERI(KEYPAD_PORT->IES, KEYPAD_IRQ_PIN) = iflags;
+        keypad_keyclick_handler(iflags);
+    }
+#endif
+
+#if KEYPAD_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
 }
 #endif
 
