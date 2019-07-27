@@ -6,7 +6,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2017-2018 Terje Io
+  Copyright (c) 2017-2019 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -45,19 +45,6 @@ typedef struct {
 
 static i2c_trans_t i2c;
 
-void eepromInit (void)
-{
-    P6->SEL0 |= BIT4|BIT5;                     // Assign I2C pins to USCI_B0
-
- //   NVIC_EnableIRQ(EUSCIB1_IRQn);
-
-    EUSCI_B1->CTLW0 |= EUSCI_B_CTLW0_SWRST;                                         // Put EUSCI_B1 in reset state
-    EUSCI_B1->CTLW0 |= EUSCI_B_CTLW0_MODE_3|EUSCI_B_CTLW0_MST| EUSCI_B_CTLW0_SYNC;  // I2C master mode, SMCLK
-    EUSCI_B1->BRW = 240;                                                            // baudrate 100 KHZ (SMCLK = 48MHz)
-    EUSCI_B1->CTLW0 &=~ EUSCI_B_CTLW0_SWRST;                                        // clear reset register
-//    EUSCI_B1->IE = EUSCI_B_IE_NACKIE;                                             // NACK interrupt enable
-}
-
 /* could not get ACK polling to work...
 static void WaitForACK (void)
 {
@@ -84,12 +71,12 @@ static void StartI2C (bool read)
     bool single = i2c.count == 1;
 
     EUSCI_B1->I2CSA = i2c.addr;                                         // Set EEPROM address and MSB part of data address
-    EUSCI_B1->IFG &= ~(EUSCI_B_IFG_TXIFG0|EUSCI_B_IFG_RXIFG0);          // Clear interrupt flags
+    EUSCI_B1->IE &= ~(EUSCI_B_IE_TXIE0|EUSCI_B_IE_TXIE0);               // Diasable and
+    EUSCI_B1->IFG &= ~(EUSCI_B_IFG_TXIFG0|EUSCI_B_IFG_RXIFG0);          // clear interrupts
     EUSCI_B1->CTLW0 |= EUSCI_B_CTLW0_TR|EUSCI_B_CTLW0_TXSTT;            // Transmit start condition and address
-    while(!(EUSCI_B1->IFG & EUSCI_B_IFG_TXIFG0));                       // Wait for TX
+    while(!(EUSCI_B1->IFG & EUSCI_B_IFG_TXIFG0));                       // Wait for TX completed
     EUSCI_B1->TXBUF = i2c.word_addr;                                    // Transmit data address LSB
-//    EUSCI_B1->IFG &= ~EUSCI_B_IFG_TXIFG0;                               // Clear TX interrupt flag and
-    while(!(EUSCI_B1->IFG & EUSCI_B_IFG_TXIFG0));                       // wait for transmit complete
+    while(!(EUSCI_B1->IFG & EUSCI_B_IFG_TXIFG0));                       // Wait for TX completed
 
     if(read) {                                                          // Read data from EEPROM:
         EUSCI_B1->CTLW0 |= EUSCI_B_CTLW0_TXSTP;                         // Transmit STOP condtition

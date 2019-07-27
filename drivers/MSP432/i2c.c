@@ -21,13 +21,7 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "driver.h"
-
-#if TRINAMIC_ENABLE && TRINAMIC_I2C
-
 #include "i2c.h"
-
-#include "trinamic\TMC2130_I2C_map.h"
 
 typedef enum {
     I2CState_Idle = 0,
@@ -43,13 +37,31 @@ typedef struct {
     volatile i2c_state_t state;
     uint8_t count;
     uint8_t *data;
-    bool getKeycode;
+#if KEYPAD_ENABLE
+    keycode_callback_ptr keycode_callback;
+#endif
     uint8_t buffer[8];
 } i2c_tr_trans_t;
 
 static i2c_tr_trans_t i2c;
 
 #define i2cIsBusy ((i2c.state != I2CState_Idle) || (EUSCI_B1->CTLW0 & EUSCI_B_CTLW0_TXSTP))
+
+void I2CInit (void)
+{
+    memset(&i2c, 0, sizeof(i2c_tr_trans_t));
+
+    P6->SEL0 |= BIT4|BIT5;                                                          // Assign I2C pins to USCI_B0
+
+    EUSCI_B1->CTLW0 |= EUSCI_B_CTLW0_SWRST;                                         // Put EUSCI_B1 in reset state
+    EUSCI_B1->CTLW0 |= EUSCI_B_CTLW0_MODE_3|EUSCI_B_CTLW0_MST| EUSCI_B_CTLW0_SYNC;  // I2C master mode, SMCLK
+    EUSCI_B1->BRW = 240;                                                            // baudrate 100 KHZ (SMCLK = 48MHz)
+    EUSCI_B1->CTLW0 &=~ EUSCI_B_CTLW0_SWRST;                                        // clear reset register
+//    EUSCI_B1->IE = EUSCI_B_IE_NACKIE;                                             // NACK interrupt enable
+    NVIC_EnableIRQ(EUSCIB1_IRQn);       // Enable I2C interrupt and
+    NVIC_SetPriority(EUSCIB1_IRQn, 3);  // set priority
+
+}
 
 // get bytes (max 8), waits for result
 static uint8_t* I2CReceiveMany(uint32_t i2cAddr, uint32_t bytes)
@@ -61,12 +73,18 @@ static uint8_t* I2CReceiveMany(uint32_t i2cAddr, uint32_t bytes)
     i2c.state = bytes == 1 ? I2CState_ReceiveLast : (bytes == 2 ? I2CState_ReceiveNextToLast : I2CState_ReceiveNext);
 
     EUSCI_B1->I2CSA = i2cAddr;
-    EUSCI_B1->CTLW0 &= ~EUSCI_B_CTLW0_TR;                           // Set read mode
-    EUSCI_B1->CTLW0 |= EUSCI_B_CTLW0_TXSTT;
+    EUSCI_B1->CTLW0 &= ~EUSCI_B_CTLW0_TR;                       // Set read mode
+    EUSCI_B1->IFG &= ~(EUSCI_B_IFG_TXIFG0|EUSCI_B_IFG_RXIFG0);  // Clear interrupt flags
     EUSCI_B1->IE |= EUSCI_B_IE_RXIE0;
-//    I2CMasterControl(I2C0_BASE,  bytes == 1 ? I2C_MASTER_CMD_SINGLE_RECEIVE : I2C_MASTER_CMD_BURST_RECEIVE_START);
+    if(bytes == 1)
+        EUSCI_B1->CTLW0 |= EUSCI_B_CTLW0_TXSTT|EUSCI_B_CTLW0_TXSTP;
+    else
+        EUSCI_B1->CTLW0 |= EUSCI_B_CTLW0_TXSTT;
 
-    while(i2cIsBusy);
+#if KEYPAD_ENABLE
+    if(!i2c.keycode_callback) // Do not block when reading keycode
+#endif
+        while(i2cIsBusy);
 
     return i2c.buffer;
 }
@@ -98,6 +116,21 @@ static void I2CSendMany (uint32_t i2cAddr, uint8_t bytes)
 //    I2CMasterDataPut(I2C0_BASE, *i2c.data++);
 //    I2CMasterControl(I2C0_BASE, bytes == 1 ? I2C_MASTER_CMD_SINGLE_SEND : I2C_MASTER_CMD_BURST_SEND_START);
 }
+
+#if KEYPAD_ENABLE
+
+void I2C_GetKeycode (uint32_t i2cAddr, keycode_callback_ptr callback)
+{
+    while(i2cIsBusy);
+
+    i2c.keycode_callback = callback;
+
+    I2CReceiveMany(i2cAddr, 1);
+}
+
+#endif
+
+#if TRINAMIC_ENABLE && TRINAMIC_I2C
 
 TMC2130_status_t I2C_ReadRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
 {
@@ -133,6 +166,7 @@ TMC2130_status_t I2C_ReadRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
     return status;
 }
 
+
 TMC2130_status_t I2C_WriteRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
 {
     TMC2130_status_t status = {0};
@@ -140,7 +174,7 @@ TMC2130_status_t I2C_WriteRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
     while(i2cIsBusy);
 
     reg->addr.write = 1;
-    i2c.buffer[0] = TMCI2C_GetMapAddress((uint8_t)((uint32_t)driver->cs_pin), reg->addr).value;
+    i2c.buffer[0] = TMCI2C_GetMapAddress((uint8_t)(driver ? (uint32_t)driver->cs_pin : 0), reg->addr).value;
     reg->addr.write = 0;
 
     if(i2c.buffer[0] == 0xFF)
@@ -164,35 +198,9 @@ void I2C_DriverInit (TMC_io_driver_t *driver)
 {
     driver->WriteRegister = I2C_WriteRegister;
     driver->ReadRegister = I2C_ReadRegister;
-
-    NVIC_EnableIRQ(EUSCIB1_IRQn);  // Enable stepper interrupt and
-    NVIC_SetPriority(EUSCIB1_IRQn, 3);
-
-/*
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_I2C0);
-    SysCtlPeripheralReset(SYSCTL_PERIPH_I2C0);
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
-
-    GPIOPinConfigure(GPIO_PB2_I2C0SCL);
-    GPIOPinConfigure(GPIO_PB3_I2C0SDA);
-    GPIOPadConfigSet(GPIO_PORTB_BASE, GPIO_PIN_3, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_OD);
-
-    GPIOPinTypeI2CSCL(GPIO_PORTB_BASE, GPIO_PIN_2);
-    GPIOPinTypeI2C(GPIO_PORTB_BASE, GPIO_PIN_3);
-#ifdef __MSP432E401Y__
-    I2CMasterInitExpClk(I2C0_BASE, 120000000, false);
-#else // TM4C1294
-    I2CMasterInitExpClk(I2C0_BASE, SysCtlClockGet(), false);
-#endif
-    I2CIntRegister(I2C0_BASE, I2C_interrupt_handler);
-
-    i2c.count = 0;
-    i2c.state = I2CState_Idle;
-
-    I2CMasterIntClear(I2C0_BASE);
-    I2CMasterIntEnable(I2C0_BASE);
-    */
 }
+
+#endif
 
 void I2C_interrupt_handler (void)
 {
@@ -249,8 +257,12 @@ void I2C_interrupt_handler (void)
             *i2c.data = EUSCI_B1->RXBUF;
             i2c.count = 0;
             i2c.state = I2CState_Idle;
+#if KEYPAD_ENABLE
+            if(i2c.keycode_callback) {
+                i2c.keycode_callback(i2c.data[0]);
+                i2c.keycode_callback = NULL;
+            }
+#endif
             break;
     }
 }
-
-#endif

@@ -23,13 +23,14 @@
 
 #include "driver.h"
 #include "serial.h"
+#include "i2c.h"
 
 #if EEPROM_ENABLE
 #include "eeprom.h"
 #endif
 
 #if KEYPAD_ENABLE
-#include "keypad.h"
+#include "keypad/keypad.h"
 #endif
 
 #if ATC_ENABLE
@@ -1176,11 +1177,36 @@ static bool driver_setup (settings_t *settings)
 // Set defaults
 
 #if KEYPAD_ENABLE
-    keypad_setup();
+    BITBAND_PERI(KEYPAD_PORT->OUT, KEYPAD_IRQ_PIN) = 1;
+    BITBAND_PERI(KEYPAD_PORT->REN, KEYPAD_IRQ_PIN) = 1;
+    BITBAND_PERI(KEYPAD_PORT->IES, KEYPAD_IRQ_PIN) = (KEYPAD_PORT->IN & KEYPAD_IRQ_BIT) ? 1 : 0;
+    KEYPAD_PORT->IFG &= ~KEYPAD_IRQ_BIT;
+    KEYPAD_PORT->IE |= KEYPAD_IRQ_BIT;
+
+    NVIC_EnableIRQ(KEYPAD_INT);  // Enable keypad  port interrupt
 #endif
 
 #if TRINAMIC_ENABLE
+
     trinamic_init();
+
+    // Configure input pin for DIAG1 signal (with pullup) and enable interrupt
+    BITBAND_PERI(TRINAMIC_DIAG_IRQ_PORT->OUT, TRINAMIC_DIAG_IRQ_PIN) = 1;
+    BITBAND_PERI(TRINAMIC_DIAG_IRQ_PORT->REN, TRINAMIC_DIAG_IRQ_PIN) = 1;
+    BITBAND_PERI(TRINAMIC_DIAG_IRQ_PORT->IES, TRINAMIC_DIAG_IRQ_PIN) = 1;
+    BITBAND_PERI(TRINAMIC_DIAG_IRQ_PORT->IFG, TRINAMIC_DIAG_IRQ_PIN) = 0;
+    BITBAND_PERI(TRINAMIC_DIAG_IRQ_PORT->IE, TRINAMIC_DIAG_IRQ_PIN) = 1;
+    NVIC_EnableIRQ(TRINAMIC_DIAG_INT);
+  #if TRINAMIC_I2C
+    // Configure input pin for WARN signal (with pullup) and enable interrupt
+    BITBAND_PERI(TRINAMIC_WARN_IRQ_PORT->OUT, TRINAMIC_WARN_IRQ_PIN) = 1;
+    BITBAND_PERI(TRINAMIC_WARN_IRQ_PORT->REN, TRINAMIC_WARN_IRQ_PIN) = 1;
+    BITBAND_PERI(TRINAMIC_WARN_IRQ_PORT->IES, TRINAMIC_WARN_IRQ_PIN) = 1;
+    BITBAND_PERI(TRINAMIC_WARN_IRQ_PORT->IFG, TRINAMIC_WARN_IRQ_PIN) = 0;
+    BITBAND_PERI(TRINAMIC_WARN_IRQ_PORT->IE, TRINAMIC_WARN_IRQ_PIN) = 1;
+    NVIC_EnableIRQ(TRINAMIC_WARN_INT);
+  #endif
+
 #endif
 
     IOInitDone = settings->version == 14;
@@ -1262,9 +1288,10 @@ bool driver_init (void)
 
     serialInit();
 
-#if EEPROM_ENABLE
-    eepromInit();
+#if EEPROM_ENABLE || KEYPAD_ENABLE || TRINAMIC_I2C
+    I2CInit();
 #endif
+
     hal.info = "MSP432";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = SystemCoreClock;
@@ -1315,9 +1342,12 @@ bool driver_init (void)
 #endif
 
 #ifdef DRIVER_SETTINGS
-//    assert(EEPROM_ADDR_TOOL_TABLE - (sizeof(driver_settings_t) + 2) > EEPROM_ADDR_GLOBAL + sizeof(settings_t) + 1);
-
-    hal.eeprom.driver_area.address = 1024; //EEPROM_ADDR_TOOL_TABLE - (sizeof(driver_settings_t) + 2);
+  #if !TRINAMIC_ENABLE
+    assert(EEPROM_ADDR_TOOL_TABLE - (sizeof(driver_settings_t) + 2) > EEPROM_ADDR_GLOBAL + sizeof(settings_t) + 1);
+    hal.eeprom.driver_area.address = EEPROM_ADDR_TOOL_TABLE - (sizeof(driver_settings_t) + 2);
+  #else
+    hal.eeprom.driver_area.address = 1024;
+  #endif
     hal.eeprom.driver_area.size = sizeof(driver_settings_t);
     hal.eeprom.size = GRBL_EEPROM_SIZE + sizeof(driver_settings_t) + 1;
 
@@ -1547,7 +1577,7 @@ void CONTROL_FH_CS_IRQHandler (void)
 
 void CONTROL_SD_MODE_Handler (void)
 {
-    uint8_t iflags = CONTROL_PORT_SD->IFG & (SAFETY_DOOR_BIT|MODE_SWITCH_BIT|TRINAMIC_WARN_IRQ_BIT);
+    uint8_t iflags = CONTROL_PORT_SD->IFG;
 
     CONTROL_PORT_SD->IFG = 0;
 
@@ -1558,10 +1588,11 @@ void CONTROL_SD_MODE_Handler (void)
     } else
   #endif
   #if TRINAMIC_I2C
-        if(iflags & TRINAMIC_WARN_IRQ_BIT)
-            trinamic_warn_handler();
-        else
+    if(iflags & TRINAMIC_WARN_IRQ_BIT)
+        trinamic_warn_handler();
+    else
   #endif
+    if(iflags & SAFETY_DOOR_BIT)
         hal.control_interrupt_callback(systemGetState());
 }
 #endif

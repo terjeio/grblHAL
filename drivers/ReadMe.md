@@ -23,7 +23,7 @@
 | Manual tool change<sup>5</sup>      | no          | yes      | no     | yes     | no          | no     | yes   | yes   | no      | no      |
 | Automatic tool change<sup>6</sup>    | planned| no          | no     | no      | no          | no     | no    | no    | no      | no      |
 | Laser PPI mode<sup>7</sup>           | no     | no          | yes    | no      | no          | no     | no    | no    | no      | no      |
-| Trinamic support<sup>8</sup>         | no     | no          | TBC<sup>9</sup>    | no      | no          | no     | no    | no    | no      | no      |
+| Trinamic support<sup>8</sup>         | TBC<sup>9</sup>    | TBC<sup>9</sup>         | TBC<sup>9</sup>    | TBC<sup>9</sup>     | no          | no     | no    | no    | no      | no      |
 | Runs as FreeRTOS task   | no       | yes         | no     | option  | no          | no     | yes   | no    | no      | no      |
 | CNC BoosterPack support | 1        | 2           | 1      | 2       | 1           | no     | yes<sup>10</sup>   | yes<sup>10</sup>  | no      | yes<sup>10</sup>     |
 
@@ -34,8 +34,8 @@
 <br><sup>5</sup> Protocol extension, requires compatible GCode sender.
 <br><sup>6</sup> Grbl core has functionality and HAL driver entry points are provided, needs verification!
 <br><sup>7</sup> Driver specific M codes added for control. PPI = Pulses Per Inch.
-<br><sup>8</sup> Code ready for verification for TMC2130 drivers, new [CNC BoosterPack](https://github.com/terjeio/CNC_Boosterpack) design for Texas Instrument LaunchPads complete - awaiting PCB delivery.
-<br><sup>9</sup> Preliminary implementation provided for TMC2130, SPI and [I2C](https://github.com/terjeio/Trinamic_TMC2130_I2C_SPI_Bridge) interfaces. Work in progress.
+<br><sup>8</sup> Initial version ready for TMC2130 drivers, new [CNC BoosterPack](https://github.com/terjeio/CNC_Boosterpack) design for Texas Instrument LaunchPads ready and initial testing ok.
+<br><sup>9</sup> Implementation provided for TMC2130, with initial focus on [I2C](https://github.com/terjeio/Trinamic_TMC2130_I2C_SPI_Bridge) interfaces. Work in good progress - code published.
 <br><sup>10</sup> Via "motherboard" that accommodates [CNC BoosterPack](https://github.com/terjeio/CNC_Boosterpack) and processor board. Prototypes made, includes 8-bit I2C GPIO expander \(not available/needed for STM32F1xx\). "motherboards" has option for isolated level-shifted spindle PWM or DC output.  BoosterPack has an onboard EEPROM and an I2C level shifter.
 <br><sup>11</sup> Requires 128KB of flash \(STM32F103CB\), many STM32F1038B based Blue Pill boards has that too?
 
@@ -44,4 +44,4 @@ Please note that some of the capabilities should be fairly easy to port from one
 The fastest and most deterministic MCUs seems to be MSP432E401Y and TMC129x, ESP32 is not bad but it is a bit unstable - maybe due to outstanding [bugs](https://github.com/espressif/esp-idf/issues) in the [ESP-IDF](https://github.com/espressif/esp-idf) and the system architecture - program code is stored off chip in external serial flash.
 
 ---
-2019-06-16
+2019-06-27

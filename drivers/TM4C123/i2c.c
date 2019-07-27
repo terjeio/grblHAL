@@ -1,11 +1,11 @@
 /*
-  i2c.c - I2C bridge interface for Trinamic TMC2130 stepper drivers
+  i2c.c - I2C interface
 
-  For Texas Instruments SimpleLink ARM processors/LaunchPads
+  Grbl driver code for Texas Instruments Tiva C (TM4C123GH6PM) ARM processor
 
   Part of Grbl
 
-  Copyright (c) 2018 Terje Io
+  Copyright (c) 2018-2019 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -21,9 +21,9 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "driver.h"
-
 #include "i2c.h"
+
+#define i2cIsBusy ((i2c.state != I2CState_Idle) || I2CMasterBusy(I2C1_BASE))
 
 typedef enum {
     I2CState_Idle = 0,
@@ -39,7 +39,6 @@ typedef struct {
     volatile i2c_state_t state;
     uint8_t count;
     uint8_t *data;
-    bool getKeycode;
 #if KEYPAD_ENABLE
     keycode_callback_ptr keycode_callback;
 #endif
@@ -48,47 +47,37 @@ typedef struct {
 
 static i2c_trans_t i2c;
 
-#define i2cIsBusy ((i2c.state != I2CState_Idle) || I2CMasterBusy(I2C0_BASE))
-
 static void I2C_interrupt_handler (void);
 
 void I2CInit (void)
 {
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_I2C0);
-    SysCtlPeripheralReset(SYSCTL_PERIPH_I2C0);
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_I2C1);
+    SysCtlPeripheralReset(SYSCTL_PERIPH_I2C1);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
 
-    GPIOPinConfigure(GPIO_PB2_I2C0SCL);
-    GPIOPinConfigure(GPIO_PB3_I2C0SDA);
-    GPIOPadConfigSet(GPIO_PORTB_BASE, GPIO_PIN_3, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_OD);
+    GPIOPinConfigure(GPIO_PA6_I2C1SCL);
+    GPIOPinConfigure(GPIO_PA7_I2C1SDA);
+    GPIOPadConfigSet(GPIO_PORTA_BASE, GPIO_PIN_7, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_OD);
 
-    GPIOPinTypeI2CSCL(GPIO_PORTB_BASE, GPIO_PIN_2);
-    GPIOPinTypeI2C(GPIO_PORTB_BASE, GPIO_PIN_3);
-#ifdef __MSP432E401Y__
-    I2CMasterInitExpClk(I2C0_BASE, 120000000, false);
-#else // TM4C1294
-    I2CMasterInitExpClk(I2C0_BASE, 120000000, false);
-#endif
-    I2CIntRegister(I2C0_BASE, I2C_interrupt_handler);
+    GPIOPinTypeI2CSCL(GPIO_PORTA_BASE, GPIO_PIN_6);
+    GPIOPinTypeI2C(GPIO_PORTA_BASE, GPIO_PIN_7);
 
-    i2c.count = 0;
-    i2c.state = I2CState_Idle;
+    I2CMasterInitExpClk(I2C1_BASE, SysCtlClockGet(), false);
+    I2CIntRegister(I2C1_BASE, I2C_interrupt_handler);
 
-    I2CMasterIntClear(I2C0_BASE);
-    I2CMasterIntEnable(I2C0_BASE);
+    I2CMasterIntClear(I2C1_BASE);
+    I2CMasterIntEnable(I2C1_BASE);
 }
 
 // get bytes (max 8), waits for result
-static uint8_t* I2CReceive(uint32_t i2cAddr, uint32_t bytes, bool block)
+static uint8_t* I2CReceive (uint32_t i2cAddr, uint32_t bytes, bool block)
 {
-    while(i2cIsBusy);
-
     i2c.data  = i2c.buffer;
     i2c.count = bytes;
     i2c.state = bytes == 1 ? I2CState_ReceiveLast : (bytes == 2 ? I2CState_ReceiveNextToLast : I2CState_ReceiveNext);
 
-    I2CMasterSlaveAddrSet(I2C0_BASE, i2cAddr, true);
-    I2CMasterControl(I2C0_BASE,  bytes == 1 ? I2C_MASTER_CMD_SINGLE_RECEIVE : I2C_MASTER_CMD_BURST_RECEIVE_START);
+    I2CMasterSlaveAddrSet(I2C1_BASE, i2cAddr, true);
+    I2CMasterControl(I2C1_BASE,  bytes == 1 ? I2C_MASTER_CMD_SINGLE_RECEIVE : I2C_MASTER_CMD_BURST_RECEIVE_START);
 
     if(block)
         while(i2cIsBusy);
@@ -101,9 +90,9 @@ static void I2CSend (uint32_t i2cAddr, uint8_t bytes, bool block)
     i2c.count = bytes - 1;
     i2c.data  = i2c.buffer;
     i2c.state = bytes == 1 ? I2CState_AwaitCompletion : (bytes == 2 ? I2CState_SendLast : I2CState_SendNext);
-    I2CMasterSlaveAddrSet(I2C0_BASE, i2cAddr, false);
-    I2CMasterDataPut(I2C0_BASE, *i2c.data++);
-    I2CMasterControl(I2C0_BASE, bytes == 1 ? I2C_MASTER_CMD_SINGLE_SEND : I2C_MASTER_CMD_BURST_SEND_START);
+    I2CMasterSlaveAddrSet(I2C1_BASE, i2cAddr, false);
+    I2CMasterDataPut(I2C1_BASE, *i2c.data++);
+    I2CMasterControl(I2C1_BASE, bytes == 1 ? I2C_MASTER_CMD_SINGLE_SEND : I2C_MASTER_CMD_BURST_SEND_START);
 
     if(block)
         while(i2cIsBusy);
@@ -142,7 +131,7 @@ static TMC2130_status_t I2C_TMC_ReadRegister (TMC2130_t *driver, TMC2130_datagra
 
     I2CSend(I2C_ADR_I2CBRIDGE, 1, true);
 
-    __delay_cycles(3000); // Delay to allow I2C bridge to get data from driver
+    __delay_cycles(2000); // Delay to allow I2C bridge to get data from driver
 
     res = I2CReceive(I2C_ADR_I2CBRIDGE, 5, true);
 
@@ -190,10 +179,11 @@ void I2C_DriverInit (TMC_io_driver_t *driver)
 static void I2C_interrupt_handler (void)
 {
     // based on code from https://e2e.ti.com/support/microcontrollers/tiva_arm/f/908/t/169882
+    // https://es.technikum-wien.at/ti-connected-launchpad/i2c_wrapper_public/blob/master/i2c_wrapper.c
 
-    I2CMasterIntClear(I2C0_BASE);
+    I2CMasterIntClear(I2C1_BASE);
 
-//    if(I2CMasterErr(I2C0_BASE) == I2C_MASTER_ERR_NONE)
+//    if(I2CMasterErr(I2C1_BASE) == I2C_MASTER_ERR_NONE)
 
     switch(i2c.state) {
 
@@ -201,17 +191,16 @@ static void I2C_interrupt_handler (void)
             break;
 
         case I2CState_SendNext:
-            I2CMasterDataPut(I2C0_BASE, *i2c.data++);
+            I2CMasterDataPut(I2C1_BASE, *i2c.data++);
             if(--i2c.count == 1)
                 i2c.state = I2CState_SendLast;
 
-            I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_SEND_CONT);
+            I2CMasterControl(I2C1_BASE, I2C_MASTER_CMD_BURST_SEND_CONT);
             break;
 
         case I2CState_SendLast:
-            I2CMasterDataPut(I2C0_BASE, *i2c.data);
-            I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_SEND_FINISH);
-
+            I2CMasterDataPut(I2C1_BASE, *i2c.data);
+            I2CMasterControl(I2C1_BASE, I2C_MASTER_CMD_BURST_SEND_FINISH);
             i2c.state = I2CState_AwaitCompletion;
             break;
 
@@ -221,28 +210,28 @@ static void I2C_interrupt_handler (void)
             break;
 
         case I2CState_ReceiveNext:
-            *i2c.data++ = I2CMasterDataGet(I2C0_BASE);
-            I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_RECEIVE_CONT);
+            *i2c.data++ = I2CMasterDataGet(I2C1_BASE);
+            I2CMasterControl(I2C1_BASE, I2C_MASTER_CMD_BURST_RECEIVE_CONT);
 
             if(--i2c.count == 2)
                 i2c.state = I2CState_ReceiveNextToLast;
             break;
 
         case I2CState_ReceiveNextToLast:
-            *i2c.data++ = I2CMasterDataGet(I2C0_BASE);
-            I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_RECEIVE_FINISH);
+            *i2c.data++ = I2CMasterDataGet(I2C1_BASE);
+            I2CMasterControl(I2C1_BASE, I2C_MASTER_CMD_BURST_RECEIVE_FINISH);
 
             i2c.count--;
             i2c.state = I2CState_ReceiveLast;
             break;
 
         case I2CState_ReceiveLast:
-            *i2c.data = I2CMasterDataGet(I2C0_BASE);
+            *i2c.data = I2CMasterDataGet(I2C1_BASE);
             i2c.count = 0;
             i2c.state = I2CState_Idle;
           #if KEYPAD_ENABLE
             if(i2c.keycode_callback) {
-                  //  if(GPIOIntStatus(KEYINTR_PORT, KEYINTR_PIN) != 0) { // only add keycode when key is still pressed
+                //  if(GPIOIntStatus(KEYINTR_PORT, KEYINTR_PIN) != 0) { // only add keycode when key is still pressed
                 i2c.keycode_callback(*i2c.data);
                 i2c.keycode_callback = NULL;
             }
@@ -250,4 +239,3 @@ static void I2C_interrupt_handler (void)
             break;
     }
 }
-

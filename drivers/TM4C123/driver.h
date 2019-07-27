@@ -37,6 +37,9 @@
 #define LASER_PPI               0 // Laser PPI (Pulses Per Inch) option.
 #define KEYPAD_ENABLE           0 // I2C keypad for jogging etc.
 #define ATC_ENABLE              0 // do not change!
+#define TRINAMIC_ENABLE         0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
+#define TRINAMIC_I2C            0 // Trinamic I2C - SPI bridge interface.
+#define TRINAMIC_DEV            1 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
 #define CNC_BOOSTERPACK         1 // Use CNC Boosterpack pin assignments.
 #if CNC_BOOSTERPACK
   #define CNC_BOOSTERPACK_SHORTS  1 // Shorts added to BoosterPack for some signals (for faster and simpler driver)
@@ -47,6 +50,29 @@
 #endif
 
 // End configuration
+
+#if TRINAMIC_ENABLE || KEYPAD_ENABLE
+#define DRIVER_SETTINGS
+#endif
+
+#ifdef DRIVER_SETTINGS
+
+#if TRINAMIC_ENABLE
+#include "tmc2130/trinamic.h"
+#endif
+
+typedef struct {
+#if TRINAMIC_ENABLE
+    trinamic_settings_t trinamic;
+#endif
+#if KEYPAD_ENABLE
+    jog_settings_t jog;
+#endif
+} driver_settings_t;
+
+extern driver_settings_t driver_settings;
+
+#endif
 
 #define timerBase(t) timerB(t)
 #define timerB(t) t ## _BASE
@@ -109,8 +135,13 @@
 #define HWDIRECTION_MASK    (X_DIRECTION_PIN|Y_DIRECTION_PIN|Z_DIRECTION_PIN) // All direction bits
 #define DIRECTION_OUTMODE   GPIO_MAP
 
+#if TRINAMIC_ENABLE
+#define TRINAMIC_DIAG_IRQ_PORT      GPIO_PORTE_BASE
+#define TRINAMIC_DIAG_IRQ_PIN       GPIO_PIN_1
+#define TRINAMIC_WARN_IRQ_PORT      GPIO_PORTF_BASE
+#define TRINAMIC_WARN_IRQ_PIN       GPIO_PIN_0
 // Define stepper driver enable/disable output pin(s).
-#if CNC_BOOSTERPACK
+#elif CNC_BOOSTERPACK
 #define STEPPERS_DISABLE_XY_PORT    GPIO_PORTE_BASE
 #define STEPPERS_DISABLE_XY_PIN     GPIO_PIN_1
 #define STEPPERS_DISABLE_Z_PORT     GPIO_PORTF_BASE
@@ -185,6 +216,11 @@
 #define SPINDLEPPORT		GPIO_PORTB_BASE
 #define SPINDLEPPIN			GPIO_PIN_2
 #define SPINDLEPWM_MAP		GPIO_PB2_T3CCP0
+
+#if KEYPAD_ENABLE
+#define KEYINTR_PIN   GPIO_PIN_4
+#define KEYINTR_PORT  GPIO_PORTE_BASE
+#endif
 
 #if LASER_PPI
 

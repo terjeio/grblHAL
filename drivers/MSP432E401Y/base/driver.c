@@ -35,6 +35,19 @@
 #include "timers.h"
 #endif
 
+#if KEYPAD_ENABLE
+#include "keypad/keypad.h"
+static void keyclick_int_handler (void);
+#endif
+
+#if TRINAMIC_ENABLE
+static void trinamic_diag1_isr (void);
+#endif
+
+#if KEYPAD_ENABLE || TRINAMIC_I2C
+#include "i2c.h"
+#endif
+
 #if SDCARD_ENABLE
 #include "sdcard/sdcard.h"
 #endif
@@ -341,7 +354,6 @@ static void driver_delay_ms (uint32_t ms, void (*callback)(void))
 }
 #else
 
-static volatile uint32_t delay.ms = 1; // NOTE: initial value 1 is for "resetting" systick timer
 static void systick_isr (void);
 
 static void driver_delay_ms (uint32_t ms, void (*callback)(void))
@@ -439,7 +451,15 @@ inline static void set_dir_outputs (axes_signals_t dir_outbits)
 static void stepperEnable (axes_signals_t enable)
 {
     enable.mask ^= settings.steppers.enable_invert.mask;
-#if CNC_BOOSTERPACK
+#if TRINAMIC_ENABLE && TRINAMIC_I2C
+    axes_signals_t tmc_enable = trinamic_stepper_enable(enable);
+  #if !CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
+    if(!tmc_enable.z)
+        GPIOPinWrite(STEPPERS_DISABLE_Z_PORT, STEPPERS_DISABLE_Z_PIN, enable.z ? STEPPERS_DISABLE_Z_PIN : 0);
+    if(!tmc_enable.x)
+        GPIOPinWrite(STEPPERS_DISABLE_Z_PORT, STEPPERS_DISABLE_Z_PIN, enable.z ? STEPPERS_DISABLE_Z_PIN : 0);
+  #endif
+#elif CNC_BOOSTERPACK
     GPIOPinWrite(STEPPERS_DISABLE_XY_PORT, STEPPERS_DISABLE_XY_PIN, enable.x ? STEPPERS_DISABLE_XY_PIN : 0);
     GPIOPinWrite(STEPPERS_DISABLE_Z_PORT, STEPPERS_DISABLE_Z_PIN, enable.z ? STEPPERS_DISABLE_Z_PIN : 0);
  #if CNC_BOOSTERPACK2
@@ -1090,6 +1110,10 @@ static void settings_changed (settings_t *settings)
 
     if(IOInitDone) {
 
+      #if TRINAMIC_ENABLE
+        trinamic_configure();
+      #endif
+
         // NOTE: some interfaces may defer actual stream switch until stack is operational
         switch(settings->stream) {
 
@@ -1129,10 +1153,6 @@ static void settings_changed (settings_t *settings)
             hal.stepper_pulse_start = stepperPulseStart;
           #endif
         }
-
-      #if TRINAMIC_ENABLE
-        trinamic_configure();
-      #endif
 
       #if LASER_PPI
         if(!settings->flags.laser_mode)
@@ -1267,6 +1287,9 @@ static bool driver_setup (settings_t *settings)
     if(hal.eeprom.driver_area.address != 0) {
         if(!hal.eeprom.memcpy_from_with_checksum((uint8_t *)&driver_settings, hal.eeprom.driver_area.address, sizeof(driver_settings)))
             hal.driver_settings_restore(SETTINGS_RESTORE_DRIVER_PARAMETERS);
+      #if TRINAMIC_ENABLE && CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
+        driver_settings.trinamic.driver_enable.mask = AXES_BITMASK;
+      #endif
     }
 #endif
 
@@ -1299,18 +1322,21 @@ static bool driver_setup (settings_t *settings)
 
 #if CNC_BOOSTERPACK
 
-#ifndef __MSP432E401Y__
+ #ifndef __MSP432E401Y__
     // Unlock GPIOD7, used for disable XY
     HWREG(GPIO_PORTD_BASE + GPIO_O_LOCK) = GPIO_LOCK_KEY;
     HWREG(GPIO_PORTD_BASE + GPIO_O_CR) |= GPIO_PIN_7;
     HWREG(GPIO_PORTD_BASE + GPIO_O_LOCK) = 0;
-#endif
+ #endif
+
+ #if !TRINAMIC_ENABLE
     GPIOPinTypeGPIOOutput(STEPPERS_DISABLE_XY_PORT, STEPPERS_DISABLE_XY_PIN);
     GPIOPinTypeGPIOOutput(STEPPERS_DISABLE_Z_PORT, STEPPERS_DISABLE_Z_PIN);
   #if CNC_BOOSTERPACK2
     GPIOPinTypeGPIOOutput(STEPPERS_DISABLE_AC_PORT, STEPPERS_DISABLE_AC_PIN);
     GPIOPinTypeGPIOOutput(STEPPERS_DISABLE_B_PORT, STEPPERS_DISABLE_B_PIN);
   #endif
+ #endif
 #else
     GPIOPinTypeGPIOOutput(STEPPERS_DISABLE_PORT, STEPPERS_DISABLE_PIN);
 #endif
@@ -1474,22 +1500,45 @@ static bool driver_setup (settings_t *settings)
     pwm_ramp.ms_cfg = pwm_ramp.pwm_current = pwm_ramp.pwm_target = 0;
   #endif
 
-#ifdef _KEYPAD_H_
+#if SDCARD_ENABLE
+    sdcard_init();
+#endif
+
+#if KEYPAD_ENABLE
 
    /*********************
     *  I2C KeyPad init  *
     *********************/
 
-    keypad_setup();
+    GPIOPinTypeGPIOInput(KEYINTR_PORT, KEYINTR_PIN);
+    GPIOPadConfigSet(KEYINTR_PORT, KEYINTR_PIN, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU); // -> WPU
 
-#endif
+    GPIOIntRegister(KEYINTR_PORT, keyclick_int_handler);
+    GPIOIntTypeSet(KEYINTR_PORT, KEYINTR_PIN, GPIO_BOTH_EDGES);
+    GPIOIntEnable(KEYINTR_PORT, KEYINTR_PIN);
 
-#if SDCARD_ENABLE
-    sdcard_init();
 #endif
 
 #if TRINAMIC_ENABLE
+
     trinamic_init();
+
+    // Configure input pin for DIAG1 signal (with pullup) and enable interrupt
+    GPIOPinTypeGPIOInput(TRINAMIC_DIAG_IRQ_PORT, TRINAMIC_DIAG_IRQ_PIN);
+    GPIOIntRegister(TRINAMIC_DIAG_IRQ_PORT, trinamic_diag1_isr); // Register a call-back function for interrupt
+    GPIOPadConfigSet(TRINAMIC_DIAG_IRQ_PORT, TRINAMIC_DIAG_IRQ_PIN, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
+    GPIOIntTypeSet(TRINAMIC_DIAG_IRQ_PORT, TRINAMIC_DIAG_IRQ_PIN, GPIO_FALLING_EDGE);
+    GPIOIntEnable(TRINAMIC_DIAG_IRQ_PORT, TRINAMIC_DIAG_IRQ_PIN);
+
+  #if TRINAMIC_I2C
+  // Configure input pin for WARN signal (with pullup) and enable interrupt
+    GPIOPinTypeGPIOInput(TRINAMIC_WARN_IRQ_PORT, TRINAMIC_WARN_IRQ_PIN);
+//    GPIOIntRegister(TRINAMIC_WARN_IRQ_PORT, trinamic_warn_isr); // Register a call-back function for interrupt NOTE: same port as limit X
+    GPIOPadConfigSet(TRINAMIC_WARN_IRQ_PORT, TRINAMIC_WARN_IRQ_PIN, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
+    GPIOIntTypeSet(TRINAMIC_WARN_IRQ_PORT, TRINAMIC_WARN_IRQ_PIN, GPIO_FALLING_EDGE);
+    GPIOIntEnable(TRINAMIC_WARN_IRQ_PORT, TRINAMIC_WARN_IRQ_PIN);
+  #endif
+
 #endif
 
     /*********************
@@ -1517,9 +1566,13 @@ static bool driver_setup (settings_t *settings)
 
 #ifdef DRIVER_SETTINGS
 
-static bool driver_setting (uint_fast16_t param, float value, char *svalue)
+static bool driver_setting (setting_type_t param, float value, char *svalue)
 {
     bool claimed = false;
+
+#if KEYPAD_ENABLE
+    claimed = keypad_setting(param, value, svalue);
+#endif
 
 #if TRINAMIC_ENABLE
     if(!claimed)
@@ -1534,6 +1587,9 @@ static bool driver_setting (uint_fast16_t param, float value, char *svalue)
 
 static void driver_settings_report (bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx)
 {
+#if KEYPAD_ENABLE
+    keypad_settings_report(axis_settings, setting_type, axis_idx);
+#endif
 #if TRINAMIC_ENABLE
     trinamic_settings_report(axis_settings, setting_type, axis_idx);
 #endif
@@ -1542,6 +1598,9 @@ static void driver_settings_report (bool axis_settings, axis_setting_type_t sett
 void driver_settings_restore (uint8_t restore_flag)
 {
     if(restore_flag & SETTINGS_RESTORE_DRIVER_PARAMETERS) {
+#if KEYPAD_ENABLE
+        keypad_settings_restore(restore_flag);
+#endif
 #if TRINAMIC_ENABLE
         trinamic_settings_restore(restore_flag);
 #endif
@@ -1566,6 +1625,7 @@ bool driver_init (void)
     // Set up systick timer with a 1ms period
     SysTickPeriodSet((hal.f_step_timer / 1000) - 1);
     SysTickIntRegister(systick_isr);
+    IntPrioritySet(FAULT_SYSTICK, 0x40);
     SysTickIntEnable();
     SysTickEnable();
 #endif
@@ -1593,6 +1653,8 @@ bool driver_init (void)
 #endif
 
     serialInit();
+
+    I2CInit();
 
 #ifdef __MSP432E401Y__
   #ifdef FreeRTOS
@@ -1655,18 +1717,24 @@ bool driver_init (void)
 #endif
 
 #ifdef DRIVER_SETTINGS
+  #if !TRINAMIC_ENABLE
     assert(EEPROM_ADDR_TOOL_TABLE - (sizeof(driver_settings_t) + 2) > EEPROM_ADDR_GLOBAL + sizeof(settings_t) + 1);
-
     hal.eeprom.driver_area.address = EEPROM_ADDR_TOOL_TABLE - (sizeof(driver_settings_t) + 2);
+  #else
+    hal.eeprom.driver_area.address = 1024;
+    hal.eeprom.size = GRBL_EEPROM_SIZE + sizeof(driver_settings_t) + 1;
+  #endif
     hal.eeprom.driver_area.size = sizeof(driver_settings_t);
-
     hal.driver_setting = driver_setting;
     hal.driver_settings_report = driver_settings_report;
     hal.driver_settings_restore = driver_settings_restore;
+#endif
 
-    hal.driver_mcode_check = trinamic_MCodeCheck;
-    hal.driver_mcode_validate = trinamic_MCodeValidate;
-    hal.driver_mcode_execute = trinamic_MCodeExecute;
+#if TRINAMIC_ENABLE
+    hal.user_mcode_check = trinamic_MCodeCheck;
+    hal.user_mcode_validate = trinamic_MCodeValidate;
+    hal.user_mcode_execute = trinamic_MCodeExecute;
+    hal.driver_rt_report = trinamic_RTReport;
 #endif
 
     hal.set_bits_atomic = bitsSetAtomic;
@@ -1685,7 +1753,7 @@ bool driver_init (void)
     hal.debug_out = debug_out;
 #endif
 
-#ifdef _KEYPAD_H_
+#if KEYPAD_ENABLE
     hal.execute_realtime = process_keypress;
     hal.driver_setting = driver_setting;
     hal.driver_settings_restore = driver_settings_restore;
@@ -1842,8 +1910,14 @@ static void limit_x_isr (void)
     uint32_t iflags = GPIOIntStatus(LIMIT_PORT_X, true);
 
     GPIOIntClear(LIMIT_PORT_X, iflags);
+
     if(iflags & X_LIMIT_PIN)
         hal.limit_interrupt_callback(limitsGetState());
+
+#if TRINAMIC_ENABLE && TRINAMIC_I2C
+    if(iflags & TRINAMIC_WARN_IRQ_PIN)
+        trinamic_warn_handler();
+#endif
 }
 
 static void limit_debounced_x_isr (void)
@@ -1869,6 +1943,35 @@ static void mode_select_isr (void)
 
     driver_delay_ms(50, modechange);            // Debounce 50ms before attempting mode change
 }
+
+
+#if KEYPAD_ENABLE
+
+static void keyclick_int_handler (void)
+{
+    uint32_t iflags = GPIOIntStatus(KEYINTR_PORT, true);
+
+    GPIOIntClear(KEYINTR_PORT, iflags);
+
+    if(iflags & KEYINTR_PIN)
+        keypad_keyclick_handler(GPIOPinRead(KEYINTR_PORT, KEYINTR_PIN) != 0);
+}
+
+#endif
+
+#if TRINAMIC_ENABLE
+
+static void trinamic_diag1_isr (void)
+{
+    uint32_t iflags = GPIOIntStatus(TRINAMIC_DIAG_IRQ_PORT, true);
+
+    GPIOIntClear(TRINAMIC_DIAG_IRQ_PORT, iflags);
+
+    if(iflags & TRINAMIC_DIAG_IRQ_PIN)
+        trinamic_fault_handler();
+}
+
+#endif
 
   #if CNC_BOOSTERPACK2
 

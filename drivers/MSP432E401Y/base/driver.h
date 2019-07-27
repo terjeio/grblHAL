@@ -41,13 +41,16 @@
 // Configuration
 // Set value to 1 to enable, 0 to disable
 
+#define FreeRTOS
+
 #define PWM_RAMPED              0 // Ramped spindle PWM.
 #define LASER_PPI               0 // Laser PPI (Pulses Per Inch) option.
-#define SDCARD_ENABLE           1 // Run jobs from SD card.
-#define ETHERNET_ENABLE         1 // Ethernet streaming.
+#define KEYPAD_ENABLE           0 // I2C keypad for jogging etc.
+#define SDCARD_ENABLE           0 // Run jobs from SD card.
+#define ETHERNET_ENABLE         0 // Ethernet streaming.
 #define M6_ENABLE               1 // Manual toolchange.
 #define TRINAMIC_ENABLE         0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
-#define TRINAMIC_I2C            1 // Trinamic I2C - SPI bridge interface.
+#define TRINAMIC_I2C            0 // Trinamic I2C - SPI bridge interface.
 #define CNC_BOOSTERPACK         1 // Use CNC Boosterpack pin assignments.
 #if CNC_BOOSTERPACK
   #define CNC_BOOSTERPACK_SHORTS  0 // do not change!
@@ -65,20 +68,26 @@
 
 // End configuration
 
-#if TRINAMIC_ENABLE
+#if TRINAMIC_ENABLE || KEYPAD_ENABLE
 #define DRIVER_SETTINGS
-#endif
-
-#if ETHERNET_ENABLE || SDCARD_ENABLE
-#define FreeRTOS
 #endif
 
 #ifdef DRIVER_SETTINGS
 
-#include "trinamic.h"
+#if TRINAMIC_ENABLE
+#include "tmc2130/trinamic.h"
+#if CNC_BOOSTERPACK_A4998
+#undef CNC_BOOSTERPACK_A4998
+#endif
+#endif
 
 typedef struct {
+#if TRINAMIC_ENABLE
     trinamic_settings_t trinamic;
+#endif
+#if KEYPAD_ENABLE
+    jog_settings_t jog;
+#endif
 } driver_settings_t;
 
 extern driver_settings_t driver_settings;
@@ -221,7 +230,13 @@ extern driver_settings_t driver_settings;
 #endif
 
 // Define stepper driver enable/disable output pin(s).
-#if CNC_BOOSTERPACK
+#if TRINAMIC_ENABLE
+#define TRINAMIC_DIAG_IRQ_PORT      GPIO_PORTD_BASE
+#define TRINAMIC_DIAG_IRQ_PIN       GPIO_PIN_7
+#define TRINAMIC_WARN_IRQ_PORT      GPIO_PORTH_BASE
+#define TRINAMIC_WARN_IRQ_PIN       GPIO_PIN_3
+// Define stepper driver enable/disable output pin(s).
+#elif CNC_BOOSTERPACK
 #define STEPPERS_DISABLE_XY_PORT    GPIO_PORTD_BASE
 #define STEPPERS_DISABLE_XY_PIN     GPIO_PIN_7
 #define STEPPERS_DISABLE_Z_PORT     GPIO_PORTH_BASE
@@ -358,6 +373,11 @@ extern driver_settings_t driver_settings;
 #define MODE_GPIO           GPIO2_GPIO
 #define MODE_INT            GPIO2_INT
 #define MODE_SWITCH_PIN     GPIO2_PIN
+
+#if KEYPAD_ENABLE
+#define KEYINTR_PIN   GPIO_PIN_6
+#define KEYINTR_PORT  GPIO_PORTC_BASE
+#endif
 
 #if LASER_PPI
 

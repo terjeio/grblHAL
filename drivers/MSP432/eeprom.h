@@ -6,7 +6,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2017-2018 Terje Io
+  Copyright (c) 2017-2019 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,14 +23,9 @@
 
 */
 
-#ifndef __EEPROM_H__
-#define __EEPROM_H__
+#define HAS_EEPROM
 
-void eepromInit (void);
 uint8_t eepromGetByte (uint32_t addr);
 void eepromPutByte (uint32_t addr, uint8_t new_value);
 void eepromWriteBlockWithChecksum (uint32_t destination, uint8_t *source, uint32_t size);
 bool eepromReadBlockWithChecksum (uint8_t *destination, uint32_t source, uint32_t size);
-
-#endif
-

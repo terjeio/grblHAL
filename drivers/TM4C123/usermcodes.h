@@ -27,7 +27,7 @@
 
 #include "GRBL/grbl.h"
 
-uint_fast16_t userMCodeCheck (uint_fast16_t mcode);
+user_mcode_t userMCodeCheck (user_mcode_t mcode);
 status_code_t userMCodeValidate (parser_block_t *gc_block, uint_fast16_t *value_words);
 void userMCodeExecute (uint_fast16_t state, parser_block_t *gc_block);
 

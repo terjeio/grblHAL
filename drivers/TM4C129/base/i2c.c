@@ -23,11 +23,7 @@
 
 #include "driver.h"
 
-#if TRINAMIC_ENABLE && TRINAMIC_I2C
-
 #include "i2c.h"
-
-#include "trinamic\TMC2130_I2C_map.h"
 
 typedef enum {
     I2CState_Idle = 0,
@@ -44,6 +40,9 @@ typedef struct {
     uint8_t count;
     uint8_t *data;
     bool getKeycode;
+#if KEYPAD_ENABLE
+    keycode_callback_ptr keycode_callback;
+#endif
     uint8_t buffer[8];
 } i2c_trans_t;
 
@@ -53,109 +52,11 @@ static i2c_trans_t i2c;
 
 static void I2C_interrupt_handler (void);
 
-// get bytes (max 8), waits for result
-static uint8_t* I2CReceiveMany(uint32_t i2cAddr, uint32_t bytes)
+void I2CInit (void)
 {
-    while(i2cIsBusy);
-
-    i2c.data  = i2c.buffer;
-    i2c.count = bytes;
-    i2c.state = bytes == 1 ? I2CState_ReceiveLast : (bytes == 2 ? I2CState_ReceiveNextToLast : I2CState_ReceiveNext);
-
-    I2CMasterSlaveAddrSet(I2C0_BASE, i2cAddr, true);
-    I2CMasterControl(I2C0_BASE,  bytes == 1 ? I2C_MASTER_CMD_SINGLE_RECEIVE : I2C_MASTER_CMD_BURST_RECEIVE_START);
-
-    while(i2cIsBusy);
-
-    return i2c.buffer;
-}
-
-static void I2CSendMany (uint32_t i2cAddr, uint8_t bytes)
-{
-    i2c.count = bytes - 1;
-    i2c.data  = i2c.buffer;
-    i2c.state = bytes == 1 ? I2CState_AwaitCompletion : (bytes == 2 ? I2CState_SendLast : I2CState_SendNext);
-    I2CMasterSlaveAddrSet(I2C0_BASE, i2cAddr, false);
-    I2CMasterDataPut(I2C0_BASE, *i2c.data++);
-    I2CMasterControl(I2C0_BASE, bytes == 1 ? I2C_MASTER_CMD_SINGLE_SEND : I2C_MASTER_CMD_BURST_SEND_START);
-}
-
-static TMC2130_map_addr_t getAdr (uint8_t axis, TMC2130_addr_t regaddr)
-{
-    uint_fast8_t i = 0;
-    TMC2130_map_addr_t map = {0xFF};
-
-    do {
-        if(TMC2130_I2C_regmap[i] == regaddr.value) {
-            map.axis = axis;
-            map.mapaddr = i;
-        }
-    } while(TMC2130_I2C_regmap[++i] != 0xFF && map.value == 0xFF);
-
-    return map;
-}
-
-TMC2130_status_t I2C_ReadRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
-{
-    uint8_t *res;
-    TMC2130_status_t status = {0};
-
-    if((i2c.buffer[0] = getAdr((uint8_t)((uint32_t)driver->cs_pin), reg->addr).value) == 0xFF)
-        return status; // unsupported register
-
-    i2c.buffer[1] = 0;
-    i2c.buffer[2] = 0;
-    i2c.buffer[3] = 0;
-    i2c.buffer[4] = 0;
-
-    I2CSendMany(I2C_ADR_I2CBRIDGE, 5);
-
-    while(i2cIsBusy);
-
-    __delay_cycles(1400); // Delay to allow I2C bridge to get data from driver
-
-    res = I2CReceiveMany(I2C_ADR_I2CBRIDGE, 5);
-
-    status.value = (uint8_t)*res++;
-    reg->payload.value = ((uint8_t)*res++ << 24);
-    reg->payload.value |= ((uint8_t)*res++ << 16);
-    reg->payload.value |= ((uint8_t)*res++ << 8);
-    reg->payload.value |= (uint8_t)*res++;
-
-    return status;
-}
-
-TMC2130_status_t I2C_WriteRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
-{
-    TMC2130_status_t status = {0};
-
-    while(i2cIsBusy);
-
-    reg->addr.write = 1;
-    i2c.buffer[0] = getAdr((uint8_t)((uint32_t)driver->cs_pin), reg->addr).value;
-    reg->addr.write = 0;
-
-    if(i2c.buffer[0] == 0xFF)
-        return status; // unsupported register
-
-    i2c.buffer[1] = (reg->payload.value >> 24) & 0xFF;
-    i2c.buffer[2] = (reg->payload.value >> 16) & 0xFF;
-    i2c.buffer[3] = (reg->payload.value >> 8) & 0xFF;
-    i2c.buffer[4] = reg->payload.value & 0xFF;
-
-    I2CSendMany(I2C_ADR_I2CBRIDGE, 5);
-
-    return status;
-}
-
-void I2C_DriverInit (SPI_driver_t *driver)
-{
-    driver->WriteRegister = I2C_WriteRegister;
-    driver->ReadRegister = I2C_ReadRegister;
-
     SysCtlPeripheralEnable(SYSCTL_PERIPH_I2C0);
     SysCtlPeripheralReset(SYSCTL_PERIPH_I2C0);
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB);
 
     GPIOPinConfigure(GPIO_PB2_I2C0SCL);
     GPIOPinConfigure(GPIO_PB3_I2C0SDA);
@@ -166,7 +67,7 @@ void I2C_DriverInit (SPI_driver_t *driver)
 #ifdef __MSP432E401Y__
     I2CMasterInitExpClk(I2C0_BASE, 120000000, false);
 #else // TM4C1294
-    I2CMasterInitExpClk(I2C0_BASE, SysCtlClockGet(), false);
+    I2CMasterInitExpClk(I2C0_BASE, 120000000, false);
 #endif
     I2CIntRegister(I2C0_BASE, I2C_interrupt_handler);
 
@@ -176,6 +77,115 @@ void I2C_DriverInit (SPI_driver_t *driver)
     I2CMasterIntClear(I2C0_BASE);
     I2CMasterIntEnable(I2C0_BASE);
 }
+
+// get bytes (max 8), waits for result
+static uint8_t* I2CReceive(uint32_t i2cAddr, uint32_t bytes, bool block)
+{
+    while(i2cIsBusy);
+
+    i2c.data  = i2c.buffer;
+    i2c.count = bytes;
+    i2c.state = bytes == 1 ? I2CState_ReceiveLast : (bytes == 2 ? I2CState_ReceiveNextToLast : I2CState_ReceiveNext);
+
+    I2CMasterSlaveAddrSet(I2C0_BASE, i2cAddr, true);
+    I2CMasterControl(I2C0_BASE,  bytes == 1 ? I2C_MASTER_CMD_SINGLE_RECEIVE : I2C_MASTER_CMD_BURST_RECEIVE_START);
+
+    if(block)
+        while(i2cIsBusy);
+
+    return i2c.buffer;
+}
+
+static void I2CSend (uint32_t i2cAddr, uint8_t bytes, bool block)
+{
+    i2c.count = bytes - 1;
+    i2c.data  = i2c.buffer;
+    i2c.state = bytes == 1 ? I2CState_AwaitCompletion : (bytes == 2 ? I2CState_SendLast : I2CState_SendNext);
+    I2CMasterSlaveAddrSet(I2C0_BASE, i2cAddr, false);
+    I2CMasterDataPut(I2C0_BASE, *i2c.data++);
+    I2CMasterControl(I2C0_BASE, bytes == 1 ? I2C_MASTER_CMD_SINGLE_SEND : I2C_MASTER_CMD_BURST_SEND_START);
+
+    if(block)
+        while(i2cIsBusy);
+}
+
+#if KEYPAD_ENABLE
+
+void I2C_GetKeycode (uint32_t i2cAddr, keycode_callback_ptr callback)
+{
+    while(i2cIsBusy);
+
+    i2c.keycode_callback = callback;
+
+    I2CReceive(i2cAddr, 1, false);
+}
+
+#endif
+
+#if TRINAMIC_ENABLE && TRINAMIC_I2C
+
+static TMC2130_status_t I2C_TMC_ReadRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
+{
+    uint8_t *res, i2creg;
+    TMC2130_status_t status = {0};
+
+    if((i2creg = TMCI2C_GetMapAddress((uint8_t)(driver ? (uint32_t)driver->cs_pin : 0), reg->addr).value) == 0xFF)
+        return status; // unsupported register
+
+    while(i2cIsBusy);
+
+    i2c.buffer[0] = i2creg;
+    i2c.buffer[1] = 0;
+    i2c.buffer[2] = 0;
+    i2c.buffer[3] = 0;
+    i2c.buffer[4] = 0;
+
+    I2CSend(I2C_ADR_I2CBRIDGE, 1, true);
+
+    __delay_cycles(3000); // Delay to allow I2C bridge to get data from driver
+
+    res = I2CReceive(I2C_ADR_I2CBRIDGE, 5, true);
+
+    status.value = (uint8_t)*res++;
+    reg->payload.value = ((uint8_t)*res++ << 24);
+    reg->payload.value |= ((uint8_t)*res++ << 16);
+    reg->payload.value |= ((uint8_t)*res++ << 8);
+    reg->payload.value |= (uint8_t)*res++;
+
+    return status;
+}
+
+
+static TMC2130_status_t I2C_TMC_WriteRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
+{
+    TMC2130_status_t status = {0};
+
+    while(i2cIsBusy);
+
+    reg->addr.write = 1;
+    i2c.buffer[0] = TMCI2C_GetMapAddress((uint8_t)(driver ? (uint32_t)driver->cs_pin : 0), reg->addr).value;
+    reg->addr.write = 0;
+
+    if(i2c.buffer[0] == 0xFF)
+        return status; // unsupported register
+
+    i2c.buffer[1] = (reg->payload.value >> 24) & 0xFF;
+    i2c.buffer[2] = (reg->payload.value >> 16) & 0xFF;
+    i2c.buffer[3] = (reg->payload.value >> 8) & 0xFF;
+    i2c.buffer[4] = reg->payload.value & 0xFF;
+
+    I2CSend(I2C_ADR_I2CBRIDGE, 5, true);
+
+    return status;
+}
+
+void I2C_DriverInit (TMC_io_driver_t *driver)
+{
+    driver->WriteRegister = I2C_TMC_WriteRegister;
+    driver->ReadRegister = I2C_TMC_ReadRegister;
+}
+
+#endif
 
 static void I2C_interrupt_handler (void)
 {
@@ -230,9 +240,14 @@ static void I2C_interrupt_handler (void)
             *i2c.data = I2CMasterDataGet(I2C0_BASE);
             i2c.count = 0;
             i2c.state = I2CState_Idle;
+          #if KEYPAD_ENABLE
+            if(i2c.keycode_callback) {
+                  //  if(GPIOIntStatus(KEYINTR_PORT, KEYINTR_PIN) != 0) { // only add keycode when key is still pressed
+                i2c.keycode_callback(*i2c.data);
+                i2c.keycode_callback = NULL;
+            }
+          #endif
             break;
     }
 }
-
-#endif
 

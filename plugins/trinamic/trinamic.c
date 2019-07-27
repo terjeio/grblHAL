@@ -80,12 +80,12 @@ void trinamic_init (void)
 #if !TRINAMIC_I2C
     static chip_select_t cs[N_AXIS];
 
-    cs[0].port = SPI_CS_PORT_X;
-    cs[0].pin = SPI_CS_PIN_X;
-    cs[1].port = SPI_CS_PORT_Y;
-    cs[1].pin = SPI_CS_PIN_Y;
-    cs[2].port = SPI_CS_PORT_Z;
-    cs[2].pin = SPI_CS_PIN_Z;
+    cs[X_AXIS].port = SPI_CS_PORT_X;
+    cs[X_AXIS].pin = SPI_CS_PIN_X;
+    cs[Y_AXIS].port = SPI_CS_PORT_Y;
+    cs[Y_AXIS].pin = SPI_CS_PIN_Y;
+    cs[Z_AXIS].port = SPI_CS_PORT_Z;
+    cs[Z_AXIS].pin = SPI_CS_PIN_Z;
 
     // TODO: add definitions for other axes if more than three!
 #endif
@@ -145,23 +145,6 @@ void trinamic_init (void)
           #endif
         }
     } while(idx);
-
-    // Configure input pin for DIAG1 signal (with pullup) and enable interrupt
-    BITBAND_PERI(TRINAMIC_DIAG_IRQ_PORT->OUT, TRINAMIC_DIAG_IRQ_PIN) = 1;
-    BITBAND_PERI(TRINAMIC_DIAG_IRQ_PORT->REN, TRINAMIC_DIAG_IRQ_PIN) = 1;
-    BITBAND_PERI(TRINAMIC_DIAG_IRQ_PORT->IES, TRINAMIC_DIAG_IRQ_PIN) = 1;
-    BITBAND_PERI(TRINAMIC_DIAG_IRQ_PORT->IFG, TRINAMIC_DIAG_IRQ_PIN) = 0;
-    BITBAND_PERI(TRINAMIC_DIAG_IRQ_PORT->IE, TRINAMIC_DIAG_IRQ_PIN) = 1;
-    NVIC_EnableIRQ(TRINAMIC_DIAG_INT);
-#if TRINAMIC_I2C
-    // Configure input pin for WARN signal (with pullup) and enable interrupt
-    BITBAND_PERI(TRINAMIC_WARN_IRQ_PORT->OUT, TRINAMIC_WARN_IRQ_PIN) = 1;
-    BITBAND_PERI(TRINAMIC_WARN_IRQ_PORT->REN, TRINAMIC_WARN_IRQ_PIN) = 1;
-    BITBAND_PERI(TRINAMIC_WARN_IRQ_PORT->IES, TRINAMIC_WARN_IRQ_PIN) = 1;
-    BITBAND_PERI(TRINAMIC_WARN_IRQ_PORT->IFG, TRINAMIC_WARN_IRQ_PIN) = 0;
-    BITBAND_PERI(TRINAMIC_WARN_IRQ_PORT->IE, TRINAMIC_WARN_IRQ_PIN) = 1;
-    NVIC_EnableIRQ(TRINAMIC_WARN_INT);
-#endif
 }
 
 // Update driver settings on changes
@@ -227,8 +210,6 @@ void trinamic_settings_restore (uint8_t restore_flag)
         driver_settings.trinamic.homing_enable.mask = 0;
 
         do {
-            idx--;
-
             switch(--idx) {
 
                 case X_AXIS:
@@ -280,15 +261,15 @@ void trinamic_settings_report (bool axis_settings, axis_setting_type_t setting_t
     }
 }
 
-// Add warning info to next realtime report when reported by drivers
+// Add warning info to next realtime report when warning flag set by drivers
 void trinamic_RTReport (stream_write_ptr stream_write)
 {
     if(warning) {
+        warning = false;
         TMCI2C_status_t status = (TMCI2C_status_t)TMC2130_ReadRegister(NULL, (TMC2130_datagram_t *)&dgr_monitor).value;
         otpw_triggered.mask |= dgr_monitor.reg.otpw.mask;
         sprintf(sbuf, "|TMCMON:%d:%d:%d:%d:%d", status.value, dgr_monitor.reg.ot.mask, dgr_monitor.reg.otpw.mask, dgr_monitor.reg.otpw_cnt.mask, dgr_monitor.reg.error.mask);
         stream_write(sbuf);
-        warning = false;
     }
 }
 
