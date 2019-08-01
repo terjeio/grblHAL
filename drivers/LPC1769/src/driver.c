@@ -2,7 +2,7 @@
 
   driver.c - driver code for NXP LPC176x ARM processors
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2018-2019 Terje Io
 
@@ -32,7 +32,7 @@
 #include "grbl-lpc/pwm_driver.h"
 
 #if SDCARD_ENABLE
-#include "sdcard.h"
+#include "sdcard/sdcard.h"
 #endif
 
 static bool pwmEnabled = false, IOInitDone = false;

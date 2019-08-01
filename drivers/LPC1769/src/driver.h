@@ -2,7 +2,7 @@
 
   driver.h - driver code for NXP LPC176x ARM processors
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2018 Terje Io
 
