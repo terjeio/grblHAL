@@ -29,8 +29,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "grbl.h"
-#include "C:\users\terjeio\Documents\Arduino\grbl\stream.h" // bug in ...... Arduino framework? No support for subfolders!
+#include "src/grbl/grbl.h"
+#include "src/grbl/stream.h" // bug in ...... Arduino framework? No support for subfolders!
 
 #define TX_BUFFER_SIZE 512      // must be a power of 2
 #define RX_BUFFER_SIZE 1024     // must be a power of 2

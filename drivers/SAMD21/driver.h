@@ -24,7 +24,7 @@
 #ifndef __DRIVER_H__
 #define __DRIVER_H__
 
-#include "grbl.h"
+#include "src/grbl/grbl.h"
 
 // Configuration
 // Set value to 1 to enable, 0 to disable

@@ -31,7 +31,7 @@
 #endif
 
 #if SDCARD_ENABLE
-#include "sdcard.h"
+#include "src/sdcard/sdcard.h"
 #include "diskio.h"
 #endif
 

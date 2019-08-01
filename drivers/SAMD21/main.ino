@@ -4,7 +4,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2018 Terje Io
+  Copyright (c) 2018-2019 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -21,10 +21,15 @@
 
 */
 
-#include "grbllib.h"
+// Double tap reset to enter bootloader mode - select bootloader port for programming
 
-int main ()
+#include "src/grbl/grbllib.h"
+
+void setup ()
 {
-	grbl_enter();
-	return 0;
+    grbl_enter();
+}
+
+void loop ()
+{
 }

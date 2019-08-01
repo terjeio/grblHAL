@@ -1,11 +1,8 @@
 ## SAMD21 Driver
 
-A GrblHAL driver for the Atmel SAMD21 processor on a [Arduiono MKR ZERO board](https://store.arduino.cc/arduino-mkrzero).
+A GrblHAL driver for the Atmel SAMD21 processor on a [Arduino MKR ZERO board](https://store.arduino.cc/arduino-mkrzero).
 
 ### *** EXPERIMENTAL *** ###
-
-**NOTE:** Not all code included - I have not spent much time to grasp, for me, the strange ways the Arduino framework is to be set up when publishing code.
-It seems to me that subdirectories with code is problematic... Any guidance will be welcome.
 
 This driver compiles and uploads from the Arduino IDE and is partially dependent on the Arduino framework.
 
@@ -63,5 +60,4 @@ Numbers in round brackets are the Arduino pin assignments, in square brackets th
 **NOTE:** Only tested on my bench with an oscilloscope, some switches and LEDs.
 
 ---
-2018-12-25
-
+2019-08-01
