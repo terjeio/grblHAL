@@ -29,6 +29,7 @@ typedef enum {
     I2CState_Idle = 0,
     I2CState_SendNext,
     I2CState_SendLast,
+    I2CState_SendRegisterAddress,
     I2CState_AwaitCompletion,
     I2CState_ReceiveNext,
     I2CState_ReceiveNextToLast,
@@ -37,6 +38,7 @@ typedef enum {
 
 typedef struct {
     volatile i2c_state_t state;
+    uint8_t addr;
     uint8_t count;
     uint8_t *data;
     bool getKeycode;
@@ -79,7 +81,7 @@ void I2CInit (void)
 }
 
 // get bytes (max 8), waits for result
-static uint8_t* I2CReceive(uint32_t i2cAddr, uint32_t bytes, bool block)
+static uint8_t* I2C_Receive(uint32_t i2cAddr, uint32_t bytes, bool block)
 {
     while(i2cIsBusy);
 
@@ -96,7 +98,7 @@ static uint8_t* I2CReceive(uint32_t i2cAddr, uint32_t bytes, bool block)
     return i2c.buffer;
 }
 
-static void I2CSend (uint32_t i2cAddr, uint8_t bytes, bool block)
+static void I2C_Send (uint32_t i2cAddr, uint8_t bytes, bool block)
 {
     i2c.count = bytes - 1;
     i2c.data  = i2c.buffer;
@@ -109,6 +111,24 @@ static void I2CSend (uint32_t i2cAddr, uint8_t bytes, bool block)
         while(i2cIsBusy);
 }
 
+static uint8_t *I2C_ReadRegister (uint32_t i2cAddr, uint8_t bytes, bool block)
+{
+    while(i2cIsBusy);
+
+    i2c.count = bytes;
+    i2c.data  = i2c.buffer;
+    i2c.state = I2CState_SendRegisterAddress;
+    i2c.addr = i2cAddr;
+    I2CMasterSlaveAddrSet(I2C0_BASE, i2cAddr, false);
+    I2CMasterDataPut(I2C0_BASE, *i2c.data);
+    I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_SEND_START);
+
+    if(block)
+        while(i2cIsBusy);
+
+    return i2c.buffer;
+}
+
 #if KEYPAD_ENABLE
 
 void I2C_GetKeycode (uint32_t i2cAddr, keycode_callback_ptr callback)
@@ -117,7 +137,7 @@ void I2C_GetKeycode (uint32_t i2cAddr, keycode_callback_ptr callback)
 
     i2c.keycode_callback = callback;
 
-    I2CReceive(i2cAddr, 1, false);
+    I2C_Receive(i2cAddr, 1, false);
 }
 
 #endif
@@ -140,11 +160,7 @@ static TMC2130_status_t I2C_TMC_ReadRegister (TMC2130_t *driver, TMC2130_datagra
     i2c.buffer[3] = 0;
     i2c.buffer[4] = 0;
 
-    I2CSend(I2C_ADR_I2CBRIDGE, 1, true);
-
-    __delay_cycles(3000); // Delay to allow I2C bridge to get data from driver
-
-    res = I2CReceive(I2C_ADR_I2CBRIDGE, 5, true);
+    res = I2C_ReadRegister(I2C_ADR_I2CBRIDGE, 5, true);
 
     status.value = (uint8_t)*res++;
     reg->payload.value = ((uint8_t)*res++ << 24);
@@ -174,7 +190,7 @@ static TMC2130_status_t I2C_TMC_WriteRegister (TMC2130_t *driver, TMC2130_datagr
     i2c.buffer[3] = (reg->payload.value >> 8) & 0xFF;
     i2c.buffer[4] = reg->payload.value & 0xFF;
 
-    I2CSend(I2C_ADR_I2CBRIDGE, 5, true);
+    I2C_Send(I2C_ADR_I2CBRIDGE, 5, true);
 
     return status;
 }
@@ -215,6 +231,12 @@ static void I2C_interrupt_handler (void)
             i2c.state = I2CState_AwaitCompletion;
             break;
 
+        case I2CState_SendRegisterAddress:
+            I2CMasterSlaveAddrSet(I2C0_BASE, i2c.addr, true);
+            I2CMasterControl(I2C0_BASE,  i2c.count == 1 ? I2C_MASTER_CMD_SINGLE_RECEIVE : I2C_MASTER_CMD_BURST_RECEIVE_START);
+            i2c.state = i2c.count == 1 ? I2CState_ReceiveLast : (i2c.count == 2 ? I2CState_ReceiveNextToLast : I2CState_ReceiveNext);
+            break;
+
         case I2CState_AwaitCompletion:
             i2c.count = 0;
             i2c.state = I2CState_Idle;
@@ -250,4 +272,3 @@ static void I2C_interrupt_handler (void)
             break;
     }
 }
-

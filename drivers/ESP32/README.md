@@ -6,6 +6,11 @@ A GrblHAL driver for the ESP32 processor.
 
 ---
 
+__Update 2019-08-01:__ Now uses code for keypad and SD card options from common plugins. Added support for Trinamic TMC2130 plugin (currently via SPI <> I2C bridge).
+
+__NOTE:__ If plugins are to be used `driver.h` and `CMakeLists.txt` has to be updated. Details can be found in these files.
+
+
 __Update 2018-12-14:__ Prototype [CNC BoosterPack](https://github.com/terjeio/CNC_Boosterpack) "motherboard" up and running.
 
 The board has an 8-bit I2C IO-expander and a micro SD card socket on board. Option to use EEPROM on BoosterPack for settings.

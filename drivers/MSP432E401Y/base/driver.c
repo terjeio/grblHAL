@@ -1754,7 +1754,7 @@ bool driver_init (void)
 #endif
 
 #if KEYPAD_ENABLE
-    hal.execute_realtime = process_keypress;
+    hal.execute_realtime = keypad_process_keypress;
     hal.driver_setting = driver_setting;
     hal.driver_settings_restore = driver_settings_restore;
     hal.driver_settings_report = driver_settings_report;
@@ -1899,7 +1899,7 @@ static void limit_debounced_yz_isr (void)
         TimerLoadSet(DEBOUNCE_TIMER_BASE, TIMER_A, 32000);  // 32ms
         TimerEnable(DEBOUNCE_TIMER_BASE, TIMER_A);
     }
-#if CNC_BOOSTERPACK_SHORTS
+#if !CNC_BOOSTERPACK_SHORTS
     if(iflags & RESET_PIN)
         hal.control_interrupt_callback(systemGetState());
 #endif

@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <launchConfiguration type="com.ti.ccstudio.debug.launchType.device.debugging">
 <stringAttribute key="com.ti.ccstudio.debug.debugModel.ATTR_CPUS_WITH_PROJECT" value="&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;&#13;&#10;&lt;cpus_with_project&gt;&#13;&#10;&lt;id id=&quot;TI MSP430 USB1/MSP430&quot; isa=&quot;MSP430&quot;/&gt;&#13;&#10;&lt;/cpus_with_project&gt;"/>
-<stringAttribute key="com.ti.ccstudio.debug.debugModel.ATTR_DEBUGGER_PROPERTIES.TI MSP430 USB1/MSP430" value="&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; standalone=&quot;no&quot; ?&gt;&#10;&lt;PropertyValues&gt;&#10;&#10;  &lt;property id=&quot;ConnectOnStartup&quot;&gt;&#10;    &lt;curValue&gt;1&lt;/curValue&gt;&#10;  &lt;/property&gt;&#10;&#10;  &lt;property id=&quot;EnableInstalledBreakpoint&quot;&gt;&#10;    &lt;curValue&gt;1&lt;/curValue&gt;&#10;  &lt;/property&gt;&#10;&#10;&lt;/PropertyValues&gt;&#10;"/>
-<stringAttribute key="com.ti.ccstudio.debug.debugModel.ATTR_PROGRAM.TI MSP430 USB1/MSP430" value="${build_artifact:GRBL Driver MSP430F5529}"/>
-<stringAttribute key="com.ti.ccstudio.debug.debugModel.ATTR_PROJECT.TI MSP430 USB1/MSP430" value="GRBL Driver MSP430F5529"/>
+<stringAttribute key="com.ti.ccstudio.debug.debugModel.ATTR_DEBUGGER_PROPERTIES.D:\Projects\CCS8\GRBL Driver MSP430F5529\targetConfigs\MSP430F5529.ccxml.TI MSP430 USB1/MSP430" value="&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; standalone=&quot;no&quot; ?&gt;&#10;&lt;PropertyValues&gt;&#10;&#10;  &lt;property id=&quot;ConnectOnStartup&quot;&gt;&#10;    &lt;curValue&gt;1&lt;/curValue&gt;&#10;  &lt;/property&gt;&#10;&#10;  &lt;property id=&quot;EnableInstalledBreakpoint&quot;&gt;&#10;    &lt;curValue&gt;1&lt;/curValue&gt;&#10;  &lt;/property&gt;&#10;&#10;&lt;/PropertyValues&gt;&#10;"/>
+<stringAttribute key="com.ti.ccstudio.debug.debugModel.ATTR_PROGRAM.D:\Projects\CCS8\GRBL Driver MSP430F5529\targetConfigs\MSP430F5529.ccxml.TI MSP430 USB1/MSP430" value="${build_artifact:GRBL Driver MSP430F5529}"/>
+<stringAttribute key="com.ti.ccstudio.debug.debugModel.ATTR_PROJECT.D:\Projects\CCS8\GRBL Driver MSP430F5529\targetConfigs\MSP430F5529.ccxml.TI MSP430 USB1/MSP430" value="GRBL Driver MSP430F5529"/>
 <stringAttribute key="com.ti.ccstudio.debug.debugModel.ATTR_TARGET_CONFIG" value="${target_config_active_default:GRBL Driver MSP430F5529}"/>
-<stringAttribute key="com.ti.ccstudio.debug.debugModel.MRU_PROGRAM.TI MSP430 USB1/MSP430" value="D:/Projects\CCS\GRBL Driver MSP430F5529\Debug\GRBL Driver MSP430F5529.out"/>
+<stringAttribute key="com.ti.ccstudio.debug.debugModel.MRU_PROGRAM.D:\Projects\CCS8\GRBL Driver MSP430F5529\targetConfigs\MSP430F5529.ccxml.TI MSP430 USB1/MSP430" value="D:/Projects\CCS\GRBL Driver MSP430F5529\Debug\GRBL Driver MSP430F5529.out"/>
 <mapAttribute key="com.ti.ccstudio.debug.ui.displayFormats">
 <mapEntry key="TI MSP430 USB1/MSP430@##separator##@0" value="16-Bit Hex - TI Style"/>
 </mapAttribute>

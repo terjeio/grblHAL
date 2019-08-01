@@ -2,7 +2,23 @@
 # in this exact order for cmake to work correctly
 cmake_minimum_required(VERSION 3.5)
 
-set(MAIN_SRCS main.c driver.c nvs.c esp32-hal-uart.c bluetooth.c wifi.c TCPStream.c sdcard.c keypad.c ioexpand.c eeprom.c
+# The following plugins are supported:
+# I2C keypad
+# SD Card
+# Trinamic TMC2130 stepper drivers via I2C <> SPI bridge
+# ---
+# Move the commented lines below to MAIN_SRCS list
+# if enabled in driver.h:
+# keypad/keypad.c
+# trinamic/trinamic2130.c
+# trinamic/TMC2130_I2C_map.c
+# tmc2130/trinamic.c
+# sdcard/sdcard.c
+
+set(MAIN_SRCS main.c driver.c nvs.c esp32-hal-uart.c bluetooth.c wifi.c TCPStream.c
+ i2c.c
+ ioexpand.c
+ eeprom.c
  GRBL/grbllib.c
  GRBL/coolant_control.c
  GRBL/eeprom_emulate.c
@@ -22,7 +38,10 @@ set(MAIN_SRCS main.c driver.c nvs.c esp32-hal-uart.c bluetooth.c wifi.c TCPStrea
  GRBL/system.c
 )
 
-#include_directories("D:/Projects/esp/esp-idf/components/freertos/include")
+#include_directories("$ENV{IDF_PATH}/components/freertos/include" "D:\Projects\esp\GrblDriver")
+#include_directories(BEFORE "D:/Projects/esp/GrblDriver")
+
+set(INCLUDE_DIRS "D:/Projects/esp/GrblDriver")
 
 #file(GLOB GRBL_SOURCE "GRBL/*.c")
     
@@ -30,6 +49,8 @@ set(MAIN_SRCS main.c driver.c nvs.c esp32-hal-uart.c bluetooth.c wifi.c TCPStrea
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(grbl)
+include_directories(BEFORE "D:/Projects/esp/GrblDriver")
+#target_compile_options(grbl PRIVATE -Werror -Wall -Wextra)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 

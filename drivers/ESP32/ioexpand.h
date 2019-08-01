@@ -28,6 +28,12 @@
 
 #include "driver.h"
 
+#define IOEX_ADDRESS 0x40
+#define READ_INPUT   0
+#define RW_OUTPUT    1
+#define RW_INVERSION 2
+#define RW_CONFIG    3
+
 void ioexpand_init (void);
 void ioexpand_out (ioexpand_t pins);
 ioexpand_t ioexpand_in (void);

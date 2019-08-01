@@ -154,9 +154,9 @@ typedef struct HAL {
     bool (*probe_get_state)(void);
     void (*probe_configure_invert_mask)(bool is_probe_away);
     void (*execute_realtime)(uint_fast16_t state);
-    uint_fast16_t (*driver_mcode_check)(uint_fast16_t mcode);
-    status_code_t (*driver_mcode_validate)(parser_block_t *gc_block, uint32_t *value_words);
-    void (*driver_mcode_execute)(uint_fast16_t state, parser_block_t *gc_block);
+    user_mcode_t (*user_mcode_check)(user_mcode_t mcode);
+    status_code_t (*user_mcode_validate)(parser_block_t *gc_block, uint32_t *value_words);
+    void (*user_mcode_execute)(uint_fast16_t state, parser_block_t *gc_block);
     void (*driver_rt_command_execute)(uint8_t cmd);
     void (*driver_rt_report)(stream_write_ptr stream_write);
     void (*driver_feedback_message)(stream_write_ptr stream_write);
@@ -167,7 +167,7 @@ typedef struct HAL {
     void (*show_message)(const char *msg);
     void (*report_options)(void);
     void (*driver_reset)(void);
-    bool (*driver_setting)(uint_fast16_t setting, float value, char *svalue);
+    bool (*driver_setting)(setting_type_t setting, float value, char *svalue);
     void (*driver_settings_restore)(uint8_t restore_flag);
     void (*driver_settings_report)(bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx);
     spindle_data_t (*spindle_get_data)(spindle_data_request_t request);

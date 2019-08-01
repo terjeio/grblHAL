@@ -23,7 +23,7 @@
 | Manual tool change<sup>5</sup>      | no          | yes      | no     | yes     | no          | no     | yes   | yes   | no      | no      |
 | Automatic tool change<sup>6</sup>    | planned| no          | no     | no      | no          | no     | no    | no    | no      | no      |
 | Laser PPI mode<sup>7</sup>           | no     | no          | yes    | no      | no          | no     | no    | no    | no      | no      |
-| Trinamic support<sup>8</sup>         | TBC<sup>9</sup>    | TBC<sup>9</sup>         | TBC<sup>9</sup>    | TBC<sup>9</sup>     | no          | no     | no    | no    | no      | no      |
+| Trinamic support<sup>8</sup>         | TBC<sup>9</sup>    | TBC<sup>9</sup>         | TBC<sup>9</sup>    | TBC<sup>9</sup>     | no          | no     | TBC<sup>9</sup>   | no    | no      | no      |
 | Runs as FreeRTOS task   | no       | yes         | no     | option  | no          | no     | yes   | no    | no      | no      |
 | CNC BoosterPack support | 1        | 2           | 1      | 2       | 1           | no     | yes<sup>10</sup>   | yes<sup>10</sup>  | no      | yes<sup>10</sup>     |
 
@@ -44,4 +44,4 @@ Please note that some of the capabilities should be fairly easy to port from one
 The fastest and most deterministic MCUs seems to be MSP432E401Y and TMC129x, ESP32 is not bad but it is a bit unstable - maybe due to outstanding [bugs](https://github.com/espressif/esp-idf/issues) in the [ESP-IDF](https://github.com/espressif/esp-idf) and the system architecture - program code is stored off chip in external serial flash.
 
 ---
-2019-06-27
+2019-08-01

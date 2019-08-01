@@ -189,6 +189,11 @@ typedef enum {
 
     Setting_AxisSettingsBase = 100, // NOTE: Reserving settings values >= 100 for axis settings. Up to 255.
     Setting_AxisSettingsMax = 255
+
+// Optional driver implemented settings
+    ,Setting_TrinamicDriver = 256,
+    Setting_TrinamicHoming = 257
+//
 } setting_type_t;
 
 typedef enum {
@@ -376,6 +381,15 @@ typedef struct {
 // Setting structs that may be used by driver
 
 typedef struct {
+    float fast_speed;
+    float slow_speed;
+    float step_speed;
+    float fast_distance;
+    float slow_distance;
+    float step_distance;
+} jog_settings_t;
+
+typedef struct {
     char ssid[65];
     char password[33];
     uint16_t port;
@@ -397,7 +411,7 @@ void settings_init();
 void settings_restore(uint8_t restore_flag);
 
 // A helper method to set new settings from command line
-status_code_t settings_store_global_setting(uint_fast16_t parameter, char *svalue);
+status_code_t settings_store_global_setting(setting_type_t setting, char *svalue);
 
 // Writes the protocol line variable as a startup line in persistent storage
 void settings_write_startup_line(uint8_t idx, char *line);

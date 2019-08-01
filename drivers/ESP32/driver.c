@@ -47,11 +47,12 @@
 #endif
 
 #if SDCARD_ENABLE
-#include "sdcard.h"
+#include "sdcard/sdcard.h"
+#include "esp_vfs_fat.h"
 #endif
 
 #if KEYPAD_ENABLE
-#include "keypad.h"
+#include "keypad/keypad.h"
 #endif
 
 #if IOEXPAND_ENABLE
@@ -60,6 +61,10 @@
 
 #if EEPROM_ENABLE
 #include "eeprom.h"
+#endif
+
+#ifdef I2C_PORT
+#include "i2c.h"
 #endif
 
 #include "freertos/FreeRTOS.h"
@@ -219,10 +224,6 @@ static void gpio_isr (void *arg);
 static TimerHandle_t xDelayTimer = NULL, debounceTimer = NULL;
 static TaskHandle_t xStepperTask = NULL;
 
-QueueHandle_t i2cQueue = NULL;
-SemaphoreHandle_t i2cBusy = NULL;
-
-
 void selectStream (stream_setting_t stream)
 {
 	//
@@ -377,7 +378,19 @@ inline IRAM_ATTR static void set_dir_outputs (axes_signals_t dir_outbits)
 static void stepperEnable (axes_signals_t enable)
 {
     enable.mask ^= settings.steppers.enable_invert.mask;
-#if IOEXPAND_ENABLE // TODO: read from expander?
+#if TRINAMIC_ENABLE && TRINAMIC_I2C
+    axes_signals_t tmc_enable = trinamic_stepper_enable(enable);
+ #if !CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
+  #if IOEXPAND_ENABLE
+	if(!tmc_enable.x)
+		iopins.stepper_enable_x = enable.x;
+    if(!tmc_enable.y)
+        iopins.stepper_enable_y = enable.y;
+	if(!tmc_enable.z)
+		iopins.stepper_enable_z = enable.z;
+  #endif
+ #endif
+#elif IOEXPAND_ENABLE // TODO: read from expander?
     iopins.stepper_enable_x = enable.x;
     iopins.stepper_enable_y = enable.y;
     iopins.stepper_enable_z = enable.z;
@@ -453,6 +466,9 @@ static void limitsEnable (bool on, bool homing)
     for(i = INPUT_LIMIT_X; i <= INPUT_LIMIT_Z; i++) {
         gpio_set_intr_type(inputpin[i].pin, on ? (inputpin[i].invert ? GPIO_INTR_NEGEDGE : GPIO_INTR_POSEDGE) : GPIO_INTR_DISABLE);
     }
+#if TRINAMIC_ENABLE
+    trinamic_homing(homing);
+#endif
 }
 
 // Returns limit state as an axes_signals_t variable.
@@ -718,64 +734,7 @@ void debounceTimerCallback (TimerHandle_t xTimer)
 		  hal.control_interrupt_callback(systemGetState());
 }
 
-#ifdef I2C_PORT
 
-void I2CTask (void *queue)
-{
-	i2c_task_t task;
-
-	while(xQueueReceive((QueueHandle_t)queue, &task, portMAX_DELAY) == pdPASS) {
-#if KEYPAD_ENABLE
-		if(task.action == 1) { // Read keypad character and add to input buffer
-			if(i2cBusy != NULL && xSemaphoreTake(i2cBusy, 20 / portTICK_PERIOD_MS) == pdTRUE) {
-				char keycode;
-				i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-				i2c_master_start(cmd);
-				i2c_master_write_byte(cmd, (KEYPAD_I2CADDR << 1) | I2C_MASTER_READ, true);
-				i2c_master_read_byte(cmd, (uint8_t*)&keycode, I2C_MASTER_NACK);
-				i2c_master_stop(cmd);
-				if(i2c_master_cmd_begin(I2C_PORT, cmd, 1000 / portTICK_RATE_MS) == ESP_OK)
-					keypad_enqueue_keycode(keycode);
-				i2c_cmd_link_delete(cmd);
-				xSemaphoreGive(i2cBusy);
-			}
-		}
-#endif
-	}
-}
-
-void i2c_init (void)
-{
-	static bool init_ok = false;
-
-	if(!init_ok) {
-
-		init_ok = true;
-
-		i2c_config_t i2c_config = {
-			.mode = I2C_MODE_MASTER,
-			.sda_io_num = I2C_SDA,
-			.scl_io_num = I2C_SCL,
-			.sda_pullup_en = GPIO_PULLUP_DISABLE,
-			.scl_pullup_en = GPIO_PULLUP_DISABLE,
-			.master.clk_speed = I2C_CLOCK
-		};
-
-		i2c_param_config(I2C_PORT, &i2c_config);
-		esp_err_t ret = i2c_driver_install(I2C_PORT, i2c_config.mode, 0, 0, 0);
-
-		i2cQueue = xQueueCreate(5, sizeof(uint8_t));
-		i2cBusy = xSemaphoreCreateBinary();
-
-		TaskHandle_t I2CTaskHandle;
-
-		xTaskCreatePinnedToCore(I2CTask, "I2C", 2048, (void *)i2cQueue, configMAX_PRIORITIES, &I2CTaskHandle, 1);
-
-		xSemaphoreGive(i2cBusy);
-	}
-}
-
-#endif
 
 // Configures perhipherals when settings are initialized or changed
 static void settings_changed (settings_t *settings)
@@ -794,7 +753,11 @@ static void settings_changed (settings_t *settings)
 
     if(IOInitDone) {
 
-        hal.spindle_set_state = hal.driver_cap.variable_spindle ? spindleSetStateVariable : spindleSetState;
+	  #if TRINAMIC_ENABLE
+	    trinamic_configure();
+	  #endif
+
+	    hal.spindle_set_state = hal.driver_cap.variable_spindle ? spindleSetStateVariable : spindleSetState;
 
     	// Validate stream setting, switch to serial if not supported
     	if((settings->stream == StreamSetting_WiFi && !hal.driver_cap.wifi) ||
@@ -952,6 +915,9 @@ static bool driver_setup (settings_t *settings)
 	if(hal.eeprom.type != EEPROM_None) {
 		if(!hal.eeprom.memcpy_from_with_checksum((uint8_t *)&driver_settings, hal.eeprom.driver_area.address, sizeof(driver_settings)))
 			hal.driver_settings_restore(SETTINGS_RESTORE_DRIVER_PARAMETERS);
+		#if TRINAMIC_ENABLE && CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
+		  driver_settings.trinamic.driver_enable.mask = AXES_BITMASK;
+		#endif
 	}
 
     /******************
@@ -1020,7 +986,28 @@ static bool driver_setup (settings_t *settings)
 	ledc_timer_config(&ledTimerConfig);
 	ledc_channel_config(&ledConfig);
 
+	/**/
+
 #if SDCARD_ENABLE
+
+    sdmmc_host_t host = SDSPI_HOST_DEFAULT();
+    sdspi_slot_config_t slot_config = SDSPI_SLOT_CONFIG_DEFAULT();
+    esp_vfs_fat_sdmmc_mount_config_t mount_config = {
+        .format_if_mount_failed = false,
+        .max_files = 5
+//        .allocation_unit_size = 16 * 1024
+    };
+
+    slot_config.gpio_miso = PIN_NUM_MISO;
+    slot_config.gpio_mosi = PIN_NUM_MOSI;
+    slot_config.gpio_sck  = PIN_NUM_CLK;
+    slot_config.gpio_cs   = PIN_NUM_CS;
+
+    host.max_freq_khz = 20000; //SDMMC_FREQ_DEFAULT; //SDMMC_FREQ_PROBING; 19000;
+
+    sdmmc_card_t* card;
+    esp_vfs_fat_sdmmc_mount("/sdcard", &host, &slot_config, &mount_config, &card);
+
     sdcard_init();
 #endif
 
@@ -1029,7 +1016,11 @@ static bool driver_setup (settings_t *settings)
 #endif
 
 #if KEYPAD_ENABLE
-    keypad_init();
+//    keypad_init();
+#endif
+
+#if TRINAMIC_ENABLE
+    trinamic_init();
 #endif
 
   // Set defaults
@@ -1078,13 +1069,19 @@ static bool driver_setting (uint_fast16_t param, float value, char *svalue)
 		claimed = keypad_setting(param, value, svalue);
 #endif
 
+#if TRINAMIC_ENABLE
+    if(!claimed)
+        claimed = trinamic_setting(param, value, svalue);
+#endif
+
 	if(claimed)
 		hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
 
     return claimed;
 }
 
-#if WIFI_ENABLE || BLUETOOTH_ENABLE
+#ifdef DRIVER_SETTINGS
+
 static void report_string_setting (uint8_t setting, char *value)
 {
     hal.stream.write("$");
@@ -1093,13 +1090,12 @@ static void report_string_setting (uint8_t setting, char *value)
     hal.stream.write(value);
     hal.stream.write("\r\n");
 }
-#endif
 
-static void driver_settings_report (bool axis_setting, axis_setting_type_t setting_type, uint8_t axis_idx)
+static void driver_settings_report (bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx)
 {
-    if(!axis_setting) {
+    if(!axis_settings) {
 #if KEYPAD_ENABLE
-    	keypad_settings_report(axis_setting, setting_type, axis_idx);
+    	keypad_settings_report(axis_settings, setting_type, axis_idx);
 #endif
 #if WIFI_ENABLE
 		report_string_setting(Settings_WiFiSSID, driver_settings.wifi.ssid);
@@ -1111,6 +1107,9 @@ static void driver_settings_report (bool axis_setting, axis_setting_type_t setti
 		report_string_setting(Settings_BlueToothServiceName, driver_settings.bluetooth.service_name);
 #endif
     }
+#if TRINAMIC_ENABLE
+    trinamic_settings_report(axis_settings, setting_type, axis_idx);
+#endif
 }
 
 void driver_settings_restore (uint8_t restore_flag)
@@ -1124,9 +1123,14 @@ void driver_settings_restore (uint8_t restore_flag)
 #if KEYPAD_ENABLE
     	keypad_settings_restore(restore_flag);
 #endif
+#if TRINAMIC_ENABLE
+        trinamic_settings_restore(restore_flag);
+#endif
     	hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
     }
 }
+
+#endif
 
 // Initialize HAL pointers, setup serial comms and enable EEPROM
 // NOTE: Grbl is not yet configured (from EEPROM data), driver_setup() will be called when done
@@ -1135,6 +1139,10 @@ bool driver_init (void)
     // Enable EEPROM and serial port here for Grbl to be able to configure itself and report any errors
 
     uartInit();
+
+#ifdef I2C_PORT
+	I2CInit();
+#endif
 
     hal.info = "ESP32";
     hal.driver_setup = driver_setup;
@@ -1169,30 +1177,32 @@ bool driver_init (void)
     selectStream(StreamSetting_Serial);
 
 #if EEPROM_ENABLE
-    eeprom_init();
     hal.eeprom.type = EEPROM_Physical;
     hal.eeprom.get_byte = eepromGetByte;
     hal.eeprom.put_byte = eepromPutByte;
     hal.eeprom.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
     hal.eeprom.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
-	hal.eeprom.driver_area.address = GRBL_EEPROM_SIZE;
-	hal.eeprom.driver_area.size = sizeof(driver_settings); // Add assert?
-	hal.eeprom.size = GRBL_EEPROM_SIZE + sizeof(driver_settings) + 1;
 #else
     if(nvsInit()) {
         hal.eeprom.type = EEPROM_Emulated;
         hal.eeprom.memcpy_from_flash = nvsRead;
         hal.eeprom.memcpy_to_flash = nvsWrite;
-		hal.eeprom.driver_area.address = GRBL_EEPROM_SIZE;
-		hal.eeprom.driver_area.size = sizeof(driver_settings); // Add assert?
-		hal.eeprom.size = GRBL_EEPROM_SIZE + sizeof(driver_settings) + 1;
 	} else
 	    hal.eeprom.type = EEPROM_None;
 #endif
 
-    hal.driver_setting = driver_setting;
-    hal.driver_settings_report = driver_settings_report;
-    hal.driver_settings_restore = driver_settings_restore;
+#ifdef DRIVER_SETTINGS
+
+    if(hal.eeprom.type != EEPROM_None) {
+		hal.eeprom.driver_area.address = GRBL_EEPROM_SIZE;
+		hal.eeprom.driver_area.size = sizeof(driver_settings); // Add assert?
+		hal.eeprom.size = GRBL_EEPROM_SIZE + sizeof(driver_settings) + 1;
+
+		hal.driver_setting = driver_setting;
+		hal.driver_settings_report = driver_settings_report;
+		hal.driver_settings_restore = driver_settings_restore;
+    }
+#endif
 
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
@@ -1210,6 +1220,13 @@ bool driver_init (void)
 
 #if SDCARD_ENABLE
     hal.driver_reset = sdcard_reset;
+#endif
+
+#if TRINAMIC_ENABLE
+    hal.user_mcode_check = trinamic_MCodeCheck;
+    hal.user_mcode_validate = trinamic_MCodeValidate;
+    hal.user_mcode_execute = trinamic_MCodeExecute;
+    hal.driver_rt_report = trinamic_RTReport;
 #endif
 
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality

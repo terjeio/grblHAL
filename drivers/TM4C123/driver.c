@@ -1193,7 +1193,7 @@ bool driver_init (void)
     hal.show_message = showMessage;
 
 #if KEYPAD_ENABLE
-    hal.execute_realtime = process_keypress;
+    hal.execute_realtime = keypad_process_keypress;
     hal.driver_setting = driver_setting;
     hal.driver_settings_restore = driver_settings_restore;
     hal.driver_settings_report = driver_settings_report;

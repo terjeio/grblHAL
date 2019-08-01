@@ -1,11 +1,11 @@
 /*
-  sdcard.h - An embedded CNC Controller with rs274/ngc (g-code) support
+  i2c.h - I2C interface for Trinamic TMC2130 stepper drivers
 
-  Run GCode stored on SD card
+  For Texas Instruments MSP432 LaunchPad
 
   Part of Grbl
 
-  Copyright (c) 2018 Terje Io
+  Copyright (c) 2018-2019 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -21,10 +21,30 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef _SDCARD_H_
-#define _SDCARD_H_
+#ifndef __I2C_DRIVER_H__
+#define __I2C_DRIVER_H__
 
-void sdcard_init (void);
-void sdcard_reset (void);
+#include "driver.h"
+
+void I2CInit (void);
+
+#if TRINAMIC_ENABLE && TRINAMIC_I2C
+
+#include "trinamic\trinamic2130.h"
+#include "trinamic\TMC2130_I2C_map.h"
+
+#define I2C_ADR_I2CBRIDGE 0x47
+
+void I2C_DriverInit (TMC_io_driver_t *drv);
+
+#endif
+
+#if KEYPAD_ENABLE
+
+#include "keypad/keypad.h"
+
+void I2C_GetKeycode (uint32_t i2cAddr, keycode_callback_ptr callback);
+
+#endif
 
 #endif

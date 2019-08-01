@@ -522,7 +522,7 @@ status_code_t gc_execute_block(char *block, char *message)
                         break;
 
                     default:
-                        if(hal.driver_mcode_check && (gc_block.driver_mcode = hal.driver_mcode_check(int_value)))
+                        if(hal.user_mcode_check && (gc_block.user_mcode = hal.user_mcode_check((user_mcode_t)int_value)))
                             word_bit.group = ModalGroup_M10;
                         else
                             FAIL(Status_GcodeUnsupportedCommand); // [Unsupported M command]
@@ -907,7 +907,7 @@ status_code_t gc_execute_block(char *block, char *message)
 
     // [9a. User defined M commands ]:
     if (bit_istrue(command_words, bit(ModalGroup_M10))) {
-        if((int_value = (uint_fast16_t)hal.driver_mcode_validate(&gc_block, &value_words)))
+        if((int_value = (uint_fast16_t)hal.user_mcode_validate(&gc_block, &value_words)))
             FAIL((status_code_t)int_value);
         axis_words = ijk_words = 0;
     }
@@ -1920,12 +1920,12 @@ status_code_t gc_execute_block(char *block, char *message)
     }
 
     // [9a. User defined M commands ]:
-    if(gc_block.driver_mcode != 0 && sys.state != STATE_CHECK_MODE) {
+    if(gc_block.user_mcode && sys.state != STATE_CHECK_MODE) {
 
-        if(gc_block.driver_mcode_sync)
+        if(gc_block.user_mcode_sync)
             protocol_buffer_synchronize(); // Ensure user defined mcode is executed when specified in program.
 
-        hal.driver_mcode_execute(sys.state, &gc_block);
+        hal.user_mcode_execute(sys.state, &gc_block);
     }
 
     // [10. Dwell ]:

@@ -268,11 +268,24 @@ typedef enum {
 // Modal Group G12: Active work coordinate system
 // N/A: Stores coordinate system value (54-59) to change to.
 
-// Modal Group M14: Spindle Speed Mode
+// Modal Group G14: Spindle Speed Mode
 typedef enum {
     SpindleSpeedMode_RPM = 0,  // G96 (Default: Must be zero)
     SpindleSpeedMode_CSS = 1   // G97 (Do not alter value)
 } spindle_rpm_mode_t;
+
+// Modal Group M10: User defined M commands
+// NOTE: Not used by core, may be used by driver code
+typedef enum {
+    UserMCode_Ignore = 0,
+    Trinamic_DebugReport = 122,
+    Trinamic_StepperCurrent = 906,
+    Trinamic_ModeToggle = 569,
+    Trinamic_ReportPrewarnFlags = 911,
+    Trinamic_ClearPrewarnFlags = 912,
+    Trinamic_HybridThreshold = 913,
+    Trinamic_HomingSensivity = 914
+} user_mcode_t;
 
 // Define g-code parser position updating flags
 typedef enum {
@@ -484,8 +497,8 @@ extern tool_data_t tool_table;
 typedef struct {
     non_modal_t non_modal_command;
     override_mode_t override_command; // TODO: add to non_modal above?
-    uint_fast16_t driver_mcode;
-    bool driver_mcode_sync;
+    user_mcode_t user_mcode;
+    bool user_mcode_sync;
     gc_modal_t modal;
     gc_values_t values;
 } parser_block_t;

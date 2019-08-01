@@ -98,11 +98,11 @@ bool spindle_restore (spindle_state_t state, float rpm)
     else { // TODO: add check for current spindle state matches restore state?
         spindle_set_state(state, rpm);
         if((ok = !hal.driver_cap.spindle_at_speed))
-            delay_sec(SAFETY_DOOR_SPINDLE_DELAY, DelayMode_Dwell);
+            delay_sec(SAFETY_DOOR_SPINDLE_DELAY, DelayMode_SysSuspend);
         else {
             float delay = 0.0f;
             while(!(ok = hal.spindle_get_state().at_speed)) {
-                delay_sec(0.1f, DelayMode_Dwell);
+                delay_sec(0.1f, DelayMode_SysSuspend);
                 delay += 0.1f;
                 if(ABORTED || delay >= SAFETY_DOOR_SPINDLE_DELAY)
                     break;

@@ -44,11 +44,6 @@ typedef struct {
 
 static i2c_trans_t i2c;
 
-void eeprom_init (void)
-{
-	i2c_init();
-}
-
 static void StartI2C (bool read)
 {
 	if(i2cBusy != NULL && xSemaphoreTake(i2cBusy, 5 / portTICK_PERIOD_MS) == pdTRUE) {

@@ -49,8 +49,9 @@
 #define SDCARD_ENABLE           0 // Run jobs from SD card.
 #define ETHERNET_ENABLE         0 // Ethernet streaming.
 #define M6_ENABLE               1 // Manual toolchange.
-#define TRINAMIC_ENABLE         0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
+#define TRINAMIC_ENABLE         0 // Trinamic TMC2130 stepper driver support.
 #define TRINAMIC_I2C            0 // Trinamic I2C - SPI bridge interface.
+#define TRINAMIC_DEV            0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code.
 #define CNC_BOOSTERPACK         1 // Use CNC Boosterpack pin assignments.
 #if CNC_BOOSTERPACK
   #define CNC_BOOSTERPACK_SHORTS  0 // do not change!

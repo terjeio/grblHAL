@@ -341,25 +341,25 @@ void settings_restore (uint8_t restore_flag) {
 }
 
 // A helper method to set settings from command line
-status_code_t settings_store_global_setting (uint_fast16_t parameter, char *svalue)
+status_code_t settings_store_global_setting (setting_type_t setting, char *svalue)
 {
     uint_fast8_t set_idx = 0;
     float value;
 
     if (!read_float(svalue, &set_idx, &value))
-        return hal.driver_setting && hal.driver_setting(parameter, NAN, svalue) ? Status_OK : Status_BadNumberFormat;
+        return hal.driver_setting && hal.driver_setting(setting, NAN, svalue) ? Status_OK : Status_BadNumberFormat;
 
     if (svalue[set_idx] != '\0')
         return Status_InvalidStatement;
 
-    if (value < 0.0f && (setting_type_t)parameter != Setting_ParkingTarget)
+    if (value < 0.0f && setting != Setting_ParkingTarget)
         return Status_NegativeValue;
 
-    if ((setting_type_t)parameter >= Setting_AxisSettingsBase && (setting_type_t)parameter <= Setting_AxisSettingsMax) {
+    if (setting >= Setting_AxisSettingsBase && setting <= Setting_AxisSettingsMax) {
         // Store axis configuration. Axis numbering sequence set by AXIS_SETTING defines.
         // NOTE: Ensure the setting index corresponds to the report.c settings printout.
         bool found = false;
-        uint_fast16_t base_idx = (uint_fast16_t)parameter - (uint_fast16_t)Setting_AxisSettingsBase;
+        uint_fast16_t base_idx = (uint_fast16_t)setting - (uint_fast16_t)Setting_AxisSettingsBase;
         uint_fast8_t axis_idx = base_idx % AXIS_SETTINGS_INCREMENT;
 
         if(axis_idx < N_AXIS) switch((base_idx - axis_idx) / AXIS_SETTINGS_INCREMENT) {
@@ -403,13 +403,13 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
                 break;
         }
 
-        if(!(found || (hal.driver_setting && hal.driver_setting(parameter, value, svalue))))
+        if(!(found || (hal.driver_setting && hal.driver_setting(setting, value, svalue))))
             return Status_InvalidStatement;
 
     } else {
         // Store non-axis Grbl settings
         uint_fast16_t int_value = (uint_fast16_t)truncf(value);
-        switch((setting_type_t)parameter) {
+        switch(setting) {
 
             case Setting_PulseMicroseconds:
                 if (int_value < 3)
@@ -588,7 +588,7 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
             case Setting_HomingCycle_4:
             case Setting_HomingCycle_5:
             case Setting_HomingCycle_6:
-                settings.homing.cycle[parameter - Setting_HomingCycle_1].mask = int_value;
+                settings.homing.cycle[setting - Setting_HomingCycle_1].mask = int_value;
                 limits_set_homing_axes();
                 break;
 
@@ -740,7 +740,7 @@ status_code_t settings_store_global_setting (uint_fast16_t parameter, char *sval
                 break;
 
             default:
-                if(hal.driver_setting && hal.driver_setting(parameter, value, svalue))
+                if(hal.driver_setting && hal.driver_setting(setting, value, svalue))
                     return Status_OK;
                 else
                     return Status_InvalidStatement;

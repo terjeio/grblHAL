@@ -38,8 +38,6 @@
 
 #include "GRBL/grbl.h"
 
-#include "keypad.h"
-
 // Configuration
 // Set value to 1 to enable, 0 to disable
 
@@ -47,20 +45,38 @@
 #define PWM_RAMPED       0 // Ramped spindle PWM.
 #define PROBE_ENABLE     1 // Probe input
 #define PROBE_ISR        0 // Catch probe state change by interrupt TODO: needs verification!
-#define KEYPAD_ENABLE    0 // I2C keypad for jogging etc. NOTE: not yet ready
+#define KEYPAD_ENABLE    0 // I2C keypad for jogging etc.
 #define WIFI_ENABLE      0 // Streaming over WiFi.
 #define BLUETOOTH_ENABLE 0 // Streaming over Bluetooth.
 #define SDCARD_ENABLE    0 // Run jobs from SD card.
 #define IOEXPAND_ENABLE  0 // I2C IO expander for some output signals.
 #define EEPROM_ENABLE    0 // I2C EEPROM (24LC16) support.
+#define TRINAMIC_ENABLE  0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
+#define TRINAMIC_I2C     0 // Trinamic I2C - SPI bridge interface.
+#define TRINAMIC_DEV     0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
 
 // End configuration
+
+#if TRINAMIC_ENABLE
+#include "tmc2130/trinamic.h"
+#endif
+
+#if WIFI_ENABLE || BLUETOOTH_ENABLE || TRINAMIC_ENABLE || KEYPAD_ENABLE
+
+#define DRIVER_SETTINGS
 
 typedef struct {
 	wifi_settings_t wifi;
 	bluetooth_settings_t bluetooth;
-	jog_config_t jog_config;
+#if TRINAMIC_ENABLE
+    trinamic_settings_t trinamic;
+#endif
+#if KEYPAD_ENABLE
+    jog_settings_t jog;
+#endif
 } driver_settings_t;
+
+#endif
 
 typedef struct {
 	uint8_t action;
@@ -137,7 +153,7 @@ extern driver_settings_t driver_settings;
 #define KEYPAD_STROBE_PIN	GPIO_NUM_33
 #endif
 
-#if IOEXPAND_ENABLE || KEYPAD_ENABLE || EEPROM_ENABLE
+#if IOEXPAND_ENABLE || KEYPAD_ENABLE || EEPROM_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
 // Define I2C port/pins
 #define I2C_PORT  I2C_NUM_1
 #define I2C_SDA   GPIO_NUM_21
@@ -231,7 +247,7 @@ typedef union {
 #error No free pins for keypad!
 #endif
 
-#if IOEXPAND_ENABLE || KEYPAD_ENABLE || EEPROM_ENABLE
+#if IOEXPAND_ENABLE || KEYPAD_ENABLE || EEPROM_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
 // Define I2C port/pins
 #define I2C_PORT  I2C_NUM_1
 #define I2C_SDA   GPIO_NUM_21
@@ -260,7 +276,6 @@ typedef union {
 #ifdef I2C_PORT
 extern QueueHandle_t i2cQueue;
 extern SemaphoreHandle_t i2cBusy;
-void i2c_init (void);
 #endif
 
 void selectStream (stream_setting_t stream);

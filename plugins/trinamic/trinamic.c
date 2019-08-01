@@ -19,7 +19,7 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "../driver.h"
+#include "driver.h"
 
 #if TRINAMIC_ENABLE
 
@@ -49,7 +49,10 @@ static struct {
     uint32_t sg_status_axis;
     uint32_t msteps;
 } report = {0};
+
+#if TRINAMIC_DEV
 static TMC2130_datagram_t *reg_ptr = NULL;
+#endif
 
 #if TRINAMIC_I2C
 TMCI2C_enable_dgr_t dgr_enable = {
@@ -182,6 +185,9 @@ bool trinamic_setting (setting_type_t setting, float value, char *svalue)
                 if((ok = TMC2130_MicrostepsIsValid((uint16_t)value)))
                     driver_settings.trinamic.driver[idx].microsteps = (tmc2130_microsteps_t)value;
                 break;
+
+            default:
+            	break;
         }
     } else switch((setting_type_t)setting) {
 
@@ -194,6 +200,9 @@ bool trinamic_setting (setting_type_t setting, float value, char *svalue)
             ok = true;
             driver_settings.trinamic.homing_enable.mask = (uint8_t)value & AXES_BITMASK;
             break;
+
+        default:
+        	break;
     }
 
     return ok;
@@ -254,6 +263,9 @@ void trinamic_settings_report (bool axis_settings, axis_setting_type_t setting_t
             case AxisSetting_MicroSteps:
                 report_uint_setting((setting_type_t)(basetype + axis_idx), driver_settings.trinamic.driver[axis_idx].microsteps);
                 break;
+
+            default:
+            	break;
         }
     } else {
         report_uint_setting(Setting_TrinamicDriver, driver_settings.trinamic.driver_enable.mask);
@@ -477,6 +489,9 @@ status_code_t trinamic_MCodeValidate (parser_block_t *gc_block, uint_fast16_t *v
                 } while(idx && state == Status_OK);
             }
             break;
+
+        default:
+        	break;
     }
 
     return state;
@@ -510,7 +525,7 @@ void trinamic_MCodeExecute (uint_fast16_t state, parser_block_t *gc_block)
                     hal_stepper_pulse_start = hal.stepper_pulse_start;
                     hal.stepper_pulse_start = stepper_pulse_start;
                 }
-                stepper[idx].coolconf.reg.sfilt = report.sfilt;
+                stepper[report.sg_status_axis].coolconf.reg.sfilt = report.sfilt;
                 TMC2130_WriteRegister(&stepper[report.sg_status_axis], (TMC2130_datagram_t *)&stepper[report.sg_status_axis].coolconf);
             } else if(hal.execute_realtime == report_sg_status) {
                 hal.execute_realtime = NULL;
@@ -573,6 +588,9 @@ void trinamic_MCodeExecute (uint_fast16_t state, parser_block_t *gc_block)
                 }
             } while(idx);
             break;
+
+        default:
+        	break;
     }
 }
 

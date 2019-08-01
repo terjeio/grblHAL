@@ -1,7 +1,5 @@
 /*
-  sdcard.c - An embedded CNC Controller with rs274/ngc (g-code) support
-
-  Run GCode stored on SD card
+  sdcard.c - SDCard plugin for FatFs
 
   Part of Grbl
 
@@ -27,14 +25,29 @@
 #include "sdcard.h"
 #include "GRBL/grbl.h"
 
-/* uses fatfs - http://www.elm-chan.org/fsw/ff/00index_e.html */
+// https://e2e.ti.com/support/tools/ccs/f/81/t/428524?Linking-error-unresolved-symbols-rom-h-pinout-c-
 
-#if SDCARD_ENABLE
+/* uses fatfs - http://www.elm-chan.org/fsw/ff/00index_e.html */
 
 #define MAX_PATHLEN 128
 #define LCAPS(c) ((c >= 'A' && c <= 'Z') ? c | 0x20 : c)
 
+#ifdef __MSP432E401Y__
+#include "fatfs/ff.h"
+#include "fatfs/diskio.h"
+#include <ti/drivers/SDFatFS.h>
+#include <ti/boards/MSP_EXP432E401Y/Board.h>
+#elif defined(ESP_PLATFORM)
 #include "esp_vfs_fat.h"
+#else
+#include "fatfs/src/ff.h"
+#include "fatfs/src/diskio.h"
+#endif
+
+#if FF_USE_LFN
+//#define _USE_LFN FF_USE_LFN
+#define _MAX_LFN FF_MAX_LFN
+#endif
 
 char const *const filetypes[] = {
     "nc",
@@ -72,6 +85,29 @@ static file_t file = {
 };
 
 static io_stream_t active_stream;
+//static report_t active_reports;
+
+#ifdef __MSP432E401Y__
+/*---------------------------------------------------------*/
+/* User Provided Timer Function for FatFs module           */
+/*---------------------------------------------------------*/
+/* This is a real time clock service to be called from     */
+/* FatFs module. Any valid time must be returned even if   */
+/* the system does not support a real time clock.          */
+
+DWORD fatfs_getFatTime (void)
+{
+
+    return    ((2007UL-1980) << 25)    // Year = 2007
+            | (6UL << 21)            // Month = June
+            | (5UL << 16)            // Day = 5
+            | (11U << 11)            // Hour = 11
+            | (38U << 5)            // Min = 38
+            | (0U >> 1)                // Sec = 0
+            ;
+
+}
+#endif
 
 static file_status_t allowed (char *filename, bool is_file)
 {
@@ -110,18 +146,30 @@ static file_status_t allowed (char *filename, bool is_file)
 
 static inline char *get_name (FILINFO *file)
 {
-//    return *file->lfname == '\0' ? file->fname : file->lfname;
+#if _USE_LFN
+    return *file->lfname == '\0' ? file->fname : file->lfname;
+#else
     return file->fname;
+#endif
 }
 
 static FRESULT scan_dir (char *path, uint_fast8_t depth, char *buf)
 {
+#if defined(ESP_PLATFORM)
     FF_DIR dir;
+#else
+    DIR dir;
+#endif
     FILINFO fno;
     FRESULT res;
     file_status_t status;
+#if _USE_LFN
+    static TCHAR lfn[_MAX_LFN + 1];   /* Buffer to store the LFN */
+    fno.lfname = lfn;
+    fno.lfsize = sizeof(lfn);
+#endif
 
-    if((res = f_opendir(&dir, path)) != FR_OK)
+   if((res = f_opendir(&dir, path)) != FR_OK)
         return res;
 
     while(true) {
@@ -142,7 +190,10 @@ static FRESULT scan_dir (char *path, uint_fast8_t depth, char *buf)
             hal.stream.write(buf);
         }
     }
-    f_closedir(&dir); // requires never version?
+
+#if defined(__MSP432E401Y__) || defined(ESP_PLATFORM)
+    f_closedir(&dir);
+#endif
 
     return res;
 }
@@ -199,15 +250,23 @@ static int16_t file_read (void)
 
 static bool sdcard_mount (void)
 {
+#ifdef __MSP432E401Y__
+    return SDFatFS_open(Board_SDFatFS0, 0) != NULL;
+#else
     if(file.fs == NULL)
         file.fs = malloc(sizeof(FATFS));
 
+#ifdef ESP_PLATFORM
     if(file.fs && f_mount(file.fs, "", 0) != FR_OK) {
+#else
+    if(file.fs && f_mount(0, file.fs) != FR_OK) {
+#endif
         free(file.fs);
         file.fs = NULL;
     }
 
     return file.fs != NULL;
+#endif
 }
 
 static status_code_t sdcard_ls (char *buf)
@@ -277,13 +336,15 @@ static void sdcard_report (stream_write_ptr stream_write)
 {
     stream_write("|SD:");
     stream_write(ftoa((float)file.pos / (float)file.size * 100.0f, 1));
+//    stream_write(",");
+//    stream_write(get_name(file.handle));
 }
 
 static bool sdcard_suspend (bool suspend)
 {
     if(suspend) {
         hal.stream.reset_read_buffer();
-        hal.stream.read = active_stream.read;               // Restore serial input for tool change (jog etc)
+        hal.stream.read = active_stream.read;               // Restore normal stream input for tool change (jog etc)
         hal.stream.enqueue_realtime_command = active_stream.enqueue_realtime_command;
         hal.report.status_message = report_status_message;  // as well as normal status messages reporting
     } else {
@@ -314,13 +375,18 @@ static status_code_t sdcard_parse (uint_fast16_t state, char *line, char *lcline
                 retval = Status_SystemGClock;
             else {
                 if(file_open(&line[3])) {
-                    hal.report.status_message(Status_OK);           			// Confirm command to originator
+                    gc_state.last_error = Status_OK;                            // Start with no errors
+                    hal.report.status_message(Status_OK);                       // and confirm command to originator
                     memcpy(&active_stream, &hal.stream, sizeof(io_stream_t));   // Save current stream pointers
                     hal.stream.type = StreamSetting_SDCard;                     // then redirect to read from SD card instead
-                    hal.stream.read = sdcard_read;                  			// ...
+                    hal.stream.read = sdcard_read;                              // ...
                     hal.stream.enqueue_realtime_command = drop_input_stream;    // Drop input from current stream except realtime commands
-                    hal.stream.suspend_read = sdcard_suspend;      	 			// ...
-                    hal.driver_rt_report = sdcard_report;      					// Sdd percent complete to real time report
+#if M6_ENABLE
+                    hal.stream.suspend_read = sdcard_suspend;                   // ...
+#else
+                    hal.stream.suspend_read = NULL;                             // ...
+#endif
+                    hal.driver_rt_report = sdcard_report;                       // Add percent complete to real time report
                     hal.report.status_message = trap_status_report;             // Redirect status message and feedback message
                     hal.report.feedback_message = trap_feedback_message;        // reports here
                     retval = Status_OK;
@@ -349,25 +415,8 @@ void sdcard_reset (void)
 
 void sdcard_init (void)
 {
-    sdmmc_host_t host = SDSPI_HOST_DEFAULT();
-    sdspi_slot_config_t slot_config = SDSPI_SLOT_CONFIG_DEFAULT();
-    esp_vfs_fat_sdmmc_mount_config_t mount_config = {
-        .format_if_mount_failed = false,
-        .max_files = 5
-//        .allocation_unit_size = 16 * 1024
-    };
-
-    slot_config.gpio_miso = PIN_NUM_MISO;
-    slot_config.gpio_mosi = PIN_NUM_MOSI;
-    slot_config.gpio_sck  = PIN_NUM_CLK;
-    slot_config.gpio_cs   = PIN_NUM_CS;
-
-    host.max_freq_khz = 20000; //SDMMC_FREQ_DEFAULT; //SDMMC_FREQ_PROBING; 19000;
-
-    sdmmc_card_t* card;
-    esp_vfs_fat_sdmmc_mount("/sdcard", &host, &slot_config, &mount_config, &card);
-
+#ifdef __MSP432E401Y__
+    SDFatFS_init();
+#endif
     hal.driver_sys_command_execute = sdcard_parse;
 }
-
-#endif

@@ -23,21 +23,14 @@
 
 */
 
+#include "driver.h"
+
 #if IOEXPAND_ENABLE
 
 #include "ioexpand.h"
-#include "driver.h"
-
-#define IOEX_ADDRESS 0x40
-#define READ_INPUT   0
-#define RW_OUTPUT    1
-#define RW_INVERSION 2
-#define RW_CONFIG    3
 
 void ioexpand_init (void)
 {
-	i2c_init();
-
 	if(i2cBusy != NULL && xSemaphoreTake(i2cBusy, 5 / portTICK_PERIOD_MS) == pdTRUE) {
 
 		// 0 = output, 1 = input
@@ -76,7 +69,18 @@ void ioexpand_init (void)
 
 void ioexpand_out (ioexpand_t pins)
 {
-	if(i2cBusy != NULL && xSemaphoreTake(i2cBusy, 5 / portTICK_PERIOD_MS) == pdTRUE) {
+	static i2c_task_t i2c_task = {
+		.action = 2,
+		.params = NULL
+	};
+
+	if(xPortInIsrContext()) {
+		i2c_task.params = (void *)((uint32_t)pins.mask);
+//		printf("EXP %d %d %d\n", i2c_task.action, (uint32_t)i2c_task.params, pins.mask);
+
+	    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+		xQueueSendFromISR(i2cQueue, (void *)&i2c_task, &xHigherPriorityTaskWoken);
+	} else if(i2cBusy != NULL && xSemaphoreTake(i2cBusy, 5 / portTICK_PERIOD_MS) == pdTRUE) {
 
 		i2c_cmd_handle_t cmd = i2c_cmd_link_create();
 		i2c_master_start(cmd);

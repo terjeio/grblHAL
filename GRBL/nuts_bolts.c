@@ -40,6 +40,21 @@ static const float froundvalues[MAX_PRECISION + 1] =
     0.00000000005       // 10
 };
 
+char const *const axis_letter[N_AXIS] = {
+    "X",
+    "Y",
+    "Z",
+#if N_AXIS > 3
+    ,"A"
+#endif
+#if N_AXIS > 4
+    ,"B"
+#endif
+#if N_AXIS > 5
+    ,"C"
+#endif
+};
+
 // Converts an uint32 variable to string.
 char *uitoa (uint32_t n)
 {

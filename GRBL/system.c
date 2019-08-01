@@ -383,10 +383,8 @@ status_code_t system_execute_line (char *line)
                         retval = Status_BadNumberFormat;
                     else if(line[counter++] != '=' || parameter - truncf(parameter) != 0.0f)
                         retval = Status_InvalidStatement;
-                    else if((uint_fast16_t)parameter > Setting_AxisSettingsMax)
-                        retval = Status_InvalidStatement;
                     else
-                        retval = settings_store_global_setting((uint_fast16_t)parameter, &lcline[counter]);
+                        retval = settings_store_global_setting((setting_type_t)parameter, &lcline[counter]);
                 } else
                     retval = Status_IdleError;
             }

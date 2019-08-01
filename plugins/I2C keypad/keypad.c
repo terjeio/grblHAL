@@ -70,6 +70,9 @@ bool keypad_setting (setting_type_t setting, float value, char *svalue)
             driver_settings.jog.fast_distance = value;
             ok = true;
             break;
+
+        default:
+        	break;
     }
 
     return ok;
@@ -99,13 +102,13 @@ void keypad_settings_report (bool axis_settings, axis_setting_type_t setting_typ
     }
 }
 
-static void keypad_enqueue_keycode (char cmd)
+void keypad_enqueue_keycode (char c)
 {
     uint32_t bptr = (keybuf_head + 1) & (KEYBUF_SIZE - 1);    // Get next head pointer
 
-    if(bptr != keybuf_tail) {                       // If not buffer full
-        keybuf_buf[keybuf_head] = cmd;              // add data to buffer
-        keybuf_head = bptr;                         // and update pointer
+    if(bptr != keybuf_tail) {           // If not buffer full
+        keybuf_buf[keybuf_head] = c;    // add data to buffer
+        keybuf_head = bptr;             // and update pointer
     }
 }
 
@@ -138,7 +141,7 @@ static char *strrepl (char *str, int c, char *str3)
     return str;
 }
 
-void process_keypress (uint_fast16_t state)
+void keypad_process_keypress (uint_fast16_t state)
 {
     bool addedGcode, jogCommand = false;
     char command[30] = "", keycode = keypad_get_keycode();
@@ -262,7 +265,7 @@ void process_keypress (uint_fast16_t state)
     }
 }
 
-void keypad_keyclick_handler (bool keydown)
+ISR_CODE void keypad_keyclick_handler (bool keydown)
 {
     keyreleased = !keydown;
 

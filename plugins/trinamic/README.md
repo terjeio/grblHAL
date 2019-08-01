@@ -6,7 +6,7 @@ I supports Marlin-style M-codes such as `M122`, `M911`, `M912`, `M913` and `M914
 
 Settings \($n=...\) are provided for axis enable, homing, stepper current, microsteps and sensorless homing. More to follow.
 
-The driver and driver configuration has to be extended to support this plugin, currently this has been done for the [MSP432 driver](https://github.com/terjeio/grblHAL/tree/master/drivers/MSP432).
+The driver and driver configuration has to be extended to support this plugin.
 
 Dependencies:
 

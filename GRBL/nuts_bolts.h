@@ -81,6 +81,8 @@
 #define AXES_BITMASK (X_AXIS_BIT|Y_AXIS_BIT|Z_AXIS_BIT|A_AXIS_BIT|B_AXIS_BIT)
 #endif
 
+extern char const *const axis_letter[];
+
 typedef union {
     uint8_t mask;
     uint8_t value;
