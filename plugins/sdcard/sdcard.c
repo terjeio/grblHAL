@@ -1,7 +1,7 @@
 /*
   sdcard.c - SDCard plugin for FatFs
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2018-2019 Terje Io
 
@@ -21,9 +21,17 @@
 
 #include <stdio.h>
 
+#ifdef ARDUINO_SAMD_MKRZERO
+#include "../../driver.h"
+#include "../grbl/grbl.h"
+#else
 #include "driver.h"
+#include "grbl/grbl.h"
+#endif
+
+#if SDCARD_ENABLE
+
 #include "sdcard.h"
-#include "GRBL/grbl.h"
 
 // https://e2e.ti.com/support/tools/ccs/f/81/t/428524?Linking-error-unresolved-symbols-rom-h-pinout-c-
 
@@ -39,6 +47,12 @@
 #include <ti/boards/MSP_EXP432E401Y/Board.h>
 #elif defined(ESP_PLATFORM)
 #include "esp_vfs_fat.h"
+#elif defined(__LPC176x__)
+#include "fatfs/ff.h"
+#include "fatfs/diskio.h"
+#elif defined(ARDUINO_SAMD_MKRZERO) || defined(STM32F103xB)
+#include "ff.h"
+#include "diskio.h"
 #else
 #include "fatfs/src/ff.h"
 #include "fatfs/src/diskio.h"
@@ -186,7 +200,7 @@ static FRESULT scan_dir (char *path, uint_fast8_t depth, char *buf)
                     break;
             }
         } else if((status = allowed(get_name(&fno), true)) != Filename_Filtered) { // It is a file
-            sprintf(buf, "[FILE:%s/%s|SIZE:%d%s]\r\n", path, get_name(&fno), (uint32_t)fno.fsize, status == Filename_Invalid ? "|UNUSABLE" : "");
+            sprintf(buf, "[FILE:%s/%s|SIZE:%ld%s]\r\n", path, get_name(&fno), (uint32_t)fno.fsize, status == Filename_Invalid ? "|UNUSABLE" : "");
             hal.stream.write(buf);
         }
     }
@@ -256,8 +270,8 @@ static bool sdcard_mount (void)
     if(file.fs == NULL)
         file.fs = malloc(sizeof(FATFS));
 
-#ifdef ESP_PLATFORM
-    if(file.fs && f_mount(file.fs, "", 0) != FR_OK) {
+#if defined(ESP_PLATFORM) || defined(STM32F103xB)
+    if(file.fs && f_mount(file.fs, "", 1) != FR_OK) {
 #else
     if(file.fs && f_mount(0, file.fs) != FR_OK) {
 #endif
@@ -290,7 +304,7 @@ void trap_status_report (status_code_t status_code)
 {
     if(status_code != Status_OK) { // TODO: all errors should terminate job?
         char buf[50]; // TODO: check if extended error reports are permissible
-        sprintf(buf, "error:%d in SD file at line %d\r\n", (uint8_t)status_code, file.line);
+        sprintf(buf, "error:%d in SD file at line %ld\r\n", (uint8_t)status_code, file.line);
         hal.stream.write(buf);
 
         sdcard_end_job();
@@ -340,6 +354,8 @@ static void sdcard_report (stream_write_ptr stream_write)
 //    stream_write(get_name(file.handle));
 }
 
+#if M6_ENABLE
+
 static bool sdcard_suspend (bool suspend)
 {
     if(suspend) {
@@ -355,6 +371,7 @@ static bool sdcard_suspend (bool suspend)
 
     return true;
 }
+#endif
 
 static status_code_t sdcard_parse (uint_fast16_t state, char *line, char *lcline)
 {
@@ -407,7 +424,7 @@ void sdcard_reset (void)
 {
     if(hal.stream.type == StreamSetting_SDCard) {
         char buf[70];
-        sprintf(buf, "[MSG:Reset during streaming of SD file at line: %d]\r\n", file.line);
+        sprintf(buf, "[MSG:Reset during streaming of SD file at line: %ld]\r\n", file.line);
         hal.stream.write(buf);
         sdcard_end_job();
     }
@@ -420,3 +437,5 @@ void sdcard_init (void)
 #endif
     hal.driver_sys_command_execute = sdcard_parse;
 }
+
+#endif

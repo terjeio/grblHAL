@@ -4,7 +4,7 @@
 
   for 2K EEPROM on CNC Boosterpack (Microchip 24LC16B)
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2019 Terje Io
 
@@ -31,7 +31,6 @@ uint8_t eepromGetByte (uint32_t addr);
 void eepromPutByte (uint32_t addr, uint8_t new_value);
 void eepromWriteBlockWithChecksum (uint32_t destination, uint8_t *source, uint32_t size);
 bool eepromReadBlockWithChecksum (uint8_t *destination, uint32_t source, uint32_t size);
-#else
-fuck it
+
 #endif
 

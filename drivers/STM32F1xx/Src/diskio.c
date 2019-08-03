@@ -7,8 +7,8 @@
 
 /*
  * This file was modified from a sample available from the FatFs
- * web site. It was modified to work with an Arduino MKRZERO board.
- * For FatFs R0.09b
+ * web site. It was modified to work with a STM32F103 (Bluepill) board.
+ * For FatFs R0.13c
  */
 
 #include <stdint.h>
@@ -18,6 +18,7 @@
 
 #include "ff.h"
 #include "diskio.h"
+#include "driver.h"
 
 /* Definitions for MMC/SDC command */
 #define CMD0    (0x40+0)    /* GO_IDLE_STATE */
@@ -40,36 +41,7 @@
 #define TRUE true
 #define FALSE false
 
-//
-
-typedef enum
-{
-	SERCOM_SPI_MODE_0 = 0,	// CPOL : 0  | CPHA : 0
-	SERCOM_SPI_MODE_1,		// CPOL : 0  | CPHA : 1
-	SERCOM_SPI_MODE_2,		// CPOL : 1  | CPHA : 0
-	SERCOM_SPI_MODE_3		// CPOL : 1  | CPHA : 1
-} SercomSpiClockMode;
-
-typedef enum
-{
-	SPI_PAD_0_SCK_1 = 0,
-	SPI_PAD_2_SCK_3,
-	SPI_PAD_3_SCK_1,
-	SPI_PAD_0_SCK_3
-} SercomSpiTXPad;
-
-#define pinIn(p) ((PORT->Group[g_APinDescription[p].ulPort].IN.reg & (1 << g_APinDescription[p].ulPin)) != 0)
-#define pinOut(p, e) {  }
-
-
-#define SD_SCK_PIN  26
-#define SD_MOSI_PIN 27
-#define SD_CS_PIN   28
-#define SD_MISO_PIN 29
-#define SD_CLOCKMODE SERCOM_SPI_MODE_0
-#define SD_CLOCK_ID GCM_SERCOM2_CORE
-
-SPI_HandleTypeDef hspi1 = {
+static SPI_HandleTypeDef hspi1 = {
 	.Instance = SPI1,
 	.Init.Mode = SPI_MODE_MASTER,
 	.Init.Direction = SPI_DIRECTION_2LINES,
@@ -77,7 +49,7 @@ SPI_HandleTypeDef hspi1 = {
 	.Init.CLKPolarity = SPI_POLARITY_LOW,
 	.Init.CLKPhase = SPI_PHASE_1EDGE,
 	.Init.NSS = SPI_NSS_SOFT,
-	.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2,
+	.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_256,
 	.Init.FirstBit = SPI_FIRSTBIT_MSB,
 	.Init.TIMode = SPI_TIMODE_DISABLE,
 	.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE,
@@ -88,14 +60,14 @@ SPI_HandleTypeDef hspi1 = {
 static inline
 void SELECT (void)
 {
-	pinOut(SD_CS_PIN, 0);
+    BITBAND_PERI(SD_CS_PORT->ODR, SD_CS_PIN) = 0;
 }
 
 /* de-asserts the CS pin to the card */
 static inline
 void DESELECT (void)
 {
-	pinOut(SD_CS_PIN, 1);
+    BITBAND_PERI(SD_CS_PORT->ODR, SD_CS_PIN) = 1;
 }
 
 /*--------------------------------------------------------------------------
@@ -123,13 +95,11 @@ BYTE PowerFlag = 0;     /* indicates if "power" is on */
 static
 void xmit_spi(BYTE dat)
 {
-/*
-	sd_spi->SPI.DATA.bit.DATA = dat; // Writing data into Data register
+	hspi1.Instance->DR = dat;
 
-	while(sd_spi->SPI.INTFLAG.bit.RXC == 0);
+	while(!__HAL_SPI_GET_FLAG(&hspi1, SPI_FLAG_TXE));
 
-	dat = sd_spi->SPI.DATA.bit.DATA;
-*/
+    __HAL_SPI_CLEAR_OVRFLAG(&hspi1);
 }
 
 
@@ -140,13 +110,11 @@ void xmit_spi(BYTE dat)
 static
 BYTE rcvr_spi (void)
 {
-/*	sd_spi->SPI.DATA.bit.DATA = 0xFF; // Writing dummy data into Data register
+	hspi1.Instance->DR = 0xFF; // Writing dummy data into Data register
 
-	while(sd_spi->SPI.INTFLAG.bit.RXC == 0);
+	while(!__HAL_SPI_GET_FLAG(&hspi1, SPI_FLAG_RXNE));
 
-    return (BYTE)sd_spi->SPI.DATA.bit.DATA;
-*/
-	return 1;
+    return (BYTE)hspi1.Instance->DR;
 }
 
 
@@ -189,6 +157,8 @@ void send_initial_clock_train(void)
 
     while(i--)
 		xmit_spi(0xFF);
+
+    i = 0xFF;
 }
 
 /*-----------------------------------------------------------------------*/
@@ -208,19 +178,16 @@ void power_on (void)
      */
 
 	if(!init) {
-		  if (HAL_SPI_Init(&hspi1) != HAL_OK)
-		  {
-		    Error_Handler();
-		  }
+		// Disable JTAG. NOTE: a power cycle is required after programming
+		__HAL_AFIO_REMAP_SWJ_DISABLE();
+
+		hal.delay_ms(10, NULL);
+
+		HAL_SPI_Init(&hspi1);
 	}
 
-/*
-	//Synchronous arithmetic
-	sd_spi->SPI.BAUD.reg = SystemCoreClock / (2 * 400000) - 1;
+	__HAL_SPI_ENABLE(&hspi1);
 
-	sd_spi->SPI.CTRLA.bit.ENABLE = 1;
-	while(sd_spi->SPI.SYNCBUSY.bit.ENABLE)
-*/
 	init = true;
     PowerFlag = 1;
 }
@@ -229,27 +196,15 @@ void power_on (void)
 static
 void set_max_speed(void)
 {
-    unsigned long i;
-
-    /* Set the maximum speed as half the system clock, with a max of 12 MHz. */
-	i = SystemCoreClock / 2;
-	if(i > 12000000UL)
-		i = 12000000UL;
-/*
-	sd_spi->SPI.CTRLA.bit.ENABLE = 0;
-	while(sd_spi->SPI.SYNCBUSY.bit.ENABLE);
-
-	sd_spi->SPI.BAUD.reg = SystemCoreClock / (2 * i) - 1;
-
-	sd_spi->SPI.CTRLA.bit.ENABLE = 1;
-	while(sd_spi->SPI.SYNCBUSY.bit.ENABLE);
-	*/
+	hspi1.Instance->CR1 &= ~SPI_BAUDRATEPRESCALER_256;
+	hspi1.Instance->CR1 |= SPI_BAUDRATEPRESCALER_32; // should be able to go to 12Mhz...
 }
 
 static
 void power_off (void)
 {
     PowerFlag = 0;
+	__HAL_SPI_DISABLE(&hspi1);
 }
 
 static
@@ -269,7 +224,6 @@ BOOL rcvr_datablock (
 )
 {
     BYTE token;
-
 
     Timer1 = 100;
     do {                            /* Wait for data packet in timeout of 100ms */
@@ -293,7 +247,7 @@ BOOL rcvr_datablock (
 /* Send a data packet to MMC                                             */
 /*-----------------------------------------------------------------------*/
 
-#if _READONLY == 0
+#if FF_FS_READONLY == 0
 static
 BOOL xmit_datablock (
     const BYTE *buff,    /* 512 byte data block to be transmitted */
@@ -425,14 +379,16 @@ DSTATUS disk_initialize (
     BYTE n, ty, ocr[4];
 
 
-	pinOut(7, 1);
+//	pinOut(7, 1);
     if (drv) return STA_NOINIT;            /* Supports only single drive */
     if (Stat & STA_NODISK) return Stat;    /* No card in the socket */
 
     power_on();                            /* Force socket power on */
+
     send_initial_clock_train();            /* Ensure the card is in SPI mode */
 
     SELECT();                /* CS = L */
+
     ty = 0;
     if (send_cmd(CMD0, 0) == 1) {            /* Enter Idle state */
         Timer1 = 100;                        /* Initialization timeout of 1000 msec */
@@ -460,6 +416,7 @@ DSTATUS disk_initialize (
                 ty = 0;
         }
     }
+
     CardType = ty;
     DESELECT();            /* CS = H */
     rcvr_spi();            /* Idle (Release DO) */
@@ -507,6 +464,7 @@ DRESULT disk_read (
     if (!(CardType & 4)) sector *= 512;    /* Convert to byte address if needed */
 
     SELECT();            /* CS = L */
+//	__HAL_SPI_ENABLE(&hspi1);
 
     if (count == 1) {    /* Single block read */
         if ((send_cmd(CMD17, sector) == 0)    /* READ_SINGLE_BLOCK */
@@ -525,6 +483,7 @@ DRESULT disk_read (
 
     DESELECT();            /* CS = H */
     rcvr_spi();            /* Idle (Release DO) */
+//	__HAL_SPI_DISABLE(&hspi1);
 
     return count ? RES_ERROR : RES_OK;
 }
@@ -535,7 +494,7 @@ DRESULT disk_read (
 /* Write Sector(s)                                                       */
 /*-----------------------------------------------------------------------*/
 
-#if _READONLY == 0
+#if FF_FS_READONLY == 0
 DRESULT disk_write (
     BYTE drv,            /* Physical drive nmuber (0) */
     const BYTE *buff,    /* Pointer to the data to be written */
@@ -550,6 +509,7 @@ DRESULT disk_write (
     if (!(CardType & 4)) sector *= 512;    /* Convert to byte address if needed */
 
     SELECT();            /* CS = L */
+//	__HAL_SPI_ENABLE(&hspi1);
 
     if (count == 1) {    /* Single block write */
         if ((send_cmd(CMD24, sector) == 0)    /* WRITE_BLOCK */
@@ -621,6 +581,7 @@ DRESULT disk_ioctl (
         if (Stat & STA_NOINIT) return RES_NOTRDY;
 
         SELECT();        /* CS = L */
+//    	__HAL_SPI_ENABLE(&hspi1);
 
         switch (ctrl) {
         case GET_SECTOR_COUNT :    /* Get number of sectors on the disk (DWORD) */
@@ -677,6 +638,8 @@ DRESULT disk_ioctl (
 
         DESELECT();            /* CS = H */
         rcvr_spi();            /* Idle (Release DO) */
+//    	__HAL_SPI_DISABLE(&hspi1);
+
     }
 
     return res;

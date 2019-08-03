@@ -23,7 +23,7 @@
 #define _TRINAMIC_OPTION_H_
 
 #include "driver.h"
-#include "trinamic/trinamic2130.h"
+//#include "trinamic/trinamic2130.h"
 #if TRINAMIC_I2C
 #include "trinamic/TMC2130_I2C_map.h"
 #endif
@@ -42,6 +42,7 @@
 #define tmc_hysteresis_start(axis, val) { stepper[axis].chopconf.reg.hstrt = (uint8_t)(val - 1) & 0x07; TMC2130_WriteRegister(&stepper[axis], (TMC2130_datagram_t *)&stepper[axis].chopconf); }
 #define tmc_hysteresis_end(axis, val)   { stepper[axis].chopconf.reg.hend = (uint8_t)(val + 3) & 0x0F; TMC2130_WriteRegister(&stepper[axis], (TMC2130_datagram_t *)&stepper[axis].chopconf); }
 
+// General
 #if TRINAMIC_ENABLE && CNC_BOOSTERPACK
 #define TMC_X_ENABLE 1 // Do not change
 #else
@@ -53,7 +54,7 @@
 #define TMC_X_CURRENT 500         // mA RMS
 #define TMC_X_HOLD_CURRENT_PCT 50
 #define TMC_X_SGT 22
-/*
+
 #define TMC_X_ADVANCED \
 tmc_stealthChop(X_AXIS, 1); \
 tmc_sg_filter(X_AXIS, 1); \
@@ -66,7 +67,7 @@ tmc_tbl(X_AXIS, 1); \
 tmc_chopper_mode(X_AXIS, 0); \
 tmc_hysteresis_start(X_AXIS, 4); \
 tmc_hysteresis_end(X_AXIS, -2);
-*/
+// General
 
 #if TRINAMIC_ENABLE && CNC_BOOSTERPACK
 #define TMC_Y_ENABLE 1 // Do not change
@@ -79,7 +80,7 @@ tmc_hysteresis_end(X_AXIS, -2);
 #define TMC_Y_CURRENT 500         // mA RMS
 #define TMC_Y_HOLD_CURRENT_PCT 50
 #define TMC_Y_SGT 22
-/*
+
 #define TMC_Y_ADVANCED \
 tmc_stealthChop(Y_AXIS, 1); \
 tmc_sg_filter(Y_AXIS, 1); \
@@ -92,7 +93,6 @@ tmc_tbl(Y_AXIS, 1); \
 tmc_chopper_mode(Y_AXIS, 0); \
 tmc_hysteresis_start(Y_AXIS, 5); \
 tmc_hysteresis_end(Y_AXIS, 1);
-*/
 
 #if TRINAMIC_ENABLE && CNC_BOOSTERPACK
 #define TMC_Z_ENABLE 1 // Do not change
@@ -105,7 +105,7 @@ tmc_hysteresis_end(Y_AXIS, 1);
 #define TMC_Z_CURRENT 500         // mA RMS
 #define TMC_Z_HOLD_CURRENT_PCT 50
 #define TMC_Z_SGT 22
-/*
+
 #define TMC_Z_ADVANCED \
 tmc_stealthChop(Z_AXIS, 1); \
 tmc_sg_filter(Z_AXIS, 1); \
@@ -118,7 +118,7 @@ tmc_tbl(Z_AXIS, 1); \
 tmc_chopper_mode(Z_AXIS, 0); \
 tmc_hysteresis_start(Z_AXIS, 5); \
 tmc_hysteresis_end(Z_AXIS, 1);
-*/
+
 
 //
 

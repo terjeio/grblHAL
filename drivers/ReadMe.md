@@ -5,7 +5,7 @@
 |-------------------------|----------|-------------|--------|---------|-------------|--------|-------|-------|---------|---------|
 | MCU speed \(MHz\)       | 48       | 120         | 80     | 120     | 25 \(16 bit\) | 80     | 2x240 | 48    | 120     | 72      |
 | Floating point unit     | yes      | yes         | yes    | yes     | no          | no     | yes   | no    | no      | no      |
-| Non-volatile storage    | External | EEPROM      | EEPROM | EEPROM  | External    | EEPROM | Flash | Flash | Flash   | Flash   |
+| Non-volatile storage    | I2C EEPROM | EEPROM      | EEPROM | EEPROM  | I2C EEPROM | EEPROM | Flash/I2C EEPROM | Flash | Flash   | Flash/I2C EEPROM   |
 | Number of axes          | 3        | up to 6     | 3      | up to 6 | 3           | 3<sup>2</sup>      | 3    | 3    | 3       | up to 6 |
 | Variable spindle        | yes      | yes         | yes    | yes     | yes         | yes    | yes   | yes   | yes     | no      |
 | Ramped spindle          | no       | yes         | yes    | no      | no          | no     | yes   | no    | no      | no      |
@@ -17,13 +17,14 @@
 | Bluetooth streaming     | no       | no          | no     | no      | no          | no     | yes   | no    | no      | no      |
 | Ethernet streaming      | no       | yes         | no     | yes     | no          | no     | no    | no    | no      | no      |
 | WiFi streaming          | no       | no          | no     | no      | no          | no     | yes   | no    | no      | no      |
-| SD Card streaming       | no       | TBC         | no     | yes     | no          | no     | yes   | no    | yes     | no      |
-| I2C Keypad              | yes      | no          | yes    | no      | no          | yes    | yes   | no    | no      | no      |
+| SD Card streaming       | no       | TBC         | no     | yes     | no          | no     | yes   | no    | yes     | yes     |
+| I2C Keypad              | yes      | no          | yes    | no      | no          | yes    | yes   | no    | no      | yes     |
+| I2C IO Expander         | no       | no          | no     | no      | no          | no     | yes    | no    | no      | no      |
 | MPG stream input        | yes      | yes         | no     | yes     | no          | no     | no    | no    | no      | no      |
 | Manual tool change<sup>5</sup>      | no          | yes      | no     | yes     | no          | no     | yes   | yes   | no      | no      |
 | Automatic tool change<sup>6</sup>    | planned| no          | no     | no      | no          | no     | no    | no    | no      | no      |
 | Laser PPI mode<sup>7</sup>           | no     | no          | yes    | no      | no          | no     | no    | no    | no      | no      |
-| Trinamic support<sup>8</sup>         | TBC<sup>9</sup>    | TBC<sup>9</sup>         | TBC<sup>9</sup>    | TBC<sup>9</sup>     | no          | no     | TBC<sup>9</sup>   | no    | no      | no      |
+| Trinamic support<sup>8</sup>         | TBC<sup>9</sup>    | TBC<sup>9</sup>         | TBC<sup>9</sup>    | TBC<sup>9</sup>     | no          | no     | TBC<sup>9</sup>   | no    | no      | TBC<sup>9</sup>    |
 | Runs as FreeRTOS task   | no       | yes         | no     | option  | no          | no     | yes   | no    | no      | no      |
 | CNC BoosterPack support | 1        | 2           | 1      | 2       | 1           | no     | yes<sup>10</sup>   | yes<sup>10</sup>  | no      | yes<sup>10</sup>     |
 
@@ -44,4 +45,4 @@ Please note that some of the capabilities should be fairly easy to port from one
 The fastest and most deterministic MCUs seems to be MSP432E401Y and TMC129x, ESP32 is not bad but it is a bit unstable - maybe due to outstanding [bugs](https://github.com/espressif/esp-idf/issues) in the [ESP-IDF](https://github.com/espressif/esp-idf) and the system architecture - program code is stored off chip in external serial flash.
 
 ---
-2019-08-01
+2019-08-03

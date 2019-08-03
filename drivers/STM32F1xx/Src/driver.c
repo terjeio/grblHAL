@@ -25,13 +25,18 @@
 
 #include "main.h"
 
-#include "..\GRBL\grbl.h"
+#include "grbl.h"
 
 #include "driver.h"
 #include "serial.h"
 
+#ifdef I2C_PORT
+#include "i2c.h"
+#endif
+
 #if SDCARD_ENABLE
-#include "sdcard.h"
+#include "sdcard/sdcard.h"
+#include "ff.h"
 #include "diskio.h"
 #endif
 
@@ -43,8 +48,16 @@
 #include "..\Inc\eeprom.h"
 #endif
 
+#if KEYPAD_ENABLE
+#include "keypad/keypad.h"
+#endif
+
 #if FLASH_ENABLE
 #include "flash.h"
+#endif
+
+#ifdef DRIVER_SETTINGS
+driver_settings_t driver_settings;
 #endif
 
 extern __IO uint32_t uwTick;
@@ -112,7 +125,11 @@ static void driver_delay (uint32_t ms, void (*callback)(void))
 static void stepperEnable (axes_signals_t enable)
 {
     enable.mask ^= settings.steppers.enable_invert.mask;
+#if TRINAMIC_ENABLE && TRINAMIC_I2C
+    axes_signals_t tmc_enable = trinamic_stepper_enable(enable);
+#else
     BITBAND_PERI(STEPPERS_DISABLE_PORT->ODR, STEPPERS_DISABLE_PIN) = enable.x;
+#endif
 }
 
 // Starts stepper driver ISR timer and forces a stepper driver interrupt callback
@@ -209,6 +226,10 @@ static void limitsEnable (bool on, bool homing)
     	EXTI->IMR |= LIMIT_MASK;	// and enable
     } else
     	EXTI->IMR &= ~LIMIT_MASK;
+
+#if TRINAMIC_ENABLE
+    trinamic_homing(homing);
+#endif
 }
 
 // Returns limit state as an axes_signals_t variable.
@@ -434,6 +455,10 @@ void settings_changed (settings_t *settings)
 
 		GPIO_Init.Speed = GPIO_SPEED_FREQ_HIGH;
 
+	  #if TRINAMIC_ENABLE
+	    trinamic_configure();
+	  #endif
+
         stepperEnable(settings->steppers.deenergize);
 
         if(hal.driver_cap.variable_spindle) {
@@ -577,7 +602,31 @@ void settings_changed (settings_t *settings)
 		GPIO_Init.Mode = GPIO_MODE_INPUT;
 		GPIO_Init.Pull = settings->flags.disable_probe_pullup ? GPIO_NOPULL : GPIO_PULLUP;
 		HAL_GPIO_Init(PROBE_PORT, &GPIO_Init);
+
+#if KEYPAD_ENABLE
+	    HAL_NVIC_DisableIRQ(EXTI15_10_IRQn);
+
+		GPIO_Init.Pin = KEYPAD_STROBE_BIT;
+		GPIO_Init.Mode = GPIO_MODE_IT_RISING_FALLING;
+		GPIO_Init.Pull = GPIO_PULLUP;
+		HAL_GPIO_Init(KEYPAD_PORT, &GPIO_Init);
+
+	    HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
+#endif
     }
+}
+
+status_code_t (*syscmd)(uint_fast16_t state, char *line, char *lcline);
+
+static status_code_t jtag_enable (uint_fast16_t state, char *line, char *lcline)
+{
+	if(!strcmp(line, "$PGM")) {
+		__HAL_AFIO_REMAP_SWJ_ENABLE();
+		syscmd = NULL;
+		return Status_OK;
+	}
+
+	return syscmd ? syscmd(state, line, lcline) : Status_Unhandled;
 }
 
 // Initializes MCU peripherals for Grbl use
@@ -594,6 +643,16 @@ static bool driver_setup (settings_t *settings)
 
 	GPIO_Init.Speed = GPIO_SPEED_FREQ_HIGH;
 	GPIO_Init.Mode = GPIO_MODE_OUTPUT_PP;
+
+#ifdef DRIVER_SETTINGS
+    if(hal.eeprom.driver_area.address != 0) {
+        if(!hal.eeprom.memcpy_from_with_checksum((uint8_t *)&driver_settings, hal.eeprom.driver_area.address, sizeof(driver_settings)))
+            hal.driver_settings_restore(SETTINGS_RESTORE_DRIVER_PARAMETERS);
+      #if TRINAMIC_ENABLE && CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
+        driver_settings.trinamic.driver_enable.mask = AXES_BITMASK;
+      #endif
+    }
+#endif
 
  // Stepper init
 
@@ -668,13 +727,29 @@ static bool driver_setup (settings_t *settings)
 	HAL_GPIO_Init(COOLANT_MIST_PORT, &GPIO_Init);
 
 #if SDCARD_ENABLE
+
+	GPIO_Init.Mode = GPIO_MODE_OUTPUT_PP;
+	GPIO_Init.Pin = SD_CS_BIT;
+	HAL_GPIO_Init(SD_CS_PORT, &GPIO_Init);
+
+	BITBAND_PERI(SD_CS_PORT->ODR, SD_CS_PIN) = 1;
+
     sdcard_init();
+    syscmd = hal.driver_sys_command_execute;
+    hal.driver_sys_command_execute = jtag_enable;
+
 #endif
 
  // Set defaults
 
     if(hal.driver_cap.amass_level == 0)
         hal.stepper_cycles_per_tick = &stepperCyclesPerTickPrescaled;
+
+#if TRINAMIC_ENABLE
+
+    trinamic_init();
+
+#endif
 
     IOInitDone = settings->version == 14;
 
@@ -686,6 +761,52 @@ static bool driver_setup (settings_t *settings)
 
     return IOInitDone;
 }
+
+#ifdef DRIVER_SETTINGS
+
+static bool driver_setting (setting_type_t param, float value, char *svalue)
+{
+    bool claimed = false;
+
+#if KEYPAD_ENABLE
+    claimed = keypad_setting(param, value, svalue);
+#endif
+
+#if TRINAMIC_ENABLE
+    if(!claimed)
+        claimed = trinamic_setting(param, value, svalue);
+#endif
+
+    if(claimed)
+        hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
+
+    return claimed;
+}
+
+static void driver_settings_report (bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx)
+{
+#if KEYPAD_ENABLE
+    keypad_settings_report(axis_settings, setting_type, axis_idx);
+#endif
+#if TRINAMIC_ENABLE
+    trinamic_settings_report(axis_settings, setting_type, axis_idx);
+#endif
+}
+
+void driver_settings_restore (uint8_t restore_flag)
+{
+    if(restore_flag & SETTINGS_RESTORE_DRIVER_PARAMETERS) {
+#if KEYPAD_ENABLE
+        keypad_settings_restore(restore_flag);
+#endif
+#if TRINAMIC_ENABLE
+        trinamic_settings_restore(restore_flag);
+#endif
+        hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
+    }
+}
+
+#endif
 
 // Initialize HAL pointers, setup serial comms and enable EEPROM
 // NOTE: Grbl is not yet configured (from EEPROM data), driver_setup() will be called when done
@@ -701,6 +822,12 @@ bool driver_init (void)
 #else
 	serialInit();
 #endif
+
+#ifdef I2C_PORT
+	I2C_Init();
+#endif
+
+//	__HAL_AFIO_REMAP_SWJ_NOJTAG();
 
     hal.info = "STM32F103C8";
     hal.driver_setup = driver_setup;
@@ -733,6 +860,11 @@ bool driver_init (void)
     hal.spindle_update_rpm = spindleUpdateRPM;
 
     hal.system_control_get_state = systemGetState;
+
+    hal.set_bits_atomic = bitsSetAtomic;
+    hal.clear_bits_atomic = bitsClearAtomic;
+    hal.set_value_atomic = valueSetAtomic;
+
 #if USB_ENABLE
     hal.stream.read = usbGetC;
     hal.stream.write = usbWriteS;
@@ -750,7 +882,6 @@ bool driver_init (void)
 #endif
 
 #if EEPROM_ENABLE
-    eepromInit();
     hal.eeprom.type = EEPROM_Physical;
     hal.eeprom.get_byte = eepromGetByte;
     hal.eeprom.put_byte = eepromPutByte;
@@ -764,12 +895,31 @@ bool driver_init (void)
     hal.eeprom.type = EEPROM_None;
 #endif
 
-    hal.set_bits_atomic = bitsSetAtomic;
-    hal.clear_bits_atomic = bitsClearAtomic;
-    hal.set_value_atomic = valueSetAtomic;
+#ifdef DRIVER_SETTINGS
+  #if !TRINAMIC_ENABLE
+    assert(EEPROM_ADDR_TOOL_TABLE - (sizeof(driver_settings_t) + 2) > EEPROM_ADDR_GLOBAL + sizeof(settings_t) + 1);
+    hal.eeprom.driver_area.address = EEPROM_ADDR_TOOL_TABLE - (sizeof(driver_settings_t) + 2);
+  #else
+    hal.eeprom.driver_area.address = GRBL_EEPROM_SIZE;
+  #endif
+    hal.eeprom.driver_area.size = sizeof(driver_settings_t);
+    hal.eeprom.size = GRBL_EEPROM_SIZE + sizeof(driver_settings_t) + 1;
 
-#ifdef HAS_KEYPAD
-    hal.execute_realtime = process_keypress;
+    hal.driver_setting = driver_setting;
+    hal.driver_settings_report = driver_settings_report;
+    hal.driver_settings_restore = driver_settings_restore;
+
+#endif
+
+#if TRINAMIC_ENABLE
+    hal.user_mcode_check = trinamic_MCodeCheck;
+    hal.user_mcode_validate = trinamic_MCodeValidate;
+    hal.user_mcode_execute = trinamic_MCodeExecute;
+    hal.driver_rt_report = trinamic_RTReport;
+#endif
+
+#if KEYPAD_ENABLE
+    hal.execute_realtime = keypad_process_keypress;
 #endif
 
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
@@ -846,17 +996,30 @@ void TIM4_IRQHandler (void)
 
 void EXTI15_10_IRQHandler(void)
 {
+#if KEYPAD_ENABLE
+	uint32_t ifg = __HAL_GPIO_EXTI_GET_IT(LIMIT_MASK|KEYPAD_STROBE_BIT);
+#else
 	uint32_t ifg = __HAL_GPIO_EXTI_GET_IT(LIMIT_MASK);
-
+#endif
 	if(ifg) {
 
 		__HAL_GPIO_EXTI_CLEAR_IT(ifg);
+
+#if KEYPAD_ENABLE
+		if(ifg & KEYPAD_STROBE_BIT)
+	        keypad_keyclick_handler(BITBAND_PERI(KEYPAD_PORT->IDR, KEYPAD_STROBE_PIN));
+		if(ifg & LIMIT_MASK) {
+#endif
 
 		if(hal.driver_cap.software_debounce) {
 			DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
 			DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
 		} else
 			hal.limit_interrupt_callback(limitsGetState());
+
+#if KEYPAD_ENABLE
+		}
+#endif
 	}
 }
 
@@ -875,6 +1038,13 @@ void EXTI9_5_IRQHandler(void)
 // Interrupt handler for 1 ms interval timer
 void HAL_IncTick(void)
 {
+#if SDCARD_ENABLE
+	static uint32_t fatfs_ticks = 10;
+	if(!(--fatfs_ticks)) {
+		disk_timerproc();
+		fatfs_ticks = 10;
+	}
+#endif
 	uwTick += uwTickFreq;
 
 	if(delay.ms && !(--delay.ms)) {

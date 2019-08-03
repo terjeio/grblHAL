@@ -28,6 +28,8 @@
 
 void SystemClock_Config(void);
 
+I2C_HandleTypeDef hi2c2;
+
 int main(void)
 {
 	HAL_Init();

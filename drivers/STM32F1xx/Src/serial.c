@@ -26,7 +26,7 @@
 
 #include "driver.h"
 #include "serial.h"
-#include "../GRBL/grbl.h"
+#include "grbl.h"
 
 #include "main.h"
 

@@ -4,9 +4,9 @@
 
   for 2K EEPROM on CNC Boosterpack (Microchip 24LC16B)
 
-  Part of Grbl
+  Part of GrblHAL
 
-  Copyright (c) 2017-2018 Terje Io
+  Copyright (c) 2017-2019 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,57 +23,17 @@
 
 */
 
-#include <main.h>
-#include <stdint.h>
-#include <stdbool.h>
-
+#include "i2c.h"
 #include "../GRBL/grbl.h"
-
-extern I2C_HandleTypeDef hi2c2;
 
 #define EEPROM_I2C_ADDRESS (0xA0 >> 1)
 #define EEPROM_ADDR_BITS_LO 8
 #define EEPROM_BLOCK_SIZE (2 ^ EEPROM_LO_ADDR_BITS)
 #define EEPROM_PAGE_SIZE 16
 
-typedef struct {
-    uint8_t addr;
-    volatile int16_t count;
-    uint8_t *data;
-    uint8_t word_addr;
-} i2c_trans_t;
+#if EEPROM_ENABLE
 
 static i2c_trans_t i2c;
-
-void eepromInit (void)
-{
-	hi2c2.Instance = I2C2;
-	hi2c2.Init.ClockSpeed = 100000;
-	hi2c2.Init.DutyCycle = I2C_DUTYCYCLE_2;
-	hi2c2.Init.OwnAddress1 = 0;
-	hi2c2.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
-	hi2c2.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
-	hi2c2.Init.OwnAddress2 = 0;
-	hi2c2.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
-	hi2c2.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
-	if (HAL_I2C_Init(&hi2c2) != HAL_OK)
-		Error_Handler();
-}
-
-static void StartI2C (bool read)
-{
-
-    while (HAL_I2C_GetState(&hi2c2) != HAL_I2C_STATE_READY);
-
-//    while (HAL_I2C_IsDeviceReady(&hi2c2, (uint16_t)(0xA0), 3, 100) != HAL_OK);
-
-    if(read)
-    	HAL_I2C_Mem_Read(&hi2c2, i2c.addr, i2c.word_addr, I2C_MEMADD_SIZE_8BIT, i2c.data, i2c.count, 100);
-    else {
-    	HAL_I2C_Mem_Write(&hi2c2, i2c.addr, i2c.word_addr, I2C_MEMADD_SIZE_8BIT, i2c.data, i2c.count, 100);
-        hal.delay_ms(5, NULL);
-    }
-}
 
 uint8_t eepromGetByte (uint32_t addr)
 {
@@ -83,7 +43,7 @@ uint8_t eepromGetByte (uint32_t addr)
     i2c.word_addr = addr & 0xFF;
     i2c.data = &value;
     i2c.count = 1;
-    StartI2C(true);
+    I2C_EEPROM(&i2c, true);
 
     return value;
 }
@@ -95,7 +55,7 @@ void eepromPutByte (uint32_t addr, uint8_t new_value)
     i2c.data = &new_value;
     i2c.count = 1;
 
-    StartI2C(false);
+    I2C_EEPROM(&i2c, false);
 }
 
 void eepromWriteBlockWithChecksum (uint32_t destination, uint8_t *source, uint32_t size)
@@ -112,7 +72,7 @@ void eepromWriteBlockWithChecksum (uint32_t destination, uint8_t *source, uint32
         bytes -= i2c.count;
         destination += i2c.count;
 
-        StartI2C(false);
+        I2C_EEPROM(&i2c, false);
 
         i2c.word_addr = destination & 0xFF;
     }
@@ -128,7 +88,9 @@ bool eepromReadBlockWithChecksum (uint8_t *destination, uint32_t source, uint32_
     i2c.count = size;
     i2c.data = destination;
 
-    StartI2C(true);
+    I2C_EEPROM(&i2c, true);
 
     return calc_checksum(destination, size) == eepromGetByte(source + size);
 }
+
+#endif

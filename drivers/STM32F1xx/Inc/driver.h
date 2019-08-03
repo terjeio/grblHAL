@@ -2,7 +2,7 @@
 
   driver.h - driver code for STM32F103C8 ARM processors
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2019 Terje Io
 
@@ -22,6 +22,7 @@
 */
 
 #include "main.h"
+#include "grbl.h"
 
 #ifndef __DRIVER_H__
 #define __DRIVER_H__
@@ -36,24 +37,53 @@
 // Configuration
 // Set value to 1 to enable, 0 to disable
 
-#define USB_ENABLE      1
+#define USB_ENABLE      0
+#define KEYPAD_ENABLE   0 // I2C keypad for jogging etc.
+#define TRINAMIC_ENABLE	0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
+#define TRINAMIC_I2C    0 // Trinamic I2C - SPI bridge interface.
+#define TRINAMIC_DEV    0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
 #define CNC_BOOSTERPACK 0
 
 #if CNC_BOOSTERPACK
 #if N_AXIS > 3
 #error Max number of axes is 3!
 #endif
-#define SDCARD_ENABLE 0 // Run jobs from SD card. NOTE: to be completed
-#define EEPROM_ENABLE 0 // I2C EEPROM (24LC16) support. NOTE: to be completed
+#define SDCARD_ENABLE 0 // Run jobs from SD card.
+#define EEPROM_ENABLE 0 // I2C EEPROM (24LC16) support.
 #else
-#define SDCARD_ENABLE 0 // Run jobs from SD card. NOTE: to be completed
-#define EEPROM_ENABLE 0 // I2C EEPROM (24LC16) support. NOTE: to be completed
+#define SDCARD_ENABLE 0 // Run jobs from SD card.
+#define EEPROM_ENABLE 0 // I2C EEPROM (24LC16) support.
 #endif
 
 #if EEPROM_ENABLE == 0
 #define FLASH_ENABLE 1
 #else
 #define FLASH_ENABLE 0
+#endif
+
+#if EEPROM_ENABLE|| KEYPAD_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
+#define I2C_PORT
+#endif
+
+#if TRINAMIC_ENABLE || KEYPAD_ENABLE
+#define DRIVER_SETTINGS
+#endif
+
+#ifdef DRIVER_SETTINGS
+
+#include "tmc2130/trinamic.h"
+
+typedef struct {
+#if TRINAMIC_ENABLE
+    trinamic_settings_t trinamic;
+#endif
+#if KEYPAD_ENABLE
+    jog_settings_t jog;
+#endif
+} driver_settings_t;
+
+extern driver_settings_t driver_settings;
+
 #endif
 
 // End configuration
@@ -192,9 +222,30 @@
 #define CONTROL_MASK            	(CONTROL_RESET_BIT|CONTROL_FEED_HOLD_BIT|CONTROL_CYCLE_START_BIT|CONTROL_SAFETY_DOOR_BIT)
 
 // Define probe switch input pin.
-#define PROBE_PORT                 	GPIOB
-#define PROBE_PIN                	15
+#define PROBE_PORT                 	GPIOA
+#define PROBE_PIN                	7
 #define PROBE_BIT                 	(1<<PROBE_PIN)
+
+#if KEYPAD_ENABLE
+#define KEYPAD_PORT               	GPIOB
+#define KEYPAD_STROBE_PIN        	15
+#define KEYPAD_STROBE_BIT        	(1<<KEYPAD_STROBE_PIN)
+#endif
+
+#if SDCARD_ENABLE
+#define SD_CS_PORT	GPIOA
+#define SD_CS_PIN	3
+#define SD_CS_BIT	(1<<SD_CS_PIN)
+// The following defines are not used but defined for reference
+// Port init and remap is done by HAL_SPI_MspInit() in stm32f1xx_hal_msp.c
+#define SD_IO_PORT	GPIOB
+#define SD_SCK_PIN  3
+#define SD_SCK_BIT  (1<<SD_SCK_PIN)
+#define SD_MISO_PIN	4
+#define SD_MISO_BIT	(1<<SD_MISO_PIN)
+#define SD_MOSI_PIN	5
+#define SD_MOSI_BIT	(1<<SD_MOSI_PIN)
+#endif
 
 bool driver_init (void);
 
