@@ -2,15 +2,16 @@
 
 A GrblHAL driver for the NXP LPC1769 processor.
 
-Based on the official [grbl-LPC port](https://github.com/gnea/grbl-LPC).
+Loosely based on the official [grbl-LPC port](https://github.com/gnea/grbl-LPC).
 
-*** Incomplete ***
+*** Incomplete - needs work on pin assignments ***
 
-I did some work on this in early 2018 but I did not complete it for some reason \(IIRC something to do with limit pins on a popular board not beeing interrupt capable?\). I cannot remember now how far I got but at least it compiles.
+__Update 2019-08-08:__ Changed IDE to [MCUXpresso v11](https://www.nxp.com/design/software/development-software/mcuxpresso-software-and-tools/mcuxpresso-integrated-development-environment-ide:MCUXpresso-IDE) and linked against [LPCOpen development platform](https://www.nxp.com/design/microcontrollers-developer-resources/lpcopen-libraries-and-examples/lpcopen-software-development-platform-lpc17xx:LPCOPEN-SOFTWARE-FOR-LPC17XX) libraries. I2C EEPROM on [OM13085 LPCXpresso board](https://www.nxp.com/design/microcontrollers-developer-resources/lpc-microcontroller-utilities/lpcxpresso-board-for-lpc1769-with-cmsis-dap-probe:OM13085) and SD card supported. 
 
-Since the HAL now has entry points that can be used for SD card support, I googled for a FatFs port. Since I found one I have included that but be aware that I have not checked the pin assignments for SPI neither that it works - then again, it compiles.
+Currently tested running on a OM13085 board with oscilloscope only. Communication is configured via CMSIS-DAP VCOM connected to UART0, code for "native" USB VCOM provided but untested.
 
-I decided to publish it so somebody may have a go at making it work.
+__NOTE:__ earlier commits of this driver are full of bugs! Notably the bitbanding for GPIO is allocated in the SRAM region for this processor, _not_ PERI region...
 
 ---
-2019-08-01
+
+2019-08-08

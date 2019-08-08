@@ -49,6 +49,10 @@
 // Convert character to uppercase
 #define CAPS(c) ((c >= 'a' && c <= 'z') ? c & 0x5F : c)
 
+#ifndef UNUSED
+#define UNUSED(x) (void)(x)
+#endif
+
 // Axis array index values. Must start with 0 and be continuous.
 #ifndef N_AXIS
 #define N_AXIS 3 // Number of axes

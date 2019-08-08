@@ -1,10 +1,12 @@
 /*
 
-  main.c - startup code for NXP LPC176x ARM processors
+  eeprom.h - driver code for NXP LPC176x ARM processors
+
+  for 8K EEPROM on OM13085 dev board (Microchip 24LC64) connected to I2C1
 
   Part of GrblHAL
 
-  Copyright (c) 2018-2019 Terje Io
+  Copyright (c) 2019 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -21,11 +23,14 @@
 
 */
 
-#include "GRBL\grbllib.h"
+#ifndef __EEPROM_H__
+#define __EEPROM_H__
 
-int main(void)
-{
-	grbl_enter();
+void eepromInit (void);
+uint8_t eepromGetByte (uint32_t addr);
+void eepromPutByte (uint32_t addr, uint8_t new_value);
+void eepromWriteBlockWithChecksum (uint32_t destination, uint8_t *source, uint32_t size);
+bool eepromReadBlockWithChecksum (uint8_t *destination, uint32_t source, uint32_t size);
 
-	return 0;
-}
+#endif
+

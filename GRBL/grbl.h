@@ -24,12 +24,13 @@
 
 // Grbl versioning system
 #define GRBL_VERSION "1.1f"
-#define GRBL_VERSION_BUILD "20190601"
+#define GRBL_VERSION_BUILD "20190803"
 
 // Define standard libraries used by Grbl.
 #include <math.h>
 #include <inttypes.h>
 #include <string.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>

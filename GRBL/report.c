@@ -114,13 +114,13 @@ static char *get_axis_values_inches (float *axis_values)
 // Convert rate value to null terminated string (mm).
 static char *get_rate_value_mm (float value)
 {
-    return ftoa(value, N_DECIMAL_RATEVALUE_MM);
+    return uitoa((uint32_t)value);
 }
 
 // Convert rate value to null terminated string (mm).
 static char *get_rate_value_inch (float value)
 {
-    return ftoa(value * INCH_PER_MM, N_DECIMAL_RATEVALUE_INCH);
+    return uitoa((uint32_t)(value * INCH_PER_MM));
 }
 
 // Convert axes signals bits to string representation
@@ -613,8 +613,6 @@ void report_gcode_modes (void)
 void report_startup_line (uint8_t n, char *line)
 {
     hal.stream.write(appendbuf(3, "$N", uitoa((uint32_t)n), "="));
-    hal.stream.write(uitoa((uint32_t)n));
-    hal.stream.write("=");
     hal.stream.write(line);
     hal.stream.write("\r\n");
 }
@@ -746,7 +744,8 @@ void report_build_info (char *line)
         strcat(buf, "LATHE,");
 
 #ifdef N_TOOLS
-    strcat(buf, "ATC,");
+    if(hal.tool_change)
+    	strcat(buf, "ATC,");
 #else
     if(hal.stream.suspend_read)
         strcat(buf, "TC,"); // Manual tool change supported (M6)
@@ -883,9 +882,9 @@ void report_realtime_status (void)
     if(settings.status_report.feed_speed) {
         if(hal.driver_cap.variable_spindle) {
             hal.stream.write_all(appendbuf(2, "|FS:", get_rate_value(st_get_realtime_rate())));
-            hal.stream.write_all(appendbuf(2, ",", ftoa(sys.spindle_rpm, N_DECIMAL_RPMVALUE)));
+            hal.stream.write_all(appendbuf(2, ",", uitoa((uint32_t)sys.spindle_rpm)));
             if(hal.spindle_get_data /* && sys.mpg_mode */)
-                hal.stream.write_all(appendbuf(2, ",", ftoa(hal.spindle_get_data(SpindleData_RPM).rpm, N_DECIMAL_RPMVALUE)));
+                hal.stream.write_all(appendbuf(2, ",", uitoa((uint32_t)hal.spindle_get_data(SpindleData_RPM).rpm)));
         } else
             hal.stream.write_all(appendbuf(2, "|F:", get_rate_value(st_get_realtime_rate())));
     }

@@ -469,17 +469,18 @@ typedef struct {
     float feed_rate;                    // Millimeters/min
     float distance_per_rev;             // Millimeters/rev
     float position[N_AXIS];             // Where the interpreter considers the tool to be at this point in the code
-    float g92_coord_offset[N_AXIS];     // Retains the G92 coordinate offset (work coordinates) relative to
-                                        // machine zero in mm. Non-persistent. Cleared upon reset and boot.
     int32_t line_number;                // Last line number sent
     uint8_t tool_pending;               // Tool to be selected on next M6
-    tool_data_t *tool;                  // Tracks tool number and offset
-    float tool_length_offset[N_AXIS];   // Tracks tool length offset value when enabled
     bool file_run;                      // Tracks % command
     bool is_laser_ppi_mode;
     bool is_rpm_rate_adjusted;
     bool tool_change;
     status_code_t last_error;           // last return value from parser
+    //
+    float g92_coord_offset[N_AXIS];     // Retains the G92 coordinate offset (work coordinates) relative to
+                                        // machine zero in mm. Non-persistent. Cleared upon reset and boot.
+    float tool_length_offset[N_AXIS];   // Tracks tool length offset value when enabled
+    tool_data_t *tool;                  // Tracks tool number and offset
 } parser_state_t;
 
 typedef struct {

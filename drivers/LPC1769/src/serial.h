@@ -2,7 +2,7 @@
 
   serial.h - low level functions for transmitting bytes via the serial port
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2017-2019 Terje Io
 
@@ -24,7 +24,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define USE_USB
+#define SERIAL_IRQHandler UART0_IRQHandler
+#define SERIAL_MODULE     LPC_UART0
+#define SERIAL_MODULE_INT UART0_IRQn
 
 #define TX_BUFFER_SIZE 128      // must be a power of 2
 #define RX_BUFFER_SIZE 1024     // must be a power of 2
@@ -33,7 +35,23 @@
 //#define RTS_PORT P1
 #define RTS_PIN  4
 #define RTS_BIT (1<<RTS_PIN)
-//#define LINE_BUFFER_SIZE 20
+
+#define BUFCOUNT(head, tail, size) ((head >= tail) ? (head - tail) : (size - tail + head))
+
+typedef struct {
+    volatile uint16_t head;
+    volatile uint16_t tail;
+    bool overflow;
+//    bool rts_state;
+    bool backup;
+    char data[RX_BUFFER_SIZE];
+} stream_rx_buffer_t;
+
+typedef struct {
+    volatile uint16_t head;
+    volatile uint16_t tail;
+    char data[TX_BUFFER_SIZE];
+} stream_tx_buffer_t;
 
 void serialInit(void);
 int16_t serialGetC(void);
@@ -41,15 +59,10 @@ bool serialPutC(const char c);
 void serialWriteS(const char *s);
 void serialWriteLn(const char *s);
 void serialWrite(const char *s, uint16_t length);
+bool serialSuspendInput (bool suspend);
 
-#ifdef LINE_BUFFER_SIZE
-char *serialReadLn (void);
-#endif
-
-#ifdef RX_BUFFER_SIZE
 uint16_t serialTxCount(void);
 uint16_t serialRxCount(void);
 uint16_t serialRxFree(void);
 void serialRxFlush(void);
 void serialRxCancel(void);
-#endif

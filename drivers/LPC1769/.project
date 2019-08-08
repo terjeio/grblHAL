@@ -3,6 +3,7 @@
 	<name>GRBL Driver LPC176x</name>
 	<comment></comment>
 	<projects>
+		<project>CMSIS_CORE_LPC17xx</project>
 	</projects>
 	<buildSpec>
 		<buildCommand>
@@ -22,6 +23,5 @@
 		<nature>org.eclipse.cdt.core.cnature</nature>
 		<nature>org.eclipse.cdt.managedbuilder.core.managedBuildNature</nature>
 		<nature>org.eclipse.cdt.managedbuilder.core.ScannerConfigNature</nature>
-		<nature>org.eclipse.cdt.core.ccnature</nature>
 	</natures>
 </projectDescription>

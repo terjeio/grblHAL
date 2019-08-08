@@ -117,11 +117,8 @@ inline static float gc_get_block_offset (parser_block_t *gc_block, uint_fast8_t 
 
 void gc_init(bool cold_start)
 {
-    tool_data_t *tool = gc_state.tool;
-
-    memset(&gc_state, 0, sizeof(parser_state_t));
-
     if(cold_start) {
+        memset(&gc_state, 0, sizeof(parser_state_t));
       #ifdef N_TOOLS
         gc_state.tool = &tool_table[0];
       #else
@@ -129,9 +126,9 @@ void gc_init(bool cold_start)
         gc_state.tool = &tool_table;
       #endif
     } else {
-        gc_state.tool = tool;
-        gc_state.tool_pending = tool->tool;
-        // TODO: restore offsets
+        memset(&gc_state, 0, offsetof(parser_state_t, g92_coord_offset));
+        gc_state.tool_pending = gc_state.tool->tool;
+        // TODO: restore offsets, tool offset mode?
     }
 
     // Load default override status

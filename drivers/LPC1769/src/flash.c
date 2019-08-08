@@ -2,11 +2,9 @@
 
   flash.h - driver code for NXP LPC176x ARM processors
 
-  Part of Grbl
+  Part of GrblHAL
 
-  Copyright (c) 2018 Terje Io
-
-  Based on code by Todd Fleming and info from UM10360 - LPC176x/5x User manual
+  Copyright (c) 2018-2019 Terje Io
 
   This code reads/writes the whole RAM-based emulated EPROM contents from/to flash
 
@@ -25,77 +23,38 @@
 
 */
 
-#include "LPC17xx.h"
+#include "chip.h"
 #include "grbl/grbl.h"
-
-#define IAP_PREP_WRITE   50
-#define IAP_WRITE_SECTOR 51
-#define IAP_ERASE_SECTOR 52
 
 #define IAP_CMD_SUCCESS 0
 
-typedef struct {
-	uint32_t command;
-	uint32_t param0;
-	uint32_t param1;
-	uint32_t param2;
-	uint32_t param3;
-} iap_command_t;
+static const uint32_t flash_sector = 29;		// Last 32k sector number
+static const uint32_t flash_target = 0x1000UL * 16 + 0x8000UL * (flash_sector - 16);
 
-typedef struct {
-	uint32_t return_code;
-	uint32_t result0;
-	uint32_t result1;
-	uint32_t result2;
-	uint32_t result3;
-} iap_output_t;
-
-typedef void (*Iap)(iap_command_t *, iap_output_t *);
-
-static const uint32_t flash_sector = 15;				// Last 4k sector number
-static const uint8_t *flash_target = (uint8_t *)0xF000;	// Last 4k sector start adress
-static const Iap iap = (Iap)0x1FFF1FF1;					// IAP entry point in ROM
+//static const uint32_t flash_sector = 15;		// Last 4k sector number
+//static const uint32_t flash_target = 0xF000UL;	// Last 4k sector start adress
 
 bool memcpy_from_flash (uint8_t *dest)
 {
-    memcpy(dest, flash_target, GRBL_EEPROM_SIZE);
+    memcpy(dest, (const void *)flash_target, hal.eeprom.size);
     return true;
 }
 
 bool memcpy_to_flash (uint8_t *source)
 {
-    if (!memcmp(source, flash_target, GRBL_EEPROM_SIZE))
+    if (!memcmp(source, (const void *)flash_target, hal.eeprom.size))
         return true;
 
-    iap_command_t prepare = {
-    	IAP_PREP_WRITE,
-        flash_sector,
-        flash_sector,
-		0,
-		0
-    };
+    uint8_t ret;
 
-    iap_command_t action = {
-    	IAP_ERASE_SECTOR,
-        flash_sector,
-        flash_sector,
-		SystemCoreClock / 1000,
-		0
-    };
+	__disable_irq();
 
-    iap_output_t output;
+    ret = Chip_IAP_PreSectorForReadWrite(flash_sector, flash_sector);
+    ret = Chip_IAP_EraseSector(flash_sector, flash_sector);
+    ret = Chip_IAP_PreSectorForReadWrite(flash_sector, flash_sector);
+    ret = Chip_IAP_CopyRamToFlash(flash_target, (uint32_t *)source, (uint32_t)hal.eeprom.size);
 
-    iap(&prepare, &output);
-    iap(&action, &output);
-    iap(&prepare, &output);
+	__enable_irq();
 
-    action.command = IAP_WRITE_SECTOR;
-    action.param0  = (uint32_t)flash_target;
-    action.param1  = (uint32_t)source;
-    action.param2  = GRBL_EEPROM_SIZE;
-    action.param2  = SystemCoreClock / 1000;
-
-    iap(&action, &output);
-
-    return output.return_code == IAP_CMD_SUCCESS;
+    return ret == IAP_CMD_SUCCESS;
 }

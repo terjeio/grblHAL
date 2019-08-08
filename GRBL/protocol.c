@@ -324,7 +324,7 @@ bool protocol_execute_realtime ()
             protocol_exec_rt_suspend();
 
       #ifdef EMULATE_EEPROM
-        if(sys.state == STATE_IDLE && settings_dirty.is_dirty && !gc_state.file_run)
+        if((sys.state == STATE_IDLE || sys.state == STATE_ALARM) && settings_dirty.is_dirty && !gc_state.file_run)
             eeprom_emu_sync_physical();
       #endif
     }

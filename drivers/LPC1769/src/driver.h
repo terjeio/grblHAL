@@ -4,7 +4,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2018 Terje Io
+  Copyright (c) 2018-2019 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -21,51 +21,69 @@
 
 */
 
-/*****************************************************************************************
- *                                                                                       *
- * NOTE: any assingment changes related to interrupt generating peripherals              *
- *       must be synchronized with entries in the msp432_startup_ccs.c IRQ vector table  *
- *                                                                                       *
- *****************************************************************************************/
-
-#include "LPC17xx.h"
-
 #ifndef __DRIVER_H__
 #define __DRIVER_H__
 
-//-------------------------------------------------
 #include <stdbool.h>
 #include <stdint.h>
-//-------------------------------------------------
+
+#include "chip.h"
+
+/******************************************************************************
+* Definitions for bit band access                                             *
+******************************************************************************/
+
+/* Bit band SRAM and GPIO definitions */
+#define BITBAND_SRAM_REF   0x20000000
+#define BITBAND_SRAM_BASE  0x22000000
+
+#define BITBAND_SRAM(a,b) (*((__IO uint32_t *)((BITBAND_SRAM_BASE + ((((uint32_t)(uint32_t *)&a)-BITBAND_SRAM_REF)<<5) + (b<<2)))))
+/* NOTE: GPIO registers live in the SRAM bitband region! */
+#define BITBAND_GPIO BITBAND_SRAM
+
+/* Bit band PERIPHERAL definitions */
+#define BITBAND_PERI_REF   0x40000000
+#define BITBAND_PERI_BASE  0x42000000
+
+#define BITBAND_PERI(a,b) (*((__IO uint32_t *)((BITBAND_PERI_BASE + ((((uint32_t)(uint32_t *)&a)-BITBAND_PERI_REF)<<5) + (b<<2)))))  // Convert PERI address
+
+// Added missing definition for GPIO0
+#define LPC_GPIO0 ((LPC_GPIO_T *) LPC_GPIO0_BASE)
 
 // Configuration
 // Set value to 1 to enable, 0 to disable
 
 #define SDCARD_ENABLE 0 // Run jobs from SD card.
+#define USB_ENABLE	  0
+#define EEPROM_ENABLE 0 // I2C EEPROM (24LC64) support for OM13085.
+
+#if EEPROM_ENABLE == 0
+#define FLASH_ENABLE 1
+#else
+#define FLASH_ENABLE 0
+#endif
 
 // End configuration
 
 #define port(p) portI(p)
 #define portI(p) LPC_GPIO ## p
-#define portGpio(p) portG(p)
-#define portG(p) GPIO_PORT_P ## p
-#define portINT(p) portQ(p)
-#define portQ(p) PORT ## p ## _IRQn
 #define portINTER(p) portQR(p)
-#define portQR(p) LPC_GPIOINT->IO ## p ## IntEnR
+#define portQR(p) LPC_GPIOINT->IO ## p.ENR
 #define portINTEF(p) portQF(p)
-#define portQF(p) LPC_GPIOINT->IO ## p ## IntEnF
+#define portQF(p) LPC_GPIOINT->IO ## p.ENF
 #define portINTSR(p) portQSR(p)
-#define portQSR(p) LPC_GPIOINT->IO ## p ## IntStatR
+#define portQSR(p) LPC_GPIOINT->IO ## p.STATR
 #define portINTSF(p) portQSF(p)
-#define portQSF(p) LPC_GPIOINT->IO ## p ## IntStatF
+#define portQSF(p) LPC_GPIOINT->IO ## p.STATF
 #define portINTCLR(p) portC(p)
-#define portC(p) LPC_GPIOINT->IO ## p ## IntClr
+#define portC(p) LPC_GPIOINT->IO ## p.CLR
 #define portRDI(p) portR(p * 2)
 #define portR(p) PINMODE ## p
 
 #define P0Int (1<<0)
 #define P2Int (1<<2)
+
+#define GPIO_IRQHandler EINT3_IRQHandler
 
 #define PINMODE_PULLUP   0x0
 #define PINMODE_REPEATER 0x1
@@ -73,11 +91,15 @@
 #define PINMODE_PULLDOWN 0x3
 
 #define timer(p) timerN(p)
-#define timerN(p) LPC_TIM ## p
+#define timerN(p) LPC_TIMER ## p
 #define timerINT0(p) timerI0(p)
 #define timerI0(p) TIMER ## p ## _IRQn
 #define timerINTN(p) timerIN(p)
 #define timerIN(p) T ## p ## _N_IRQn
+#define timerISR(p) timerS(p)
+#define timerS(p) TIMER ## p ## _IRQHandler
+#define timerPCLK(p) timerCK(p)
+#define timerCK(p) SYSCTL_PCLK_TIMER ## p
 
 #define MR0I (1<<0)
 #define MR0R (1<<1)
@@ -88,11 +110,6 @@
 
 #define MR0IFG (1<<0)
 #define MR1IFG (1<<1)
-
-#define eusci(p) eusciM(p)
-#define eusciM(p) EUSCI_ ## p
-#define eusciINT(p) eusciI(p)
-#define eusciI(p) EUSCI ## p ## _IRQn
 
 // Define GPIO output mode options
 
@@ -110,20 +127,26 @@
 #define STEPPER_TIM 1
 #define STEPPER_TIMER timer(STEPPER_TIM)
 #define STEPPER_TIMER_INT0 timerINT0(STEPPER_TIM)
+#define STEPPER_TIMER_PCLK timerPCLK(STEPPER_TIM)
+#define STEPPER_IRQHandler timerISR(STEPPER_TIM)
 
 #define PULSE_TIM 0
 #define PULSE_TIMER timer(PULSE_TIM)
 #define PULSE_TIMER_INT0 timerINT0(PULSE_TIM)
+#define PULSE_TIMER_PCLK timerPCLK(PULSE_TIM)
+#define STEPPULSE_IRQHandler timerISR(PULSE_TIM)
 
 #define DEBOUNCE_TIM 2
 #define DEBOUNCE_TIMER timer(DEBOUNCE_TIM)
 #define DEBOUNCE_TIMER_INT0 timerINT0(DEBOUNCE_TIM)
+#define DEBOUNCE_TIMER_PCLK timerPCLK(DEBOUNCE_TIM)
+#define DEBOUNCE_IRQHandler timerISR(DEBOUNCE_TIM)
 
 // Define serial port pins and module
 
 #define SERIAL_MOD A0
-#define SERIAL_MODULE eusci(SERIAL_MOD)
-#define SERIAL_MODULE_INT eusciINT(SERIAL_MOD)
+//#define SERIAL_MODULE eusci(SERIAL_MOD)
+//#define SERIAL_MODULE_INT eusciINT(SERIAL_MOD)
 #define SERIAL_PORT P1
 #define SERIAL_RX BIT2
 #define SERIAL_TX BIT3
@@ -135,9 +158,9 @@
 
 #define STEP_PN         2
 #define STEP_PORT       port(STEP_PN)
-#define X_STEP_PIN      0
-#define Y_STEP_PIN      1
-#define Z_STEP_PIN      2
+#define X_STEP_PIN      1
+#define Y_STEP_PIN      2
+#define Z_STEP_PIN      3
 #define X_STEP_BIT      (1<<X_STEP_PIN)
 #define Y_STEP_BIT      (1<<Y_STEP_PIN)
 #define Z_STEP_BIT      (1<<Z_STEP_PIN)
@@ -150,9 +173,9 @@
 
 #define DIRECTION_PN      0
 #define DIRECTION_PORT    port(DIRECTION_PN)
-#define X_DIRECTION_PIN   5
-#define Y_DIRECTION_PIN   11
-#define Z_DIRECTION_PIN   20
+#define X_DIRECTION_PIN   11
+#define Y_DIRECTION_PIN   20
+#define Z_DIRECTION_PIN   22
 #define X_DIRECTION_BIT   (1<<X_DIRECTION_PIN)
 #define Y_DIRECTION_BIT   (1<<Y_DIRECTION_PIN)
 #define Z_DIRECTION_BIT   (1<<Z_DIRECTION_PIN)
@@ -163,26 +186,26 @@
 // Define stepper driver enable/disable output pin.
 
 #define STEPPERS_DISABLE_PN		0
-#define STEPPERS_DISABLE_PORT  port(STEPPERS_DISABLE_PN)
-#define STEPPERS_DISABLE_PIN   7
-#define STEPPERS_DISABLE_BIT   (1<<STEPPERS_DISABLE_PIN)
-#define STEPPERS_DISABLE_MASK  (STEPPERS_DISABLE_BIT)
+#define STEPPERS_DISABLE_PORT	port(STEPPERS_DISABLE_PN)
+#define STEPPERS_DISABLE_PIN	10
+// 19 + 21
+#define STEPPERS_DISABLE_BIT	(1<<STEPPERS_DISABLE_PIN)
+#define STEPPERS_DISABLE_MASK	(STEPPERS_DISABLE_BIT)
 
 // Define homing/hard limit switch input pins
 // NOTE: All limit bit pins must be on the same port
 
-#define LIMIT_PN      2
+#define LIMIT_PN      0
 #define LIMIT_PORT    port(LIMIT_PN)
-#define LIMIT_GPIO    portGpio(LIMIT_PN)
+#define LIMIT_INTCLR  portINTCLR(LIMIT_PN)
 #define LIMIT_INTENR  portINTER(LIMIT_PN)
-#define LIMIT_INTENF  portINTER(LIMIT_PN)
 #define LIMIT_INTSTR  portINTSR(LIMIT_PN)
-#define LIMIT_INTSTF  portINTSR(LIMIT_PN)
+#define LIMIT_INTSTF  portINTSF(LIMIT_PN)
 #define LIMIT_INTCLR  portINTCLR(LIMIT_PN)
 
 #define X_LIMIT_PIN 24
 #define Y_LIMIT_PIN 26
-#define Z_LIMIT_PIN 28
+#define Z_LIMIT_PIN 29
 #define X_LIMIT_BIT (1<<X_LIMIT_PIN)
 #define Y_LIMIT_BIT (1<<Y_LIMIT_PIN)
 #define Z_LIMIT_BIT (1<<Z_LIMIT_PIN)
@@ -194,15 +217,11 @@
 
 #define COOLANT_FLOOD_PN    2
 #define COOLANT_FLOOD_PORT	port(COOLANT_FLOOD_PN)
-#define COOLANT_FLOOD_GPIO  portGpio(COOLANT_FLOOD_PN)
-#define COOLANT_FLOOD_INT   portINT(COOLANT_FLOOD_PN)
 #define COOLANT_FLOOD_PIN   4
 #define COOLANT_FLOOD_BIT   (1<<COOLANT_FLOOD_PIN)
 
 #define COOLANT_MIST_PN     2
 #define COOLANT_MIST_PORT   port(COOLANT_MIST_PN)
-#define COOLANT_MIST_GPIO	portGpio(COOLANT_MIST_PN)
-#define COOLANT_MIST_INT    portINT(COOLANT_MIST_PN)
 #define COOLANT_MIST_PIN    6
 #define COOLANT_MIST_BIT    (1<<COOLANT_MIST_PIN)
 
@@ -215,14 +234,14 @@
 #define CONTROL_INTENR   portINTER(CONTROL_PN)
 #define CONTROL_INTENF   portINTER(CONTROL_PN)
 #define CONTROL_INTSTR   portINTSR(CONTROL_PN)
-#define CONTROL_INTSTF   portINTSR(CONTROL_PN)
+#define CONTROL_INTSTF   portINTSF(CONTROL_PN)
 #define CONTROL_INTCLR   portINTCLR(CONTROL_PN)
 #define CONTROL_RDI      portRDI(CONTROL_PN)
 
-#define RESET_PIN           22
-#define FEED_HOLD_PIN       23
-#define CYCLE_START_PIN     31
-#define SAFETY_DOOR_PIN     30
+#define RESET_PIN           6
+#define FEED_HOLD_PIN       7
+#define CYCLE_START_PIN     8
+#define SAFETY_DOOR_PIN     9
 #define RESET_BIT           (1<<RESET_PIN)
 #define FEED_HOLD_BIT       (1<<FEED_HOLD_PIN)
 #define CYCLE_START_BIT     (1<<CYCLE_START_PIN)
@@ -239,14 +258,14 @@
 
 // Define spindle enable, spindle direction and PWM output pins.
 
-#define SPINDLE_ENABLE_PN     4
+#define SPINDLE_ENABLE_PN     1
 #define SPINDLE_ENABLE_PORT   port(SPINDLE_ENABLE_PN)
-#define SPINDLE_ENABLE_PIN    0
+#define SPINDLE_ENABLE_PIN    18
 #define SPINDLE_ENABLE_BIT    (1<<SPINDLE_ENABLE_PIN)
 
-#define SPINDLE_DIRECTION_PN  4
+#define SPINDLE_DIRECTION_PN  	1
 #define SPINDLE_DIRECTION_PORT  port(SPINDLE_DIRECTION_PN)
-#define SPINDLE_DIRECTION_PIN   5
+#define SPINDLE_DIRECTION_PIN   19
 #define SPINDLE_DIRECTION_BIT   (1<<SPINDLE_DIRECTION_PIN)
 
 #ifdef SPINDLE_PWM_PIN_2_4
@@ -256,6 +275,11 @@
 #endif
 #define SPINDLE_PWM_USE_PRIMARY_PIN   false
 #define SPINDLE_PWM_USE_SECONDARY_PIN true
+
+#define SD_CS_PN  	0
+#define SD_CS_PORT  port(SD_CS_PN)
+#define SD_CS_PIN   16
+#define SD_CS_BIT	(1<<SD_CS_PIN)
 
 // Driver initialization entry point
 

@@ -21,7 +21,6 @@
 */
 
 #include "grbl.h"
-// #include "noeeprom.h" // uncomment to enable EEPROM emulation
 
 // Declare system global variable structure
 system_t sys;

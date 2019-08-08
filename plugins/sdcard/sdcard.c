@@ -50,7 +50,7 @@
 #elif defined(__LPC176x__)
 #include "fatfs/ff.h"
 #include "fatfs/diskio.h"
-#elif defined(ARDUINO_SAMD_MKRZERO) || defined(STM32F103xB)
+#elif defined(ARDUINO_SAMD_MKRZERO) || defined(STM32F103xB) || defined(__LPC17XX__)
 #include "ff.h"
 #include "diskio.h"
 #else
@@ -270,7 +270,7 @@ static bool sdcard_mount (void)
     if(file.fs == NULL)
         file.fs = malloc(sizeof(FATFS));
 
-#if defined(ESP_PLATFORM) || defined(STM32F103xB)
+#if defined(ESP_PLATFORM) || defined(STM32F103xB) ||  defined(__LPC17XX__)
     if(file.fs && f_mount(file.fs, "", 1) != FR_OK) {
 #else
     if(file.fs && f_mount(0, file.fs) != FR_OK) {
@@ -432,9 +432,7 @@ void sdcard_reset (void)
 
 void sdcard_init (void)
 {
-#ifdef __MSP432E401Y__
-    SDFatFS_init();
-#endif
+    hal.driver_reset = sdcard_reset;
     hal.driver_sys_command_execute = sdcard_parse;
 }
 

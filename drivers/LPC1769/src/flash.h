@@ -2,9 +2,9 @@
 
   flash.h - driver code for NXP LPC176x ARM processors
 
-  Part of Grbl
+  Part of GrblHAL
 
-  Copyright (c) 2018 Terje Io
+  Copyright (c) 2018-2019 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by

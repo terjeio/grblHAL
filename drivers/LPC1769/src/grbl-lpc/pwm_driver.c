@@ -20,8 +20,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 
+// 2019-08-07 (Terje Io): Modified for LPCOpen definitions, ensured output is low on duty cycle = 0, TCR flag corrected
+// NOTE: LPCOPen lacks library support for PWM!
+
+#include "chip.h"
 #include "pwm_driver.h"
-#include "LPC17xx.h"
 
 //#include "grbl.h"
 
@@ -101,11 +104,11 @@ const PWM_Channel_Config PWM1_CH6 = {
 void pwm_init(PWM_Channel_Config* channel, bool primaryPin, bool secondaryPin, uint32_t period, uint32_t width) {
 
     //Power up PWM Circuitry - Defaulted to on at reset, but doesn't hurt to make sure
-    LPC_SC->PCONP |= 1 << 6; // Power up the PWM
+    LPC_SYSCTL->PCONP |= 1 << 6; // Power up the PWM
 
     //Pin mode selections
-    if (primaryPin) LPC_PINCON->PINSEL3 |= channel->PINSEL3_Enable_Mask;
-    if (secondaryPin) LPC_PINCON->PINSEL4 |= channel->PINSEL4_Enable_Mask;
+    if (primaryPin) LPC_IOCON->PINSEL[3] |= channel->PINSEL3_Enable_Mask;
+    if (secondaryPin) LPC_IOCON->PINSEL[4] |= channel->PINSEL4_Enable_Mask;
 
     //PWM Control Register - Disable output for channel
     LPC_PWM1->PCR &= ~channel->PCR_Enable_Mask;
@@ -120,7 +123,7 @@ void pwm_init(PWM_Channel_Config* channel, bool primaryPin, bool secondaryPin, u
     LPC_PWM1->CCR = 0x0000;
 
     //PWM Timer Control Register - Counter Enable, PWM Enable
-    LPC_PWM1->TCR = (1 << 0) | (1 << 2);
+ //   LPC_PWM1->TCR = (1 << 0) | (1 << 3);
 
     pwm_set_period(period);
     pwm_set_width(channel, width);
@@ -138,6 +141,7 @@ void pwm_set_width(PWM_Channel_Config* channel, uint32_t width) {
 
     //If we are running, this will make the MRx register on the next cycle
     LPC_PWM1->LER = channel->LER_Enable_Mask;
+    LPC_PWM1->TCR = width ? (1 << 0) | (1 << 3) : (1 << 1); // stop PWM on 0 duty cycle
 }
 
 void pwm_enable(PWM_Channel_Config* channel) {
