@@ -1,10 +1,12 @@
 /*
 
-  usb_serial.h - USB serial port wrapper for Arduino MKRZERO
+  eeprom.h - driver code for Atmel SAMD21 ARM processor
+
+  for 2K EEPROM on CNC BoosterPack (Microchip 24LC16B)
 
   Part of GrblHAL
 
-  Copyright (c) 2018 Terje Io
+  Copyright (c) 2017-2019 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -21,23 +23,13 @@
 
 */
 
-#ifndef _USB_SERIAL_H_
-#define _USB_SERIAL_H_
+#ifndef _EEPROM_H_
+#define _EEPROM_H_
 
-extern void usb_execute_realtime (uint_fast16_t state);
-
-void usb_serialInit(void);
-int16_t usb_serialGetC(void);
-bool usb_serialPutC(const char c);
-void usb_serialWriteS(const char *s);
-void usb_serialWriteLn(const char *s);
-void usb_serialWrite(const char *s, uint16_t length);
-bool usb_serialSuspendInput (bool suspend);
-
-uint16_t usb_serialTxCount(void);
-uint16_t usb_serialRxCount(void);
-uint16_t usb_serialRxFree(void);
-void usb_serialRxFlush(void);
-void usb_serialRxCancel(void);
+void eeprom_init (void);
+uint8_t eepromGetByte (uint32_t addr);
+void eepromPutByte (uint32_t addr, uint8_t new_value);
+void eepromWriteBlockWithChecksum (uint32_t destination, uint8_t *source, uint32_t size);
+bool eepromReadBlockWithChecksum (uint8_t *destination, uint32_t source, uint32_t size);
 
 #endif

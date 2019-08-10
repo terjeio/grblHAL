@@ -1,7 +1,7 @@
 /*
   trinamic.h - Trinamic TMC2130 plugin
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2018-2019 Terje Io
 
@@ -22,10 +22,16 @@
 #ifndef _TRINAMIC_OPTION_H_
 #define _TRINAMIC_OPTION_H_
 
+#ifdef ARDUINO_SAMD_MKRZERO
+#include "../../driver.h"
+#if TRINAMIC_I2C
+#include "../trinamic/TMC2130_I2C_map.h"
+#endif
+#else
 #include "driver.h"
-//#include "trinamic/trinamic2130.h"
 #if TRINAMIC_I2C
 #include "trinamic/TMC2130_I2C_map.h"
+#endif
 #endif
 
 #define tmc_write_register(axis, reg, val) { TMC2130_datagram_t *p = TMC2130_GetRegPtr(&stepper[axis], reg); p->payload.value = val; TMC2130_WriteRegister(&stepper[ axis], p); }
@@ -149,7 +155,7 @@ void trinamic_fault_handler (void);
 void trinamic_warn_handler (void);
 
 user_mcode_t trinamic_MCodeCheck (user_mcode_t mcode);
-status_code_t trinamic_MCodeValidate (parser_block_t *gc_block, uint_fast16_t *value_words);
+status_code_t trinamic_MCodeValidate (parser_block_t *gc_block, uint32_t *value_words);
 void trinamic_MCodeExecute (uint_fast16_t state, parser_block_t *gc_block);
 void trinamic_RTReport (stream_write_ptr stream_write);
 

@@ -2,7 +2,7 @@
 
   usb_serial.cpp - USB serial port wrapper for Arduino MKRZERO
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2018-2019 Terje Io
 
@@ -29,7 +29,7 @@
 extern "C" {
 #endif
 
-static serial_buffer_t usb_rxbuffer, usb_rxbackup;
+static stream_rx_buffer_t usb_rxbuffer, usb_rxbackup;
 
 void usb_serialInit(void)
 {
@@ -141,7 +141,7 @@ bool usb_serialSuspendInput (bool suspend)
     if(suspend)
         hal.stream.read = serialGetNull;
     else if(usb_rxbuffer.backup)
-        memcpy(&usb_rxbuffer, &usb_rxbackup, sizeof(serial_buffer_t));
+        memcpy(&usb_rxbuffer, &usb_rxbackup, sizeof(stream_rx_buffer_t));
 
     return usb_rxbuffer.tail != usb_rxbuffer.head;
 }
@@ -157,14 +157,13 @@ void usb_execute_realtime (uint_fast16_t state)
 	int data;
 
 	while((data = Serial.peek()) != -1 ) {
+		Serial.read();
 		if(data == CMD_TOOL_ACK && !usb_rxbuffer.backup) {
-			Serial.read();
-			memcpy(&usb_rxbackup, &usb_rxbuffer, sizeof(serial_buffer_t));
+			memcpy(&usb_rxbackup, &usb_rxbuffer, sizeof(stream_rx_buffer_t));
 			usb_rxbuffer.backup = true;
 			usb_rxbuffer.tail = usb_rxbuffer.head;
 			hal.stream.read = usb_serialGetC; // restore normal input
-		} else if(!hal.stream.enqueue_realtime_command(data) && usb_serialRxFree()) {
-			Serial.read();
+		} else if(!hal.stream.enqueue_realtime_command(data) && usb_serialRxFree()) {;
 			uint32_t bptr = (usb_rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1);	// Get next head pointer,
 			usb_rxbuffer.data[usb_rxbuffer.head] = data;      				// add data to buffer
 			usb_rxbuffer.head = bptr;                           			// and update pointer

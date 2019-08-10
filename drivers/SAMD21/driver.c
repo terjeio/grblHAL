@@ -18,7 +18,11 @@
 
   You should have received a copy of the GNU General Public License
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
-
+					if(gc_state.last_error != Status_OK) {
+						hal.stream.write("[FAULT:");
+						hal.stream.write(line);
+						hal.stream.write("]\r\n");
+					}
 */
 
 #include "Arduino.h"
@@ -43,6 +47,11 @@
 #include "eeprom.h"
 #endif
 
+#if KEYPAD_ENABLE
+#include "src/keypad/keypad.h"
+void KEYPAD_IRQHandler (void);
+#endif
+
 #define pinIn(p) ((PORT->Group[g_APinDescription[p].ulPort].IN.reg & (1 << g_APinDescription[p].ulPin)) != 0)
 #define pinOut(p, e) { if(e) PORT->Group[g_APinDescription[p].ulPort].OUTSET.reg = (1 << g_APinDescription[p].ulPin); else  PORT->Group[g_APinDescription[p].ulPort].OUTCLR.reg = (1 << g_APinDescription[p].ulPin); }
 
@@ -62,6 +71,10 @@ static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value);
 
 #if IOEXPAND_ENABLE
 static ioexpand_t iopins = {0};
+#endif
+
+#ifdef DRIVER_SETTINGS
+driver_settings_t driver_settings;
 #endif
 
 static void SysTick_IRQHandler (void);
@@ -118,9 +131,11 @@ inline static void set_dir_outputs (axes_signals_t dir_outbits)
 static void stepperEnable (axes_signals_t enable)
 {
     enable.value ^= settings.steppers.enable_invert.mask;
-#if IOEXPAND_ENABLE // TODO: read from expander?
-    iopins.stepper_enable_x = enable.x;
-    iopins.stepper_enable_y = enable.y;
+#if TRINAMIC_ENABLE && TRINAMIC_I2C
+    trinamic_stepper_enable(enable);
+#elif IOEXPAND_ENABLE // TODO: read from expander?
+    iopins.stepper_enable_xy = enable.x;
+//    iopins.stepper_enable_y = enable.y;
     iopins.stepper_enable_z = enable.z;
 	ioexpand_out(iopins);	
 #else
@@ -227,6 +242,9 @@ static void limitsEnable (bool on, bool homing)
 	else?
 		EIC->INTENCLR.reg = lim_IRQMask;
 */
+#if TRINAMIC_ENABLE
+    trinamic_homing(homing);
+#endif
 }
 
 // Returns limit state as an axes_signals_t variable.
@@ -481,6 +499,10 @@ void settings_changed (settings_t *settings)
 
     if(IOInitDone) {
 
+      #if TRINAMIC_ENABLE
+        trinamic_configure();
+      #endif
+
         stepperEnable(settings->steppers.deenergize);
 
         if(hal.driver_cap.variable_spindle) {
@@ -512,6 +534,8 @@ void settings_changed (settings_t *settings)
         /*************************
          *  Control pins config  *
          *************************/
+
+		NVIC_DisableIRQ(EIC_IRQn);
 
         control_signals_t control_ies;
 
@@ -554,6 +578,18 @@ void settings_changed (settings_t *settings)
 		attachInterrupt(X_LIMIT_PIN, LIMIT_IRQHandler, limit_ies.x ? FALLING : RISING);
 		attachInterrupt(Y_LIMIT_PIN, LIMIT_IRQHandler, limit_ies.y ? FALLING : RISING);
 		attachInterrupt(Z_LIMIT_PIN, LIMIT_IRQHandler, limit_ies.z ? FALLING : RISING);
+
+#if KEYPAD_ENABLE
+		pinMode(KEYPAD_PIN, hal.driver_cap.probe_pull_up ? INPUT_PULLUP : INPUT_PULLDOWN);
+		attachInterrupt(KEYPAD_PIN, KEYPAD_IRQHandler, CHANGE);
+#endif
+
+		// Bad code elsewhere requires this...
+		hal.delay_ms(2, NULL);
+		EIC->INTFLAG.reg = 0x0003FFFF;
+		NVIC_ClearPendingIRQ(EIC_IRQn);
+		NVIC_EnableIRQ(EIC_IRQn);
+		// ...or we will enter ALARM!
 
 /*		
 		EExt_Interrupts irq;
@@ -606,6 +642,21 @@ static bool driver_setup (settings_t *settings)
     GCLK->CLKCTRL.reg = (uint16_t)(GCLK_CLKCTRL_CLKEN | GCLK_CLKCTRL_GEN_GCLK6 | 0x1B);
 	while(GCLK->STATUS.bit.SYNCBUSY);
 
+
+	/********************************************************
+	 * Read driver specific setting from persistent storage *
+	 ********************************************************/
+
+#ifdef DRIVER_SETTINGS
+	if(hal.eeprom.type != EEPROM_None) {
+		if(!hal.eeprom.memcpy_from_with_checksum((uint8_t *)&driver_settings, hal.eeprom.driver_area.address, sizeof(driver_settings)))
+			hal.driver_settings_restore(SETTINGS_RESTORE_DRIVER_PARAMETERS);
+		#if TRINAMIC_ENABLE && CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
+		  driver_settings.trinamic.driver_enable.mask = AXES_BITMASK;
+		#endif
+	}
+#endif
+
  // Stepper init
 
 	PM->APBCMASK.reg |= PM_APBCMASK_TC4;
@@ -641,8 +692,8 @@ static bool driver_setup (settings_t *settings)
     NVIC_EnableIRQ(STEPPER_TIMER_IRQn);	// Enable stepper interrupt
     NVIC_EnableIRQ(STEP_TIMER_IRQn);	// Enable step pulse interrupt
 
-    NVIC_SetPriority(STEPPER_TIMER_IRQn, 0x00);
-    NVIC_SetPriority(STEP_TIMER_IRQn, 0x20);
+    NVIC_SetPriority(STEPPER_TIMER_IRQn, 2);
+    NVIC_SetPriority(STEP_TIMER_IRQn, 1);
 
 	pinMode(X_STEP_PIN, OUTPUT);
 	pinMode(Y_STEP_PIN, OUTPUT);
@@ -717,6 +768,14 @@ static bool driver_setup (settings_t *settings)
 	pinMode(COOLANT_MIST_PIN, OUTPUT);
 #endif
 
+#if IOEXPAND_ENABLE
+	ioexpand_init();
+#endif
+
+#if TRINAMIC_ENABLE
+    trinamic_init();
+#endif
+
  // Set defaults
 
     IOInitDone = settings->version == 14;
@@ -726,6 +785,10 @@ static bool driver_setup (settings_t *settings)
 	hal.stepper_go_idle(true);
     hal.spindle_set_state((spindle_state_t){0}, 0.0f);
     hal.coolant_set_state((coolant_state_t){0});
+
+#if KEYPAD_ENABLE
+//    keypad_init();
+#endif
 
 #if SDCARD_ENABLE
 	pinMode(SD_CD_PIN, INPUT_PULLUP);
@@ -742,6 +805,55 @@ static bool driver_setup (settings_t *settings)
 
     return IOInitDone;
 }
+
+#ifdef DRIVER_SETTINGS
+
+static bool driver_setting (uint_fast16_t param, float value, char *svalue)
+{
+	bool claimed = false;
+
+#if KEYPAD_ENABLE
+	claimed = keypad_setting(param, value, svalue);
+#endif
+
+#if TRINAMIC_ENABLE
+    if(!claimed)
+        claimed = trinamic_setting(param, value, svalue);
+#endif
+
+	if(claimed)
+		hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
+
+    return claimed;
+}
+
+static void driver_settings_report (bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx)
+{
+#if KEYPAD_ENABLE
+    if(!axis_settings) {
+    	keypad_settings_report(axis_settings, setting_type, axis_idx);
+    }
+#endif
+
+#if TRINAMIC_ENABLE
+    trinamic_settings_report(axis_settings, setting_type, axis_idx);
+#endif
+}
+
+void driver_settings_restore (uint8_t restore_flag)
+{
+    if(restore_flag & SETTINGS_RESTORE_DRIVER_PARAMETERS) {
+#if KEYPAD_ENABLE
+    	keypad_settings_restore(restore_flag);
+#endif
+#if TRINAMIC_ENABLE
+        trinamic_settings_restore(restore_flag);
+#endif
+    	hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
+    }
+}
+
+#endif
 
 // EEPROM emulation - stores settings in flash
 // Note: settings will not survive a reflash unless protected
@@ -814,6 +926,18 @@ bool nvsInit (void)
 
 // End EEPROM emulation
 
+#if KEYPAD_ENABLE || USB_SERIAL
+static void execute_realtime (uint_fast16_t state)
+{
+#if USB_SERIAL
+	usb_execute_realtime(state);
+#endif
+#if KEYPAD_ENABLE
+	keypad_process_keypress(state);
+#endif
+}
+#endif
+
 // Initialize HAL pointers, setup serial comms and enable EEPROM
 // NOTE: Grbl is not yet configured (from EEPROM data), driver_setup() will be called when done
 bool driver_init (void) {
@@ -837,6 +961,7 @@ bool driver_init (void) {
     SysTick->LOAD = (SystemCoreClock / 1000) - 1;
     SysTick->VAL = 0;
     SysTick->CTRL |= SysTick_CTRL_CLKSOURCE_Msk|SysTick_CTRL_TICKINT_Msk;
+	NVIC_SetPriority(SysTick_IRQn, (1 << __NVIC_PRIO_BITS) - 1);
 
 	IRQRegister(SysTick_IRQn, SysTick_IRQHandler);
 
@@ -873,7 +998,6 @@ bool driver_init (void) {
 
 #if USB_SERIAL
 	usb_serialInit();
-	hal.execute_realtime = usb_execute_realtime;
     hal.stream.read = usb_serialGetC;
     hal.stream.get_rx_buffer_available = usb_serialRxFree;
     hal.stream.reset_read_buffer = usb_serialRxFlush;
@@ -909,12 +1033,39 @@ bool driver_init (void) {
 	    hal.eeprom.type = EEPROM_None;
 #endif
 
+#if KEYPAD_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
+    I2CInit();
+#endif
+
+#ifdef DRIVER_SETTINGS
+    if(hal.eeprom.type != EEPROM_None) {
+		hal.eeprom.driver_area.address = GRBL_EEPROM_SIZE;
+		hal.eeprom.driver_area.size = sizeof(driver_settings); // Add assert?
+		hal.eeprom.size = GRBL_EEPROM_SIZE + sizeof(driver_settings) + 1;
+
+		hal.driver_setting = driver_setting;
+		hal.driver_settings_report = driver_settings_report;
+		hal.driver_settings_restore = driver_settings_restore;
+    }
+#endif
+
+#if TRINAMIC_ENABLE
+    hal.user_mcode_check = trinamic_MCodeCheck;
+    hal.user_mcode_validate = trinamic_MCodeValidate;
+    hal.user_mcode_execute = trinamic_MCodeExecute;
+    hal.driver_rt_report = trinamic_RTReport;
+#endif
+
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
 
 #if SDCARD_ENABLE
     hal.driver_reset = sdcard_reset;
+#endif
+
+#if KEYPAD_ENABLE || USB_SERIAL
+    hal.execute_realtime = execute_realtime;
 #endif
 
 #ifdef DEBUGOUT
@@ -1008,6 +1159,13 @@ static void SD_IRQHandler (void)
 	DEBOUNCE_TIMER->CTRLBSET.bit.CMD = TCC_CTRLBCLR_CMD_RETRIGGER_Val;
 	while(DEBOUNCE_TIMER->SYNCBUSY.bit.CTRLB);
 }
+
+#if KEYPAD_ENABLE
+void KEYPAD_IRQHandler (void)
+{
+	keypad_keyclick_handler(pinIn(KEYPAD_PIN) != 0);
+}
+#endif
 
 // Interrupt handler for 1 ms interval timer
 static void SysTick_IRQHandler (void)

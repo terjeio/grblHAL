@@ -1,7 +1,7 @@
 /*
   keypad.h - I2C keypad plugin
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2017-2019 Terje Io
 
@@ -21,8 +21,6 @@
 
 #ifndef _KEYPAD_H_
 #define _KEYPAD_H_
-
-#include "driver.h"
 
 #define KEYBUF_SIZE 16 // must be a power of 2
 #define KEYPAD_I2CADDR 0x49

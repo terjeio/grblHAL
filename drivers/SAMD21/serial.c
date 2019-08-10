@@ -2,7 +2,7 @@
 
   serial.c - Atmel SAMD21 low level functions for transmitting bytes via the serial port
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2017-2019 Terje Io
   Some parts:
@@ -40,13 +40,6 @@
 #include "driver.h"
 #include "serial.h"
 
-#ifndef RX_BUFFER_SIZE
-  #define RX_BUFFER_SIZE 128
-#endif
-#ifndef TX_BUFFER_SIZE
-  #define TX_BUFFER_SIZE 64
-#endif
-
 typedef enum
 {
 	UART_TX_PAD_0 = 0x0ul,	// Only for UART
@@ -81,14 +74,13 @@ typedef enum
 } SercomDataOrder;
 
 static Sercom *sercom = SERCOM5;
-static serial_buffer_t rxbuffer, rxbackup;
+static stream_rx_buffer_t rxbuffer = {0}, rxbackup;
 
-static char txbuf[TX_BUFFER_SIZE];
-static volatile uint16_t tx_head = 0, tx_tail = 0;
+static stream_rx_buffer_t txbuffer = {0};
 
 static void SERIAL_IRQHandler (void);
 
-void initClockNVIC( void )
+void initSerClockNVIC (Sercom *sercom)
 {
   uint8_t clockId = 0;
   IRQn_Type IdNvic=PendSV_IRQn ; // Dummy init to intercept potential error later
@@ -151,70 +143,63 @@ void initClockNVIC( void )
 
 void serialInit (void)
 {
-  pinPeripheral(PIN_SERIAL1_RX, g_APinDescription[PIN_SERIAL1_RX].ulPinType);
-  pinPeripheral(PIN_SERIAL1_TX, g_APinDescription[PIN_SERIAL1_TX].ulPinType);
+	pinPeripheral(PIN_SERIAL1_RX, g_APinDescription[PIN_SERIAL1_RX].ulPinType);
+	pinPeripheral(PIN_SERIAL1_TX, g_APinDescription[PIN_SERIAL1_TX].ulPinType);
 
-  // sercom->initUART(UART_INT_CLOCK, SAMPLE_RATE_x16, BAUD_RATE);
-  
-  initClockNVIC();
-  
-  // reset
-  sercom->USART.CTRLA.bit.SWRST = 1 ;
-  while(sercom->USART.CTRLA.bit.SWRST || sercom->USART.SYNCBUSY.bit.SWRST);
-    
-  //Setting the CTRLA register
-  sercom->USART.CTRLA.reg =  SERCOM_USART_CTRLA_MODE(UART_INT_CLOCK) |
-                SERCOM_USART_CTRLA_SAMPR(SAMPLE_RATE_x16);
+	// sercom->initUART(UART_INT_CLOCK, SAMPLE_RATE_x16, BAUD_RATE);
 
-  // Internal clock, LSB first, no parity, 16x oversampling
-  //sercom->USART.CTRLA.reg = SERCOM_USART_CTRLA_MODE_USART_INT_CLK|SERCOM_SPI_CTRLA_DORD;
+	initSerClockNVIC(sercom);
 
-  //Setting the Interrupt register
-  sercom->USART.INTENSET.reg = SERCOM_USART_INTENSET_RXC |  //Received complete
-                 SERCOM_USART_INTENSET_ERROR; //All others errors
+	// reset
+	sercom->USART.CTRLA.bit.SWRST = 1 ;
+	while(sercom->USART.CTRLA.bit.SWRST || sercom->USART.SYNCBUSY.bit.SWRST);
+
+	//Setting the CTRLA register
+	sercom->USART.CTRLA.reg =  SERCOM_USART_CTRLA_MODE(UART_INT_CLOCK) |
+				SERCOM_USART_CTRLA_SAMPR(SAMPLE_RATE_x16);
+
+	// Internal clock, LSB first, no parity, 16x oversampling
+	//sercom->USART.CTRLA.reg = SERCOM_USART_CTRLA_MODE_USART_INT_CLK|SERCOM_SPI_CTRLA_DORD;
+
+	//Setting the Interrupt register
+	sercom->USART.INTENSET.reg = SERCOM_USART_INTENSET_RXC |  //Received complete
+				 SERCOM_USART_INTENSET_ERROR; //All others errors
 
 
-  // Asynchronous fractional mode (Table 24-2 in datasheet)
-  //   BAUD = fref / (sampleRateValue * fbaud)
-  // (multiply by 8, to calculate fractional piece)
-  uint32_t baudTimes8 = (SystemCoreClock * 8) / (16 * BAUD_RATE);
+	// Asynchronous fractional mode (Table 24-2 in datasheet)
+	//   BAUD = fref / (sampleRateValue * fbaud)
+	// (multiply by 8, to calculate fractional piece)
+	uint32_t baudTimes8 = (SystemCoreClock * 8) / (16 * BAUD_RATE);
 
-  sercom->USART.BAUD.FRAC.FP   = (baudTimes8 % 8);
-  sercom->USART.BAUD.FRAC.BAUD = (baudTimes8 / 8);
+	sercom->USART.BAUD.FRAC.FP   = (baudTimes8 % 8);
+	sercom->USART.BAUD.FRAC.BAUD = (baudTimes8 / 8);
 
-//
 
-  //Setting the CTRLA register
-  sercom->USART.CTRLA.reg |=  SERCOM_USART_CTRLA_FORM(0) |
-                LSB_FIRST << SERCOM_USART_CTRLA_DORD_Pos;
+	//
 
-  //Setting the CTRLB register
-  sercom->USART.CTRLB.reg |=  SERCOM_USART_CTRLB_CHSIZE(8) |
-                1 << SERCOM_USART_CTRLB_SBMODE_Pos; //If no parity use default value
+	//Setting the CTRLA register
+	sercom->USART.CTRLA.reg |= SERCOM_USART_CTRLA_FORM(0) | LSB_FIRST << SERCOM_USART_CTRLA_DORD_Pos;
 
-//  sercom->initPads(uc_padTX, uc_padRX);
+	//Setting the CTRLB register
+	sercom->USART.CTRLB.reg |= SERCOM_USART_CTRLB_CHSIZE(8) | 1 << SERCOM_USART_CTRLB_SBMODE_Pos; //If no parity use default value
 
-  //Setting the CTRLA register
-  sercom->USART.CTRLA.reg |= SERCOM_USART_CTRLA_TXPO(PAD_SERIAL1_TX)|SERCOM_USART_CTRLA_RXPO(PAD_SERIAL1_RX);
+	//  sercom->initPads(uc_padTX, uc_padRX);
 
-  // Enable Transceiver and Receiver
-  sercom->USART.CTRLB.reg = SERCOM_USART_CTRLB_TXEN|SERCOM_USART_CTRLB_RXEN;
+	//Setting the CTRLA register
+	sercom->USART.CTRLA.reg |= SERCOM_USART_CTRLA_TXPO(PAD_SERIAL1_TX)|SERCOM_USART_CTRLA_RXPO(PAD_SERIAL1_RX);
 
-//  sercom->enableUART();
-  
-  sercom->USART.CTRLA.bit.ENABLE = 1;
+	// Enable Transceiver and Receiver
+	sercom->USART.CTRLB.reg = SERCOM_USART_CTRLB_TXEN|SERCOM_USART_CTRLB_RXEN;
 
-  //Wait for then enable bit from SYNCBUSY is equal to 0;
-  while(sercom->USART.SYNCBUSY.bit.ENABLE);
+	sercom->USART.CTRLA.bit.ENABLE = 1;
+	while(sercom->USART.SYNCBUSY.bit.ENABLE);
 
-  IRQRegister(SERCOM5_IRQn, SERIAL_IRQHandler);
+	IRQRegister(SERCOM5_IRQn, SERIAL_IRQHandler);
 
-  NVIC_EnableIRQ(SERCOM5_IRQn);
-    NVIC_SetPriority(SERCOM5_IRQn, 0x40);
+	NVIC_EnableIRQ(SERCOM5_IRQn);
+	NVIC_SetPriority(SERCOM5_IRQn, 0);
 
-//  __enable_interrupts();
-
-  memset(&rxbuffer, 0, sizeof(rxbuffer));
+	//  __enable_interrupts();
 }
 
 //
@@ -222,8 +207,8 @@ void serialInit (void)
 //
 uint16_t serialTxCount (void)
 {
-  uint16_t tail = tx_tail;
-  return BUFCOUNT(tx_head, tail, TX_BUFFER_SIZE);
+  uint16_t tail = txbuffer.tail;
+  return BUFCOUNT(txbuffer.head, tail, TX_BUFFER_SIZE);
 }
 
 //
@@ -282,20 +267,20 @@ bool serialPutC (const char c) {
 
     uint32_t next_head;
 
-    if(tx_head != tx_tail || !serialPutCNonBlocking(c)) {   // Try to send character without buffering...
+    if(txbuffer.head != txbuffer.tail || !serialPutCNonBlocking(c)) {	// Try to send character without buffering...
 
-        next_head = (tx_head + 1) & (TX_BUFFER_SIZE - 1);   // .. if not, set and update head pointer
+        next_head = (txbuffer.head + 1) & (TX_BUFFER_SIZE - 1);   		// .. if not, set and update head pointer
 
-        while(tx_tail == next_head) {                       // While TX buffer full
-      //      SERIAL_MODULE->IE |= EUSCI_A_IE_TXIE;           // Enable TX interrupts???
-            if(!hal.stream_blocking_callback())           // check if blocking for space,
-                return false;                               // exit if not (leaves TX buffer in an inconsistent state)
+        while(txbuffer.tail == next_head) {                       		// While TX buffer full
+      //      SERIAL_MODULE->IE |= EUSCI_A_IE_TXIE;           			// Enable TX interrupts???
+            if(!hal.stream_blocking_callback())           				// check if blocking for space,
+                return false;                               			// exit if not (leaves TX buffer in an inconsistent state)
         }
 
-        txbuf[tx_head] = c;                                 // Add data to buffer
-        tx_head = next_head;                                // and update head pointer
+        txbuffer.data[txbuffer.head] = c;                       		// Add data to buffer
+        txbuffer.head = next_head;                                		// and update head pointer
 
-		sercom->USART.INTENSET.reg = SERCOM_USART_INTENSET_DRE;               // Enable TX interrupts
+		sercom->USART.INTENSET.reg = SERCOM_USART_INTENSET_DRE;      	// Enable TX interrupts
     }
 
     return true;
@@ -342,8 +327,8 @@ int16_t serialGetC (void)
     if(bptr == rxbuffer.head)
         return -1; // no data available else EOF
 
-    char data = rxbuffer.data[bptr++];     // Get next character, increment tmp pointer
-    rxbuffer.tail = bptr & (RX_BUFFER_SIZE - 1);  // and update pointer
+    char data = rxbuffer.data[bptr++];     			// Get next character, increment tmp pointer
+    rxbuffer.tail = bptr & (RX_BUFFER_SIZE - 1);  	// and update pointer
 
     return (int16_t)data;
 }
@@ -359,7 +344,7 @@ bool serialSuspendInput (bool suspend)
     if(suspend)
         hal.stream.read = serialGetNull;
     else if(rxbuffer.backup)
-        memcpy(&rxbuffer, &rxbackup, sizeof(serial_buffer_t));
+        memcpy(&rxbuffer, &rxbackup, sizeof(stream_rx_buffer_t));
 
     return rxbuffer.tail != rxbuffer.head;
 }
@@ -370,10 +355,19 @@ static void SERIAL_IRQHandler (void)
     char data;
 	uint16_t bptr;
 	
-	if(sercom->USART.INTFLAG.bit.RXC) {
+uint8_t ifg = sercom->USART.INTFLAG.reg;
+
+	if(sercom->USART.STATUS.bit.FERR) {
+		data = sercom->USART.DATA.bit.DATA;
+		sercom->USART.STATUS.bit.FERR = 1;
+		sercom->USART.INTFLAG.reg = ifg;
+	}
+
+	while(sercom->USART.INTFLAG.bit.RXC) {
+		uint16_t sts = sercom->USART.STATUS.reg;
 		data =  sercom->USART.DATA.bit.DATA;
 		if(data == CMD_TOOL_ACK && !rxbuffer.backup) {
-			memcpy(&rxbackup, &rxbuffer, sizeof(serial_buffer_t));
+			memcpy(&rxbackup, &rxbuffer, sizeof(stream_rx_buffer_t));
 			rxbuffer.backup = true;
 			rxbuffer.tail = rxbuffer.head;
 			hal.stream.read = serialGetC; // restore normal input
@@ -391,12 +385,14 @@ static void SERIAL_IRQHandler (void)
 		}			
 	}
 	
-	if(sercom->USART.INTFLAG.bit.DRE && tx_tail != tx_head) {
-		bptr = tx_tail;                             // Temp tail position (to avoid volatile overhead)
-		sercom->USART.DATA.reg = (uint16_t)txbuf[bptr++];       // Send a byte from the buffer
-		bptr &= (TX_BUFFER_SIZE - 1);               // and update
-		tx_tail = bptr;                             // tail position
-		if (bptr == tx_head)                        // Turn off TX interrupt
-			sercom->USART.INTENCLR.reg = SERCOM_USART_INTENCLR_DRE;  // when buffer empty
+	if(sercom->USART.INTFLAG.bit.DRE) {
+		bptr = txbuffer.tail;                             				// Temp tail position (to avoid volatile overhead)
+		if(txbuffer.tail != txbuffer.head) {
+			sercom->USART.DATA.reg = (uint16_t)txbuffer.data[bptr++];	// Send a byte from the buffer
+			bptr &= (TX_BUFFER_SIZE - 1);               				// and update
+			txbuffer.tail = bptr;                             			// tail position
+		}
+		if (bptr == txbuffer.head)                        				// Turn off TX interrupt
+			sercom->USART.INTENCLR.reg = SERCOM_USART_INTENCLR_DRE;  	// when buffer empty
 	}
 }

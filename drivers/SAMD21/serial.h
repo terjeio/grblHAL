@@ -2,9 +2,9 @@
 
   serial.h - low level functions for transmitting bytes via the serial port
 
-  Part of Grbl
+  Part of GrblHAL
 
-  Copyright (c) 2017-2018 Terje Io
+  Copyright (c) 2017-2019 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -46,7 +46,13 @@ typedef struct {
     bool rts_state;
     bool backup;
     char data[RX_BUFFER_SIZE];
-} serial_buffer_t;
+} stream_rx_buffer_t;
+
+typedef struct {
+    volatile uint16_t head;
+    volatile uint16_t tail;
+    char data[TX_BUFFER_SIZE];
+} stream_tx_buffer_t;
 
 void serialInit(void);
 int16_t serialGetC(void);
@@ -61,6 +67,8 @@ uint16_t serialRxCount(void);
 uint16_t serialRxFree(void);
 void serialRxFlush(void);
 void serialRxCancel(void);
+
+void initSerClockNVIC (Sercom *sercom);
 
 #endif // _SERIAL_H_
 

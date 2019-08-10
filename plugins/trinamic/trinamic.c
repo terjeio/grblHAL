@@ -19,17 +19,29 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#ifdef ARDUINO_SAMD_MKRZERO
+#include "../../driver.h"
+#else
 #include "driver.h"
+#endif
 
 #if TRINAMIC_ENABLE
 
 #include <stdio.h>
 #include <math.h>
 
+#ifdef ARDUINO_SAMD_MKRZERO
+#if TRINAMIC_I2C
+#include "../../i2c.h"
+#else
+#include "../../spi.h"
+#endif
+#else
 #if TRINAMIC_I2C
 #include "i2c.h"
 #else
 #include "spi.h"
+#endif
 #endif
 
 static bool warning = false, is_homing = false;
@@ -316,7 +328,7 @@ static void report_sg_status (uint_fast16_t state)
 
 static void report_sg_params (void)
 {
-    sprintf(sbuf, "[SGPARAMS:%d:%d:%d:%d]\r\n", report.sg_status_axis, stepper[report.sg_status_axis].coolconf.reg.sfilt, stepper[report.sg_status_axis].coolconf.reg.semin, stepper[report.sg_status_axis].coolconf.reg.semax);
+    sprintf(sbuf, "[SGPARAMS:%ld:%d:%d:%d]\r\n", report.sg_status_axis, stepper[report.sg_status_axis].coolconf.reg.sfilt, stepper[report.sg_status_axis].coolconf.reg.semin, stepper[report.sg_status_axis].coolconf.reg.semax);
     hal.stream.write(sbuf);
 }
 
@@ -351,7 +363,7 @@ static void stallGuard_enable (uint32_t axis, bool enable)
 
 // Validate M-code axis parameters
 // Sets value to NAN (Not A Number) if driver not installed
-static bool check_params (parser_block_t *gc_block, uint_fast16_t *value_words)
+static bool check_params (parser_block_t *gc_block, uint32_t *value_words)
 {
     bool ok = false;
     uint_fast8_t idx = N_AXIS;
@@ -396,7 +408,7 @@ user_mcode_t trinamic_MCodeCheck (user_mcode_t mcode)
 }
 
 // Validate driver specific M-code parameters
-status_code_t trinamic_MCodeValidate (parser_block_t *gc_block, uint_fast16_t *value_words)
+status_code_t trinamic_MCodeValidate (parser_block_t *gc_block, uint32_t *value_words)
 {
     status_code_t state = Status_GcodeValueWordMissing;
 
@@ -702,7 +714,7 @@ static void write_debug_report (void)
         sprintf(sbuf, "%-15s", "Peak current");
         for(idx = 0; idx < N_AXIS; idx++) {
             if(bit_istrue(report.axes.mask, bit(idx)))
-                sprintf(append(sbuf), "%8d", (uint32_t)((float)TMC2130_GetCurrent(&stepper[idx]) * sqrtf(2)));
+                sprintf(append(sbuf), "%8ld", (uint32_t)((float)TMC2130_GetCurrent(&stepper[idx]) * sqrtf(2)));
         }
         write_line(sbuf);
 
@@ -775,7 +787,7 @@ static void write_debug_report (void)
         for(idx = 0; idx < N_AXIS; idx++) {
             if(bit_istrue(report.axes.mask, bit(idx))) {
                 if(stepper[idx].tpwmthrs.reg.tpwmthrs)
-                    sprintf(append(sbuf), "%8d", TMC2130_GetTPWMTHRS(&stepper[idx], settings.steps_per_mm[idx]));
+                    sprintf(append(sbuf), "%8ld", TMC2130_GetTPWMTHRS(&stepper[idx], settings.steps_per_mm[idx]));
                 else
                     sprintf(append(sbuf), "%8s", "-");
             }
@@ -932,7 +944,7 @@ static void write_debug_report (void)
         for(idx = 0; idx < N_AXIS; idx++) {
             if(bit_istrue(report.axes.mask, bit(idx))) {
                 uint32_t reg = stepper[idx].drv_status.reg.value;
-                sprintf(sbuf, " %s = 0x%02X:%02X:%02X:%02X", axis_letter[idx], reg >> 24, (reg >> 16) & 0xFF, (reg >> 8) & 0xFF, reg & 0xFF);
+                sprintf(sbuf, " %s = 0x%02X:%02X:%02X:%02X", axis_letter[idx], (uint8_t)(reg >> 24), (uint8_t)((reg >> 16) & 0xFF), (uint8_t)((reg >> 8) & 0xFF), (uint8_t)(reg & 0xFF));
                 write_line(sbuf);
             }
         }

@@ -1,10 +1,12 @@
 /*
 
-  usb_serial.h - USB serial port wrapper for Arduino MKRZERO
+  ioexpand.h -  driver code for Atmel SAMD21 ARM processor
+
+  I2C I/O expander
 
   Part of GrblHAL
 
-  Copyright (c) 2018 Terje Io
+  Copyright (c) 2018-2019 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -21,23 +23,13 @@
 
 */
 
-#ifndef _USB_SERIAL_H_
-#define _USB_SERIAL_H_
+#ifndef _IOEXPAND_H_
+#define _IOEXPAND_H_
 
-extern void usb_execute_realtime (uint_fast16_t state);
+#include "driver.h"
 
-void usb_serialInit(void);
-int16_t usb_serialGetC(void);
-bool usb_serialPutC(const char c);
-void usb_serialWriteS(const char *s);
-void usb_serialWriteLn(const char *s);
-void usb_serialWrite(const char *s, uint16_t length);
-bool usb_serialSuspendInput (bool suspend);
-
-uint16_t usb_serialTxCount(void);
-uint16_t usb_serialRxCount(void);
-uint16_t usb_serialRxFree(void);
-void usb_serialRxFlush(void);
-void usb_serialRxCancel(void);
+void ioexpand_init (void);
+void ioexpand_out (ioexpand_t pins);
+ioexpand_t ioexpand_in (void);
 
 #endif

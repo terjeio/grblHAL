@@ -4,6 +4,10 @@ A GrblHAL driver for the Atmel SAMD21 processor on a [Arduino MKR ZERO board](ht
 
 ### *** EXPERIMENTAL *** ###
 
+__Update 2019-08-10:__ Added support for optional I2C IO Expander, I2C EEPROM, I2C keypad and Trinamic TMC2130 drivers \(via I2C bridge\). FatFS updated to R0.13c.
+
+---
+
 This driver compiles and uploads from the Arduino IDE and is partially dependent on the Arduino framework.
 
 For flexibility and to reduce overhead the vector table is relocated to RAM. On my todo list is to improve GPIO speed even more than already done.
@@ -60,4 +64,4 @@ Numbers in round brackets are the Arduino pin assignments, in square brackets th
 **NOTE:** Only tested on my bench with an oscilloscope, some switches and LEDs.
 
 ---
-2019-08-01
+2019-08-10

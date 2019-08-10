@@ -1,7 +1,7 @@
 /*
   keypad.c - I2C keypad plugin
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2017-2019 Terje Io
 
@@ -20,13 +20,23 @@
 */
 
 
+#ifdef ARDUINO_SAMD_MKRZERO
+#include "../../driver.h"
+#else
 #include "driver.h"
+#endif
 
 #if KEYPAD_ENABLE
 
 #include "keypad.h"
+
+#ifdef ARDUINO_SAMD_MKRZERO
+#include "../../i2c.h"
+#include "../grbl/grbl.h"
+#else
 #include "i2c.h"
-#include "GRBL/grbl.h"
+#include "grbl/grbl.h"
+#endif
 
 #define KEYBUF_SIZE 16
 

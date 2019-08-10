@@ -1,9 +1,7 @@
 /*
-  driver.h - An embedded CNC Controller with rs274/ngc (g-code) support
+  driver.h - driver code for Atmel SAMD21 ARM processor
 
-  Driver code for Atmel SAMD21
-
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2018-2019 Terje Io
 
@@ -29,18 +27,47 @@
 // Configuration
 // Set value to 1 to enable, 0 to disable
 
-#define SDCARD_ENABLE   1 // Run jobs from SD card.
-#define USB_SERIAL      0 // Streaming over USB direct.
-#define CNC_BOOSTERPACK 0 // !! Do not enable, not ready
+#define USB_SERIAL         0
+#define CNC_BOOSTERPACK    0 // do not change!
+
 #if CNC_BOOSTERPACK
-  #define IOEXPAND_ENABLE	1 // I2C IO expander for some output signals.
-  #define EEPROM_ENABLE		1 // I2C EEPROM (24LC16) support.
+  #define KEYPAD_ENABLE    0 // I2C keypad for jogging etc.
+  #define IOEXPAND_ENABLE  1 // I2C IO expander for some output signals.
+  #define EEPROM_ENABLE    1 // I2C EEPROM (24LC16) support.
+  #define TRINAMIC_ENABLE  0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
+  #define TRINAMIC_I2C     0 // Trinamic I2C - SPI bridge interface.
+  #define TRINAMIC_DEV     0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
 #else
-  #define IOEXPAND_ENABLE	0 // I2C IO expander for some output signals.
-  #define EEPROM_ENABLE		0 // I2C EEPROM (24LC16) support.
+  #define KEYPAD_ENABLE    0 // I2C keypad for jogging etc.
+  #define IOEXPAND_ENABLE  0 // I2C IO expander for some output signals.
+  #define EEPROM_ENABLE    0 // I2C EEPROM (24LC16) support.
+  #define TRINAMIC_ENABLE  0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
+  #define TRINAMIC_I2C     0 // Trinamic I2C - SPI bridge interface.
+  #define TRINAMIC_DEV     0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
 #endif
 
 // End configuration
+
+#if TRINAMIC_ENABLE
+#include "src/tmc2130/trinamic.h"
+#endif
+
+#if TRINAMIC_ENABLE || KEYPAD_ENABLE
+
+#define DRIVER_SETTINGS
+
+typedef struct {
+#if TRINAMIC_ENABLE
+    trinamic_settings_t trinamic;
+#endif
+#if KEYPAD_ENABLE
+    jog_settings_t jog;
+#endif
+} driver_settings_t;
+
+extern driver_settings_t driver_settings;
+
+#endif
 
 // clock definitions
 
@@ -48,14 +75,14 @@
 
 // timer definitions
 
-#define STEP_TIMER         TC3
-#define STEP_TIMER_IRQn    TC3_IRQn
+#define STEP_TIMER			TC3
+#define STEP_TIMER_IRQn		TC3_IRQn
 
-#define STEPPER_TIMER         TC4 // 32bit - TC4 & TC5 combined!
-#define STEPPER_TIMER_IRQn    TC4_IRQn
+#define STEPPER_TIMER  		TC4 // 32bit - TC4 & TC5 combined!
+#define STEPPER_TIMER_IRQn 	TC4_IRQn
 
-#define DEBOUNCE_TIMER         TCC1
-#define DEBOUNCE_TIMER_IRQn    TCC1_IRQn
+#define DEBOUNCE_TIMER    	TCC1
+#define DEBOUNCE_TIMER_IRQn	TCC1_IRQn
 
 #if CNC_BOOSTERPACK == 0
 
@@ -127,6 +154,10 @@
 #define SPINDLE_PWM_CCREG	2
 #define SPINDLEPWMPIN		(6u)
 
+#if KEYPAD_ENABLE
+#define KEYPAD_PIN 5
+#endif
+
 #if IOEXPAND_ENABLE
 
 typedef union {
@@ -155,15 +186,13 @@ typedef union {
 void IRQRegister(uint32_t IRQnum, void (*IRQhandler)(void));
 void IRQUnRegister(uint32_t IRQnum);
 
-#if IOEXPAND_ENABLE || EEPROM_ENABLE
+#if IOEXPAND_ENABLE || EEPROM_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
 
 // Define I2C port/pins
-#define I2C_PORT I2C_NUM_1 // Comment out to not enable I2C
-#define I2C_SDA  GPIO_NUM_21
-#define I2C_SCL  GPIO_NUM_22
+#define I2C_PORT SERCOM0
+#define I2C_SDA_PIN 11
+#define I2C_SCL_PIN 12
 #define I2C_CLOCK 100000
-
-void i2c_init (void);
 
 #endif
 
