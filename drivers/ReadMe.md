@@ -1,32 +1,32 @@
 ## Driver capabilities at a glance:
 
 
-|                         | MSP432   | MSP432E401Y |TMC123  | TMC129x | MSP430F5529 | PSoC&nbsp;5 | ESP32 | SAMD21 | LPC1769<sup>1</sup> | STM32F1xx<sup>11</sup> |
-|-------------------------|----------|-------------|--------|---------|-------------|--------|-------|-------|---------|---------|
-| MCU speed \(MHz\)       | 48       | 120         | 80     | 120     | 25 \(16 bit\) | 80     | 2x240 | 48    | 120     | 72      |
-| Floating point unit     | yes      | yes         | yes    | yes     | no          | no     | yes   | no    | no      | no      |
-| Non-volatile storage    | I2C EEPROM | EEPROM      | EEPROM | EEPROM  | I2C EEPROM | EEPROM | Flash/I2C EEPROM | Flash/I2C EEPROM | Flash/I2C EEPROM   | Flash/I2C EEPROM   |
-| Number of axes          | 3        | up to 6     | 3      | up to 6 | 3           | 3<sup>2</sup>      | 3    | 3    | 3       | up to 6 |
-| Variable spindle        | yes      | yes         | yes    | yes     | yes         | yes    | yes   | yes   | yes     | no      |
-| Ramped spindle          | no       | yes         | yes    | no      | no          | no     | yes   | no    | no      | no      |
-| Spindle at speed        | yes      | no          | no     | no      | no          | no     | yes<sup>3</sup>  | no    | no      | no      |
-| Spindle sync            | yes<sup>4</sup>      | no          |no     | no      | no          | no     | no    | no    | no      | no      |
-| Constant surface speed  | yes      | no          | no     | no      | no          | no     | no    | no    | no      | no      |
-| Closed loop spindle RPM | yes<sup>4</sup>      | no          | no     | no      | no          | no     | no    | no    | no      | no      |
-| Native USB streaming    | no       | no          | no     | no      | no          | no     | no    | yes   | yes?    | yes     |
-| Bluetooth streaming     | no       | no          | no     | no      | no          | no     | yes   | no    | no      | no      |
-| Ethernet streaming      | no       | yes         | no     | yes     | no          | no     | no    | no    | no      | no      |
-| WiFi streaming          | no       | no          | no     | no      | no          | no     | yes   | no    | no      | no      |
-| SD Card streaming       | no       | TBC         | no     | yes     | no          | no     | yes   | yes   | yes     | yes     |
-| I2C Keypad              | yes      | no          | yes    | no      | no          | yes    | yes   | yes   | no      | yes     |
-| I2C IO Expander         | no       | no          | no     | no      | no          | no     | yes    | yes   | no      | no      |
-| MPG stream input        | yes      | yes         | no     | yes     | no          | no     | no    | no    | no      | no      |
-| Manual tool change<sup>5</sup>      | no          | yes      | no     | yes     | no          | no     | yes   | yes   | no      | no      |
-| Automatic tool change<sup>6</sup>    | planned| no          | no     | no      | no          | no     | no    | no    | no      | no      |
-| Laser PPI mode<sup>7</sup>           | no     | no          | yes    | no      | no          | no     | no    | no    | no      | no      |
-| Trinamic support<sup>8</sup>         | TBC<sup>9</sup>    | TBC<sup>9</sup>         | TBC<sup>9</sup>    | TBC<sup>9</sup>     | no          | no     | TBC<sup>9</sup>   | TBC<sup>9</sup>  | no      | TBC<sup>9</sup>    |
-| Runs as FreeRTOS task   | no       | yes         | no     | option  | no          | no     | yes   | no    | no      | no      |
-| CNC BoosterPack support | 1        | 2           | 1      | 2       | 1           | no     | yes<sup>10</sup>   | yes<sup>10</sup>  | no      | yes<sup>10</sup>     |
+|                         | MSP432   | MSP432E401Y |TMC123  | TMC129x | MSP430F5529 | PSoC&nbsp;5 | ESP32 | SAMD21 | LPC1769<sup>1</sup> | STM32F1xx<sup>11</sup> | SAM3X8E |
+|-------------------------|----------|-------------|--------|---------|-------------|--------|-------|-------|---------|---------|---------|
+| MCU speed \(MHz\)       | 48       | 120         | 80     | 120     | 25 \(16 bit\) | 80     | 2x240 | 48    | 120     | 72      | 84      |
+| Floating point unit     | yes      | yes         | yes    | yes     | no          | no     | yes   | no    | no      | no      | no      |
+| Non-volatile storage    | I2C EEPROM | EEPROM      | EEPROM | EEPROM  | I2C EEPROM | EEPROM | Flash/I2C EEPROM | Flash/I2C EEPROM | Flash/I2C EEPROM   | Flash/I2C EEPROM   | Flash |
+| Number of axes          | 3        | up to 6     | 3      | up to 6 | 3           | 3<sup>2</sup>      | 3    | 3    | 3       | up to 6 | TBA |
+| Variable spindle        | yes      | yes         | yes    | yes     | yes         | yes    | yes   | yes   | yes     | no      | yes     |
+| Ramped spindle          | no       | yes         | yes    | no      | no          | no     | yes   | no    | no      | no      | no      |
+| Spindle at speed        | yes      | no          | no     | no      | no          | no     | yes<sup>3</sup>  | no    | no      | no      | no      |
+| Spindle sync            | yes<sup>4</sup>      | no          |no     | no      | no          | no     | no    | no    | no      | no      | no      |
+| Constant surface speed  | yes      | no          | no     | no      | no          | no     | no    | no    | no      | no      | no      |
+| Closed loop spindle RPM | yes<sup>4</sup>      | no          | no     | no      | no          | no     | no    | no    | no      | no      | no      |
+| Native USB streaming    | no       | no          | no     | no      | no          | no     | no    | yes   | yes?    | yes     | no      |
+| Bluetooth streaming     | no       | no          | no     | no      | no          | no     | yes   | no    | no      | no      | no      |
+| Ethernet streaming      | no       | yes         | no     | yes     | no          | no     | no    | no    | no      | no      | no      |
+| WiFi streaming          | no       | no          | no     | no      | no          | no     | yes   | no    | no      | no      | no      |
+| SD Card streaming       | no       | TBC         | no     | yes     | no          | no     | yes   | yes   | yes     | yes     | no      |
+| I2C Keypad              | yes      | no          | yes    | no      | no          | yes    | yes   | yes   | no      | yes     | no      |
+| I2C IO Expander         | no       | no          | no     | no      | no          | no     | yes    | yes   | no      | no      | no      |
+| MPG stream input        | yes      | yes         | no     | yes     | no          | no     | no    | no    | no      | no      | no      |
+| Manual tool change<sup>5</sup>      | no          | yes      | no     | yes     | no          | no     | yes   | yes   | no      | no      | yes     |
+| Automatic tool change<sup>6</sup>    | planned| no          | no     | no      | no          | no     | no    | no    | no      | no      | no      |
+| Laser PPI mode<sup>7</sup>           | no     | no          | yes    | no      | no          | no     | no    | no    | no      | no      | no      |
+| Trinamic support<sup>8</sup>         | TBC<sup>9</sup>    | TBC<sup>9</sup>         | TBC<sup>9</sup>    | TBC<sup>9</sup>     | no          | no     | TBC<sup>9</sup>   | TBC<sup>9</sup>  | no      | TBC<sup>9</sup>    | no      |
+| Runs as FreeRTOS task   | no       | yes         | no     | option  | no          | no     | yes   | no    | no      | no      | no      |
+| CNC BoosterPack support | 1        | 2           | 1      | 2       | 1           | no     | yes<sup>10</sup>   | yes<sup>10</sup>  | no      | yes<sup>10</sup>     | no      |
 
 <br><sup>1</sup> Not complete and untested, for someone else to finish? Compiles ok.
 <br><sup>2</sup> Should be fairly easy to extend.
