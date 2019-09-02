@@ -25,9 +25,9 @@
 #include "Arduino.h"
 #include "src/grbl/grbl.h"
 
-//#define BOARD_RAMPS
-//#define BOARD_MEGA256
-//#define BOARD_PROTONEER
+// NOTE: Only one board may be enabled!
+//#define BOARD_TINYG2_DUE
+//#define BOARD_RAMPS_16
 #define BOARD_CMCGRATH
 
 /******************************************************************************
@@ -95,10 +95,11 @@ extern driver_settings_t driver_settings;
 #define DEBOUNCE_TIMER    	(TC1->TC_CHANNEL[0])
 #define DEBOUNCE_TIMER_IRQn	TC3_IRQn
 
-#ifdef BOARD_RAMPS
-	#include "ramps_1.4_map.h"
-#endif
-#ifdef BOARD_CMCGRATH
+#ifdef BOARD_TINYG2_DUE
+	#include "tinyg2_due_map.h"
+#elif defined(BOARD_RAMPS_16)
+	#include "ramps_1.6_map.h"
+#elif defined(BOARD_CMCGRATH)
 	#include "cmcgrath_rev3_map.h"
 #else // default board - NOTE: NOT FINAL VERSION!
 
@@ -214,5 +215,17 @@ extern driver_settings_t driver_settings;
 #endif
 
 #endif // default board
+
+// Simple sanity check...
+
+#if N_AXIS > 3 && !defined(A_STEP_PIN)
+#error A motor must be defined for 4 or more axes
+#endif
+#if N_AXIS > 4 && !defined(B_STEP_PIN)
+#error B motor must be defined for 5 or more axes
+#endif
+#if N_AXIS > 5 && !defined(C_STEP_PIN)
+#error C motor must be defined for 6 axes
+#endif
 
 #endif

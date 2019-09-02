@@ -6,14 +6,14 @@
 | MCU speed \(MHz\)       | 48       | 120         | 80     | 120     | 25 \(16 bit\) | 80     | 2x240 | 48    | 120     | 72      | 84      |
 | Floating point unit     | yes      | yes         | yes    | yes     | no          | no     | yes   | no    | no      | no      | no      |
 | Non-volatile storage    | I2C EEPROM | EEPROM      | EEPROM | EEPROM  | I2C EEPROM | EEPROM | Flash/I2C EEPROM | Flash/I2C EEPROM | Flash/I2C EEPROM   | Flash/I2C EEPROM   | Flash |
-| Number of axes          | 3        | up to 6     | 3      | up to 6 | 3           | 3<sup>2</sup>      | 3    | 3    | 3       | up to 6 | TBA |
+| Number of axes          | 3        | up to 6     | 3      | up to 6 | 3           | 3<sup>2</sup>      | 3    | 3    | 3       | up to 6 | up to 6 |
 | Variable spindle        | yes      | yes         | yes    | yes     | yes         | yes    | yes   | yes   | yes     | no      | yes     |
 | Ramped spindle          | no       | yes         | yes    | no      | no          | no     | yes   | no    | no      | no      | no      |
 | Spindle at speed        | yes      | no          | no     | no      | no          | no     | yes<sup>3</sup>  | no    | no      | no      | no      |
 | Spindle sync            | yes<sup>4</sup>      | no          |no     | no      | no          | no     | no    | no    | no      | no      | no      |
 | Constant surface speed  | yes      | no          | no     | no      | no          | no     | no    | no    | no      | no      | no      |
 | Closed loop spindle RPM | yes<sup>4</sup>      | no          | no     | no      | no          | no     | no    | no    | no      | no      | no      |
-| Native USB streaming    | no       | no          | no     | no      | no          | no     | no    | yes   | yes?    | yes     | no      |
+| Native USB streaming    | no       | no          | no     | no      | no          | no     | no    | yes   | yes?    | yes     | TBC     |
 | Bluetooth streaming     | no       | no          | no     | no      | no          | no     | yes   | no    | no      | no      | no      |
 | Ethernet streaming      | no       | yes         | no     | yes     | no          | no     | no    | no    | no      | no      | no      |
 | WiFi streaming          | no       | no          | no     | no      | no          | no     | yes   | no    | no      | no      | no      |
