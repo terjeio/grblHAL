@@ -28,6 +28,8 @@
 // NOTE: Only one board may be enabled!
 //#define BOARD_TINYG2_DUE
 //#define BOARD_RAMPS_16
+//#define BOARD_MEGA256
+//#define BOARD_PROTONEER
 #define BOARD_CMCGRATH
 
 /******************************************************************************
@@ -46,15 +48,15 @@
 
 #define BITBAND_PERI(a,b) (*((__IO uint32_t *)((BITBAND_PERI_BASE + ((((uint32_t)(uint32_t *)&a)-BITBAND_PERI_REF)<<5) + (b<<2)))))
 
-void IRQRegister(uint32_t IRQnum, void (*IRQhandler)(void));
-void IRQUnRegister(uint32_t IRQnum);
+void IRQRegister(int32_t IRQnum, void (*IRQhandler)(void));
+void IRQUnRegister(int32_t IRQnum);
 
 /*****************************************************************************/
 
 // Configuration
 // Set value to 1 to enable, 0 to disable
-// NOTE: none of these options are ready yet. DO NOT ENABLE!
 #define USB_SERIAL       0
+// NOTE: none of thes following options are ready. DO NOT ENABLE!
 #define SDCARD_ENABLE    0
 #define KEYPAD_ENABLE    0 // I2C keypad for jogging etc.
 #define EEPROM_ENABLE    0 // I2C EEPROM (24LC16) support.

@@ -13,7 +13,7 @@
 | Spindle sync            | yes<sup>4</sup>      | no          |no     | no      | no          | no     | no    | no    | no      | no      | no      |
 | Constant surface speed  | yes      | no          | no     | no      | no          | no     | no    | no    | no      | no      | no      |
 | Closed loop spindle RPM | yes<sup>4</sup>      | no          | no     | no      | no          | no     | no    | no    | no      | no      | no      |
-| Native USB streaming    | no       | no          | no     | no      | no          | no     | no    | yes   | yes?    | yes     | TBC     |
+| Native USB streaming    | no       | no          | no     | no      | no          | no     | no    | yes   | yes?    | yes     | yes     |
 | Bluetooth streaming     | no       | no          | no     | no      | no          | no     | yes   | no    | no      | no      | no      |
 | Ethernet streaming      | no       | yes         | no     | yes     | no          | no     | no    | no    | no      | no      | no      |
 | WiFi streaming          | no       | no          | no     | no      | no          | no     | yes   | no    | no      | no      | no      |
@@ -45,4 +45,4 @@ Please note that some of the capabilities should be fairly easy to port from one
 The fastest and most deterministic MCUs seems to be MSP432E401Y and TMC129x, ESP32 is not bad but it is a bit unstable - maybe due to outstanding [bugs](https://github.com/espressif/esp-idf/issues) in the [ESP-IDF](https://github.com/espressif/esp-idf) and the system architecture - program code is stored off chip in external serial flash.
 
 ---
-2019-08-10
+2019-09-03

@@ -173,12 +173,12 @@ static void DEBOUNCE_IRQHandler (void);
 
 extern void Dummy_Handler(void);
 
-void IRQRegister(uint32_t IRQnum, void (*IRQhandler)(void))
+void IRQRegister(int32_t IRQnum, void (*IRQhandler)(void))
 {
     vectorTable[IRQnum + 16] = (uint32_t)IRQhandler;
 }
 
-void IRQUnRegister(uint32_t IRQnum)
+void IRQUnRegister(int32_t IRQnum)
 {
 	vectorTable[IRQnum + 16] = (uint32_t)Dummy_Handler;
 }
@@ -1595,6 +1595,10 @@ static void PIOD_IRQHandler (void)
 // Interrupt handler for 1 ms interval timer
 static void SysTick_IRQHandler (void)
 {
+#if USB_SERIAL
+    SysTick_Handler(); // SerialUSB needs the Arduino SysTick handler running
+#endif
+
 #if SDCARD_ENABLE
 	static uint32_t fatfs_ticks = 10;
 	if(!(--fatfs_ticks)) {
@@ -1610,7 +1614,9 @@ static void SysTick_IRQHandler (void)
     }
 #else
     if(!(--delay_ms.ms)) {
+  #if USB_SERIAL == 0
         SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
+  #endif
         if(delay_ms.callback) {
             delay_ms.callback();
             delay_ms.callback = NULL;

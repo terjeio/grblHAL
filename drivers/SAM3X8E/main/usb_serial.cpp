@@ -34,7 +34,7 @@ static stream_rx_buffer_t usb_rxbuffer, usb_rxbackup;
 void usb_serialInit(void)
 {
 	SerialUSB.begin(BAUD_RATE);
-    
+
     while(!SerialUSB); // Wait for connection
 }
 //
@@ -113,7 +113,7 @@ void usb_serialWrite (const char *s, uint16_t length)
     char *ptr = (char *)s;
 
     while(length--)
-        serialPutC(*ptr++);
+        usb_serialPutC(*ptr++);
 }
 
 //
