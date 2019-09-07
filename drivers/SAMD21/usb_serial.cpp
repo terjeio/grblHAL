@@ -111,7 +111,7 @@ void usb_serialWrite (const char *s, uint16_t length)
     char *ptr = (char *)s;
 
     while(length--)
-        serialPutC(*ptr++);
+        usb_serialPutC(*ptr++);
 }
 
 //

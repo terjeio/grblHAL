@@ -87,12 +87,12 @@ static void SD_IRQHandler (void);
 
 extern void Dummy_Handler(void);
 
-void IRQRegister(uint32_t IRQnum, void (*IRQhandler)(void))
+void IRQRegister(int32_t IRQnum, void (*IRQhandler)(void))
 {
     vectorTable[IRQnum + 16] = (uint32_t)IRQhandler;
 }
 
-void IRQUnRegister(uint32_t IRQnum)
+void IRQUnRegister(int32_t IRQnum)
 {
 	vectorTable[IRQnum + 16] = (uint32_t)Dummy_Handler;
 }

@@ -183,8 +183,8 @@ typedef union {
 // Define SD card detect pin.
 #define SD_CD_PIN   30
 
-void IRQRegister(uint32_t IRQnum, void (*IRQhandler)(void));
-void IRQUnRegister(uint32_t IRQnum);
+void IRQRegister(int32_t IRQnum, void (*IRQhandler)(void));
+void IRQUnRegister(int32_t IRQnum);
 
 #if IOEXPAND_ENABLE || EEPROM_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
 

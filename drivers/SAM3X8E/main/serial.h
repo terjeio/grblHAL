@@ -77,6 +77,9 @@
 #define SERIAL_RX PIO_PB21A_RXD2
 #define SERIAL_TX PIO_PB20A_TXD2
 #endif
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct {
     volatile uint16_t head;
@@ -106,6 +109,10 @@ uint16_t serialRxCount(void);
 uint16_t serialRxFree(void);
 void serialRxFlush(void);
 void serialRxCancel(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // _SERIAL_H_
 

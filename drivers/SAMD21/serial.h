@@ -30,7 +30,7 @@
 #include <stdbool.h>
 
 #include "src/grbl/grbl.h"
-#include "src/grbl/stream.h" // bug in ...... Arduino framework? No support for subfolders!
+#include "src/grbl/stream.h"
 
 #define TX_BUFFER_SIZE 512      // must be a power of 2
 #define RX_BUFFER_SIZE 1024     // must be a power of 2

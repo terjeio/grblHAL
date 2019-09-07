@@ -56,10 +56,10 @@ void IRQUnRegister(int32_t IRQnum);
 // Configuration
 // Set value to 1 to enable, 0 to disable
 #define USB_SERIAL       0
-// NOTE: none of thes following options are ready. DO NOT ENABLE!
+#define EEPROM_ENABLE    0 // I2C EEPROM (24LC16) support (using TWI0).
+// NOTE: none of the following options are ready. DO NOT ENABLE!
 #define SDCARD_ENABLE    0
 #define KEYPAD_ENABLE    0 // I2C keypad for jogging etc.
-#define EEPROM_ENABLE    0 // I2C EEPROM (24LC16) support.
 #define TRINAMIC_ENABLE  0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
 #define TRINAMIC_I2C     0 // Trinamic I2C - SPI bridge interface.
 #define TRINAMIC_DEV     0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
@@ -206,17 +206,23 @@ extern driver_settings_t driver_settings;
 #define SD_CD_BIT			(1<<SD_CD_PIN)
 #endif
 
+#endif // default board
+
 #if EEPROM_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
 
 // Define I2C port/pins
-#define I2C_PORT SERCOM0
-#define I2C_SDA_PIN 11
-#define I2C_SCL_PIN 12
+#define I2C_PERIPH  TWI0
+#define I2C_ID      ID_TWI0
+#define I2C_IRQ     TWI0_IRQn
+#define I2C_PORT	PIOA
+#define I2C_SDA_PIN 17  // Arduino Due SDA1 pin
+#define I2C_SCL_PIN 18  // Arduino Due SCL1 pin
+#define I2C_SDA_BIT (1<<I2C_SDA_PIN)
+#define I2C_SCL_BIT (1<<I2C_SCL_PIN)
+
 #define I2C_CLOCK 100000
 
 #endif
-
-#endif // default board
 
 // Simple sanity check...
 

@@ -46,6 +46,13 @@
 #define INPUT_GROUP_LIMIT   4
 #define INPUT_GROUP_KEYPAD  8
 
+#ifndef OUTPUT
+#define OUTPUT true
+#endif
+#ifndef INPUT
+#define INPUT true
+#endif
+
 typedef enum {
     Input_Probe = 0,
     Input_Reset,
@@ -664,13 +671,13 @@ static void showMessage (const char *msg)
 	hal.stream.write("]\r\n");
 }
 
-static void PIO_Mode (Pio *port, uint32_t bit, bool output)
+static void PIO_Mode (Pio *port, uint32_t bit, bool mode)
 {
 	port->PIO_WPMR = PIO_WPMR_WPKEY(0x50494F);
 
 	port->PIO_ABSR &= ~bit;
 
-	if(output)
+	if(mode == OUTPUT)
 		port->PIO_OER = bit;
 	else
 		port->PIO_ODR = bit;
@@ -999,47 +1006,47 @@ static bool driver_setup (settings_t *settings)
     NVIC_EnableIRQ(STEP_TIMER_IRQn);	// Enable stepper interrupts
     NVIC_SetPriority(STEP_TIMER_IRQn, 0);
 
-	PIO_Mode(X_STEP_PORT, X_STEP_BIT, true);
-	PIO_Mode(Y_STEP_PORT, Y_STEP_BIT, true);
-	PIO_Mode(Z_STEP_PORT, Z_STEP_BIT, true);
+	PIO_Mode(X_STEP_PORT, X_STEP_BIT, OUTPUT);
+	PIO_Mode(Y_STEP_PORT, Y_STEP_BIT, OUTPUT);
+	PIO_Mode(Z_STEP_PORT, Z_STEP_BIT, OUTPUT);
   #ifdef A_STEP_PIN
-	PIO_Mode(A_STEP_PORT, A_STEP_BIT, true);
+	PIO_Mode(A_STEP_PORT, A_STEP_BIT, OUTPUT);
   #endif
   #ifdef B_STEP_PIN
-	PIO_Mode(B_STEP_PORT, B_STEP_BIT, true);
+	PIO_Mode(B_STEP_PORT, B_STEP_BIT, OUTPUT);
   #endif
   #ifdef C_STEP_PIN
-	PIO_Mode(C_STEP_PORT, C_STEP_BIT, true);
+	PIO_Mode(C_STEP_PORT, C_STEP_BIT, OUTPUT);
   #endif
 
-	PIO_Mode(X_DIRECTION_PORT, X_DIRECTION_BIT, true);
-	PIO_Mode(Y_DIRECTION_PORT, Y_DIRECTION_BIT, true);
-	PIO_Mode(Z_DIRECTION_PORT, Z_DIRECTION_BIT, true);
+	PIO_Mode(X_DIRECTION_PORT, X_DIRECTION_BIT, OUTPUT);
+	PIO_Mode(Y_DIRECTION_PORT, Y_DIRECTION_BIT, OUTPUT);
+	PIO_Mode(Z_DIRECTION_PORT, Z_DIRECTION_BIT, OUTPUT);
   #ifdef A_DIRECTION_PIN
-	PIO_Mode(A_DIRECTION_PORT, A_DIRECTION_BIT, true);
+	PIO_Mode(A_DIRECTION_PORT, A_DIRECTION_BIT, OUTPUT);
   #endif
   #ifdef B_DIRECTION_PIN
-	PIO_Mode(B_DIRECTION_PORT, B_DIRECTION_BIT, true);
+	PIO_Mode(B_DIRECTION_PORT, B_DIRECTION_BIT, OUTPUT);
   #endif
   #ifdef C_DIRECTION_PIN
-	PIO_Mode(C_DIRECTION_PORT, C_DIRECTION_BIT, true);
+	PIO_Mode(C_DIRECTION_PORT, C_DIRECTION_BIT, OUTPUT);
   #endif
 
-	PIO_Mode(X_DISABLE_PORT, X_DISABLE_BIT, true);
+	PIO_Mode(X_DISABLE_PORT, X_DISABLE_BIT, OUTPUT);
   #ifdef Y_DISABLE_PIN
-	PIO_Mode(Y_DISABLE_PORT, Y_DISABLE_BIT, true);
+	PIO_Mode(Y_DISABLE_PORT, Y_DISABLE_BIT, OUTPUT);
   #endif
   #ifdef Z_DISABLE_PIN
-	PIO_Mode(Z_DISABLE_PORT, Z_DISABLE_BIT, true);
+	PIO_Mode(Z_DISABLE_PORT, Z_DISABLE_BIT, OUTPUT);
   #endif
   #ifdef A_DISABLE_PIN
-	PIO_Mode(A_DISABLE_PORT, A_DISABLE_BIT, true);
+	PIO_Mode(A_DISABLE_PORT, A_DISABLE_BIT, OUTPUT);
   #endif
   #ifdef B_DISABLE_PIN
-	PIO_Mode(B_DISABLE_PORT, B_DISABLE_BIT, true);
+	PIO_Mode(B_DISABLE_PORT, B_DISABLE_BIT, OUTPUT);
   #endif
   #ifdef C_DISABLE_PIN
-	PIO_Mode(C_DISABLE_PORT, C_DISABLE_BIT, true);
+	PIO_Mode(C_DISABLE_PORT, C_DISABLE_BIT, OUTPUT);
   #endif
 
   // Software debounce init
@@ -1059,9 +1066,9 @@ static bool driver_setup (settings_t *settings)
 
  // Spindle init
 
-	PIO_Mode(SPINDLE_ENABLE_PORT, SPINDLE_ENABLE_BIT, true);
+	PIO_Mode(SPINDLE_ENABLE_PORT, SPINDLE_ENABLE_BIT, OUTPUT);
   #ifdef SPINDLE_DIRECTION_PIN
-	PIO_Mode(SPINDLE_DIRECTION_PORT, SPINDLE_DIRECTION_BIT, true);
+	PIO_Mode(SPINDLE_DIRECTION_PORT, SPINDLE_DIRECTION_BIT, OUTPUT);
   #endif
 
 	SPINDLE_PWM_PORT->PIO_WPMR = PIO_WPMR_WPKEY(0x50494F);
@@ -1074,66 +1081,66 @@ static bool driver_setup (settings_t *settings)
 
  // Coolant init
 
-  #ifdef COOLANT_MIST_PIN
-	PIO_Mode(COOLANT_MIST_PIN, COOLANT_FLOOD_BIT, true);
+  #ifdef COOLANT_FLOOD_PIN
+	PIO_Mode(COOLANT_FLOOD_PORT, COOLANT_FLOOD_BIT, OUTPUT);
   #endif
   #ifdef COOLANT_MIST_PIN
-	PIO_Mode(COOLANT_MIST_PORT, COOLANT_MIST_BIT, true);
+	PIO_Mode(COOLANT_MIST_PORT, COOLANT_MIST_BIT, OUTPUT);
   #endif
 
  // Limit signals init
 
-	PIO_Mode(X_LIMIT_PORT, X_LIMIT_BIT, false);
+	PIO_Mode(X_LIMIT_PORT, X_LIMIT_BIT, INPUT);
   #ifdef X_LIMIT_PIN_MAX
-	PIO_Mode(X_LIMIT_PORT_MAX, X_LIMIT_BIT_MAX, false);
+	PIO_Mode(X_LIMIT_PORT_MAX, X_LIMIT_BIT_MAX, INPUT);
   #endif
 
 	PIO_Mode(Y_LIMIT_PORT, Y_LIMIT_BIT, false);
   #ifdef Y_LIMIT_PIN_MAX
-	PIO_Mode(Y_LIMIT_PORT_MAX, Y_LIMIT_BIT_MAX, false);
+	PIO_Mode(Y_LIMIT_PORT_MAX, Y_LIMIT_BIT_MAX, INPUT);
   #endif
 
-	PIO_Mode(Z_LIMIT_PORT, Z_LIMIT_BIT, false);
+	PIO_Mode(Z_LIMIT_PORT, Z_LIMIT_BIT, INPUT);
   #ifdef Z_LIMIT_PIN_MAX
-	PIO_Mode(Z_LIMIT_PORT_MAX, Z_LIMIT_BIT_MAX, false);
+	PIO_Mode(Z_LIMIT_PORT_MAX, Z_LIMIT_BIT_MAX, INPUT);
   #endif
 
   #ifdef A_LIMIT_PIN
-    PIO_Mode(A_LIMIT_PORT, A_LIMIT_BIT, false);
+    PIO_Mode(A_LIMIT_PORT, A_LIMIT_BIT, INPUT);
   #endif
   #ifdef A_LIMIT_PIN_MAX
-    PIO_Mode(A_LIMIT_PORT_MAX, A_LIMIT_BIT_MAX, false);
+    PIO_Mode(A_LIMIT_PORT_MAX, A_LIMIT_BIT_MAX, INPUT);
   #endif
 
   #ifdef B_LIMIT_PIN
-    PIO_Mode(B_LIMIT_PORT, B_LIMIT_BIT, false);
+    PIO_Mode(B_LIMIT_PORT, B_LIMIT_BIT, INPUT);
   #endif
   #ifdef B_LIMIT_PIN_MAX
-    PIO_Mode(B_LIMIT_PORT_MAX, B_LIMIT_BIT_MAX, false);
+    PIO_Mode(B_LIMIT_PORT_MAX, B_LIMIT_BIT_MAX, INPUT);
   #endif
 
   #ifdef C_STEP_PIN
-    PIO_Mode(C_LIMIT_PORT, C_LIMIT_BIT, false);
+    PIO_Mode(C_LIMIT_PORT, C_LIMIT_BIT, INPUT);
   #endif
   #ifdef C_LIMIT_PIN_MAX
-    PIO_Mode(C_LIMIT_PORT_MAX, C_LIMIT_BIT_MAX, false);
+    PIO_Mode(C_LIMIT_PORT_MAX, C_LIMIT_BIT_MAX, INPUT);
   #endif
 
  // Control signals init
   #ifdef RESET_PIN
-	PIO_Mode(RESET_PORT, RESET_BIT, false);
+	PIO_Mode(RESET_PORT, RESET_BIT, INPUT);
   #endif
   #ifdef FEED_HOLD_PIN
-	PIO_Mode(FEED_HOLD_PORT, FEED_HOLD_BIT, false);
+	PIO_Mode(FEED_HOLD_PORT, FEED_HOLD_BIT, INPUT);
   #endif
   #ifdef CYCLE_START_PIN
-	PIO_Mode(CYCLE_START_PORT, CYCLE_START_BIT, false);
+	PIO_Mode(CYCLE_START_PORT, CYCLE_START_BIT, INPUT);
   #endif
   #ifdef SAFETY_DOOR_PIN
-	PIO_Mode(SAFETY_DOOR_PORT, SAFETY_DOOR_BIT, false);
+	PIO_Mode(SAFETY_DOOR_PORT, SAFETY_DOOR_BIT, INPUT);
   #endif
   #ifdef PROBE_PIN
-	PIO_Mode(PROBE_PORT, PROBE_BIT, false);
+	PIO_Mode(PROBE_PORT, PROBE_BIT, INPUT);
   #endif
 
 #if TRINAMIC_ENABLE
