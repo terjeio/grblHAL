@@ -7,6 +7,8 @@
   Original code here: https://github.com/jasonwebb/grbl-mega-wall-plotter
   Note: homing is not implemented!
 
+  Bits also pulled from: https://github.com/ldocull/MaslowDue
+
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
@@ -27,101 +29,121 @@
 
 #define A_MOTOR X_AXIS // Must be X_AXIS
 #define B_MOTOR Y_AXIS // Must be Y_AXIS
+#define MAX_SEG_LENGTH_MM 2.0f
+
+typedef struct {
+    int32_t width;
+    float width_mm;
+    float width_pow;
+    int32_t height;
+    int32_t width_2;
+    int32_t height_2;
+    int32_t spindlezero[2];
+    float spindlezero_mm[2];
+} machine_t;
+
+typedef struct {
+    float a;
+    float b;
+} coord_t;
+
+static machine_t machine = {0};
+
+// Returns machine position in mm converted from system position steps.
+// TODO: perhaps change to double precision here - float calculation results in errors of a couple of micrometers.
+static void wp_convert_array_steps_to_mpos (float *position, int32_t *steps)
+{
+    coord_t len;
+
+    len.a = (float)steps[A_MOTOR] / settings.steps_per_mm[A_MOTOR];
+    len.b = (float)steps[B_MOTOR] / settings.steps_per_mm[B_MOTOR];
+
+    position[X_AXIS] = (machine.width_pow + len.a * len.a - len.b * len.b) / (2.0f * machine.width_mm);
+    len.a = machine.width_mm - position[X_AXIS];
+    position[Y_AXIS] = sqrtf(len.b * len.b - len.a * len.a );
+    position[Z_AXIS] = steps[Z_AXIS] / settings.steps_per_mm[Z_AXIS];
+}
 
 // Wall plotter calculation only. Returns x or y-axis "steps" based on wall plotter motor steps.
 // A length = sqrt( X^2 + Y^2 )
 // B length = sqrt( (MACHINE_WIDTH - X)^2 + Y^2 )
-
-inline static int32_t wp_convert_to_x_axis_steps (int32_t *steps)
+inline static int32_t wp_convert_to_a_motor_steps (float *target)
 {
-    return (int32_t)sqrtf(steps[A_MOTOR] * steps[A_MOTOR] + steps[B_MOTOR] * steps[B_MOTOR]);
+    return (int32_t)lroundf(sqrtf(target[A_MOTOR] * target[A_MOTOR] + target[B_MOTOR] * target[B_MOTOR]) * settings.steps_per_mm[A_MOTOR]);
 }
 
-inline static int32_t wp_convert_to_y_axis_steps (int32_t *steps)
+inline static int32_t wp_convert_to_b_motor_steps (float *target)
 {
-    return (int32_t)sqrtf(powf(settings.max_travel[A_MOTOR] - steps[A_MOTOR], 2.0f) + powf(steps[B_MOTOR], 2.0f));
+    float xpos = machine.width_mm - target[A_MOTOR];
+    return (int32_t)lroundf(sqrtf(xpos * xpos + target[B_MOTOR] * target[B_MOTOR]) * settings.steps_per_mm[B_MOTOR]);
 }
 
-
-// Returns machine position of axis 'idx'. Must be sent a 'step' array.
-// NOTE: If motor steps and machine position are not in the same coordinate frame, this function
-//   serves as a central place to compute the transformation.
-static float wp_convert_axis_steps_to_mpos (int32_t *steps, uint_fast8_t idx)
+// Transform absolute position from cartesian coordinate system (mm) to wall plotter coordinate system (step)
+static void wp_plan_target_to_steps (int32_t *target_steps, float *target)
 {
-    return (float)(idx == X_AXIS ? wp_convert_to_x_axis_steps(steps) : (idx == Y_AXIS ? wp_convert_to_y_axis_steps(steps) : steps[idx])) / settings.steps_per_mm[idx];
-}
+    uint_fast8_t idx = N_AXIS - 1;
 
-
-/* Add a new linear movement to the buffer. target[N_AXIS] is the signed, absolute target position
-   in millimeters. Feed rate specifies the speed of the motion. If feed rate is inverted, the feed
-   rate is taken to mean "frequency" and would complete the operation in 1/feed_rate minutes.
-   All position data passed to the planner must be in terms of machine position to keep the planner
-   independent of any coordinate system changes and offsets, which are handled by the g-code parser.
-   NOTE: Assumes buffer is available. Buffer checks are handled at a higher level by motion_control.
-   In other words, the buffer head is never equal to the buffer tail.  Also the feed rate input value
-   is used in three ways: as a normal feed rate if invert_feed_rate is false, as inverse time if
-   invert_feed_rate is true, or as seek/rapids rate if the feed_rate value is negative (and
-   invert_feed_rate always false).
-   The system motion condition tells the planner to plan a motion in the always unused block buffer
-   head. It avoids changing the planner state and preserves the buffer to ensure subsequent gcode
-   motions are still planned correctly, while the stepper module only points to the block buffer head
-   to execute the special system motion. */
-
-static bool wp_plan_copy_pos (bool system_motion, float *target, int32_t *position_steps, int32_t *target_steps)
-{
-    if (system_motion) {
-        position_steps[X_AXIS] = wp_convert_to_x_axis_steps(sys_position);
-        position_steps[Y_AXIS] = wp_convert_to_y_axis_steps(sys_position);
-        position_steps[Z_AXIS] = sys_position[Z_AXIS];
-    }
-
-    target_steps[A_MOTOR] = lroundf(target[A_MOTOR] * settings.steps_per_mm[A_MOTOR]);
-    target_steps[B_MOTOR] = lroundf(target[B_MOTOR] * settings.steps_per_mm[B_MOTOR]);
-
-    return system_motion;
-}
-
-static int32_t wp_plan_calc_pos (uint_fast8_t idx, float *target, int32_t *position_steps, int32_t *target_steps)
-{
-    int32_t delta_steps;
-    // Calculate target position in absolute steps, number of steps for each axis, and determine max step events.
-    // Also, compute individual axes distance for move and prep unit vector calculations.
-    // NOTE: Computes true distance from converted step values.
-    switch(idx) {
-        case X_AXIS:
-            delta_steps = (int32_t)sqrtf(powf(target_steps[X_AXIS] - position_steps[X_AXIS], 2.0f) + powf(target_steps[Y_AXIS] - position_steps[Y_AXIS], 2.0f));
-            break;
-        case Y_AXIS:
-            delta_steps = (int32_t)sqrtf(powf(settings.max_travel[A_MOTOR] - target_steps[X_AXIS] + position_steps[X_AXIS], 2.0f) + powf(target_steps[Y_AXIS] - position_steps[Y_AXIS], 2.0f));
-            break;
-        default:
-            target_steps[idx] = lroundf(target[idx] * settings.steps_per_mm[idx]);
-            delta_steps = target_steps[idx] - position_steps[idx];
-            break;
-    }
-    return delta_steps;
-}
-
-
-// Reset the planner position vectors. Called by the system abort/initialization routine.
-static void wp_plan_sync_position (planner_t *pl)
-{
-  // TODO: For motor configurations not in the same coordinate frame as the machine position,
-  // this function needs to be updated to accomodate the difference.
-    uint_fast8_t idx = N_AXIS;
     do {
-        switch(--idx) {
-            case X_AXIS:
-                pl->position[X_AXIS] = wp_convert_to_x_axis_steps(sys_position);
-                break;
-            case Y_AXIS:
-                pl->position[Y_AXIS] = wp_convert_to_y_axis_steps(sys_position);
-                break;
-            default:
-                pl->position[idx] = sys_position[idx];
-                break;
-        }
-    } while (idx);
+        target_steps[idx] = lroundf(target[idx] * settings.steps_per_mm[idx]);
+    } while(--idx > Y_AXIS);
+
+    target_steps[A_MOTOR] = wp_convert_to_a_motor_steps(target);
+    target_steps[B_MOTOR] = wp_convert_to_b_motor_steps(target);
+}
+
+// Wall plotter is circular in motion, so long lines must be divided up
+static bool wp_segment_line (float *target, plan_line_data_t *pl_data, bool init)
+{
+    static uint_fast16_t iterations;
+    static bool segmented;
+    static float delta[N_AXIS], segment_target[N_AXIS];
+//    static plan_line_data_t plan;
+
+    uint_fast8_t idx = N_AXIS;
+
+    if(init) {
+
+        float max_delta = 0.0f;
+
+        do {
+            idx--;
+            delta[idx] = target[idx] - gc_state.position[idx];
+            max_delta = max(max_delta, fabs(delta[idx]));
+        } while(idx);
+
+        if((segmented = !(pl_data->condition.rapid_motion || pl_data->condition.jog_motion) &&
+                           max_delta > MAX_SEG_LENGTH_MM && !(delta[X_AXIS] == 0.0f && delta[Y_AXIS] == 0.0f))) {
+
+            idx = N_AXIS;
+            iterations = (uint_fast16_t)ceilf(max_delta / MAX_SEG_LENGTH_MM);
+
+            memcpy(segment_target, gc_state.position, sizeof(segment_target));
+//            memcpy(&plan, pl_data, sizeof(plan_line_data_t));
+
+            do {
+                delta[--idx] /= (float)iterations;
+                target[idx] = gc_state.position[idx];
+            } while(idx);
+
+        } else
+            iterations = 1;
+
+        iterations++; // return at least one iteration
+
+    } else {
+
+        iterations--;
+
+        if(segmented && iterations) do {
+            idx--;
+            segment_target[idx] += delta[idx];
+            target[idx] = segment_target[idx];
+//            memcpy(pl_data, &plan, sizeof(plan_line_data_t));
+        } while(idx);
+
+    }
+
+    return iterations != 0;
 }
 
 
@@ -133,16 +155,20 @@ static uint_fast8_t wp_limits_get_axis_mask (uint_fast8_t idx)
 
 static void wp_limits_set_target_pos (uint_fast8_t idx) // fn name?
 {
+    float xy[2];
     int32_t axis_position;
+
+    xy[X_AXIS] = sys_position[X_AXIS] / settings.steps_per_mm[X_AXIS];
+    xy[Y_AXIS] = sys_position[Y_AXIS] / settings.steps_per_mm[Y_AXIS];
 
     switch(idx) {
         case X_AXIS:
-            axis_position = wp_convert_to_y_axis_steps(sys_position);
+            axis_position = wp_convert_to_b_motor_steps(xy);
             sys_position[A_MOTOR] = axis_position;
             sys_position[B_MOTOR] = -axis_position;
             break;
         case Y_AXIS:
-            sys_position[A_MOTOR] = sys_position[B_MOTOR] = wp_convert_to_x_axis_steps(sys_position);
+            sys_position[A_MOTOR] = sys_position[B_MOTOR] = wp_convert_to_a_motor_steps(xy);
             break;
         default:
             sys_position[idx] = 0;
@@ -155,17 +181,21 @@ static void wp_limits_set_target_pos (uint_fast8_t idx) // fn name?
 // NOTE: settings.max_travel[] is stored as a negative value.
 static void wp_limits_set_machine_positions (axes_signals_t cycle)
 {
+    float xy[2];
     uint_fast8_t idx = N_AXIS;
+
+    xy[X_AXIS] = sys_position[X_AXIS] / settings.steps_per_mm[X_AXIS];
+    xy[Y_AXIS] = sys_position[Y_AXIS] / settings.steps_per_mm[Y_AXIS];
 
     if(settings.homing.flags.force_set_origin) {
         if (cycle.mask & bit(--idx)) do {
             switch(--idx) {
                 case X_AXIS:
-                    sys_position[A_MOTOR] = wp_convert_to_y_axis_steps(sys_position);
+                    sys_position[A_MOTOR] = wp_convert_to_b_motor_steps(xy);
                     sys_position[B_MOTOR] = - sys_position[A_MOTOR];
                     break;
                 case Y_AXIS:
-                    sys_position[A_MOTOR] = wp_convert_to_x_axis_steps(sys_position);
+                    sys_position[A_MOTOR] = wp_convert_to_a_motor_steps(xy);
                     sys_position[B_MOTOR] = sys_position[A_MOTOR];
                     break;
                 default:
@@ -176,17 +206,17 @@ static void wp_limits_set_machine_positions (axes_signals_t cycle)
     } else do {
          if (cycle.mask & bit(--idx)) {
              int32_t off_axis_position;
-             int32_t set_axis_position = bit_istrue(settings.homing.dir_mask, bit(idx))
+             int32_t set_axis_position = bit_istrue(settings.homing.dir_mask.value, bit(idx))
                                           ? lroundf((settings.max_travel[idx] + settings.homing.pulloff) * settings.steps_per_mm[idx])
                                           : lroundf(-settings.homing.pulloff * settings.steps_per_mm[idx]);
              switch(idx) {
                  case X_AXIS:
-                     off_axis_position = wp_convert_to_y_axis_steps(sys_position);
+                     off_axis_position = wp_convert_to_b_motor_steps(xy);
                      sys_position[A_MOTOR] = set_axis_position + off_axis_position;
                      sys_position[B_MOTOR] = set_axis_position - off_axis_position;
                      break;
                  case Y_AXIS:
-                     off_axis_position = wp_convert_to_x_axis_steps(sys_position);
+                     off_axis_position = wp_convert_to_a_motor_steps(xy);
                      sys_position[A_MOTOR] = off_axis_position + set_axis_position;
                      sys_position[B_MOTOR] = off_axis_position - set_axis_position;
                      break;
@@ -202,14 +232,25 @@ static void wp_limits_set_machine_positions (axes_signals_t cycle)
 // Initialize HAL pointers for Wall Plotter kinematics
 void wall_plotter_init (void)
 {
+    machine.width_mm = -settings.max_travel[A_MOTOR];
+    machine.width = (int32_t)(machine.width_mm * settings.steps_per_mm[A_MOTOR]);
+    machine.width_2 = machine.width >> 1;
+    machine.width_pow = machine.width_mm * machine.width_mm;
+    machine.height = (int32_t)((float)settings.max_travel[B_MOTOR] * settings.steps_per_mm[B_MOTOR]);
+    machine.height_2 = machine.height >> 1;
+    machine.spindlezero[A_MOTOR] = 0; // machine.width_2;
+    machine.spindlezero[B_MOTOR] = 0; // machine.height_2;
+    machine.spindlezero_mm[A_MOTOR] = (float)machine.spindlezero[A_MOTOR] / settings.steps_per_mm[A_MOTOR];
+    machine.spindlezero_mm[B_MOTOR] = (float)machine.spindlezero[B_MOTOR] / settings.steps_per_mm[B_MOTOR];
+
+    sys_position[B_MOTOR] = machine.width;
+
     hal.kinematics.limits_set_target_pos = wp_limits_set_target_pos;
     hal.kinematics.limits_get_axis_mask = wp_limits_get_axis_mask;
     hal.kinematics.limits_set_machine_positions = wp_limits_set_machine_positions;
-    hal.kinematics.plan_sync_position = wp_plan_sync_position;
-    hal.kinematics.plan_copy_position = wp_plan_copy_pos;
-    hal.kinematics.plan_calc_position = wp_plan_calc_pos;
-    hal.kinematics.system_convert_axis_steps_to_mpos = wp_convert_axis_steps_to_mpos;
+    hal.kinematics.plan_target_to_steps = wp_plan_target_to_steps;
+    hal.kinematics.convert_array_steps_to_mpos = wp_convert_array_steps_to_mpos;
+    hal.kinematics.segment_line = wp_segment_line;
 }
 
 #endif
-

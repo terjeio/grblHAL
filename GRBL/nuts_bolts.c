@@ -43,7 +43,7 @@ static const float froundvalues[MAX_PRECISION + 1] =
 char const *const axis_letter[N_AXIS] = {
     "X",
     "Y",
-    "Z",
+    "Z"
 #if N_AXIS > 3
     ,"A"
 #endif

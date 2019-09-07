@@ -28,9 +28,33 @@
 #ifndef _grbl_config_h_
 #define _grbl_config_h_
 
+// Used to decorate code run in interrupt context, is used by ESP32 driver
+// Do not remove or change unless you know what you are doing.
+#define ISR_CODE
+
 //#define HAL_KINEMATICS // Remove comment to add HAL entry points for custom kinematics
 
-#define ISR_CODE
+// Enable Maslow router kinematics.
+// Experimental - testing required and homing needs to be worked out.
+//#define MASLOW_ROUTER // Default disabled. Uncomment to enable.
+
+// Enable wall plotter kinematics.
+// Experimental - testing required and homing needs to be worked out.
+//#define WALL_PLOTTER // Default disabled. Uncomment to enable.
+
+// Enable CoreXY kinematics. Use ONLY with CoreXY machines.
+// IMPORTANT: If homing is enabled, you must reconfigure the homing cycle #defines above to
+// #define HOMING_CYCLE_0 X_AXIS_BIT and #define HOMING_CYCLE_1 Y_AXIS_BIT
+// NOTE: This configuration option alters the motion of the X and Y axes to principle of operation
+// defined at (http://corexy.com/theory.html). Motors are assumed to positioned and wired exactly as
+// described, if not, motions may move in strange directions. Grbl requires the CoreXY A and B motors
+// have the same steps per mm internally.
+//#define COREXY // Default disabled. Uncomment to enable.
+
+// Add HAL entry points for custom kinematics
+#if (defined(COREXY) || defined(WALL_PLOTTER) || defined(MASLOW_ROUTER)) && !defined(HAL_KINEMATICS)
+#define HAL_KINEMATICS
+#endif
 
 // #define DEBUGOUT // Remove comment to add HAL entry point for debug output
 
@@ -143,20 +167,6 @@
 // between restoring the spindle and coolant and resuming the cycle.
 #define SAFETY_DOOR_SPINDLE_DELAY 4.0f // Float (seconds)
 #define SAFETY_DOOR_COOLANT_DELAY 1.0f // Float (seconds)
-
-// Enable CoreXY kinematics. Use ONLY with CoreXY machines.
-// IMPORTANT: If homing is enabled, you must reconfigure the homing cycle #defines above to
-// #define HOMING_CYCLE_0 X_AXIS_BIT and #define HOMING_CYCLE_1 Y_AXIS_BIT
-// NOTE: This configuration option alters the motion of the X and Y axes to principle of operation
-// defined at (http://corexy.com/theory.html). Motors are assumed to positioned and wired exactly as
-// described, if not, motions may move in strange directions. Grbl requires the CoreXY A and B motors
-// have the same steps per mm internally.
-// NOTE 2: corexy_init() must be called at grbl startup (possibly by the driver) to
-// initialize the required HAL pointers.
-//#define COREXY // Default disabled. Uncomment to enable.
-#ifdef COREXY
-#define HAL_KINEMATICS
-#endif
 
 // ---------------------------------------------------------------------------------------
 // ADVANCED CONFIGURATION OPTIONS:

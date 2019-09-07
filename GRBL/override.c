@@ -5,7 +5,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2017-2018 Terje Io
+  Copyright (c) 2017-2019 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,16 +23,21 @@
 
 #include "grbl.h"
 
-static uint8_t feed_buf[FEED_OVERRIDE_BUFSIZE], accessory_buf[FEED_OVERRIDE_BUFSIZE];
-static volatile uint_fast8_t feed_head = 0, feed_tail = 0, accessory_head = 0, accessory_tail = 0;
+typedef struct {
+    volatile uint_fast8_t head;
+    volatile uint_fast8_t tail;
+    uint8_t buf[OVERRIDE_BUFSIZE];
+} override_queue_t;
+
+static override_queue_t feed = {0}, accessory = {0};
 
 ISR_CODE void enqueue_feed_override (uint8_t cmd)
 {
-    uint_fast8_t bptr = (feed_head + 1) & (FEED_OVERRIDE_BUFSIZE - 1);    // Get next head pointer
+    uint_fast8_t bptr = (feed.head + 1) & (OVERRIDE_BUFSIZE - 1);    // Get next head pointer
 
-    if(bptr != feed_tail) {                       // If not buffer full
-        feed_buf[feed_head] = cmd;                // add data to buffer
-        feed_head = bptr;                         // and update pointer
+    if(bptr != feed.tail) {         // If not buffer full
+        feed.buf[feed.head] = cmd;  // add data to buffer
+        feed.head = bptr;           // and update pointer
     }
 }
 
@@ -40,11 +45,11 @@ ISR_CODE void enqueue_feed_override (uint8_t cmd)
 uint8_t get_feed_override (void)
 {
     uint8_t data = 0;
-    uint_fast8_t bptr = feed_tail;
+    uint_fast8_t bptr = feed.tail;
 
-    if(bptr != feed_head) {
-        data = feed_buf[bptr++];                        // Get next character, increment tmp pointer
-        feed_tail = bptr & (FEED_OVERRIDE_BUFSIZE - 1); // and update pointer
+    if(bptr != feed.head) {
+        data = feed.buf[bptr++];                    // Get next character, increment tmp pointer
+        feed.tail = bptr & (OVERRIDE_BUFSIZE - 1);  // and update pointer
     }
 
     return data;
@@ -52,11 +57,11 @@ uint8_t get_feed_override (void)
 
 ISR_CODE void enqueue_accessory_override (uint8_t cmd)
 {
-    uint_fast8_t bptr = (accessory_head + 1) & (ACCESSORY_OVERRIDE_BUFSIZE - 1);    // Get next head pointer
+    uint_fast8_t bptr = (accessory.head + 1) & (OVERRIDE_BUFSIZE - 1);    // Get next head pointer
 
-    if(bptr != accessory_tail) {                       // If not buffer full
-        accessory_buf[accessory_head] = cmd;           // add data to buffer
-        accessory_head = bptr;                         // and update pointer
+    if(bptr != accessory.tail) {                // If not buffer full
+        accessory.buf[accessory.head] = cmd;    // add data to buffer
+        accessory.head = bptr;                  // and update pointer
     }
 }
 
@@ -64,16 +69,16 @@ ISR_CODE void enqueue_accessory_override (uint8_t cmd)
 uint8_t get_accessory_override (void)
 {
     uint8_t data = 0;
-    uint_fast8_t bptr = accessory_tail;
+    uint_fast8_t bptr = accessory.tail;
 
-    if(bptr != accessory_head) {
-        data = accessory_buf[bptr++];                               // Get next character, increment tmp pointer
-        accessory_tail = bptr & (ACCESSORY_OVERRIDE_BUFSIZE - 1);   // and update pointer
+    if(bptr != accessory.head) {
+        data = accessory.buf[bptr++];                   // Get next character, increment tmp pointer
+        accessory.tail = bptr & (OVERRIDE_BUFSIZE - 1); // and update pointer
     }
 
     return data;
 }
 
 void flush_override_buffers () {
-    feed_head = feed_tail = accessory_head = accessory_tail = 0;
+    feed.head = feed.tail = accessory.head = accessory.tail = 0;
 }

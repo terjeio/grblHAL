@@ -70,10 +70,9 @@ typedef void (*stream_write_ptr)(const char *s);
 typedef axes_signals_t (*limits_get_state_ptr)(void);
 
 typedef struct {
-    float (*system_convert_axis_steps_to_mpos) (int32_t *steps, uint_fast8_t idx);
-    void (*plan_sync_position)(planner_t *pl);
-    bool (*plan_copy_position) (bool system_motion, float *target, int32_t *position_steps, int32_t *target_steps);
-    int32_t (*plan_calc_position) (uint_fast8_t idx, float *target, int32_t *position_steps, int32_t *target_steps);
+    void (*convert_array_steps_to_mpos)(float *position, int32_t *steps);
+    void (*plan_target_to_steps) (int32_t *target_steps, float *target);
+    bool (*segment_line) (float *target, plan_line_data_t *pl_data, bool init);
     uint_fast8_t (*limits_get_axis_mask)(uint_fast8_t idx);
     void (*limits_set_target_pos)(uint_fast8_t idx);
     void (*limits_set_machine_positions)(axes_signals_t cycle);

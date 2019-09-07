@@ -406,15 +406,15 @@ void system_flag_wco_change ()
 //       serves as a central place to compute the transformation.
 void system_convert_array_steps_to_mpos (float *position, int32_t *steps)
 {
+#ifdef HAL_KINEMATICS
+    hal.kinematics.convert_array_steps_to_mpos(position, steps);
+#else
     uint_fast8_t idx = N_AXIS;
     do {
         idx--;
-#ifdef HAL_KINEMATICS
-        position[idx] = hal.kinematics.system_convert_axis_steps_to_mpos(steps, idx);
-#else
         position[idx] = steps[idx] / settings.steps_per_mm[idx];
-#endif
     } while(idx);
+#endif
 }
 
 // Checks and reports if target array exceeds machine travel limits. Returns false if check failed.

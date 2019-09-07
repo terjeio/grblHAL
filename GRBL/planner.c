@@ -329,17 +329,14 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
     block->line_number = pl_data->line_number;
     block->message = pl_data->message;
 
+    // Copy position data based on type of motion being planned.
+    memcpy(position_steps, block->condition.system_motion ? sys_position : pl.position, sizeof(position_steps));
+
     // Compute and store initial move distance data.
 
-    // Copy position data based on type of motion being planned.
 #ifdef HAL_KINEMATICS
-    if(!hal.kinematics.plan_copy_position(block->condition.system_motion, target, position_steps, target_steps))
-#else
-    if (block->condition.system_motion) {
-        memcpy(position_steps, sys_position, sizeof(sys_position));
-    } else
+    hal.kinematics.plan_target_to_steps(target_steps, target);
 #endif
-        memcpy(position_steps, pl.position, sizeof(pl.position));
 
     idx = N_AXIS;
     do {
@@ -347,12 +344,11 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
         // Calculate target position in absolute steps, number of steps for each axis, and determine max step events.
         // Also, compute individual axes distance for move and prep unit vector calculations.
         // NOTE: Computes true distance from converted step values.
-#ifdef HAL_KINEMATICS
-        delta_steps = hal.kinematics.plan_calc_position(idx, target, position_steps, target_steps);
-#else
+
+#ifndef HAL_KINEMATICS
         target_steps[idx] = lroundf(target[idx] * settings.steps_per_mm[idx]);
-        delta_steps = target_steps[idx] - position_steps[idx];
 #endif
+        delta_steps = target_steps[idx] - position_steps[idx];
         block->steps[idx] = labs(delta_steps);
         block->step_event_count = max(block->step_event_count, block->steps[idx]);
         unit_vec[idx] = (float)delta_steps / settings.steps_per_mm[idx]; // Store unit vector numerator
@@ -486,11 +482,7 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
 // Reset the planner position vectors. Called by the system abort/initialization routine.
 void plan_sync_position ()
 {
-  #ifdef HAL_KINEMATICS
-    hal.kinematics.plan_sync_position (&pl);
-  #else
     memcpy(pl.position, sys_position, sizeof(pl.position));
-  #endif
 }
 
 
@@ -519,11 +511,11 @@ void plan_feed_override (uint_fast8_t feed_override, uint_fast8_t rapid_override
 
     feed_override = max(min(feed_override, MAX_FEED_RATE_OVERRIDE), MIN_FEED_RATE_OVERRIDE);
 
-	if ((feed_override != sys.override.feed_rate) || (rapid_override != sys.override.rapid_rate)) {
-	  sys.override.feed_rate = (uint8_t)feed_override;
-	  sys.override.rapid_rate = (uint8_t)rapid_override;
-	  sys.report.overrides = On; // Set to report change immediately
-	  plan_update_velocity_profile_parameters();
-	  plan_cycle_reinitialize();
-	}
+    if ((feed_override != sys.override.feed_rate) || (rapid_override != sys.override.rapid_rate)) {
+      sys.override.feed_rate = (uint8_t)feed_override;
+      sys.override.rapid_rate = (uint8_t)rapid_override;
+      sys.report.overrides = On; // Set to report change immediately
+      plan_update_velocity_profile_parameters();
+      plan_cycle_reinitialize();
+    }
 }

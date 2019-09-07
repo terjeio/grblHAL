@@ -692,6 +692,10 @@ ISR_CODE bool protocol_enqueue_realtime_command (char c)
             char_counter = 0;
             drop = true;
             hal.stream.cancel_read_buffer();
+#ifdef HAL_KINEMATICS // needed when kinematics algorithm segments long jog distances (as it blocks reading from input stream)
+            if (sys.state & STATE_JOG) // Block all other states from invoking motion cancel.
+                system_set_exec_state_flag(EXEC_MOTION_CANCEL);
+#endif
             break;
 
         case CMD_GCODE_REPORT:

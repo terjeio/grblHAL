@@ -5,7 +5,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2016-2017 Terje Io
+  Copyright (c) 2016-2019 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -24,8 +24,7 @@
 #ifndef __OVERRIDE_H__
 #define __OVERRIDE_H__
 
-#define FEED_OVERRIDE_BUFSIZE 16         // must be a power of 2
-#define ACCESSORY_OVERRIDE_BUFSIZE 16    // must be a power of 2
+#define OVERRIDE_BUFSIZE 16 // must be a power of 2
 
 void flush_override_buffers ();
 void enqueue_feed_override (uint8_t cmd);

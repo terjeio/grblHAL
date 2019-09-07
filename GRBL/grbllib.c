@@ -22,6 +22,14 @@
 
 #include "grbl.h"
 
+#ifdef COREXY
+#include "corexy.h"
+#endif
+
+#ifdef WALL_PLOTTER
+#include "wall_plotter.h"
+#endif
+
 // Declare system global variable structure
 system_t sys;
 int32_t sys_position[N_AXIS];               // Real-time machine (aka home) position vector in steps.
@@ -46,6 +54,21 @@ static bool stream_tx_blocking (void)
     // TODO: Restructure st_prep_buffer() calls to be executed here during a long print.
     return !(sys_rt_exec_state & EXEC_RESET);
 }
+
+#ifdef HAL_KINEMATICS
+// called from mc_line() to segment lines if not overridden, default implementation for pass-through
+static bool hal_segment_line (float *target, plan_line_data_t *pl_data, bool init)
+{
+    static uint_fast8_t iterations;
+
+    if(init)
+        iterations = 2;
+    else
+        iterations--;
+
+    return iterations != 0;
+}
+#endif
 
 #ifdef DEBUGOUT
 static void debug_out (bool on)
@@ -78,6 +101,9 @@ int grbl_enter (void)
 	hal.stream.enqueue_realtime_command = protocol_enqueue_realtime_command;
 	hal.stream_blocking_callback = stream_tx_blocking;
 	hal.protocol_enqueue_gcode = protocol_enqueue_gcode;
+#ifdef HAL_KINEMATICS
+	hal.kinematics.segment_line = hal_segment_line; // default to no segmentation
+#endif
 	memcpy(&hal.report, &report_fns, sizeof(report_t));
 
 #ifdef DEBUGOUT
@@ -121,6 +147,14 @@ int grbl_enter (void)
 
     if(hal.get_position)
         hal.get_position(&sys_position); // TODO:  restore on abort when returns true?
+
+#ifdef COREXY
+    corexy_init();
+#endif
+
+#ifdef WALL_PLOTTER
+    wall_plotter_init();
+#endif
 
     // Grbl initialization loop upon power-up or a system abort. For the latter, all processes
     // will return to this loop to be cleanly re-initialized.

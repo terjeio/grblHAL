@@ -86,7 +86,7 @@ typedef enum {
 
 // Define Grbl axis settings numbering scheme. Starts at Setting_AxisSettingsBase, every INCREMENT, over N_SETTINGS.
 #define AXIS_N_SETTINGS          4
-#define AXIS_SETTINGS_INCREMENT  10  // Must be greater than the number of axis settings
+#define AXIS_SETTINGS_INCREMENT  10  // Must be greater than the number of axis settings TODO: change to 100 to allow for a logical wider range of parameters?
 
 typedef enum {
     Setting_PulseMicroseconds = 0,
@@ -204,6 +204,12 @@ typedef enum {
     AxisSetting_StepperCurrent = 4,
     AxisSetting_MicroSteps = 5,
     AxisSetting_Backlash = 6
+    /*
+    AxisSetting_P_Gain = 7,
+    AxisSetting_I_Gain = 8,
+    AxisSetting_D_Gain = 9,
+    AxisSetting_I_MaxError = 10
+    */
 } axis_setting_type_t;
 
 typedef enum {
