@@ -1,55 +1,104 @@
-"$-Code","Setting"," Units","Setting Description"
-"0","Step pulse time","microseconds","Sets time length per step. Minimum 3 microseconds."
-"1","Step idle delay","milliseconds","Sets a short hold delay when stopping to let dynamics settle before disabling steppers. Value 255 keeps motors enabled."
-"2","Step pulse invert","mask","Inverts the step signals (active low)."
-"3","Step direction invert","mask","Inverts the direction signals (active low)."
-"4","Invert step enable pin","boolean","Inverts the stepper driver enable signals  (active low). If the stepper drivers shares the same enable signal only X is used."
-"5","Invert limit pins","mask","Inverts the axis limit input signals. "
-"6","Invert probe pin","boolean","Inverts the probe input pin signal."
-"10","Status report options","mask","Specifies optional data included in status reports."
-"11","Junction deviation","mm","Sets how fast Grbl travels through consecutive motions. Lower value slows it down."
-"12","Arc tolerance","mm","Sets the G2 and G3 arc tracing accuracy based on radial error. Beware: A very small value may effect performance."
-"13","Report in inches","boolean","Enables inch units when returning any position and rate value that is not a settings value."
-"14","Invert control pins","mask","Inverts the control signals  (active low)."
-"15","Invert coolant pins","mask","Inverts the coolant and mist signals  (active low)."
-"16","Invert spindle pins","mask","Inverts the spindle on and counterclockwise signals ( (active low)."
-"17","Pullup disable control pins","mask","Disable the control signals pullup resistors. Potentially enables pulldown resistor if available."
-"18","Pullup disable limit pins","mask","Disable the limit signals pullup resistors. Potentially enables pulldown resistor if available."
-"19","Pullup disable probe pin","boolean","Disable the probe signal pullup resistor. Potentially enables pulldown resistor if available."
-"20","Soft limits enable","boolean","Enables soft limits checks within machine travel and sets alarm when exceeded. Requires homing."
-"21","Hard limits enable","boolean","Enables hard limits. Immediately halts motion and throws an alarm when switch is triggered."
-"22","Homing cycle enable","boolean","Enables homing cycle. Requires limit switches on all axes."
-"23","Homing direction invert","mask","Homing searches for a switch in the positive direction. Set axis bit (00000ZYX) to search in negative direction."
-"24","Homing locate feed rate","mm/min","Feed rate to slowly engage limit switch to determine its location accurately."
-"25","Homing search seek rate","mm/min","Seek rate to quickly find the limit switch before the slower locating phase."
-"26","Homing switch debounce delay","milliseconds","Sets a short delay between phases of homing cycle to let a switch debounce."
-"27","Homing switch pull-off distance","mm","Retract distance after triggering switch to disengage it. Homing will fail if switch isn't cleared."
-"28","G73 Retract distance","mm","G73 retract distance (for chip breaking drilling)."
-"29","Pulse delay","microseconds","Step pulse delay"
-"30","Maximum spindle speed","RPM","Maximum spindle speed. Sets PWM to maximum duty cycle."
-"31","Minimum spindle speed","RPM","Minimum spindle speed. Sets PWM to minimum duty cycle."
-"32","Laser-mode enable","boolean","Enables laser mode. Consecutive G1/2/3 commands will not halt when spindle speed is changed."
-"33","Spindle PWM frequency","Hz","Spindle PWM frequency."
-"34","Spindle PWM off value","percent","Spindle PWM off value in percent (duty cycle)."
-"35","Spindle PWM min value","percent","Spindle PWM min value in percent (duty cycle)."
-"36","Spindle PWM max value","percent","Spindle PWM max value in percent (duty cycle)."
-"37","Steppers deenergize ","mask","Specifies which steppers not to disable when stopped."
-"38","Spindle PPR","pulses","Spindle encoder pulses per revolution"
-"50","Step jog speed ","mm/min","Step jogging speed in millimeters per minute"
-"51","Slow jog speed","mm/min","Slow jogging speed in millimeters per minute"
-"52","Fast jog speed ","mm/min","Fast jogging speed in millimeters per minute"
-"53","Step jog distance","mm","Jog distance for single step jogging"
-"54","Slow jog distance","mm","Jog distance before automatic stop"
-"55","Fast jog distance","mm","Jog distance before automatic stop"
-"100","X-axis travel resolution","step/mm","X-axis travel resolution in steps per millimeter."
-"101","Y-axis travel resolution","step/mm","Y-axis travel resolution in steps per millimeter."
-"102","Z-axis travel resolution","step/mm","Z-axis travel resolution in steps per millimeter."
-"110","X-axis maximum rate","mm/min","X-axis maximum rate. Used as G0 rapid rate."
-"111","Y-axis maximum rate","mm/min","Y-axis maximum rate. Used as G0 rapid rate."
-"112","Z-axis maximum rate","mm/min","Z-axis maximum rate. Used as G0 rapid rate."
-"120","X-axis acceleration","mm/sec^2","X-axis acceleration. Used for motion planning to not exceed motor torque and lose steps."
-"121","Y-axis acceleration","mm/sec^2","Y-axis acceleration. Used for motion planning to not exceed motor torque and lose steps."
-"122","Z-axis acceleration","mm/sec^2","Z-axis acceleration. Used for motion planning to not exceed motor torque and lose steps."
-"130","X-axis maximum travel","mm","Maximum X-axis travel distance from homing switch. Determines valid machine space for soft-limits and homing search distances."
-"131","Y-axis maximum travel","mm","Maximum Y-axis travel distance from homing switch. Determines valid machine space for soft-limits and homing search distances."
-"132","Z-axis maximum travel","mm","Maximum Z-axis travel distance from homing switch. Determines valid machine space for soft-limits and homing search distances."
+$-Code, Setting, Units,Setting Description
+0,Step pulse time,microseconds,Sets time length per step. Minimum 3 microseconds.
+1,Step idle delay,milliseconds,Sets a short hold delay when stopping to let dynamics settle before disabling steppers. Value 255 keeps motors enabled.
+2,Step pulse invert,mask,Inverts the step signals (active low).
+3,Step direction invert,mask,Inverts the direction signals (active low).
+4,Invert step enable pin,boolean,Inverts the stepper driver enable signals  (active low). If the stepper drivers shares the same enable signal only X is used.
+5,Invert limit pins,mask,Inverts the axis limit input signals. 
+6,Invert probe pin,boolean,Inverts the probe input pin signal.
+10,Status report options,mask,Specifies optional data included in status reports.
+11,Junction deviation,mm,Sets how fast Grbl travels through consecutive motions. Lower value slows it down.
+12,Arc tolerance,mm,Sets the G2 and G3 arc tracing accuracy based on radial error. Beware: A very small value may effect performance.
+13,Report in inches,boolean,Enables inch units when returning any position and rate value that is not a settings value.
+14,Invert control pins,mask,Inverts the control signals  (active low).
+15,Invert coolant pins,mask,Inverts the coolant and mist signals  (active low).
+16,Invert spindle signals,mask,Inverts the spindle on, counterclockwise and PWM signals (active low).
+17,Pullup disable control pins,mask,Disable the control signals pullup resistors. Potentially enables pulldown resistor if available.
+18,Pullup disable limit pins,mask,Disable the limit signals pullup resistors. Potentially enables pulldown resistor if available.
+19,Pullup disable probe pin,boolean,Disable the probe signal pullup resistor. Potentially enables pulldown resistor if available.
+20,Soft limits enable,boolean,Enables soft limits checks within machine travel and sets alarm when exceeded. Requires homing.
+21,Hard limits enable,mask,When enabled immediately halts motion and throws an alarm when switch is triggered. In strict mode only homing is possible after switch is triggered. 
+22,Homing cycle enable,boolean,Enables homing cycle. Requires limit switches on all axes.
+23,Homing direction invert,mask,Homing searches for a switch in the positive direction. Set axis bit to search in negative direction.
+24,Homing locate feed rate,mm/min,Feed rate to slowly engage limit switch to determine its location accurately.
+25,Homing search seek rate,mm/min,Seek rate to quickly find the limit switch before the slower locating phase.
+26,Homing switch debounce delay,milliseconds,Sets a short delay between phases of homing cycle to let a switch debounce.
+27,Homing switch pull-off distance,mm,Retract distance after triggering switch to disengage it. Homing will fail if switch isn't cleared.
+28,G73 Retract distance,mm,G73 retract distance (for chip breaking drilling).
+29,Pulse delay,microseconds,Step pulse delay.
+30,Maximum spindle speed,RPM,Maximum spindle speed. Sets PWM to maximum duty cycle.
+31,Minimum spindle speed,RPM,Minimum spindle speed. Sets PWM to minimum duty cycle.
+32,Mode of operation,integer,Laser mode: consecutive G1/2/3 commands will not halt when spindle speed is changed. Lathe mode: allows use of G7, G8, G96 and G97.
+33,Spindle PWM frequency,Hz,Spindle PWM frequency.
+34,Spindle PWM off value,percent,Spindle PWM off value in percent (duty cycle).
+35,Spindle PWM min value,percent,Spindle PWM min value in percent (duty cycle).
+36,Spindle PWM max value,percent,Spindle PWM max value in percent (duty cycle).
+37,Steppers deenergize ,mask,Specifies which steppers not to disable when stopped.
+38,Spindle PPR,pulses,Spindle encoder pulses per revolution.
+39,Enable legacy RT commands,boolean,"Enables ""normal"" processing of ?, ! and ~ characters when part of $-setting or comment. If disabled then they are added to the input string instead."
+40,Limit jog commands,boolean,Limit jog commands to machine limits for homed axes.
+43,Homing passes,,Number of homing passes. Minimum 1, maximum 128.
+44,Axes homing, first pass,mask,Axes to home in first pass.
+45,Axes homing, second pass,mask,Axes to home in second pass.
+46,Axes homing,third pass,mask,Axes to home in third pass.
+47,Axes homing, fourth pass,mask,Axes to home in fourth pass.
+48,Axes homing, fifthpass,mask,Axes to home in fifth pass.
+49,Axes homing, sixth pass,mask,Axes to home in sixth pass.
+50,Step jog speed ,mm/min,Step jogging speed in millimeters per minute.
+51,Slow jog speed,mm/min,Slow jogging speed in millimeters per minute.
+52,Fast jog speed ,mm/min,Fast jogging speed in millimeters per minut.
+53,Step jog distance,mm,Jog distance for single step jogging.
+54,Slow jog distance,mm,Jog distance before automatic stop.
+55,Fast jog distance,mm,Jog distance before automatic stop.
+60,Restore overrides,,Restore overrides to default values at program end.
+61,Ignore door when idle,,Enable this if it is desirable to open the safety door when in IDLE mode (eg. for jogging).
+62,Sleep enable,,Enable sleep mode. 
+63,Disable laser,,Disable laser during hold. 
+64,Force init alarm,,Starts Grbl in alarm mode after a cold reset.
+65,Check limits at init,,If limit switches are engaged after reset this forces Grbl to start in alarm mode.
+66,Homing init lock,,If homing is enabled, homing init lock sets Grbl into an alarm state upon power up. Clear by performing a homing cycle.
+70,Stream,,Input stream source: 0 - serial, 1 - bluetooth, 2 - ethernet, 3 - WiFi
+71,WiFi SSID,,WiFi SSID.
+72,WiFi Password,,WiFi Password.
+73,WiFi Port,,WiFi Port Number listening for incoming connections.
+74,Bluetooth device,,Bluetooth device name.
+75,Bluetooth service,,Bluetooth service name.
+80,Spindle P-gain,,
+81,Spindle I-gain,,
+82,Spindle D-gain,,
+84,Spindle PID max error,,
+85,Spindle PID max I error,,Spindle PID max integrator error
+90,Spindle sync P-gain,,
+91,Spindle sync I-gain,,
+92,Spindle sync D-gain,,
+95,Spindle sync PID max I error,,Spindle sync PID max integrator error.
+100,X-axis travel resolution,step/mm,X-axis travel resolution in steps per millimeter.
+101,Y-axis travel resolution,step/mm,Y-axis travel resolution in steps per millimeter.
+102,Z-axis travel resolution,step/mm,Z-axis travel resolution in steps per millimeter.
+103,A-axis travel resolution,step/mm,A-axis travel resolution in steps per millimeter.
+104,B-axis travel resolution,step/mm,B-axis travel resolution in steps per millimeter.
+105,C-axis travel resolution,step/mm,C-axis travel resolution in steps per millimeter.
+110,X-axis maximum rate,mm/min,X-axis maximum rate. Used as G0 rapid rate.
+111,Y-axis maximum rate,mm/min,Y-axis maximum rate. Used as G0 rapid rate.
+112,Z-axis maximum rate,mm/min,Z-axis maximum rate. Used as G0 rapid rate.
+113,A-axis maximum rate,mm/min,A-axis maximum rate. Used as G0 rapid rate.
+114,B-axis maximum rate,mm/min,B-axis maximum rate. Used as G0 rapid rate.
+115,C-axis maximum rate,mm/min,C-axis maximum rate. Used as G0 rapid rate.
+120,X-axis acceleration,mm/sec^2,X-axis acceleration. Used for motion planning to not exceed motor torque and lose steps.
+121,Y-axis acceleration,mm/sec^2,Y-axis acceleration. Used for motion planning to not exceed motor torque and lose steps.
+122,Z-axis acceleration,mm/sec^2,Z-axis acceleration. Used for motion planning to not exceed motor torque and lose steps.
+123,A-axis acceleration,mm/sec^2,A-axis acceleration. Used for motion planning to not exceed motor torque and lose steps.
+124,B-axis acceleration,mm/sec^2,B-axis acceleration. Used for motion planning to not exceed motor torque and lose steps.
+125,C-axis acceleration,mm/sec^2,C-axis acceleration. Used for motion planning to not exceed motor torque and lose steps.
+130,X-axis maximum travel,mm,Maximum X-axis travel distance from homing switch. Determines valid machine space for soft-limits and homing search distances.
+131,Y-axis maximum travel,mm,Maximum Y-axis travel distance from homing switch. Determines valid machine space for soft-limits and homing search distances.
+132,Z-axis maximum travel,mm,Maximum Z-axis travel distance from homing switch. Determines valid machine space for soft-limits and homing search distances.
+133,A-axis maximum travel,mm,Maximum A-axis travel distance from homing switch. Determines valid machine space for soft-limits and homing search distances.
+134,B-axis maximum travel,mm,Maximum B-axis travel distance from homing switch. Determines valid machine space for soft-limits and homing search distances.
+135,C-axis maximum travel,mm,Maximum B-axis travel distance from homing switch. Determines valid machine space for soft-limits and homing search distances.
+160,X-axis backlash compensation,mm,X-axis backlash distance to compensate for.
+161,Y-axis backlash compensation,mm,Y-axis backlash distance to compensate for.
+162,Z-axis backlash compensation,mm,Z-axis backlash distance to compensate for.
+163,A-axis backlash compensation,mm,A-axis backlash distance to compensate for.
+164,B-axis backlash compensation,mm,B-axis backlash distance to compensate for.
+165,C-axis backlash compensation,mm,B-axis backlash distance to compensate for.

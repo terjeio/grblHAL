@@ -73,13 +73,6 @@ static void corexy_target_to_steps (int32_t *target_steps, float *target)
     target_steps[B_MOTOR] = a_steps - b_steps;
 }
 
-
-static int32_t corexy_plan_calc_pos (uint_fast8_t idx, float *target, int32_t *position_steps, int32_t *target_steps)
-{
-    return target_steps[idx] - position_steps[idx];
-}
-
-
 static uint_fast8_t corexy_limits_get_axis_mask (uint_fast8_t idx)
 {
     return ((idx == A_MOTOR) || (idx == B_MOTOR)) ? (bit(X_AXIS) | bit(Y_AXIS)) : bit(idx);
@@ -154,14 +147,14 @@ static void corexy_limits_set_machine_positions (axes_signals_t cycle)
 }
 
 
-// Initialize HAL pointers for CoreXY kinematics
+// Initialize API pointers for CoreXY kinematics
 void corexy_init (void)
 {
-    hal.kinematics.limits_set_target_pos = corexy_limits_set_target_pos;
-    hal.kinematics.limits_get_axis_mask = corexy_limits_get_axis_mask;
-    hal.kinematics.limits_set_machine_positions = corexy_limits_set_machine_positions;
-    hal.kinematics.plan_target_to_steps = corexy_target_to_steps;
-    hal.kinematics.convert_array_steps_to_mpos = corexy_convert_array_steps_to_mpos;
+    kinematics.limits_set_target_pos = corexy_limits_set_target_pos;
+    kinematics.limits_get_axis_mask = corexy_limits_get_axis_mask;
+    kinematics.limits_set_machine_positions = corexy_limits_set_machine_positions;
+    kinematics.plan_target_to_steps = corexy_target_to_steps;
+    kinematics.convert_array_steps_to_mpos = corexy_convert_array_steps_to_mpos;
 }
 
 #endif

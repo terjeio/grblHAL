@@ -55,9 +55,12 @@ static bool stream_tx_blocking (void)
     return !(sys_rt_exec_state & EXEC_RESET);
 }
 
-#ifdef HAL_KINEMATICS
+#ifdef KINEMATICS_API
+
+kinematics_t kinematics;
+
 // called from mc_line() to segment lines if not overridden, default implementation for pass-through
-static bool hal_segment_line (float *target, plan_line_data_t *pl_data, bool init)
+static bool kinematics_segment_line (float *target, plan_line_data_t *pl_data, bool init)
 {
     static uint_fast8_t iterations;
 
@@ -68,6 +71,7 @@ static bool hal_segment_line (float *target, plan_line_data_t *pl_data, bool ini
 
     return iterations != 0;
 }
+
 #endif
 
 #ifdef DEBUGOUT
@@ -101,15 +105,23 @@ int grbl_enter (void)
 	hal.stream.enqueue_realtime_command = protocol_enqueue_realtime_command;
 	hal.stream_blocking_callback = stream_tx_blocking;
 	hal.protocol_enqueue_gcode = protocol_enqueue_gcode;
-#ifdef HAL_KINEMATICS
-	hal.kinematics.segment_line = hal_segment_line; // default to no segmentation
-#endif
+
 	memcpy(&hal.report, &report_fns, sizeof(report_t));
+
+#ifdef KINEMATICS_API
+    memset(&kinematics, 0, sizeof(kinematics_t));
+
+    kinematics.segment_line = kinematics_segment_line; // default to no segmentation
+#endif
 
 #ifdef DEBUGOUT
 	hal.debug_out = debug_out; // must be overridden by driver to have any effect
 #endif
 	driver_ok = driver_init();
+
+#if COMPATIBILITY_LEVEL > 0
+	hal.stream.suspend_read = NULL;
+#endif
 
   #ifdef EMULATE_EEPROM
 	eeprom_emu_init();

@@ -65,7 +65,7 @@ ISR_CODE void limit_interrupt_handler (axes_signals_t state) // DEFAULT: Limit p
     }
 }
 
-
+#ifndef KINEMATICS_API
 // Set machine positions for homed limit switches. Don't update non-homed axes.
 // NOTE: settings.max_travel[] is stored as a negative value.
 static void limits_set_machine_positions (axes_signals_t cycle)
@@ -84,6 +84,7 @@ static void limits_set_machine_positions (axes_signals_t cycle)
                                  : lroundf(-settings.homing.pulloff * settings.steps_per_mm[idx]);
     } while(idx);
 }
+#endif
 
 // Homes the specified cycle axes, sets the machine position, and performs a pull-off motion after
 // completing. Homing is a special motion case, which involves rapid uncontrolled stops to locate
@@ -119,8 +120,8 @@ static bool limits_homing_cycle (axes_signals_t cycle)
     do {
         idx--;
         // Initialize step pin masks
-#ifdef HAL_KINEMATICS
-        step_pin[idx] = hal.kinematics.limits_get_axis_mask(idx);
+#ifdef KINEMATICS_API
+        step_pin[idx] = kinematics.limits_get_axis_mask(idx);
 #else
         step_pin[idx] = bit(idx);
 #endif
@@ -144,8 +145,8 @@ static bool limits_homing_cycle (axes_signals_t cycle)
             if (bit_istrue(cycle.mask, bit(--idx))) {
                 n_active_axis++;
 
-#ifdef HAL_KINEMATICS
-                hal.kinematics.limits_set_target_pos(idx);
+#ifdef KINEMATICS_API
+                kinematics.limits_set_target_pos(idx);
 #else
                 sys_position[idx] = 0;
 #endif
@@ -183,8 +184,8 @@ static bool limits_homing_cycle (axes_signals_t cycle)
                 do {
                     idx--;
                     if ((axislock.mask & step_pin[idx]) && (limit_state & bit(idx))) {
-#ifdef HAL_KINEMATICS
-                        axislock.mask &= ~hal.kinematics.limits_get_axis_mask(idx);
+#ifdef KINEMATICS_API
+                        axislock.mask &= ~kinematics.limits_get_axis_mask(idx);
 #else
                         axislock.mask &= ~bit(idx);
 #endif
@@ -253,8 +254,8 @@ static bool limits_homing_cycle (axes_signals_t cycle)
     // set up pull-off maneuver from axes limit switches that have been homed. This provides
     // some initial clearance off the switches and should also help prevent them from falsely
     // triggering when hard limits are enabled or when more than one axes shares a limit pin.
-#ifdef HAL_KINEMATICS
-    hal.kinematics.limits_set_machine_positions(cycle);
+#ifdef KINEMATICS_API
+    kinematics.limits_set_machine_positions(cycle);
 #else
     limits_set_machine_positions(cycle);
 #endif

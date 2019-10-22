@@ -60,6 +60,9 @@
 #include "override.h"
 #include "sleep.h"
 #include "stream.h"
+#ifdef KINEMATICS_API
+#include "kinematics.h"
+#endif
 
 // ---------------------------------------------------------------------------------------
 // COMPILE-TIME ERROR CHECKING OF DEFINE VALUES:

@@ -139,10 +139,10 @@ bool mc_line (float *target, plan_line_data_t *pl_data)
 
 #endif // Backlash comp
 
-#ifdef HAL_KINEMATICS
-     hal.kinematics.segment_line(target, pl_data, true);
+#ifdef KINEMATICS_API
+     kinematics.segment_line(target, pl_data, true);
 
-     while(hal.kinematics.segment_line(target, pl_data, false)) {
+     while(kinematics.segment_line(target, pl_data, false)) {
 #endif
         // If the buffer is full: good! That means we are well ahead of the robot.
         // Remain in this loop until there is room in the buffer.
@@ -162,7 +162,7 @@ bool mc_line (float *target, plan_line_data_t *pl_data)
             // Forces a buffer sync while in M3 laser mode only.
             hal.spindle_set_state(pl_data->condition.spindle, pl_data->spindle.rpm);
         }
-#ifdef HAL_KINEMATICS
+#ifdef KINEMATICS_API
       }
 #endif
     }

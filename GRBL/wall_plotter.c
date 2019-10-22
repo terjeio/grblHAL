@@ -229,7 +229,7 @@ static void wp_limits_set_machine_positions (axes_signals_t cycle)
 }
 
 
-// Initialize HAL pointers for Wall Plotter kinematics
+// Initialize API pointers for Wall Plotter kinematics
 void wall_plotter_init (void)
 {
     machine.width_mm = -settings.max_travel[A_MOTOR];
@@ -245,12 +245,12 @@ void wall_plotter_init (void)
 
     sys_position[B_MOTOR] = machine.width;
 
-    hal.kinematics.limits_set_target_pos = wp_limits_set_target_pos;
-    hal.kinematics.limits_get_axis_mask = wp_limits_get_axis_mask;
-    hal.kinematics.limits_set_machine_positions = wp_limits_set_machine_positions;
-    hal.kinematics.plan_target_to_steps = wp_plan_target_to_steps;
-    hal.kinematics.convert_array_steps_to_mpos = wp_convert_array_steps_to_mpos;
-    hal.kinematics.segment_line = wp_segment_line;
+    kinematics.limits_set_target_pos = wp_limits_set_target_pos;
+    kinematics.limits_get_axis_mask = wp_limits_get_axis_mask;
+    kinematics.limits_set_machine_positions = wp_limits_set_machine_positions;
+    kinematics.plan_target_to_steps = wp_plan_target_to_steps;
+    kinematics.convert_array_steps_to_mpos = wp_convert_array_steps_to_mpos;
+    kinematics.segment_line = wp_segment_line;
 }
 
 #endif

@@ -33,6 +33,9 @@
 #include "maslow.h"
 #include "driver.h"
 
+#define A_MOTOR X_AXIS // Must be X_AXIS
+#define B_MOTOR Y_AXIS // Must be Y_AXIS
+
 typedef struct {
     float halfWidth;        //Half the machine width
     float halfHeight;       //Half the machine height
@@ -659,7 +662,7 @@ status_code_t maslow_tuning (uint_fast16_t state, char *line, char *lcline)
     return retval;
 }
 
-// Initialize HAL pointers & machine parameters for Maslow router kinematics
+// Initialize API pointers & machine parameters for Maslow router kinematics
 void maslow_init (void)
 {
     float xy[2] = {0.0f, 0.0f};
@@ -669,12 +672,12 @@ void maslow_init (void)
 
     selected_motor = A_MOTOR;
 
-    hal.kinematics.limits_set_target_pos = maslow_limits_set_target_pos;
-    hal.kinematics.limits_get_axis_mask = maslow_limits_get_axis_mask;
-    hal.kinematics.limits_set_machine_positions = maslow_limits_set_machine_positions;
-    hal.kinematics.plan_target_to_steps = maslow_target_to_steps;
-    hal.kinematics.convert_array_steps_to_mpos = maslow_convert_array_steps_to_mpos;
-    hal.kinematics.segment_line = maslow_segment_line;
+    kinematics.limits_set_target_pos = maslow_limits_set_target_pos;
+    kinematics.limits_get_axis_mask = maslow_limits_get_axis_mask;
+    kinematics.limits_set_machine_positions = maslow_limits_set_machine_positions;
+    kinematics.plan_target_to_steps = maslow_target_to_steps;
+    kinematics.convert_array_steps_to_mpos = maslow_convert_array_steps_to_mpos;
+    kinematics.segment_line = maslow_segment_line;
 
     hal.driver_sys_command_execute = maslow_tuning;
 }

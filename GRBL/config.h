@@ -28,11 +28,17 @@
 #ifndef _grbl_config_h_
 #define _grbl_config_h_
 
+// Defines compatibility level with the grbl 1.1 protocol, NOT functionality.
+// Additional G- and M-codes are not disabled.
+// Set to 0 for reporting itself as "GrblHAL" with protocol extensions enabled.
+// Set to > 0 disables some extensions (not new settings for now), and reporting itself as "Grbl".
+#define COMPATIBILITY_LEVEL 0
+
 // Used to decorate code run in interrupt context, is used by ESP32 driver
 // Do not remove or change unless you know what you are doing.
 #define ISR_CODE
 
-//#define HAL_KINEMATICS // Remove comment to add HAL entry points for custom kinematics
+//#define KINEMATICS_API // Remove comment to add HAL entry points for custom kinematics
 
 // Enable Maslow router kinematics.
 // Experimental - testing required and homing needs to be worked out.
@@ -52,8 +58,8 @@
 //#define COREXY // Default disabled. Uncomment to enable.
 
 // Add HAL entry points for custom kinematics
-#if (defined(COREXY) || defined(WALL_PLOTTER) || defined(MASLOW_ROUTER)) && !defined(HAL_KINEMATICS)
-#define HAL_KINEMATICS
+#if (defined(COREXY) || defined(WALL_PLOTTER) || defined(MASLOW_ROUTER)) && !defined(KINEMATICS_API)
+#define KINEMATICS_API
 #endif
 
 // #define DEBUGOUT // Remove comment to add HAL entry point for debug output
@@ -372,8 +378,10 @@
 // Max length of gcode lines (blocks) stored in EEPROM, do not set > 80 unless EEPROM space is reallocated
 #define MAX_STORED_LINE_LENGTH 80
 
+#if COMPATIBILITY_LEVEL == 0
 // Number of tools in ATC tool table, comment out to disable
-#define N_TOOLS 8
+//#define N_TOOLS 8
+#endif
 
 // Enable EEPROM emulation/buffering in RAM (allocated from heap)
 // Can be used for MCUs with no EEPROM or as buffer in order to avoid writing to EEPROM when not in idle state.

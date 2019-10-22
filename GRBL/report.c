@@ -269,7 +269,11 @@ void report_feedback_message(message_code_t message_code)
 void report_init_message (void)
 {
     override_counter = wco_counter = 0;
+#if COMPATIBILITY_LEVEL == 0
     hal.stream.write("\r\nGrblHAL " GRBL_VERSION " ['$' for help]\r\n");
+#else
+    hal.stream.write("\r\nGrbl " GRBL_VERSION " ['$' for help]\r\n");
+#endif
 }
 
 // Grbl help message
@@ -712,13 +716,17 @@ void report_build_info (char *line)
     hal.stream.write(uitoa(hal.rx_buffer_size));
     hal.stream.write(",");
     hal.stream.write(uitoa((uint32_t)N_AXIS));
+#if COMPATIBILITY_LEVEL == 0
     hal.stream.write(",");
-#ifdef N_TOOLS
+  #ifdef N_TOOLS
     hal.stream.write(uitoa((uint32_t)N_TOOLS));
-#else
+  #else
     hal.stream.write("0");
+  #endif
 #endif
     hal.stream.write("]\r\n");
+
+#if COMPATIBILITY_LEVEL == 0
 
     strcpy(buf, "[NEWOPT:");
 
@@ -769,6 +777,8 @@ void report_build_info (char *line)
 
     if(hal.report_options)
         hal.report_options();
+#endif
+
 }
 
 

@@ -334,8 +334,8 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
 
     // Compute and store initial move distance data.
 
-#ifdef HAL_KINEMATICS
-    hal.kinematics.plan_target_to_steps(target_steps, target);
+#ifdef KINEMATICS_API
+    kinematics.plan_target_to_steps(target_steps, target);
 #endif
 
     idx = N_AXIS;
@@ -345,7 +345,7 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
         // Also, compute individual axes distance for move and prep unit vector calculations.
         // NOTE: Computes true distance from converted step values.
 
-#ifndef HAL_KINEMATICS
+#ifndef KINEMATICS_API
         target_steps[idx] = lroundf(target[idx] * settings.steps_per_mm[idx]);
 #endif
         delta_steps = target_steps[idx] - position_steps[idx];

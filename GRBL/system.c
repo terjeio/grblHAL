@@ -406,8 +406,8 @@ void system_flag_wco_change ()
 //       serves as a central place to compute the transformation.
 void system_convert_array_steps_to_mpos (float *position, int32_t *steps)
 {
-#ifdef HAL_KINEMATICS
-    hal.kinematics.convert_array_steps_to_mpos(position, steps);
+#ifdef KINEMATICS_API
+    kinematics.convert_array_steps_to_mpos(position, steps);
 #else
     uint_fast8_t idx = N_AXIS;
     do {

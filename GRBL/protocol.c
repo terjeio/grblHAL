@@ -174,7 +174,9 @@ bool protocol_main_loop(bool cold_start)
                     gc_state.last_error = Status_SystemGClock;
                 else if(!gcode_error) { // Parse and execute g-code block.
                     gc_state.last_error = gc_execute_block(line, user_message.show ? user_message.message : NULL);
+#if COMPATIBILITY_LEVEL == 0
                     gcode_error = gc_state.last_error != Status_OK;
+#endif
                 }
                 hal.report.status_message(gc_state.last_error);
 
@@ -692,7 +694,7 @@ ISR_CODE bool protocol_enqueue_realtime_command (char c)
             char_counter = 0;
             drop = true;
             hal.stream.cancel_read_buffer();
-#ifdef HAL_KINEMATICS // needed when kinematics algorithm segments long jog distances (as it blocks reading from input stream)
+#ifdef KINEMATICS_API // needed when kinematics algorithm segments long jog distances (as it blocks reading from input stream)
             if (sys.state & STATE_JOG) // Block all other states from invoking motion cancel.
                 system_set_exec_state_flag(EXEC_MOTION_CANCEL);
 #endif

@@ -1,7 +1,7 @@
 /*
   hal.h - HAL (Hardware Abstraction Layer) entry points structure and capabilities type
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2016-2019 Terje Io
 
@@ -69,15 +69,6 @@ typedef union {
 typedef void (*stream_write_ptr)(const char *s);
 typedef axes_signals_t (*limits_get_state_ptr)(void);
 
-typedef struct {
-    void (*convert_array_steps_to_mpos)(float *position, int32_t *steps);
-    void (*plan_target_to_steps) (int32_t *target_steps, float *target);
-    bool (*segment_line) (float *target, plan_line_data_t *pl_data, bool init);
-    uint_fast8_t (*limits_get_axis_mask)(uint_fast8_t idx);
-    void (*limits_set_target_pos)(uint_fast8_t idx);
-    void (*limits_set_machine_positions)(axes_signals_t cycle);
-} HAL_kinematics_t;
-
 /* TODO: add to HAL so that a different formatting (xml, json etc) of reports may be implemented by driver? */
 typedef struct {
     void (*report_status_message)(status_code_t status_code);
@@ -139,7 +130,6 @@ typedef struct HAL {
     void (*stepper_cycles_per_tick)(uint32_t cycles_per_tick);
     void (*stepper_pulse_start)(stepper_t *stepper);
 
-
     io_stream_t stream; // pointers to current I/O stream handlers
 
     void (*set_bits_atomic)(volatile uint_fast16_t *value, uint_fast16_t bits);
@@ -173,10 +163,6 @@ typedef struct HAL {
     void (*spindle_reset_data)(void);
 #ifdef DEBUGOUT
     void (*debug_out)(bool on);
-#endif
-
-#ifdef HAL_KINEMATICS
-    HAL_kinematics_t kinematics;
 #endif
 
     eeprom_io_t eeprom;
