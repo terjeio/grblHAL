@@ -90,7 +90,9 @@ typedef struct {
 static pwm_ramp_t pwm_ramp;
 #endif
 
+#ifdef DRIVER_SETTINGS 
 driver_settings_t driver_settings;
+#endif
 
 typedef struct {
     uint8_t pin;
@@ -911,7 +913,8 @@ static bool driver_setup (settings_t *settings)
 	/********************************************************
 	 * Read driver specific setting from persistent storage *
 	 ********************************************************/
-
+	 
+#ifdef DRIVER_SETTINGS
 	if(hal.eeprom.type != EEPROM_None) {
 		if(!hal.eeprom.memcpy_from_with_checksum((uint8_t *)&driver_settings, hal.eeprom.driver_area.address, sizeof(driver_settings)))
 			hal.driver_settings_restore(SETTINGS_RESTORE_DRIVER_PARAMETERS);
@@ -919,6 +922,7 @@ static bool driver_setup (settings_t *settings)
 		  driver_settings.trinamic.driver_enable.mask = AXES_BITMASK;
 		#endif
 	}
+#endif
 
     /******************
      *  Stepper init  *
@@ -1036,6 +1040,8 @@ static bool driver_setup (settings_t *settings)
     return IOInitDone;
 }
 
+#ifdef DRIVER_SETTINGS
+
 static bool driver_setting (uint_fast16_t param, float value, char *svalue)
 {
 	bool claimed = false;
@@ -1079,8 +1085,6 @@ static bool driver_setting (uint_fast16_t param, float value, char *svalue)
 
     return claimed;
 }
-
-#ifdef DRIVER_SETTINGS
 
 static void report_string_setting (uint8_t setting, char *value)
 {

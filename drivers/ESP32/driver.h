@@ -5,7 +5,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2018 Terje Io
+  Copyright (c) 2018-2019 Terje Io
   Copyright (c) 2011-2015 Sungeun K. Jeon
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -76,6 +76,8 @@ typedef struct {
 #endif
 } driver_settings_t;
 
+extern driver_settings_t driver_settings;
+
 #endif
 
 typedef struct {
@@ -83,7 +85,6 @@ typedef struct {
 	void *params;
 } i2c_task_t;
 
-extern driver_settings_t driver_settings;
 
 #if CNC_BOOSTERPACK
 

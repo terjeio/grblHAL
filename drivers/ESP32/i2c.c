@@ -1,9 +1,7 @@
 /*
-  i2c.c - I2C bridge interface for Trinamic TMC2130 stepper drivers
+  i2c.c - I2C support for keypad and Trinamic plugins
 
-  For Texas Instruments SimpleLink ARM processors/LaunchPads
-
-  Part of Grbl
+  Part of GrblHAL driver for ESP32
 
   Copyright (c) 2018-2019 Terje Io
 

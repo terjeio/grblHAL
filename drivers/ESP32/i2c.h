@@ -1,9 +1,7 @@
 /*
-  i2c.h - I2C interface for Trinamic TMC2130 stepper drivers
+  i2c.h - I2C support for keypad and Trinamic plugins
 
-  For Texas Instruments MSP432 LaunchPad
-
-  Part of Grbl
+  Part of GrblHAL driver for ESP32
 
   Copyright (c) 2018-2019 Terje Io
 
