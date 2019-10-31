@@ -301,6 +301,8 @@ void report_float_setting (setting_type_t n, float val, uint8_t n_decimal)
 
 void report_grbl_settings (void)
 {
+    uint_fast8_t idx;
+
     // Print Grbl settings.
     report_uint_setting(Setting_PulseMicroseconds, settings.steppers.pulse_microseconds);
     report_uint_setting(Setting_StepperIdleLockTime, settings.steppers.idle_lock_time);
@@ -316,6 +318,9 @@ void report_grbl_settings (void)
     report_float_setting(Setting_JunctionDeviation, settings.junction_deviation, N_DECIMAL_SETTINGVALUE);
     report_float_setting(Setting_ArcTolerance, settings.arc_tolerance, N_DECIMAL_SETTINGVALUE);
     report_uint_setting(Setting_ReportInches, settings.flags.report_inches);
+
+#if COMPATIBILITY_LEVEL <= 1
+
     report_uint_setting(Setting_ControlInvertMask, settings.control_invert.mask);
     report_uint_setting(Setting_CoolantInvertMask, settings.coolant_invert.mask);
     report_uint_setting(Setting_SpindleInvertMask, settings.spindle.invert.mask);
@@ -323,6 +328,9 @@ void report_grbl_settings (void)
     report_uint_setting(Setting_LimitPullUpDisableMask, settings.limits.disable_pullup.mask);
     if(hal.probe_configure_invert_mask)
         report_uint_setting(Setting_ProbePullUpDisable, settings.flags.disable_probe_pullup);
+
+#endif
+
     report_uint_setting(Setting_SoftLimitsEnable, settings.limits.flags.soft_enabled);
     report_uint_setting(Setting_HardLimitsEnable, ((settings.limits.flags.hard_enabled & bit(0)) ? bit(0) | (settings.limits.flags.check_at_init ? bit(1) : 0) : 0));
     report_uint_setting(Setting_HomingEnable, settings.homing.flags.value | (settings.limits.flags.two_switches ? bit(4) : 0));
@@ -331,11 +339,20 @@ void report_grbl_settings (void)
     report_float_setting(Setting_HomingSeekRate, settings.homing.seek_rate, N_DECIMAL_SETTINGVALUE);
     report_uint_setting(Setting_HomingDebounceDelay, settings.homing.debounce_delay);
     report_float_setting(Setting_HomingPulloff, settings.homing.pulloff, N_DECIMAL_SETTINGVALUE);
+
+#if COMPATIBILITY_LEVEL <= 1
+
     report_float_setting(Setting_G73Retract, settings.g73_retract, N_DECIMAL_SETTINGVALUE);
     report_uint_setting(Setting_PulseDelayMicroseconds, settings.steppers.pulse_delay_microseconds);
+
+#endif
+
     report_float_setting(Setting_RpmMax, settings.spindle.rpm_max, N_DECIMAL_RPMVALUE);
     report_float_setting(Setting_RpmMin, settings.spindle.rpm_min, N_DECIMAL_RPMVALUE);
     report_uint_setting(Setting_Mode, settings.flags.laser_mode ? 1 : (settings.flags.lathe_mode ? 2 : 0));
+
+#if COMPATIBILITY_LEVEL <= 1
+
     report_float_setting(Setting_PWMFreq, settings.spindle.pwm_freq, N_DECIMAL_SETTINGVALUE);
 //    report_float_setting(Setting_PWMOffValue, settings.spindle.pwm_off_value, N_DECIMAL_SETTINGVALUE);
     report_float_setting(Setting_PWMMinValue, settings.spindle.pwm_min_value, N_DECIMAL_SETTINGVALUE);
@@ -351,8 +368,6 @@ void report_grbl_settings (void)
 
     report_uint_setting(Setting_HomingLocateCycles, settings.homing.locate_cycles);
 
-    uint_fast8_t idx;
-
     for(idx = 0 ; idx < N_AXIS ; idx++)
         report_uint_setting((setting_type_t)(Setting_HomingCycle_1 + idx), settings.homing.cycle[idx].mask);
 
@@ -361,8 +376,12 @@ void report_grbl_settings (void)
     report_float_setting(Setting_ParkingTarget, settings.parking.target, N_DECIMAL_SETTINGVALUE);
     report_float_setting(Setting_ParkingFastRate, settings.parking.rate, N_DECIMAL_SETTINGVALUE);
 
+#endif
+
     if(hal.driver_settings_report)
         hal.driver_settings_report(false, (axis_setting_type_t)0, 0);
+
+#if COMPATIBILITY_LEVEL <= 1
 
     report_uint_setting(Setting_RestoreOverrides, settings.flags.restore_overrides);
     report_uint_setting(Setting_IgnoreDoorWhenIdle, settings.flags.safety_door_ignore_when_idle);
@@ -372,6 +391,8 @@ void report_grbl_settings (void)
     report_uint_setting(Setting_ProbingFeedOverride, settings.flags.allow_probing_feed_override);
 
     report_uint_setting(Settings_Stream, (uint32_t)settings.stream);
+
+#endif
 
     if(hal.driver_cap.spindle_pid) {
         report_float_setting(Setting_SpindlePGain, settings.spindle.pid.p_gain, N_DECIMAL_SETTINGVALUE);
@@ -540,6 +561,8 @@ void report_gcode_modes (void)
     if(settings.flags.lathe_mode && hal.driver_cap.variable_spindle)
         hal.stream.write(gc_state.modal.spindle_rpm_mode == SpindleSpeedMode_RPM ? " G97" : " G96");
 
+#if COMPATIBILITY_LEVEL < 10
+
     hal.stream.write(gc_state.canned.retract_mode == CCRetractMode_RPos ? " G99" : " G98");
 
     hal.stream.write(gc_state.modal.scaling_active ? " G51" : " G50");
@@ -549,6 +572,8 @@ void report_gcode_modes (void)
         hal.stream.write(":");
         hal.stream.write(buf);
     }
+
+#endif
 
     if (gc_state.modal.program_flow) {
 

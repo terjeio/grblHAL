@@ -105,7 +105,7 @@ typedef enum {
     ModalGroup_G2,      // [G17,G18,G19] Plane selection
     ModalGroup_G3,      // [G90,G91] Distance mode
     ModalGroup_G4,      // [G91.1] Arc IJK distance mode
-    ModalGroup_G5,      // [G93,G94] Feed rate mode
+    ModalGroup_G5,      // [G93,G94,G95] Feed rate mode
     ModalGroup_G6,      // [G20,G21] Units
     ModalGroup_G7,      // [G40] Cutter radius compensation mode. G41/42 NOT SUPPORTED.
     ModalGroup_G8,      // [G43,G43.1,G49] Tool length offset

@@ -170,6 +170,9 @@ bool protocol_main_loop(bool cold_start)
                         report_alarm_message(Alarm_LimitsEngaged);
                         hal.report.feedback_message(Message_CheckLimits);
                     }
+                } else if (line[0] == '[' && hal.user_command_execute) {
+                    gcode_error = false;
+                    gc_state.last_error = hal.user_command_execute(line);
                 } else if (sys.state & (STATE_ALARM|STATE_ESTOP|STATE_JOG)) // Everything else is gcode. Block if in alarm, eStop or jog mode.
                     gc_state.last_error = Status_SystemGClock;
                 else if(!gcode_error) { // Parse and execute g-code block.

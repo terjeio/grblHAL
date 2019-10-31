@@ -123,6 +123,12 @@ int grbl_enter (void)
 	hal.stream.suspend_read = NULL;
 #endif
 
+#if COMPATIBILITY_LEVEL > 1
+    hal.driver_setting = NULL;
+	hal.driver_settings_report = NULL;
+	hal.driver_settings_restore = NULL;
+#endif
+
   #ifdef EMULATE_EEPROM
 	eeprom_emu_init();
   #endif

@@ -146,6 +146,7 @@ typedef struct HAL {
     user_mcode_t (*user_mcode_check)(user_mcode_t mcode);
     status_code_t (*user_mcode_validate)(parser_block_t *gc_block, uint32_t *value_words);
     void (*user_mcode_execute)(uint_fast16_t state, parser_block_t *gc_block);
+    status_code_t (*user_command_execute)(char *line);
     void (*driver_rt_command_execute)(uint8_t cmd);
     void (*driver_rt_report)(stream_write_ptr stream_write);
     void (*driver_feedback_message)(stream_write_ptr stream_write);

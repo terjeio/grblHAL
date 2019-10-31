@@ -54,7 +54,11 @@
 #define EEPROM_ADDR_BUILD_INFO     942U
 
 // Define persistent storage address indexing for coordinate parameters
+#if COMPATIBILITY_LEVEL <= 1
 #define N_COORDINATE_SYSTEM 9  // Number of supported work coordinate systems (from index 1)
+#else
+#define N_COORDINATE_SYSTEM 6  // Number of supported work coordinate systems (from index 1)
+#endif
 #define SETTING_INDEX_NCOORD N_COORDINATE_SYSTEM+2 // Total number of coordinate system stored (from index 0)
 // NOTE: Work coordinate indices are (0=G54, 1=G55, ... , 6=G59)
 #define SETTING_INDEX_G28    N_COORDINATE_SYSTEM    // Home position 1
@@ -100,12 +104,14 @@ typedef enum {
     Setting_JunctionDeviation = 11,
     Setting_ArcTolerance = 12,
     Setting_ReportInches = 13,
+#if COMPATIBILITY_LEVEL <= 1
     Setting_ControlInvertMask = 14,
     Setting_CoolantInvertMask = 15,
     Setting_SpindleInvertMask = 16,
     Setting_ControlPullUpDisableMask = 17,
     Setting_LimitPullUpDisableMask = 18,
     Setting_ProbePullUpDisable = 19,
+#endif
     Setting_SoftLimitsEnable = 20,
     Setting_HardLimitsEnable = 21,
     Setting_HomingEnable = 22,
@@ -114,11 +120,14 @@ typedef enum {
     Setting_HomingSeekRate = 25,
     Setting_HomingDebounceDelay = 26,
     Setting_HomingPulloff = 27,
+#if COMPATIBILITY_LEVEL <= 1
     Setting_G73Retract = 28,
     Setting_PulseDelayMicroseconds = 29,
+#endif
     Setting_RpmMax = 30,
     Setting_RpmMin = 31,
     Setting_Mode = 32,
+#if COMPATIBILITY_LEVEL <= 1 // TODO: 33-36 is defined in grbl-LPC, add separate level or always include?
     Setting_PWMFreq = 33,
     Setting_PWMOffValue = 34,
     Setting_PWMMinValue = 35,
@@ -158,6 +167,7 @@ typedef enum {
     Setting_ProbingFeedOverride = 65,
 
     Settings_Stream = 70,
+#endif
 
 // Optional driver implemented settings for additional streams
     Settings_WiFiSSID = 71,

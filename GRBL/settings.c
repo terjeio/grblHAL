@@ -352,8 +352,12 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
     if (svalue[set_idx] != '\0')
         return Status_InvalidStatement;
 
+#if COMPATIBILITY_LEVEL <= 1
+
     if (value < 0.0f && setting != Setting_ParkingTarget)
         return Status_NegativeValue;
+
+#endif
 
     if (setting >= Setting_AxisSettingsBase && setting <= Setting_AxisSettingsMax) {
         // Store axis configuration. Axis numbering sequence set by AXIS_SETTING defines.
@@ -417,11 +421,15 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 settings.steppers.pulse_microseconds = int_value;
                 break;
 
+#if COMPATIBILITY_LEVEL <= 1
+
             case Setting_PulseDelayMicroseconds:
                 if(int_value > 0 && !hal.driver_cap.step_pulse_delay)
                     return Status_SettingDisabled;
                 settings.steppers.pulse_delay_microseconds = int_value;
                 break;
+
+#endif
 
             case Setting_StepperIdleLockTime:
                 settings.steppers.idle_lock_time = int_value;
@@ -452,8 +460,10 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
 
             case Setting_StatusReportMask:
                 settings.status_report.mask = int_value & 0xFF;
+#if COMPATIBILITY_LEVEL <= 1
                 settings.flags.force_buffer_sync_on_wco_change = bit_istrue(int_value, bit(8));
                 settings.flags.report_alarm_substate = bit_istrue(int_value, bit(9));
+#endif
                 break;
 
             case Setting_JunctionDeviation:
@@ -469,6 +479,8 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 report_init();
                 system_flag_wco_change(); // Make sure WCO is immediately updated.
                 break;
+
+#if COMPATIBILITY_LEVEL <= 1
 
             case Setting_ControlInvertMask:
                 settings.control_invert.mask = int_value;
@@ -500,22 +512,28 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 settings.flags.disable_probe_pullup = int_value != 0;
                 break;
 
+#endif
+
             case Setting_SoftLimitsEnable:
                 if (int_value && !settings.homing.flags.enabled)
                     return Status_SoftLimitError;
                 settings.limits.flags.soft_enabled = int_value != 0;
                 break;
 
+            case Setting_HardLimitsEnable:
+                settings.limits.flags.hard_enabled = bit_istrue(int_value, bit(0));
+#if COMPATIBILITY_LEVEL <= 1
+                settings.limits.flags.check_at_init = bit_istrue(int_value, bit(1));
+#endif
+                hal.limits_enable(settings.limits.flags.hard_enabled, false); // Change immediately. NOTE: Nice to have but could be problematic later.
+                break;
+
+#if COMPATIBILITY_LEVEL <= 1
+
             case Setting_JogSoftLimited:
                 if (int_value && !settings.homing.flags.enabled)
                     return Status_SoftLimitError;
                 settings.limits.flags.jog_soft_limited = int_value != 0;
-                break;
-
-            case Setting_HardLimitsEnable:
-                settings.limits.flags.hard_enabled = bit_istrue(int_value, bit(0));
-                settings.limits.flags.check_at_init = bit_istrue(int_value, bit(1));
-                hal.limits_enable(settings.limits.flags.hard_enabled, false); // Change immediately. NOTE: Nice to have but could be problematic later.
                 break;
 
             case Setting_RestoreOverrides:
@@ -543,10 +561,16 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 settings.flags.allow_probing_feed_override = int_value != 0;
                 break;
 
+#endif
+
             case Setting_HomingEnable:
                 if (bit_istrue(int_value, bit(0))) {
+#if COMPATIBILITY_LEVEL > 1
+                    settings.homing.flags.enabled = On;
+#else
                     settings.homing.flags.value = int_value & 0x0F;
                     settings.limits.flags.two_switches = bit_istrue(int_value, bit(4));
+#endif
                 } else {
                     settings.homing.flags.value = 0;
                     settings.limits.flags.soft_enabled = Off; // Force disable soft-limits.
@@ -574,6 +598,8 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 settings.homing.pulloff = value;
                 break;
 
+#if COMPATIBILITY_LEVEL <= 1
+
             case Setting_EnableLegacyRTCommands:
                 settings.legacy_rt_commands = value != 0;
                 break;
@@ -596,6 +622,12 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 settings.g73_retract = value;
                 break;
 
+            case Setting_PWMFreq:
+                settings.spindle.pwm_freq = value;
+                break;
+
+#endif
+
             case Setting_RpmMax:
                 settings.spindle.rpm_max = value;
                 break;
@@ -612,19 +644,20 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                         settings.flags.laser_mode = On;
                         settings.flags.lathe_mode = Off;
                         break;
-                    case 2:
+
+#if COMPATIBILITY_LEVEL <= 1
+
+                     case 2:
                         settings.flags.laser_mode = Off;
                         settings.flags.lathe_mode = On;
                         break;
-                    default:
+#endif
+
+                     default:
                         settings.flags.laser_mode = Off;
                         settings.flags.lathe_mode = Off;
                         break;
                 }
-                break;
-
-            case Setting_PWMFreq:
-                settings.spindle.pwm_freq = value;
                 break;
 
 /* disabled for now - no clear use case for this value, and original code handling this is badly implemented (IMO)
@@ -632,6 +665,8 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 settings.spindle.pwm_off_value = value;
                 break;
 */
+#if COMPATIBILITY_LEVEL <= 1
+
             case Setting_ParkingEnable:
                 if (bit_istrue(int_value, bit(0)))
                     settings.parking.flags.value = bit_istrue(int_value, bit(0)) ? (int_value & 0x07) : 0;
@@ -673,6 +708,8 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 settings.spindle.ppr = int_value;
                 break;
 
+#endif
+
             case Setting_SpindlePGain:
                 settings.spindle.pid.p_gain = value;
                 break;
@@ -709,6 +746,8 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 settings.position.pid.i_max_error = value;
                 break;
 
+#if COMPATIBILITY_LEVEL <= 1
+
             case Settings_Stream:
 
                 switch((stream_setting_t)int_value) {
@@ -738,6 +777,8 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
 
                 settings.stream = (stream_setting_t)int_value;
                 break;
+
+#endif
 
             default:
                 if(hal.driver_setting && hal.driver_setting(setting, value, svalue))

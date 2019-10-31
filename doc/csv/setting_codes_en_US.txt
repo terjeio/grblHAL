@@ -1,77 +1,26 @@
 $-Code	 Setting	 Units	Datatype	Data format	Setting Description	Min	Max
-0	Step pulse time	microseconds	integer	#9	Sets time length per step. Minimum 3 microseconds.	3	
-1	Step idle delay	milliseconds	integer	##9	Sets a short hold delay when stopping to let dynamics settle before disabling steppers. Value 255 keeps motors enabled.		255
+0	Step pulse time	microseconds	integer	#0	Sets time length per step. Minimum 3 microseconds.	3	
+1	Step idle delay	milliseconds	integer	##0	Sets a short hold delay when stopping to let dynamics settle before disabling steppers. Value 255 keeps motors enabled.		255
 2	Step pulse invert	mask	bitfield	axes	Inverts the step signals (active low).		
 3	Step direction invert	mask	bitfield	axes	Inverts the direction signals (active low).		
 4	Invert step enable pin	boolean	bitfield	axes	Inverts the stepper driver enable signals  (active low). If the stepper drivers shares the same enable signal only X is used.		
 5	Invert limit pins	mask	bitfield	axes	Inverts the axis limit input signals. 		
 6	Invert probe pin	boolean	bool		Inverts the probe input pin signal.		
-10	Status report options	mask	bitfield	Position in machine coordinate,Buffer state,Line numbers,Feed & speed,Pin state,Work coordinate offset,Overrides,Probe coordinates	Specifies optional data included in status reports.		
+10	Status report options	mask	bitfield	Position in machine coordinate,Buffer state,Line numbers,Feed & speed,Pin state,Work coordinate offset,Overrides,Probe coordinates,Buffer sync on WCO change	Specifies optional data included in status reports.		
 11	Junction deviation	mm	float	#####0.000	Sets how fast Grbl travels through consecutive motions. Lower value slows it down.		
 12	Arc tolerance	mm	float	#####0.000	Sets the G2 and G3 arc tracing accuracy based on radial error. Beware: A very small value may effect performance.		
 13	Report in inches	boolean	bool		Enables inch units when returning any position and rate value that is not a settings value.		
-14	Invert control pins	mask	bitfield	Reset,Feed hold,Cycle start,Safety door	Inverts the control signals  (active low).		
-15	Invert coolant pins	mask	bitfield	Flood,Mist	Inverts the coolant and mist signals  (active low).		
-16	Invert spindle signals	mask	bitfield	Spindle on,Spindle CCW,Invert PWM	Inverts the spindle on, counterclockwise and PWM signals (active low).		
-17	Pullup disable control pins	mask	bitfield	Reset,Feed hold,Cycle start,Safety door	Disable the control signals pullup resistors. Potentially enables pulldown resistor if available.		
-18	Pullup disable limit pins	mask	bitfield	axes	Disable the limit signals pullup resistors. Potentially enables pulldown resistor if available.		
-19	Pullup disable probe pin	boolean	bool		Disable the probe signal pullup resistor. Potentially enables pulldown resistor if available.		
 20	Soft limits enable	boolean	bool		Enables soft limits checks within machine travel and sets alarm when exceeded. Requires homing.		
-21	Hard limits enable	mask	bitfield	Enable,Strict mode	When enabled immediately halts motion and throws an alarm when switch is triggered. In strict mode only homing is possible after switch is triggered. 		
-22	Homing cycle enable	boolean	bool		Enables homing cycle. Requires limit switches on all axes.		
+21	Hard limits enable	boolean	bool		When enabled immediately halts motion and throws an alarm when a limit switch is triggered. 		
+22	Homing enable	boolean	bool		Enables homing cycle. Requires limit switches on axes to be homed.		
 23	Homing direction invert	mask	bitfield	axes	Homing searches for a switch in the positive direction. Set axis bit to search in negative direction.		
 24	Homing locate feed rate	mm/min	float	#####0.000	Feed rate to slowly engage limit switch to determine its location accurately.		
 25	Homing search seek rate	mm/min	float	#####0.000	Seek rate to quickly find the limit switch before the slower locating phase.		
-26	Homing switch debounce delay	milliseconds	integer	##9	Sets a short delay between phases of homing cycle to let a switch debounce.		
+26	Homing switch debounce delay	milliseconds	integer	##0	Sets a short delay between phases of homing cycle to let a switch debounce.		
 27	Homing switch pull-off distance	mm	float	#####0.000	Retract distance after triggering switch to disengage it. Homing will fail if switch isn't cleared.		
-28	G73 Retract distance	mm	float	#####0.000	G73 retract distance (for chip breaking drilling).		
-29	Pulse delay	microseconds	integer	##9	Step pulse delay.	0	10
 30	Maximum spindle speed	RPM	float	#####0.000	Maximum spindle speed. Sets PWM to maximum duty cycle.		
 31	Minimum spindle speed	RPM	float	#####0.000	Minimum spindle speed. Sets PWM to minimum duty cycle.		
-32	Mode of operation	integer	radiobuttons	Normal,Laser mode,Lathe mode	Laser mode: consecutive G1/2/3 commands will not halt when spindle speed is changed.\nLathe mode: allows use of G7, G8, G96 and G97.		
-33	Spindle PWM frequency	Hz	float	#####0	Spindle PWM frequency.		
-34	Spindle PWM off value	percent	float	##0.0	Spindle PWM off value in percent (duty cycle).		100
-35	Spindle PWM min value	percent	float	##0.0	Spindle PWM min value in percent (duty cycle).		100
-36	Spindle PWM max value	percent	float	##0.0	Spindle PWM max value in percent (duty cycle).		100
-37	Steppers deenergize 	mask	bitfield	axes	Specifies which steppers not to disable when stopped.		
-38	Spindle PPR	pulses	integer	###0	Spindle encoder pulses per revolution.		
-39	Enable legacy RT commands	boolean	bool		Enables "normal" processing of ?, ! and ~ characters when part of $-setting or comment. If disabled then they are added to the input string instead.		
-40	Limit jog commands	boolean	bool		Limit jog commands to machine limits for homed axes.		
-43	Homing passes		integer	##9	Number of homing passes. Minimum 1, maximum 128.	1	128
-44	Axes homing, first pass	mask	bitfield	axes	Axes to home in first pass.		
-45	Axes homing, second pass	mask	bitfield	axes	Axes to home in second pass.		
-46	Axes homing,third pass	mask	bitfield	axes	Axes to home in third pass.		
-47	Axes homing, fourth pass	mask	bitfield	axes	Axes to home in fourth pass.		
-48	Axes homing, fifthpass	mask	bitfield	axes	Axes to home in fifth pass.		
-49	Axes homing, sixth pass	mask	bitfield	axes	Axes to home in sixth pass.		
-50	Step jog speed 	mm/min	float	###0.0	Step jogging speed in millimeters per minute.		
-51	Slow jog speed	mm/min	float	###0.0	Slow jogging speed in millimeters per minute.		
-52	Fast jog speed 	mm/min	float	###0.0	Fast jogging speed in millimeters per minut.		
-53	Step jog distance	mm	float	#0.000	Jog distance for single step jogging.		
-54	Slow jog distance	mm	float	###0.0	Jog distance before automatic stop.		
-55	Fast jog distance	mm	float	###0.0	Jog distance before automatic stop.		
-60	Restore overrides		bool		Restore overrides to default values at program end.		
-61	Ignore door when idle		bool		Enable this if it is desirable to open the safety door when in IDLE mode (eg. for jogging).		
-62	Sleep enable		bool		Enable sleep mode. 		
-63	Disable laser		bool		Disable laser during hold. 		
-64	Force init alarm		bool		Starts Grbl in alarm mode after a cold reset.		
-65	Check limits at init		bool		If limit switches are engaged after reset this forces Grbl to start in alarm mode.		
-66	Homing init lock		bool		If homing is enabled, homing init lock sets Grbl into an alarm state upon power up. Clear by performing a homing cycle.		
-70	Stream		integer	9	Input stream source: 0 - serial, 1 - bluetooth, 2 - ethernet, 3 - WiFi	0	3
-71	WiFi SSID		string	x(64)	WiFi SSID.
-72	WiFi Password		string	x(32)	WiFi Password.
-73	WiFi Port		integer	####9	WiFi Port Number listening for incoming connections.	1	65535
-74	Bluetooth device		string	x(32)	Bluetooth device name.
-75	Bluetooth service		string	x(32)	Bluetooth service name.
-80	Spindle P-gain		decimal	###0.000			
-81	Spindle I-gain		decimal	###0.000			
-82	Spindle D-gain		decimal	###0.000			
-84	Spindle PID max error		decimal	###0.000			
-85	Spindle PID max I error		decimal	###0.000	Spindle PID max integrator error			
-90	Spindle sync P-gain		decimal	###0.000			
-91	Spindle sync I-gain		decimal	###0.000			
-92	Spindle sync D-gain		decimal	###0.000			
-95	Spindle sync PID max I error		decimal	###0.000	Spindle sync PID max integrator error.			
+32	Laser mode	boolean	bool		Consecutive G1/2/3 commands will not halt when spindle speed is changed.		
 100	X-axis travel resolution	step/mm	float	#####0.000	X-axis travel resolution in steps per millimeter.		
 101	Y-axis travel resolution	step/mm	float	#####0.000	Y-axis travel resolution in steps per millimeter.		
 102	Z-axis travel resolution	step/mm	float	#####0.000	Z-axis travel resolution in steps per millimeter.		
@@ -96,6 +45,18 @@ $-Code	 Setting	 Units	Datatype	Data format	Setting Description	Min	Max
 133	A-axis maximum travel	mm	float	#####0.000	Maximum A-axis travel distance from homing switch. Determines valid machine space for soft-limits and homing search distances.		
 134	B-axis maximum travel	mm	float	#####0.000	Maximum B-axis travel distance from homing switch. Determines valid machine space for soft-limits and homing search distances.		
 135	C-axis maximum travel	mm	float	#####0.000	Maximum B-axis travel distance from homing switch. Determines valid machine space for soft-limits and homing search distances.		
+140	X-axis motor current	mA	integer	###0	X-axis motor current in mA (RMS).		
+141	Y-axis motor current	mA	integer	###0	X-axis motor current in mA (RMS).		
+142	Z-axis motor current	mA	integer	###0	X-axis motor current in mA (RMS).		
+143	A-axis motor current	mA	integer	###0	X-axis motor current in mA (RMS).		
+144	B-axis motor current	mA	integer	###0	X-axis motor current in mA (RMS).		
+145	C-axis motor current	mA	integer	###0	X-axis motor current in mA (RMS).		
+150	X-axis microsteps	steps	integer	###0	X-axis microsteps per fullstep.		
+151	Y-axis microsteps	steps	integer	###0	X-axis microsteps per fullstep.		
+152	Z-axis microsteps	steps	integer	###0	X-axis microsteps per fullstep.		
+153	A-axis microsteps	steps	integer	###0	X-axis microsteps per fullstep.		
+154	B-axis microsteps	steps	integer	###0	X-axis microsteps per fullstep.		
+155	C-axis microsteps	steps	integer	###0	X-axis microsteps per fullstep.		
 160	X-axis backlash compensation	mm	float	#####0.000	X-axis backlash distance to compensate for.		
 161	Y-axis backlash compensation	mm	float	#####0.000	Y-axis backlash distance to compensate for.		
 162	Z-axis backlash compensation	mm	float	#####0.000	Z-axis backlash distance to compensate for.		

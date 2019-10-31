@@ -28,10 +28,15 @@
 #ifndef _grbl_config_h_
 #define _grbl_config_h_
 
-// Defines compatibility level with the grbl 1.1 protocol, NOT functionality.
-// Additional G- and M-codes are not disabled.
+// Defines compatibility level with the grbl 1.1 protocol.
+// Additional G- and M-codes are not disabled except when level is set to >= 10.
+//  This does not apply to G- and M-codes dependent on driver and/or configuration settings disabled by stting level > 1.
 // Set to 0 for reporting itself as "GrblHAL" with protocol extensions enabled.
-// Set to > 0 disables some extensions (not new settings for now), and reporting itself as "Grbl".
+// Set to 1 to disable some extensions, and for reporting itself as "Grbl".
+// Set to 2 to disable new settings as well, use #define parameters for setting default values.
+//  These can be found in in this file and in defaults.h.
+// Set to 10 to also disable new coordinate system offsets (G59.1 - G59.3) and some $# report extensions.
+// NOTE: if switching to a level > 1 please reset EEPROM with $RST=* after reflashing!
 #define COMPATIBILITY_LEVEL 0
 
 // Used to decorate code run in interrupt context, is used by ESP32 driver

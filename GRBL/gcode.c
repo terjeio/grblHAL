@@ -421,7 +421,7 @@ status_code_t gc_execute_block(char *block, char *message)
                         break;
 
                     case 98: case 99:
-                        word_bit.group = ModalGroup_G11;
+                        word_bit.group = ModalGroup_G10;
                         gc_block.modal.retract_mode = (cc_retract_mode_t)(int_value - 98);
                         break;
 
