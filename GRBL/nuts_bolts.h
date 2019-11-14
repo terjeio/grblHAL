@@ -146,6 +146,9 @@ char *uitoa (uint32_t n);
 // Converts a float variable to string with the specified number of decimal places.
 char *ftoa (float n, uint8_t decimal_places);
 
+// Returns true if float value is a whole number (integer)
+bool isintf (float value);
+
 // Read a floating point value from a string. Line points to the input buffer, char_counter
 // is the indexer pointing to the current character of the line, while float_ptr is
 // a pointer to the result variable. Returns true when it succeeds

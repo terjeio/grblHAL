@@ -32,7 +32,7 @@
 #include "stepper.h"
 #include "eeprom.h"
 
-#define HAL_VERSION 5
+#define HAL_VERSION 6
 
 // driver capabilities, to be set by driver in driver_init(), flags may be cleared after to switch off option
 typedef union {
@@ -92,7 +92,7 @@ typedef struct {
 } report_t;
 
 typedef struct {
-    stream_setting_t type;
+    stream_type_t type;
     uint16_t (*get_rx_buffer_available)(void);
 //    bool (*stream_write)(char c);
     stream_write_ptr write; // write to current I/O stream only
@@ -157,11 +157,13 @@ typedef struct HAL {
     void (*show_message)(const char *msg);
     void (*report_options)(void);
     void (*driver_reset)(void);
-    bool (*driver_setting)(setting_type_t setting, float value, char *svalue);
+    status_code_t (*driver_setting)(setting_type_t setting, float value, char *svalue);
     void (*driver_settings_restore)(uint8_t restore_flag);
-    void (*driver_settings_report)(bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx);
+    void (*driver_settings_report)(setting_type_t setting_type);
+    void (*driver_axis_settings_report)(axis_setting_type_t setting_type, uint8_t axis_idx);
     spindle_data_t (*spindle_get_data)(spindle_data_request_t request);
     void (*spindle_reset_data)(void);
+    void (*state_change_requested)(uint_fast16_t state);
 #ifdef DEBUGOUT
     void (*debug_out)(bool on);
 #endif

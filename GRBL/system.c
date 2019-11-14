@@ -381,7 +381,7 @@ status_code_t system_execute_line (char *line)
                     float parameter;
                     if(!read_float(line, &counter, &parameter))
                         retval = Status_BadNumberFormat;
-                    else if(line[counter++] != '=' || parameter - truncf(parameter) != 0.0f)
+                    else if(!(isintf(parameter) && line[counter++] == '='))
                         retval = Status_InvalidStatement;
                     else
                         retval = settings_store_global_setting((setting_type_t)parameter, &lcline[counter]);

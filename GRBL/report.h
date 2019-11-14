@@ -46,6 +46,7 @@ void report_grbl_help();
 void report_grbl_settings (void);
 void report_uint_setting (setting_type_t n, uint32_t val);
 void report_float_setting (setting_type_t n, float val, uint8_t n_decimal);
+void report_string_setting (setting_type_t n, char *val);
 
 // Prints an echo of the pre-parsed line received right before execution.
 void report_echo_line_received (char *line);

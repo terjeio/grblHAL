@@ -255,6 +255,10 @@ void report_feedback_message(message_code_t message_code)
             hal.stream.write_all("Homing cycle required");
             break;
 
+        case Message_CycleStartToRerun:
+            hal.stream.write_all("Cycle start to rerun job");
+            break;
+
         default:
             if(hal.driver_feedback_message)
                 hal.driver_feedback_message(hal.stream.write_all);
@@ -298,6 +302,11 @@ void report_float_setting (setting_type_t n, float val, uint8_t n_decimal)
     hal.stream.write(appendbuf(2, ftoa(val, n_decimal), "\r\n"));
 }
 
+void report_string_setting (setting_type_t n, char *val)
+{
+    hal.stream.write(appendbuf(3, "$", uitoa((uint32_t)n), "="));
+    hal.stream.write(appendbuf(2, val, "\r\n"));
+}
 
 void report_grbl_settings (void)
 {
@@ -375,14 +384,6 @@ void report_grbl_settings (void)
     report_float_setting(Setting_ParkingPulloutRate, settings.parking.pullout_rate, N_DECIMAL_SETTINGVALUE);
     report_float_setting(Setting_ParkingTarget, settings.parking.target, N_DECIMAL_SETTINGVALUE);
     report_float_setting(Setting_ParkingFastRate, settings.parking.rate, N_DECIMAL_SETTINGVALUE);
-
-#endif
-
-    if(hal.driver_settings_report)
-        hal.driver_settings_report(false, (axis_setting_type_t)0, 0);
-
-#if COMPATIBILITY_LEVEL <= 1
-
     report_uint_setting(Setting_RestoreOverrides, settings.flags.restore_overrides);
     report_uint_setting(Setting_IgnoreDoorWhenIdle, settings.flags.safety_door_ignore_when_idle);
     report_uint_setting(Setting_SleepEnable, settings.flags.sleep_enable);
@@ -390,9 +391,12 @@ void report_grbl_settings (void)
     report_uint_setting(Setting_ForceInitAlarm, settings.flags.force_initialization_alarm);
     report_uint_setting(Setting_ProbingFeedOverride, settings.flags.allow_probing_feed_override);
 
-    report_uint_setting(Settings_Stream, (uint32_t)settings.stream);
-
 #endif
+
+    if(hal.driver_settings_report) {
+    	for(idx = Setting_ProbingFeedOverride + 1; idx < Setting_SpindlePGain; idx++)
+    		hal.driver_settings_report((setting_type_t)idx);
+    }
 
     if(hal.driver_cap.spindle_pid) {
         report_float_setting(Setting_SpindlePGain, settings.spindle.pid.p_gain, N_DECIMAL_SETTINGVALUE);
@@ -441,12 +445,17 @@ void report_grbl_settings (void)
 #endif
 
                 default:
-                    if(hal.driver_settings_report)
-                        hal.driver_settings_report(true, (axis_setting_type_t)set_idx, idx);
+                    if(hal.driver_axis_settings_report)
+                        hal.driver_axis_settings_report((axis_setting_type_t)set_idx, idx);
                     break;
             }
         }
         val += AXIS_SETTINGS_INCREMENT;
+    }
+
+    if(hal.driver_settings_report) {
+    	for(idx = Setting_AxisSettingsMax + 1; idx <= Setting_SettingsMax; idx++)
+    		hal.driver_settings_report((setting_type_t)idx);
     }
 }
 

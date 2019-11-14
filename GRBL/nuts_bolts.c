@@ -2,6 +2,7 @@
   nuts_bolts.c - Shared functions
   Part of Grbl
 
+  Copyright (c) 2017-2019 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -198,6 +199,11 @@ bool read_float (char *line, uint_fast8_t *char_counter, float *float_ptr)
     return true;
 }
 
+// Returns true if float value is a whole number (integer)
+bool isintf (float value)
+{
+    return value != NAN && fabsf(value - truncf(value)) < 0.001f;
+}
 
 // Non-blocking delay function used for general operation and suspend features.
 void delay_sec (float seconds, delaymode_t mode)

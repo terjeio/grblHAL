@@ -166,16 +166,19 @@ typedef enum {
     Setting_ForceInitAlarm = 64,
     Setting_ProbingFeedOverride = 65,
 
-    Settings_Stream = 70,
 #endif
 
 // Optional driver implemented settings for additional streams
-    Settings_WiFiSSID = 71,
-    Settings_WiFiPassword = 72,
-    Settings_WiFiPort = 73,
-    Settings_BlueToothDeviceName = 74,
-    Settings_BlueToothServiceName = 75,
-// 75-79 reserved for streams use
+    Setting_NetworkServices = 70,
+    Setting_BlueToothDeviceName = 71,
+    Setting_BlueToothServiceName = 72,
+    Setting_WifiMode = 73,
+    Setting_WiFi_STA_SSID = 74,
+    Setting_WiFi_STA_Password = 75,
+    Setting_WiFi_AP_SSID = 76,
+    Setting_WiFi_AP_Password = 77,
+    Setting_Wifi_AP_Country = 78,
+    Setting_Wifi_AP_Channel = 79,
 //
 
 // Optional settings for closed loop spindle speed control
@@ -198,11 +201,45 @@ typedef enum {
 //
 
     Setting_AxisSettingsBase = 100, // NOTE: Reserving settings values >= 100 for axis settings. Up to 255.
-    Setting_AxisSettingsMax = 255
+    Setting_AxisSettingsMax = 255,
 
 // Optional driver implemented settings
-    ,Setting_TrinamicDriver = 256,
-    Setting_TrinamicHoming = 257
+    Setting_TrinamicDriver = 256,
+    Setting_TrinamicHoming = 257,
+
+	// Normally used for Ethernet or WiFi Station
+	Setting_Hostname = 300,
+	Setting_IpAddress = 301,
+	Setting_Gateway = 302,
+	Setting_NetMask = 303,
+	Setting_IpMode = 304,
+    Setting_TelnetPort = 305,
+    Setting_HttpPort = 306,
+    Setting_WebSocketPort = 307,
+
+	// Normally used for WiFi Access Point
+	Setting_Hostname2 = 310,
+	Setting_IpAddress2 = 311,
+	Setting_Gateway2 = 312,
+	Setting_NetMask2 = 313,
+	Setting_IpMode2 = 314,
+    Setting_TelnetPort2 = 315,
+    Setting_HttpPort2 = 316,
+    Setting_WebSocketPort2 = 317,
+
+	Setting_Hostname3 = 320,
+	Setting_IpAddress3 = 321,
+	Setting_Gateway3 = 322,
+	Setting_NetMask3 = 323,
+	Setting_IpMode3 = 324,
+    Setting_TelnetPort3 = 325,
+    Setting_HttpPort3 = 326,
+    Setting_WebSocketPort3 = 327,
+
+    Setting_AdminPassword = 330,
+    Setting_UserPassword = 331,
+
+	Setting_SettingsMax
 //
 } setting_type_t;
 
@@ -223,12 +260,12 @@ typedef enum {
 } axis_setting_type_t;
 
 typedef enum {
-    StreamSetting_Serial = 0,
-    StreamSetting_Bluetooth,
-    StreamSetting_Ethernet,
-    StreamSetting_WiFi,
-    StreamSetting_SDCard
-} stream_setting_t;
+    StreamType_Serial = 0,
+    StreamType_Bluetooth,
+    StreamType_Telnet,
+    StreamType_WebSocket,
+    StreamType_SDCard
+} stream_type_t;
 
 typedef union {
     uint16_t value;
@@ -387,14 +424,14 @@ typedef struct {
     stepper_settings_t steppers;
     reportmask_t status_report; // Mask to indicate desired report data.
     settingflags_t flags;  // Contains default boolean settings
-    stream_setting_t stream;
+    stream_type_t stream; // deprecated
     homing_settings_t homing;
     limit_settings_t limits;
     parking_settings_t parking;
     position_pid_t position; // Used for synchronized motion
 } settings_t;
 
-// Setting structs that may be used by driver
+// Setting structs that may be used by drivers
 
 typedef struct {
     float fast_speed;
@@ -405,18 +442,67 @@ typedef struct {
     float step_distance;
 } jog_settings_t;
 
+typedef enum {
+	IpMode_Static = 0,
+	IpMode_DHCP,
+    IpMode_AutoIP
+} ip_mode_t;
+
+typedef union {
+    uint8_t mask;
+    struct {
+        uint8_t telnet     :1,
+                websocket  :1,
+                http       :1,
+                mdns       :1,
+                ssdp       :1,
+                unassigned :3;
+    };
+} network_services_t;
+
+typedef char ssid_t[65];
+typedef char password_t[33];
+typedef char hostname_t[33];
+
 typedef struct {
-    char ssid[65];
-    char password[33];
-    uint16_t port;
-} wifi_settings_t;
+    char ip[16];
+    char gateway[16];
+    char mask[16];
+    hostname_t hostname;
+    uint16_t telnet_port;
+    uint16_t websocket_port;
+    uint16_t http_port;
+    ip_mode_t ip_mode;
+    network_services_t services;
+} network_settings_t;
+
+typedef enum {
+	WiFiMode_NULL = 0,
+	WiFiMode_STA,
+	WiFiMode_AP,
+	WiFiMode_APSTA
+} grbl_wifi_mode_t;
+
+typedef struct {
+	ssid_t ssid;
+	password_t password;
+    char country[4];
+    uint8_t channel;
+    network_settings_t network;
+} wifi_ap_settings_t;
+
+typedef struct {
+	ssid_t ssid;
+	password_t password;
+    network_settings_t network;
+} wifi_sta_settings_t;
 
 typedef struct {
     char device_name[33];
     char service_name[33];
 } bluetooth_settings_t;
 
-// End setting structs that may be used by driver
+// End of setting structs that may be used by drivers
 
 extern settings_t settings;
 

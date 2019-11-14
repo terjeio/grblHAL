@@ -28,7 +28,7 @@ const settings_t defaults = {
 
     .version = SETTINGS_VERSION,
 
-    .stream = (stream_setting_t)DEFAULT_STREAM,
+    .stream = (stream_type_t)DEFAULT_STREAM, // deprecated, no longer used - kept for now to avoid triggering EEPROM reset
     .junction_deviation = DEFAULT_JUNCTION_DEVIATION,
     .arc_tolerance = DEFAULT_ARC_TOLERANCE,
     .g73_retract = DEFAULT_G73_RETRACT,
@@ -275,30 +275,6 @@ void settings_restore (uint8_t restore_flag) {
 
     if (restore_flag & SETTINGS_RESTORE_DEFAULTS) {
         memcpy(&settings, &defaults, sizeof(settings_t));
-
-        // Sanity check for default stream assignment
-        if(settings.stream != StreamSetting_Serial)
-          switch(settings.stream) {
-
-            case StreamSetting_Bluetooth:
-                if(!hal.driver_cap.bluetooth)
-                    settings.stream = StreamSetting_Serial;
-                break;
-
-            case StreamSetting_Ethernet:
-                if(!hal.driver_cap.ethernet)
-                    settings.stream = StreamSetting_Serial;
-                break;
-
-            case StreamSetting_WiFi:
-                if(!hal.driver_cap.wifi)
-                    settings.stream = StreamSetting_Serial;
-                break;
-
-            default:
-                settings.stream = StreamSetting_Serial;
-        }
-
         write_global_settings();
     }
 
@@ -346,11 +322,13 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
     uint_fast8_t set_idx = 0;
     float value;
 
-    if (!read_float(svalue, &set_idx, &value))
-        return hal.driver_setting && hal.driver_setting(setting, NAN, svalue) ? Status_OK : Status_BadNumberFormat;
-
-    if (svalue[set_idx] != '\0')
-        return Status_InvalidStatement;
+    if (!read_float(svalue, &set_idx, &value)) {
+		status_code_t status;
+		if(hal.driver_setting && (status = hal.driver_setting(setting, NAN, svalue)) != Status_Unhandled)
+			return status;
+		else
+			return Status_BadNumberFormat;
+	}
 
 #if COMPATIBILITY_LEVEL <= 1
 
@@ -540,7 +518,7 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 settings.flags.restore_overrides = int_value != 0;
                 break;
 
-           case Setting_IgnoreDoorWhenIdle:
+            case Setting_IgnoreDoorWhenIdle:
                 settings.flags.safety_door_ignore_when_idle = int_value != 0;
                 break;
 
@@ -746,43 +724,10 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 settings.position.pid.i_max_error = value;
                 break;
 
-#if COMPATIBILITY_LEVEL <= 1
-
-            case Settings_Stream:
-
-                switch((stream_setting_t)int_value) {
-
-                    case StreamSetting_Serial:
-                        // Always available?
-                        break;
-
-                    case StreamSetting_Bluetooth:
-                        if(!hal.driver_cap.bluetooth)
-                            return Status_InvalidStatement;
-                        break;
-
-                    case StreamSetting_Ethernet:
-                        if(!hal.driver_cap.ethernet)
-                            return Status_InvalidStatement;
-                        break;
-
-                    case StreamSetting_WiFi:
-                        if(!hal.driver_cap.wifi)
-                            return Status_InvalidStatement;
-                        break;
-
-                    default:
-                        return Status_InvalidStatement;
-                }
-
-                settings.stream = (stream_setting_t)int_value;
-                break;
-
-#endif
-
-            default:
-                if(hal.driver_setting && hal.driver_setting(setting, value, svalue))
-                    return Status_OK;
+            default:;
+            	status_code_t status;
+                if(hal.driver_setting && (status = hal.driver_setting(setting, value, svalue)) != Status_Unhandled)
+                    return status;
                 else
                     return Status_InvalidStatement;
         }

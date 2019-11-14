@@ -127,91 +127,96 @@ void update_state (uint_fast16_t rt_exec)
 
 void set_state (uint_fast16_t new_state)
 {
-    if(new_state != sys.state)
-      switch(new_state) {    // Set up new state and handler
+    if(new_state != sys.state) {
 
-        case STATE_IDLE:
-            sys.suspend = false;        // Break suspend state.
-            sys.step_control.flags = 0; // Restore step control to normal operation.
-            sys.parking_state = Parking_DoorClosed;
-            sys.holding_state = Hold_NotHolding;
-            sys.state = pending_state = new_state;
-            stateHandler = state_idle;
-            break;
+        switch(new_state) {    // Set up new state and handler
 
-        case STATE_CYCLE:
-            if(sys.state == STATE_IDLE) {
-                // Start cycle only if queued motions exist in planner buffer and the motion is not canceled.
-                plan_block_t *block;
-                if ((block = plan_get_current_block())) {
-                    sys.state = new_state;
-                    sys.steppers_deenergize = false;    // Cancel stepper deenergize if pending.
-                    st_prep_buffer();                   // Initialize step segment buffer before beginning cycle.
-                    if(block->condition.spindle.synchronized) {
+            case STATE_IDLE:
+                sys.suspend = false;        // Break suspend state.
+                sys.step_control.flags = 0; // Restore step control to normal operation.
+                sys.parking_state = Parking_DoorClosed;
+                sys.holding_state = Hold_NotHolding;
+                sys.state = pending_state = new_state;
+                stateHandler = state_idle;
+                break;
 
-                        if(hal.spindle_reset_data)
-                            hal.spindle_reset_data();
+            case STATE_CYCLE:
+                if(sys.state == STATE_IDLE) {
+                    // Start cycle only if queued motions exist in planner buffer and the motion is not canceled.
+                    plan_block_t *block;
+                    if ((block = plan_get_current_block())) {
+                        sys.state = new_state;
+                        sys.steppers_deenergize = false;    // Cancel stepper deenergize if pending.
+                        st_prep_buffer();                   // Initialize step segment buffer before beginning cycle.
+                        if(block->condition.spindle.synchronized) {
 
-                        uint32_t index = hal.spindle_get_data(SpindleData_Counters).index_count + 2;
+                            if(hal.spindle_reset_data)
+                                hal.spindle_reset_data();
 
-                        while(index != hal.spindle_get_data(SpindleData_Counters).index_count); // check for abort in this loop?
+                            uint32_t index = hal.spindle_get_data(SpindleData_Counters).index_count + 2;
 
+                            while(index != hal.spindle_get_data(SpindleData_Counters).index_count); // check for abort in this loop?
+
+                        }
+                        st_wake_up();
+                        stateHandler = state_cycle;
                     }
-                    st_wake_up();
-                    stateHandler = state_cycle;
                 }
-            }
-            break;
+                break;
 
-        case STATE_JOG:
-            if(sys.state == STATE_TOOL_CHANGE)
-                pending_state = STATE_TOOL_CHANGE;
-            sys.state = new_state;
-            stateHandler = state_cycle;
-            break;
-
-        case STATE_TOOL_CHANGE:
-            sys.state = new_state;
-            stateHandler = state_await_toolchanged;
-            break;
-
-        case STATE_HOLD:
-            if(sys.override.control.sync && sys.override.control.feed_hold_disable)
-                sys.flags.feed_hold_pending = On;
-            if(!((sys.state & STATE_JOG) || sys.override.control.feed_hold_disable)) {
-                if(!initiate_hold(new_state)) {
-                    sys.holding_state = Hold_Complete;
-                    stateHandler = state_await_resume;
-                }
+            case STATE_JOG:
+                if(sys.state == STATE_TOOL_CHANGE)
+                    pending_state = STATE_TOOL_CHANGE;
                 sys.state = new_state;
-                sys.flags.feed_hold_pending = Off;
-            }
-            break;
+                stateHandler = state_cycle;
+                break;
 
-        case STATE_SAFETY_DOOR:
-            if((sys.state & (STATE_ALARM|STATE_ESTOP|STATE_SLEEP|STATE_CHECK_MODE)))
-                return;
-            hal.report.feedback_message(Message_SafetyDoorAjar);
-            // no break
-        case STATE_SLEEP:
-            sys.parking_state = Parking_Retracting;
-            if(!initiate_hold(new_state)) {
-                if(pending_state != new_state) {
+            case STATE_TOOL_CHANGE:
+                sys.state = new_state;
+                stateHandler = state_await_toolchanged;
+                break;
+
+            case STATE_HOLD:
+                if(sys.override.control.sync && sys.override.control.feed_hold_disable)
+                    sys.flags.feed_hold_pending = On;
+                if(!((sys.state & STATE_JOG) || sys.override.control.feed_hold_disable)) {
+                    if(!initiate_hold(new_state)) {
+                        sys.holding_state = Hold_Complete;
+                        stateHandler = state_await_resume;
+                    }
                     sys.state = new_state;
-                    state_await_hold(EXEC_CYCLE_COMPLETE); // "Simulate" a cycle stop
+                    sys.flags.feed_hold_pending = Off;
                 }
-            } else
-                sys.state = new_state;
-            break;
+                break;
 
-        case STATE_ALARM:
-        case STATE_ESTOP:
-        case STATE_HOMING:
-        case STATE_CHECK_MODE:
-            sys.state = new_state;
-            sys.suspend = false;
-            stateHandler = state_noop;
-            break;
+            case STATE_SAFETY_DOOR:
+                if((sys.state & (STATE_ALARM|STATE_ESTOP|STATE_SLEEP|STATE_CHECK_MODE)))
+                    return;
+                hal.report.feedback_message(Message_SafetyDoorAjar);
+                // no break
+            case STATE_SLEEP:
+                sys.parking_state = Parking_Retracting;
+                if(!initiate_hold(new_state)) {
+                    if(pending_state != new_state) {
+                        sys.state = new_state;
+                        state_await_hold(EXEC_CYCLE_COMPLETE); // "Simulate" a cycle stop
+                    }
+                } else
+                    sys.state = new_state;
+                break;
+
+            case STATE_ALARM:
+            case STATE_ESTOP:
+            case STATE_HOMING:
+            case STATE_CHECK_MODE:
+                sys.state = new_state;
+                sys.suspend = false;
+                stateHandler = state_noop;
+                break;
+        }
+
+        if(hal.state_change_requested)
+            hal.state_change_requested(new_state);
     }
 }
 

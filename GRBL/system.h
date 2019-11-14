@@ -73,7 +73,9 @@ typedef enum {
     Message_SpindleRestore = 10,
     Message_SleepMode = 11,
     Message_EStop = 12,
-    Message_HomingCycleRequired = 13
+    Message_HomingCycleRequired = 13,
+    Message_CycleStartToRerun = 14,
+    Message_NextMessage // Next unassigned message number
 } message_code_t;
 
 // Alarm executor codes. Valid values (1-255). Zero is reserved.
