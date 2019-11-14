@@ -347,7 +347,7 @@ static err_t streamReceive (void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_
             streamSession->pcbConnect = NULL;
             streamSession->state = TCPState_Listen;
 
-            selectStream(StreamSetting_Serial);
+            selectStream(StreamType_Serial);
         }
     }
 
@@ -394,8 +394,7 @@ static err_t TCPStreamAccept (void *arg, struct tcp_pcb *pcb, err_t err)
     tcp_poll(pcb, streamPoll, 1000 / TCP_SLOW_INTERVAL);
     tcp_sent(pcb, streamSent);
 
-    selectStream(StreamSetting_WiFi);
-	hal.stream.write_all("[MSG:WIFI CONNECTED]\r\n");
+    selectStream(StreamType_Telnet);
 
     return ERR_OK;
 }

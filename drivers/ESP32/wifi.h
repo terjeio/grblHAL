@@ -24,11 +24,27 @@
 #ifndef _grbl_wifi_h_
 #define _grbl_wifi_h_
 
-#include "GRBL/grbl.h"
+#include "driver.h"
+#include "esp_wifi.h"
 
 #define STREAM_POLL_INTERVAL 20 // Poll interval in milliseconds
 
+typedef struct {
+	uint16_t ap_num;
+	wifi_ap_record_t *ap_records;
+	uint8_t *ap_selected;
+	char ap_status[20];
+} ap_list_t;
+
 bool wifi_init (wifi_settings_t *settings);
+bool wifi_stop (void);
+bool wifi_ap_connect (char *ssid, char *password);
+ap_list_t *wifi_get_aplist (void);
+void wifi_release_aplist (void);
+
+status_code_t wifi_setting (uint_fast16_t param, float value, char *svalue);
+void wifi_settings_report (setting_type_t setting);
+void wifi_settings_restore (void);
 
 #endif
 

@@ -47,6 +47,10 @@
 #define PROBE_ISR        0 // Catch probe state change by interrupt TODO: needs verification!
 #define KEYPAD_ENABLE    0 // I2C keypad for jogging etc.
 #define WIFI_ENABLE      0 // Streaming over WiFi.
+#define WIFI_SOFTAP      0 // Use Soft AP mode for WiFi.
+#define HTTP_ENABLE      1 // Enable http daemon - requires WiFi enabled
+#define TELNET_ENABLE	 1 // Enable telnet daemon - requires WiFi enabled
+#define WEBSOCKET_ENABLE 0 // Enable websocket daemon - requires WiFi enabled (DO NOT ENABLE, NOT YET IMPLEMENTED!)
 #define BLUETOOTH_ENABLE 0 // Streaming over Bluetooth.
 #define SDCARD_ENABLE    0 // Run jobs from SD card.
 #define IOEXPAND_ENABLE  0 // I2C IO expander for some output signals.
@@ -55,11 +59,58 @@
 #define TRINAMIC_I2C     0 // Trinamic I2C - SPI bridge interface.
 #define TRINAMIC_DEV     0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
 
+#if WIFI_ENABLE
+
+#define NETWORK_TELNET_PORT		23
+#define NETWORK_HTTP_PORT		80
+#define NETWORK_WEBSOCKET_PORT	81
+
+// WiFi Station (STA) settings
+#define NETWORK_HOSTNAME		"Grbl"
+#define NETWORK_IPMODE_STATIC 1
+#if NETWORK_IPMODE_STATIC
+#define NETWORK_IP				"192.168.5.1"
+#define NETWORK_GATEWAY			"192.168.5.1"
+#define NETWORK_MASK     		"255.255.255.0"
+#endif
+
+// WiFi Access Point (AP) settings
+#if WIFI_SOFTAP
+#define NETWORK_AP_HOSTNAME	"GrblAP"
+#define NETWORK_AP_IP		"192.168.5.1"
+#define NETWORK_AP_GATEWAY	"192.168.5.1"
+#define NETWORK_AP_MASK     "255.255.255.0"
+#define WIFI_AP_SSID		"GRBL"
+#define WIFI_AP_PASSWORD	"GrblPassword" // Minimum 8 characters, or blank for open
+#define NETWORK_AP_IPMODE	IpMode_Static // Do not change!
+#define WIFI_MODE WiFiMode_AP; // OPTION: WiFiMode_APSTA
+#else
+#define WIFI_MODE WiFiMode_STA; // Do not change!
+#endif
+
+#endif // WIFI_ENABLE
+
 // End configuration
 
 #if TRINAMIC_ENABLE
 #include "tmc2130/trinamic.h"
 #endif
+
+typedef struct
+{
+	grbl_wifi_mode_t mode;
+	wifi_sta_settings_t sta;
+	wifi_ap_settings_t ap;
+//	network_settings_t network;
+	password_t admin_password;
+	password_t user_password;
+} wifi_settings_t;
+
+typedef struct {
+	uint8_t action;
+	void *params;
+} i2c_task_t;
+
 
 #if WIFI_ENABLE || BLUETOOTH_ENABLE || TRINAMIC_ENABLE || KEYPAD_ENABLE
 
@@ -79,12 +130,6 @@ typedef struct {
 extern driver_settings_t driver_settings;
 
 #endif
-
-typedef struct {
-	uint8_t action;
-	void *params;
-} i2c_task_t;
-
 
 #if CNC_BOOSTERPACK
 
@@ -279,6 +324,6 @@ extern QueueHandle_t i2cQueue;
 extern SemaphoreHandle_t i2cBusy;
 #endif
 
-void selectStream (stream_setting_t stream);
+void selectStream (stream_type_t stream);
 
 #endif // __DRIVER_H__

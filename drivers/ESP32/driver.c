@@ -105,7 +105,7 @@ typedef struct {
 } state_signal_t;
 
 const io_stream_t serial_stream = {
-    .type = StreamSetting_Serial,
+    .type = StreamType_Serial,
     .read = uartRead,
     .write = uartWriteS,
     .write_all = uartWriteS,
@@ -118,17 +118,20 @@ const io_stream_t serial_stream = {
 
 #if WIFI_ENABLE
 
-void wifiStreamWriteS (const char *data)
+static network_services_t services = {0};
+
+void tcpStreamWriteS (const char *data)
 {
-	TCPStreamWriteS(data);
+	if(services.telnet)
+		TCPStreamWriteS(data);
 	uartWriteS(data);
 }
 
-const io_stream_t wifi_stream = {
-    .type = StreamSetting_WiFi,
+const io_stream_t telnet_stream = {
+    .type = StreamType_Telnet,
     .read = TCPStreamGetC,
     .write = TCPStreamWriteS,
-    .write_all = wifiStreamWriteS,
+    .write_all = tcpStreamWriteS,
     .get_rx_buffer_available = TCPStreamRxFree,
     .reset_read_buffer = TCPStreamRxFlush,
     .cancel_read_buffer = TCPStreamRxCancel,
@@ -145,7 +148,7 @@ void btStreamWriteS (const char *data)
 }
 
 const io_stream_t bluetooth_stream = {
-    .type = StreamSetting_Bluetooth,
+    .type = StreamType_Bluetooth,
     .read = BTStreamGetC,
     .write = BTStreamWriteS,
     .write_all = btStreamWriteS,
@@ -226,28 +229,36 @@ static void gpio_isr (void *arg);
 static TimerHandle_t xDelayTimer = NULL, debounceTimer = NULL;
 static TaskHandle_t xStepperTask = NULL;
 
-void selectStream (stream_setting_t stream)
+void selectStream (stream_type_t stream)
 {
-	//
+	static stream_type_t active_stream = StreamType_Serial;
+
     switch(stream) {
 #if BLUETOOTH_ENABLE
-        case StreamSetting_Bluetooth:
+        case StreamType_Bluetooth:
             memcpy(&hal.stream, &bluetooth_stream, sizeof(io_stream_t));
+            services.bluetooth = On;
             break;
 #endif
 #if WIFI_ENABLE
-        case StreamSetting_WiFi:
-            memcpy(&hal.stream, &wifi_stream, sizeof(io_stream_t));
-        	hal.stream.write_all("[MSG:WIFI RUNNING]\r\n");
+        case StreamType_Telnet:
+            memcpy(&hal.stream, &telnet_stream, sizeof(io_stream_t));
+            services.telnet = On;
+        	hal.stream.write_all("[MSG:TELNET STREAM ACTIVE]\r\n");
             break;
 #endif
-        case StreamSetting_Serial:
+        case StreamType_Serial:
             memcpy(&hal.stream, &serial_stream, sizeof(io_stream_t));
+            services.mask = 0;
+            if(active_stream != StreamType_Serial)
+            	hal.stream.write_all("[MSG:SERIAL STREAM ACTIVE]\r\n");
             break;
 
         default:
         	break;
     }
+
+    active_stream = stream;
 }
 
 void initRMT (settings_t *settings)
@@ -761,37 +772,22 @@ static void settings_changed (settings_t *settings)
 
 	    hal.spindle_set_state = hal.driver_cap.variable_spindle ? spindleSetStateVariable : spindleSetState;
 
-    	// Validate stream setting, switch to serial if not supported
-    	if((settings->stream == StreamSetting_WiFi && !hal.driver_cap.wifi) ||
-        	(settings->stream == StreamSetting_Bluetooth && !hal.driver_cap.bluetooth))
-    		settings->stream = StreamSetting_Serial;
-
-    	// NOTE: some interfaces may defer actual stream switch until stack is operational
-    	switch(settings->stream) {
-
-    		case StreamSetting_Serial:
-    			selectStream(StreamSetting_Serial);
-    			break;
-
 #if WIFI_ENABLE
-    		case StreamSetting_WiFi:;
-				static bool wifi_ok = false;
-				if(!wifi_ok && driver_settings.wifi.ssid[0] != '\0')
-					wifi_ok = wifi_init(&driver_settings.wifi);
-					// else report error?
-				break;
+
+		static bool wifi_ok = false;
+
+		if(!wifi_ok)
+			wifi_ok = wifi_init(&driver_settings.wifi);
+
+		// TODO: start/stop services...
 #endif
 
 #if BLUETOOTH_ENABLE
-    		case StreamSetting_Bluetooth:;
-    			static bool bluetooth_ok = false;
-    			if(!bluetooth_ok && driver_settings.bluetooth.device_name[0] != '\0')
-					bluetooth_ok = bluetooth_init(&driver_settings.bluetooth);
-				// else report error?
+		static bool bluetooth_ok = false;
+		if(!bluetooth_ok && driver_settings.bluetooth.device_name[0] != '\0')
+			bluetooth_ok = bluetooth_init(&driver_settings.bluetooth);
+		// else report error?
 #endif
-    		default:
-    			break;
-    	}
 
         stepperEnable(settings->steppers.deenergize);
 
@@ -1042,94 +1038,76 @@ static bool driver_setup (settings_t *settings)
 
 #ifdef DRIVER_SETTINGS
 
-static bool driver_setting (uint_fast16_t param, float value, char *svalue)
+static status_code_t driver_setting (uint_fast16_t param, float value, char *svalue)
 {
-	bool claimed = false;
+	status_code_t status = Status_Unhandled;
 
-	if(svalue) switch(param) {
+#if BLUETOOTH_ENABLE
+	status = bluetooth_setting(param, value, svalue);
+#endif
 
-		case Settings_WiFiSSID:
-			claimed = strlcpy(driver_settings.wifi.ssid, svalue, sizeof(driver_settings.wifi.ssid)) <= sizeof(driver_settings.wifi.ssid);
-			break;
-
-		case Settings_WiFiPassword:
-			claimed = strlcpy(driver_settings.wifi.password, svalue, sizeof(driver_settings.wifi.password)) <= sizeof(driver_settings.wifi.password);
-			break;
-
-		case Settings_WiFiPort:
-			if((claimed = (value != NAN && value > 0.0f && value < 65536.0f)))
-				driver_settings.wifi.port = (uint16_t)value;
-			break;
-
-		case Settings_BlueToothDeviceName:
-			claimed = strlcpy(driver_settings.bluetooth.device_name, svalue, sizeof(driver_settings.bluetooth.device_name)) <= sizeof(driver_settings.bluetooth.device_name);
-			break;
-
-		case Settings_BlueToothServiceName:
-			claimed = strlcpy(driver_settings.bluetooth.service_name, svalue, sizeof(driver_settings.bluetooth.service_name)) <= sizeof(driver_settings.bluetooth.service_name);
-			break;
-	}
+#if WIFI_ENABLE
+	if(status == Status_Unhandled)
+		status = wifi_setting(param, value, svalue);
+#endif
 
 #if KEYPAD_ENABLE
-	if(!claimed)
-		claimed = keypad_setting(param, value, svalue);
+	if(status == Status_Unhandled)
+		status = keypad_setting(param, value, svalue);
 #endif
 
 #if TRINAMIC_ENABLE
-    if(!claimed)
-        claimed = trinamic_setting(param, value, svalue);
+    if(status == Status_Unhandled)
+    	status = trinamic_setting(param, value, svalue);
 #endif
 
-	if(claimed)
+	if(status == Status_OK)
 		hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
 
-    return claimed;
+	return status;
 }
 
-static void report_string_setting (uint8_t setting, char *value)
+static void driver_settings_report (setting_type_t setting)
 {
-    hal.stream.write("$");
-    hal.stream.write(uitoa((uint32_t)setting));
-    hal.stream.write("=");
-    hal.stream.write(value);
-    hal.stream.write("\r\n");
-}
-
-static void driver_settings_report (bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx)
-{
-    if(!axis_settings) {
 #if KEYPAD_ENABLE
-    	keypad_settings_report(axis_settings, setting_type, axis_idx);
+	keypad_settings_report(setting);
 #endif
-#if WIFI_ENABLE
-		report_string_setting(Settings_WiFiSSID, driver_settings.wifi.ssid);
-		report_string_setting(Settings_WiFiPassword, driver_settings.wifi.password);
-		report_uint_setting(Settings_WiFiPort, driver_settings.wifi.port);
-#endif
+
 #if BLUETOOTH_ENABLE
-		report_string_setting(Settings_BlueToothDeviceName, driver_settings.bluetooth.device_name);
-		report_string_setting(Settings_BlueToothServiceName, driver_settings.bluetooth.service_name);
+	bluetooth_settings_report();
 #endif
-    }
+
+#if WIFI_ENABLE
+	wifi_settings_report(setting);
+#endif
+
 #if TRINAMIC_ENABLE
-    trinamic_settings_report(axis_settings, setting_type, axis_idx);
+    trinamic_settings_report(setting);
 #endif
 }
 
 void driver_settings_restore (uint8_t restore_flag)
 {
     if(restore_flag & SETTINGS_RESTORE_DRIVER_PARAMETERS) {
-    	driver_settings.wifi.ssid[0] = '\0';
-    	driver_settings.wifi.password[0] = '\0';
-    	driver_settings.wifi.port = 23;
-    	strcpy(driver_settings.bluetooth.device_name, "GRBL");
-    	strcpy(driver_settings.bluetooth.service_name, "GRBL Serial Port");
+
+    	memset(&driver_settings, 0, sizeof(driver_settings_t));
+
+#if WIFI_ENABLE
+    	wifi_settings_restore();
+#endif
+
+#if BLUETOOTH_ENABLE
+    	bluetooth_settings_restore();
+#endif
+
 #if KEYPAD_ENABLE
     	keypad_settings_restore(restore_flag);
 #endif
+
 #if TRINAMIC_ENABLE
         trinamic_settings_restore(restore_flag);
 #endif
+
     	hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
     }
 }
@@ -1178,7 +1156,7 @@ bool driver_init (void)
 
     hal.system_control_get_state = systemGetState;
 
-    selectStream(StreamSetting_Serial);
+    selectStream(StreamType_Serial);
 
 #if EEPROM_ENABLE
     hal.eeprom.type = EEPROM_Physical;
@@ -1203,8 +1181,11 @@ bool driver_init (void)
 		hal.eeprom.size = GRBL_EEPROM_SIZE + sizeof(driver_settings) + 1;
 
 		hal.driver_setting = driver_setting;
-		hal.driver_settings_report = driver_settings_report;
 		hal.driver_settings_restore = driver_settings_restore;
+		hal.driver_settings_report = driver_settings_report;
+  #if TRINAMIC_ENABLE
+		hal.driver_axis_settings_report = trinamic_axis_settings_report;
+  #endif
     }
 #endif
 
@@ -1258,7 +1239,7 @@ bool driver_init (void)
 #endif
 
    // no need to move version check before init - compiler will fail any mismatch for existing entries
-    return hal.version == 5;
+    return hal.version == 6;
 }
 
 /* interrupt handlers */

@@ -180,13 +180,13 @@ static void esp_spp_cb (esp_spp_cb_event_t event, esp_spp_cb_param_t *param)
 			connection = param->open.handle;
 		    tx_buffers[0].head = tx_buffers[1].head = 0;
 			txbuffer = txbuffer_send = &tx_buffers[0];
-			selectStream(StreamSetting_Bluetooth);
+			selectStream(StreamType_Bluetooth);
 			hal.stream.write_all("[MSG:BT OK]\r\n");
 			break;
 
 		case ESP_SPP_CLOSE_EVT:
 //	        BT_MUTEX_TXUNLOCK();
-			selectStream(StreamSetting_Serial);
+			selectStream(StreamType_Serial);
 			connection = 0;
 			ESP_LOGI(SPP_TAG, "ESP_SPP_CLOSE_EVT");
 			break;
@@ -351,3 +351,43 @@ bool bluetooth_init (bluetooth_settings_t *settings)
 
     return false;
 }
+
+#if BLUETOOTH_ENABLE
+
+status_code_t bluetooth_setting (uint_fast16_t param, float value, char *svalue)
+{
+	status_code_t status = Status_Unhandled;
+
+	if(svalue) switch(param) {
+
+		case Settings_BlueToothDeviceName:
+			if(strlcpy(driver_settings.bluetooth.device_name, svalue, sizeof(driver_settings.bluetooth.device_name)) <= sizeof(driver_settings.bluetooth.device_name))
+				status = Status_OK;
+			else
+				status = Status_InvalidStatement; // too long...				;
+			break;
+
+		case Settings_BlueToothServiceName:
+			if(strlcpy(driver_settings.bluetooth.service_name, svalue, sizeof(driver_settings.bluetooth.service_name)) <= sizeof(driver_settings.bluetooth.service_name))
+				status = Status_OK;
+			else
+				status = Status_InvalidStatement; // too long...				;
+			break;
+	}
+
+	return status;
+}
+
+void bluetooth_settings_report (void)
+{
+	report_string_setting(Settings_BlueToothDeviceName, driver_settings.bluetooth.device_name);
+	report_string_setting(Settings_BlueToothServiceName, driver_settings.bluetooth.service_name);
+}
+
+void bluetooth_settings_restore (void)
+{
+	strcpy(driver_settings.bluetooth.device_name, "GRBL");
+	strcpy(driver_settings.bluetooth.service_name, "GRBL Serial Port");
+}
+
+#endif

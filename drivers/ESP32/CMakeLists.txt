@@ -14,6 +14,7 @@ cmake_minimum_required(VERSION 3.5)
 # trinamic/TMC2130_I2C_map.c
 # tmc2130/trinamic.c
 # sdcard/sdcard.c
+# web/backend.c
 
 set(MAIN_SRCS main.c driver.c nvs.c esp32-hal-uart.c bluetooth.c wifi.c TCPStream.c
  i2c.c
@@ -38,10 +39,10 @@ set(MAIN_SRCS main.c driver.c nvs.c esp32-hal-uart.c bluetooth.c wifi.c TCPStrea
  GRBL/system.c
 )
 
-#include_directories("$ENV{IDF_PATH}/components/freertos/include" "D:\Projects\esp\GrblDriver")
-#include_directories(BEFORE "D:/Projects/esp/GrblDriver")
+#include_directories("$ENV{IDF_PATH}/components/freertos/include" "D:\Projects\Espressif\GrblDriver")
+#include_directories(BEFORE "D:/Projects/Espressif/GrblDriver")
 
-set(INCLUDE_DIRS "D:/Projects/esp/GrblDriver")
+set(INCLUDE_DIRS "D:/Projects/Espressif/GrblDriver")
 
 #file(GLOB GRBL_SOURCE "GRBL/*.c")
     
@@ -49,7 +50,7 @@ set(INCLUDE_DIRS "D:/Projects/esp/GrblDriver")
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(grbl)
-include_directories(BEFORE "D:/Projects/esp/GrblDriver")
+include_directories(BEFORE "D:/Projects/Espressif/GrblDriver")
 #target_compile_options(grbl PRIVATE -Werror -Wall -Wextra)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
