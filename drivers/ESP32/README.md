@@ -6,6 +6,14 @@ A GrblHAL driver for the ESP32 processor.
 
 ---
 
+__Update 2019-11-15:__ Added AP and APSTA WiFi options. Initial webserver support for reading/setting $-settings via JSON-messages. In APSTA WiFi mode webserver supports querying for available access points and connecting to selected, again via JSON messages. No UI for this yet though...
+
+__NOTE:__ IDF version 3.2 or later required for compilation if webserver is to be enabled.
+
+__IMPORTANT:__ [Network setting-id's](https://github.com/terjeio/grblHAL/wiki/Additional-or-extended-settings) are changed and many are added. Any previous network settings will be lost if upgrading.
+
+---
+
 __Update 2019-08-01:__ Now uses code for keypad and SD card options from common plugins. Added support for Trinamic TMC2130 plugin (currently via SPI <> I2C bridge).
 
 __NOTE:__ If plugins are to be used `driver.h` and `CMakeLists.txt` has to be updated. Details can be found in these files.
