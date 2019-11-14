@@ -24,7 +24,38 @@
 #ifndef _SDCARD_H_
 #define _SDCARD_H_
 
+#ifdef ARDUINO_SAMD_MKRZERO
+#include "../../driver.h"
+#include "../grbl/grbl.h"
+#else
+#include "driver.h"
+#include "grbl/grbl.h"
+#endif
+
+#if SDCARD_ENABLE
+
+#ifdef __MSP432E401Y__
+#include "fatfs/ff.h"
+#include "fatfs/diskio.h"
+#include <ti/drivers/SDFatFS.h>
+#include <ti/boards/MSP_EXP432E401Y/Board.h>
+#elif defined(ESP_PLATFORM)
+#include "esp_vfs_fat.h"
+#elif defined(__LPC176x__)
+#include "fatfs/ff.h"
+#include "fatfs/diskio.h"
+#elif defined(ARDUINO_SAMD_MKRZERO) || defined(STM32F103xB) || defined(__LPC17XX__)
+#include "ff.h"
+#include "diskio.h"
+#else
+#include "fatfs/src/ff.h"
+#include "fatfs/src/diskio.h"
+#endif
+
 void sdcard_init (void);
 void sdcard_reset (void);
+FATFS *sdcard_getfs(void);
+
+#endif // SDCARD_ENABLE
 
 #endif

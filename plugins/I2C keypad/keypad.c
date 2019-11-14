@@ -45,47 +45,47 @@ static char keybuf_buf[KEYBUF_SIZE];
 static jogmode_t jogMode = JogMode_Fast;
 static volatile uint32_t keybuf_head = 0, keybuf_tail = 0;
 
-bool keypad_setting (setting_type_t setting, float value, char *svalue)
+status_code_t keypad_setting (setting_type_t setting, float value, char *svalue)
 {
-    bool ok = false;
+	status_code_t status = Status_Unhandled;
 
     switch(setting) {
 
         case Setting_JogStepSpeed:
             driver_settings.jog.step_speed = value;
-            ok = true;
+			status = Status_OK;
             break;
 
         case Setting_JogSlowSpeed:
             driver_settings.jog.slow_speed = value;
-            ok = true;
+			status = Status_OK;
             break;
 
         case Setting_JogFastSpeed:
             driver_settings.jog.fast_speed = value;
-            ok = true;
+			status = Status_OK;
             break;
 
         case Setting_JogStepDistance:
             driver_settings.jog.step_distance = value;
-            ok = true;
+			status = Status_OK;
             break;
 
         case Setting_JogSlowDistance:
             driver_settings.jog.slow_distance = value;
-            ok = true;
-            break;
+			status = Status_OK;
+           break;
 
         case Setting_JogFastDistance:
             driver_settings.jog.fast_distance = value;
-            ok = true;
+			status = Status_OK;
             break;
 
         default:
         	break;
     }
 
-    return ok;
+    return status;
 }
 
 void keypad_settings_restore (uint8_t restore_flag)
@@ -100,15 +100,36 @@ void keypad_settings_restore (uint8_t restore_flag)
     }
 }
 
-void keypad_settings_report (bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx)
+void keypad_settings_report (setting_type_t setting)
 {
-    if(!axis_settings) {
-        report_float_setting(Setting_JogStepSpeed, driver_settings.jog.step_speed, 0);
-        report_float_setting(Setting_JogSlowSpeed, driver_settings.jog.slow_speed, 0);
-        report_float_setting(Setting_JogFastSpeed, driver_settings.jog.fast_speed, 0);
-        report_float_setting(Setting_JogStepDistance, driver_settings.jog.step_distance, N_DECIMAL_SETTINGVALUE);
-        report_float_setting(Setting_JogSlowDistance, driver_settings.jog.slow_distance, 0);
-        report_float_setting(Setting_JogFastDistance, driver_settings.jog.fast_distance, 0);
+    switch(setting) {
+
+        case Setting_JogStepSpeed:
+            report_float_setting(setting, driver_settings.jog.step_speed, 0);
+            break;
+
+        case Setting_JogSlowSpeed:
+            report_float_setting(setting, driver_settings.jog.slow_speed, 0);
+            break;
+
+        case Setting_JogFastSpeed:
+            report_float_setting(setting, driver_settings.jog.fast_speed, 0);
+            break;
+
+        case Setting_JogStepDistance:
+            report_float_setting(setting, driver_settings.jog.step_distance, N_DECIMAL_SETTINGVALUE);
+            break;
+
+        case Setting_JogSlowDistance:
+            report_float_setting(setting, driver_settings.jog.slow_distance, 0);
+           break;
+
+        case Setting_JogFastDistance:
+            report_float_setting(setting, driver_settings.jog.fast_distance, 0);
+            break;
+
+        default:
+        	break;
     }
 }
 

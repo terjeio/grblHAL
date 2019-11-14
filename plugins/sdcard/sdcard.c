@@ -21,17 +21,9 @@
 
 #include <stdio.h>
 
-#ifdef ARDUINO_SAMD_MKRZERO
-#include "../../driver.h"
-#include "../grbl/grbl.h"
-#else
-#include "driver.h"
-#include "grbl/grbl.h"
-#endif
+#include "sdcard.h"
 
 #if SDCARD_ENABLE
-
-#include "sdcard.h"
 
 // https://e2e.ti.com/support/tools/ccs/f/81/t/428524?Linking-error-unresolved-symbols-rom-h-pinout-c-
 
@@ -40,23 +32,6 @@
 #define MAX_PATHLEN 128
 #define LCAPS(c) ((c >= 'A' && c <= 'Z') ? c | 0x20 : c)
 
-#ifdef __MSP432E401Y__
-#include "fatfs/ff.h"
-#include "fatfs/diskio.h"
-#include <ti/drivers/SDFatFS.h>
-#include <ti/boards/MSP_EXP432E401Y/Board.h>
-#elif defined(ESP_PLATFORM)
-#include "esp_vfs_fat.h"
-#elif defined(__LPC176x__)
-#include "fatfs/ff.h"
-#include "fatfs/diskio.h"
-#elif defined(ARDUINO_SAMD_MKRZERO) || defined(STM32F103xB) || defined(__LPC17XX__)
-#include "ff.h"
-#include "diskio.h"
-#else
-#include "fatfs/src/ff.h"
-#include "fatfs/src/diskio.h"
-#endif
 
 #if FF_USE_LFN
 //#define _USE_LFN FF_USE_LFN
@@ -98,6 +73,7 @@ static file_t file = {
     .pos = 0
 };
 
+static bool frewind = false;
 static io_stream_t active_stream;
 //static report_t active_reports;
 
@@ -200,7 +176,7 @@ static FRESULT scan_dir (char *path, uint_fast8_t depth, char *buf)
                     break;
             }
         } else if((status = allowed(get_name(&fno), true)) != Filename_Filtered) { // It is a file
-            sprintf(buf, "[FILE:%s/%s|SIZE:%ld%s]\r\n", path, get_name(&fno), (uint32_t)fno.fsize, status == Filename_Invalid ? "|UNUSABLE" : "");
+            sprintf(buf, "[FILE:%s/%s|SIZE:%ul%s]\r\n", path, get_name(&fno), (uint32_t)fno.fsize, status == Filename_Invalid ? "|UNUSABLE" : "");
             hal.stream.write(buf);
         }
     }
@@ -234,14 +210,6 @@ static bool file_open (char *filename)
     }
 
     return file.handle != NULL;
-}
-
-// Drop input from current stream except realtime commands
-ISR_CODE bool drop_input_stream (char c)
-{
-    active_stream.enqueue_realtime_command(c);
-
-    return true;
 }
 
 static int16_t file_read (void)
@@ -296,30 +264,10 @@ static void sdcard_end_job (void)
     memcpy(&hal.stream, &active_stream, sizeof(io_stream_t));   // Restore stream pointers
     hal.stream.reset_read_buffer();                             // and flush input buffer
     hal.driver_rt_report = NULL;
+    hal.state_change_requested = NULL;
     hal.report.status_message = report_status_message;
     hal.report.feedback_message = report_feedback_message;
-}
-
-void trap_status_report (status_code_t status_code)
-{
-    if(status_code != Status_OK) { // TODO: all errors should terminate job?
-        char buf[50]; // TODO: check if extended error reports are permissible
-        sprintf(buf, "error:%d in SD file at line %ld\r\n", (uint8_t)status_code, file.line);
-        hal.stream.write(buf);
-
-        sdcard_end_job();
-    }
-    // else
-    //     file.line++; ??
-}
-
-void trap_feedback_message (message_code_t message_code)
-{
-    report_feedback_message(message_code);
-
-    // TODO: rewind and wait for cycle start in order to comply with NIST?
-    if(message_code == Message_ProgramEnd)
-        sdcard_end_job();
+    frewind = false;
 }
 
 static int16_t sdcard_read (void)
@@ -344,6 +292,55 @@ static int16_t sdcard_read (void)
         sdcard_end_job();
 
     return c;
+}
+
+static int16_t await_cycle_start (void)
+{
+    return -1;
+}
+
+// Drop input from current stream except realtime commands
+ISR_CODE bool drop_input_stream (char c)
+{
+    active_stream.enqueue_realtime_command(c);
+
+    return true;
+}
+
+static void trap_state_change_request(uint_fast16_t state)
+{
+    if(state == STATE_CYCLE) {
+        if(hal.stream.read == await_cycle_start)
+            hal.stream.read = sdcard_read;
+        hal.state_change_requested = NULL;
+    }
+}
+
+static void trap_status_report (status_code_t status_code)
+{
+    if(status_code != Status_OK) { // TODO: all errors should terminate job?
+        char buf[50]; // TODO: check if extended error reports are permissible
+        sprintf(buf, "error:%d in SD file at line %u\r\n", (uint8_t)status_code, file.line);
+        hal.stream.write(buf);
+        sdcard_end_job();
+    }
+}
+
+static void trap_feedback_message (message_code_t message_code)
+{
+    report_feedback_message(message_code);
+
+    if(message_code == Message_ProgramEnd) {
+        if(frewind) {
+            f_lseek(file.handle, 0);
+            file.pos = file.line = 0;
+            file.eol = false;
+            report_feedback_message(Message_CycleStartToRerun);
+            hal.stream.read = await_cycle_start;
+            hal.state_change_requested = trap_state_change_request;
+        } else
+            sdcard_end_job();
+    }
 }
 
 static void sdcard_report (stream_write_ptr stream_write)
@@ -380,11 +377,18 @@ static status_code_t sdcard_parse (uint_fast16_t state, char *line, char *lcline
     if(line[1] == 'F') switch(line[2]) {
 
         case '\0':
+            frewind = false;
             retval = sdcard_ls(line); // (re)use line buffer for reporting filenames
             break;
 
         case 'M':
+            frewind = false;
             retval = sdcard_mount() ? Status_OK : Status_SDMountError;
+            break;
+
+        case 'R':
+            frewind = true;
+            retval = Status_OK;
             break;
 
         case '=':
@@ -395,7 +399,7 @@ static status_code_t sdcard_parse (uint_fast16_t state, char *line, char *lcline
                     gc_state.last_error = Status_OK;                            // Start with no errors
                     hal.report.status_message(Status_OK);                       // and confirm command to originator
                     memcpy(&active_stream, &hal.stream, sizeof(io_stream_t));   // Save current stream pointers
-                    hal.stream.type = StreamSetting_SDCard;                     // then redirect to read from SD card instead
+                    hal.stream.type = StreamType_SDCard;                     // then redirect to read from SD card instead
                     hal.stream.read = sdcard_read;                              // ...
                     hal.stream.enqueue_realtime_command = drop_input_stream;    // Drop input from current stream except realtime commands
 #if M6_ENABLE
@@ -422,10 +426,12 @@ static status_code_t sdcard_parse (uint_fast16_t state, char *line, char *lcline
 
 void sdcard_reset (void)
 {
-    if(hal.stream.type == StreamSetting_SDCard) {
-        char buf[70];
-        sprintf(buf, "[MSG:Reset during streaming of SD file at line: %ld]\r\n", file.line);
-        hal.stream.write(buf);
+    if(hal.stream.type == StreamType_SDCard) {
+        if(file.line > 0) {
+            char buf[70];
+            sprintf(buf, "[MSG:Reset during streaming of SD file at line: %ul]\r\n", file.line);
+            hal.stream.write(buf);
+        }
         sdcard_end_job();
     }
 }
@@ -434,6 +440,14 @@ void sdcard_init (void)
 {
     hal.driver_reset = sdcard_reset;
     hal.driver_sys_command_execute = sdcard_parse;
+}
+
+FATFS *sdcard_getfs(void)
+{
+	if(file.fs == NULL)
+		sdcard_mount();
+
+	return file.fs;
 }
 
 #endif

@@ -177,9 +177,9 @@ void trinamic_configure (void)
 }
 
 // Parse and set driver specific parameters
-bool trinamic_setting (setting_type_t setting, float value, char *svalue)
+status_code_t trinamic_setting (setting_type_t setting, float value, char *svalue)
 {
-    bool ok = false;
+    status_code_t status = Status_Unhandled;
 
     if((setting_type_t)setting >= Setting_AxisSettingsBase && (setting_type_t)setting <= Setting_AxisSettingsMax) {
 
@@ -189,13 +189,16 @@ bool trinamic_setting (setting_type_t setting, float value, char *svalue)
         if(idx < N_AXIS) switch((base_idx - idx) / AXIS_SETTINGS_INCREMENT) {
 
             case AxisSetting_StepperCurrent:
-                ok = true;
+                status = Status_OK;
                 driver_settings.trinamic.driver[idx].current = (uint16_t)value;
                 break;
 
             case AxisSetting_MicroSteps:
-                if((ok = TMC2130_MicrostepsIsValid((uint16_t)value)))
+                if(TMC2130_MicrostepsIsValid((uint16_t)value)) {
+                    status = Status_OK;
                     driver_settings.trinamic.driver[idx].microsteps = (tmc2130_microsteps_t)value;
+                } else
+                    status = Status_InvalidStatement;
                 break;
 
             default:
@@ -204,12 +207,12 @@ bool trinamic_setting (setting_type_t setting, float value, char *svalue)
     } else switch((setting_type_t)setting) {
 
         case Setting_TrinamicDriver:
-            ok = true;
+            status = Status_OK;
             driver_settings.trinamic.driver_enable.mask = (uint8_t)value & AXES_BITMASK;
             break;
 
         case Setting_TrinamicHoming:
-            ok = true;
+            status = Status_OK;
             driver_settings.trinamic.homing_enable.mask = (uint8_t)value & AXES_BITMASK;
             break;
 
@@ -217,7 +220,7 @@ bool trinamic_setting (setting_type_t setting, float value, char *svalue)
         	break;
     }
 
-    return ok;
+    return status;
 }
 
 // Initialize default EEPROM settings
@@ -260,29 +263,41 @@ void trinamic_settings_restore (uint8_t restore_flag)
 }
 
 // Append Trinamic settings to '$$' report
-void trinamic_settings_report (bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx)
+
+void trinamic_settings_report (setting_type_t setting)
 {
-    if(axis_settings) {
+	switch(setting) {
 
-        setting_type_t basetype = (setting_type_t)(Setting_AxisSettingsBase + setting_type * AXIS_SETTINGS_INCREMENT);
+		case Setting_TrinamicDriver:
+	        report_uint_setting(setting, driver_settings.trinamic.driver_enable.mask);
+			break;
 
-        switch(setting_type) {
+		case AxisSetting_MicroSteps:
+	        report_uint_setting(setting, driver_settings.trinamic.homing_enable.mask);
+			break;
 
-            case AxisSetting_StepperCurrent:
-                report_uint_setting((setting_type_t)(basetype + axis_idx), driver_settings.trinamic.driver[axis_idx].current);
-                break;
+		default:
+			break;
+	}
+}
 
-            case AxisSetting_MicroSteps:
-                report_uint_setting((setting_type_t)(basetype + axis_idx), driver_settings.trinamic.driver[axis_idx].microsteps);
-                break;
+void trinamic_axis_settings_report (axis_setting_type_t setting, uint8_t axis_idx)
+{
+	setting_type_t basetype = (setting_type_t)(Setting_AxisSettingsBase + setting * AXIS_SETTINGS_INCREMENT);
 
-            default:
-            	break;
-        }
-    } else {
-        report_uint_setting(Setting_TrinamicDriver, driver_settings.trinamic.driver_enable.mask);
-        report_uint_setting(Setting_TrinamicHoming, driver_settings.trinamic.homing_enable.mask);
-    }
+	switch(setting) {
+
+		case AxisSetting_StepperCurrent:
+			report_uint_setting((setting_type_t)(basetype + axis_idx), driver_settings.trinamic.driver[axis_idx].current);
+			break;
+
+		case AxisSetting_MicroSteps:
+			report_uint_setting((setting_type_t)(basetype + axis_idx), driver_settings.trinamic.driver[axis_idx].microsteps);
+			break;
+
+		default:
+			break;
+	}
 }
 
 // Add warning info to next realtime report when warning flag set by drivers

@@ -148,9 +148,10 @@ void trinamic_init (void);
 void trinamic_configure (void);
 void trinamic_homing (bool enable);
 axes_signals_t trinamic_stepper_enable (axes_signals_t enable);
-bool trinamic_setting (setting_type_t setting, float value, char *svalue);
+status_code_t trinamic_setting (setting_type_t setting, float value, char *svalue);
 void trinamic_settings_restore (uint8_t restore_flag);
-void trinamic_settings_report (bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx);
+void trinamic_settings_report (setting_type_t setting_type);
+void trinamic_axis_settings_report (axis_setting_type_t setting, uint8_t axis_idx);
 void trinamic_fault_handler (void);
 void trinamic_warn_handler (void);
 
