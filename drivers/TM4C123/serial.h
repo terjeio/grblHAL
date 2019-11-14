@@ -1,7 +1,7 @@
 //
 // serial.h - (UART) port library for Tiva
 //
-// v1.00 / 2019-06-03 / Io Engineering / Terje
+// v1.00 / 2019-08-11 / Io Engineering / Terje
 //
 
 /*
@@ -59,6 +59,7 @@ bool serialPutC(const char data);
 void serialWriteS(const char *data);
 void serialWriteLn(const char *data);
 void serialWrite(const char *data, unsigned int length);
+bool serialSuspendInput (bool suspend);
 
 #ifdef RX_BUFFER_SIZE
 uint16_t serialTxCount(void);

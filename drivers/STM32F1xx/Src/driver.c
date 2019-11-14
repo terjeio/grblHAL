@@ -764,32 +764,32 @@ static bool driver_setup (settings_t *settings)
 
 #ifdef DRIVER_SETTINGS
 
-static bool driver_setting (setting_type_t param, float value, char *svalue)
+static status_code_t driver_setting (setting_type_t param, float value, char *svalue)
 {
-    bool claimed = false;
+    status_code_t status = Status_Unhandled;
 
 #if KEYPAD_ENABLE
-    claimed = keypad_setting(param, value, svalue);
+    status = keypad_setting(param, value, svalue);
 #endif
 
 #if TRINAMIC_ENABLE
-    if(!claimed)
-        claimed = trinamic_setting(param, value, svalue);
+    if(status == Status_Unhandled)
+    	status = trinamic_setting(param, value, svalue);
 #endif
 
-    if(claimed)
+    if(status == Status_OK)
         hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
 
-    return claimed;
+    return status;
 }
 
-static void driver_settings_report (bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx)
+static void driver_settings_report (setting_type_t setting)
 {
 #if KEYPAD_ENABLE
-    keypad_settings_report(axis_settings, setting_type, axis_idx);
+    keypad_settings_report(setting);
 #endif
 #if TRINAMIC_ENABLE
-    trinamic_settings_report(axis_settings, setting_type, axis_idx);
+    trinamic_settings_report(setting);
 #endif
 }
 
@@ -916,6 +916,7 @@ bool driver_init (void)
     hal.user_mcode_validate = trinamic_MCodeValidate;
     hal.user_mcode_execute = trinamic_MCodeExecute;
     hal.driver_rt_report = trinamic_RTReport;
+    hal.driver_axis_settings_report = trinamic_axis_settings_report;
 #endif
 
 #if KEYPAD_ENABLE
@@ -936,8 +937,10 @@ bool driver_init (void)
 #if SDCARD_ENABLE
     hal.driver_cap.sd_card = On;
 #endif
-    // no need to move version check before init - compiler will fail any mismatch for existing entries
-    return hal.version == 5;
+
+    // No need to move version check before init.
+    // Compiler will fail any signature mismatch for existing entries.
+    return hal.version == 6;
 }
 
 /* interrupt handlers */

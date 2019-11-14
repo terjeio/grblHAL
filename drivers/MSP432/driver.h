@@ -40,9 +40,9 @@
 #define ATC_ENABLE             0 // do not change!
 #define MPG_MODE_ENABLE        1 // Additional serial input for MPG (with GPIO input for enable)
 #define LIMITS_OVERRIDE_ENABLE 1 // Adds input for overriding limit switches
-#define TRINAMIC_ENABLE        0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
-#define TRINAMIC_I2C           0 // Trinamic I2C - SPI bridge interface.
-#define TRINAMIC_DEV           0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
+#define TRINAMIC_ENABLE        1 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
+#define TRINAMIC_I2C           1 // Trinamic I2C - SPI bridge interface.
+#define TRINAMIC_DEV           1 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
 #define CNC_BOOSTERPACK        1 // do not change!
 
 #if CNC_BOOSTERPACK
@@ -70,7 +70,9 @@
 
 #ifdef DRIVER_SETTINGS
 
+#if TRINAMIC_ENABLE
 #include "tmc2130/trinamic.h"
+#endif
 
 typedef struct {
 #if TRINAMIC_ENABLE
@@ -93,6 +95,13 @@ extern driver_settings_t driver_settings;
 #define portQ(p) PORT ## p ## _IRQn
 #define portHANDLER(p) portH(p)
 #define portH(p) PORT ## p ## _IRQHandler
+
+#define I2Cport(p) I2CportI(p)
+#define I2CportI(p) EUSCI_ ## p
+#define I2CportINT(p) I2CportQ(p)
+#define I2CportQ(p) EUSCI ## p ## _IRQn
+#define I2CportHANDLER(p) I2CportH(p)
+#define I2CportH(p) EUSCI ## p ## _IRQHandler
 
 
 #define timer(p) timerN(p)
@@ -221,7 +230,7 @@ extern driver_settings_t driver_settings;
 #define TRINAMIC_WARN_IRQ_PIN    7
 #define TRINAMIC_WARN_IRQ_BIT    (1<<TRINAMIC_WARN_IRQ_PIN)
 #define TRINAMIC_WARN_INT        portINT(TRINAMIC_WARN_IRQ_PN)
-//#define TRINAMIC_WARN_IRQHandler portHANDLER(TRINAMIC_WARN_IRQ_PN)
+#define TRINAMIC_WARN_IRQHandler portHANDLER(TRINAMIC_WARN_IRQ_PN)
 #endif
 
 #if CNC_BOOSTERPACK_A4998
@@ -447,10 +456,6 @@ extern driver_settings_t driver_settings;
 #define MODE_IRQHandler     portHANDLER(GPIO2_PN)
 #endif
 
-// to be removed?
-#define MODE_LED_PIN        0
-#define MODE_LED_BIT        (1<<MODE_LED_PIN)
-
 #if KEYPAD_ENABLE
 #define KEYPAD_PN           GPIO6_PN
 #define KEYPAD_PORT         port(KEYPAD_PN)
@@ -460,6 +465,11 @@ extern driver_settings_t driver_settings;
 #define KEYPAD_IRQ_BIT      GPIO6_BIT
 #define KEYPAD_IRQHandler   portHANDLER(KEYPAD_PN)
 #endif
+
+#define I2C_PN B1
+#define I2C_PORT        I2Cport(I2C_PN)
+#define I2C_INT         I2CportINT(I2C_PN)
+#define I2C_IRQHandler  I2CportHANDLER(I2C_PN)
 
 // Driver initialization entry point
 

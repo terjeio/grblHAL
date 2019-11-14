@@ -30,7 +30,7 @@
 //#define BOARD_RAMPS_16
 //#define BOARD_MEGA256
 //#define BOARD_PROTONEER
-#define BOARD_CMCGRATH
+//#define BOARD_CMCGRATH
 
 /******************************************************************************
 * Definitions for bit band access and dynamic IRQ registration                *
@@ -208,7 +208,7 @@ extern driver_settings_t driver_settings;
 
 #endif // default board
 
-#if EEPROM_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
+#if EEPROM_ENABLE || KEYPAD_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
 
 // Define I2C port/pins
 #define I2C_PERIPH  TWI0

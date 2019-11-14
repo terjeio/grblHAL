@@ -37,38 +37,32 @@
 #endif
 
 typedef struct {
-    volatile uint16_t head;
-    volatile uint16_t tail;
+    volatile uint32_t head;
+    volatile uint32_t tail;
     bool overflow;
     bool rts_state;
     bool backup;
     char data[RX_BUFFER_SIZE];
-} serial_buffer_t;
+} stream_rx_buffer_t;
 
-static serial_buffer_t rxbuffer = {
-  .head = 0,
-  .tail = 0,
-  .backup = false,
-  .overflow = false,
-  .rts_state = false
-};
+typedef struct {
+    volatile uint32_t head;
+    volatile uint32_t tail;
+#ifdef ENABLE_XONXOFF
+    volatile uint8_t flow_ctrl = XON_SENT; // Flow control state variable
+#endif
+    char data[TX_BUFFER_SIZE];
+} stream_tx_buffer_t;
 
-static serial_buffer_t rxbackup;
-
-static char txbuf[TX_BUFFER_SIZE];
-static volatile uint16_t tx_head = 0, tx_tail = 0;
+static stream_tx_buffer_t txbuffer = {0};
+static stream_rx_buffer_t rxbuffer = {0}, rxbackup;
 
 #ifdef SERIAL2_MOD
-static char rx2buf[RX_BUFFER_SIZE];
-static volatile uint16_t rx2_head = 0, rx2_tail = 0, rx2_overflow = 0;
+static stream_rx_buffer_t rxbuffer2 = {0};
 #endif
 
 #ifdef RTS_PORT
   static volatile uint8_t rts_state = 0;
-#endif
-
-#ifdef ENABLE_XONXOFF
-  static volatile uint8_t flow_ctrl = XON_SENT; // Flow control state variable
 #endif
 
 void serialInit (void)
@@ -110,8 +104,8 @@ void serialInit (void)
 //
 uint16_t serialTxCount (void)
 {
-  uint16_t tail = tx_tail;
-  return BUFCOUNT(tx_head, tail, TX_BUFFER_SIZE);
+  uint16_t tail = txbuffer.tail;
+  return BUFCOUNT(txbuffer.head, tail, TX_BUFFER_SIZE);
 }
 
 //
@@ -176,18 +170,18 @@ bool serialPutC (const char c) {
 
     uint32_t next_head;
 
-    if(tx_head != tx_tail || !serialPutCNonBlocking(c)) {   // Try to send character without buffering...
+    if(txbuffer.head != txbuffer.tail || !serialPutCNonBlocking(c)) {   // Try to send character without buffering...
 
-        next_head = (tx_head + 1) & (TX_BUFFER_SIZE - 1);   // .. if not, set and update head pointer
+        next_head = (txbuffer.head + 1) & (TX_BUFFER_SIZE - 1);   // .. if not, set and update head pointer
 
-        while(tx_tail == next_head) {                       // While TX buffer full
+        while(txbuffer.tail == next_head) {                       // While TX buffer full
             SERIAL_MODULE->IE |= EUSCI_A_IE_TXIE;           // Enable TX interrupts???
             if(!hal.stream_blocking_callback())           // check if blocking for space,
                 return false;                               // exit if not (leaves TX buffer in an inconsistent state)
         }
 
-        txbuf[tx_head] = c;                                 // Add data to buffer
-        tx_head = next_head;                                // and update head pointer
+        txbuffer.data[txbuffer.head] = c;                                 // Add data to buffer
+        txbuffer.head = next_head;                                // and update head pointer
 
         SERIAL_MODULE->IE |= EUSCI_A_IE_TXIE;               // Enable TX interrupts
     }
@@ -258,7 +252,7 @@ bool serialSuspendInput (bool suspend)
     if(suspend)
         hal.stream.read = serialGetNull;
     else if(rxbuffer.backup)
-        memcpy(&rxbuffer, &rxbackup, sizeof(serial_buffer_t));
+        memcpy(&rxbuffer, &rxbackup, sizeof(stream_rx_buffer_t));
 
     return rxbuffer.tail != rxbuffer.head;
 }
@@ -271,19 +265,19 @@ void SERIAL_IRQHandler (void)
     switch(SERIAL_MODULE->IV) {
 
         case 0x04:
-            bptr = tx_tail;                             // Temp tail position (to avoid volatile overhead)
-            SERIAL_MODULE->TXBUF = txbuf[bptr++];       // Send a byte from the buffer
-            bptr &= (TX_BUFFER_SIZE - 1);               // and update
-            tx_tail = bptr;                             // tail position
-            if (bptr == tx_head)                        // Turn off TX interrupt
-                SERIAL_MODULE->IE &= ~EUSCI_A_IE_TXIE;  // when buffer empty
+            bptr = txbuffer.tail;                           // Temp tail position (to avoid volatile overhead)
+            SERIAL_MODULE->TXBUF = txbuffer.data[bptr++];   // Send a byte from the buffer
+            bptr &= (TX_BUFFER_SIZE - 1);                   // and update
+            txbuffer.tail = bptr;                           // tail position
+            if (bptr == txbuffer.head)                      // Turn off TX interrupt
+                SERIAL_MODULE->IE &= ~EUSCI_A_IE_TXIE;      // when buffer empty
             break;
 
         case 0x02:;
-            uint16_t data = SERIAL_MODULE->RXBUF;       // Read character received
+            uint16_t data = SERIAL_MODULE->RXBUF;           // Read character received
             if(data == CMD_TOOL_ACK && !rxbuffer.backup) {
 
-                memcpy(&rxbackup, &rxbuffer, sizeof(serial_buffer_t));
+                memcpy(&rxbackup, &rxbuffer, sizeof(stream_rx_buffer_t));
                 rxbuffer.backup = true;
                 rxbuffer.tail = rxbuffer.head;
                 hal.stream.read = serialGetC; // restore normal input
@@ -325,7 +319,7 @@ void serialSelect (bool mpg)
 //
 uint16_t serial2RxFree (void)
 {
-  unsigned int tail = rx2_tail, head = rx2_head;
+  uint32_t tail = rxbuffer2.tail, head = rxbuffer2.head;
   return (RX_BUFFER_SIZE - 1) - BUFCOUNT(head, tail, RX_BUFFER_SIZE);
 }
 
@@ -334,7 +328,7 @@ uint16_t serial2RxFree (void)
 //
 void serial2RxFlush (void)
 {
-    rx2_head = rx2_tail = 0;
+    rxbuffer2.head = rxbuffer2.tail = 0;
 }
 
 //
@@ -342,9 +336,9 @@ void serial2RxFlush (void)
 //
 void serial2RxCancel (void)
 {
-    rx2buf[rx2_head] = ASCII_CAN;
-    rx2_tail = rx2_head;
-    rx2_head = (rx2_tail + 1) & (RX_BUFFER_SIZE - 1);
+    rxbuffer2.data[rxbuffer2.head] = ASCII_CAN;
+    rxbuffer2.tail = rxbuffer2.head;
+    rxbuffer2.head = (rxbuffer2.tail + 1) & (RX_BUFFER_SIZE - 1);
 }
 
 //
@@ -352,13 +346,13 @@ void serial2RxCancel (void)
 //
 int16_t serial2GetC (void)
 {
-    uint16_t bptr = rx2_tail;
+    uint16_t bptr = rxbuffer2.tail;
 
-    if(bptr == rx2_head)
+    if(bptr == rxbuffer2.head)
         return -1; // no data available else EOF
 
-    char data = rx2buf[bptr++];             // Get next character, increment tmp pointer
-    rx2_tail = bptr & (RX_BUFFER_SIZE - 1); // and update pointer
+    char data = rxbuffer2.data[bptr++];             // Get next character, increment tmp pointer
+    rxbuffer2.tail = bptr & (RX_BUFFER_SIZE - 1);   // and update pointer
 
     return (int16_t)data;
 }
@@ -370,13 +364,13 @@ void SERIAL2_IRQHandler (void)
     switch(SERIAL2_MODULE->IV) {
 
         case 0x02:
-            data = SERIAL2_MODULE->RXBUF;                   // Read character received
-            bptr = (rx2_head + 1) & (RX_BUFFER_SIZE - 1);   // Temp head position (to avoid volatile overhead)
-            if(bptr == rx2_tail) {                          // If buffer full
-                rx2_overflow = 1;                           // flag overflow
+            data = SERIAL2_MODULE->RXBUF;                       // Read character received
+            bptr = (rxbuffer2.head + 1) & (RX_BUFFER_SIZE - 1); // Temp head position (to avoid volatile overhead)
+            if(bptr == rxbuffer2.tail) {                        // If buffer full
+                rxbuffer2.overflow = 1;                         // flag overflow
             } else if(!hal.stream.enqueue_realtime_command((char)data)) {
-                rx2buf[rx2_head] = data;                    // Add data to buffer
-                rx2_head = bptr;                            // and update pointer
+                rxbuffer2.data[rxbuffer2.head] = data;          // Add data to buffer
+                rxbuffer2.head = bptr;                          // and update pointer
             }
             break;
     }

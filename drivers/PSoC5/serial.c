@@ -123,7 +123,7 @@ static void uart_rx_interrupt_handler (void) {
 
         if(bptr == rx_tail)     // If buffer full
             rx_overflow = 1;    // flag overflow
-        else if(hal.protocol_process_realtime(data)) {
+        else if(!hal.stream.enqueue_realtime_command(data)) {
             rxbuf[rx_head] = data;  // Add data to buffer
             rx_head = bptr;         // and update pointer
         }

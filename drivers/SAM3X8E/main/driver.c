@@ -104,6 +104,9 @@ static spindle_pwm_t spindle_pwm;
 static delay_t delay_ms = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
 static debounce_queue_t debounce_queue = {0};
 static input_signal_t a_signals[10] = {0}, b_signals[10] = {0}, c_signals[10] = {0}, d_signals[10] = {0};
+#ifdef SQUARING_ENABLED
+static axes_signals_t motors_1 = {AXES_BITMASK}, motors_2 = {AXES_BITMASK};
+#endif
 
 static input_signal_t inputpin[] = {
   #ifdef PROBE_PIN
@@ -152,7 +155,7 @@ static input_signal_t inputpin[] = {
     { .id = Input_LimitC_Max,   .port = C_LIMIT_PORT_MAX,  .bit = C_LIMIT_BIT_MAX,   .group = INPUT_GROUP_LIMIT },
   #endif
   #if KEYPAD_ENABLE
-  , { .id = Input_KeypadStrobe, .port = KEYPAD_STROBE_PORT .bit = KEYPAD_STROBE_BIT, .group = INPUT_GROUP_KEYPAD }
+    { .id = Input_KeypadStrobe, .port = KEYPAD_PORT,       .bit = KEYPAD_BIT, .group = INPUT_GROUP_KEYPAD }
   #endif
 };
 
@@ -160,10 +163,6 @@ static uint32_t vectorTable[sizeof(DeviceVectors) / sizeof(uint32_t)] __attribut
 
 #ifdef DRIVER_SETTINGS
 driver_settings_t driver_settings;
-#endif
-
-#ifdef SQUARING_ENABLED
-static axes_signals_t a_motors = {AXES_BITMASK}, b_motors = {AXES_BITMASK};
 #endif
 
 static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value);
@@ -201,6 +200,7 @@ static void driver_delay_ms (uint32_t ms, void (*callback)(void))
 }
 
 // Set stepper pulse output pins
+#ifndef SQUARING_ENABLED
 inline static void set_step_outputs (axes_signals_t step_outbits)
 {
     step_outbits.value ^= settings.steppers.step_invert.mask;
@@ -208,19 +208,53 @@ inline static void set_step_outputs (axes_signals_t step_outbits)
     BITBAND_PERI(X_STEP_PORT->PIO_ODSR, X_STEP_PIN) = step_outbits.x;
   #ifdef X2_STEP_PIN
     BITBAND_PERI(X2_STEP_PORT->PIO_ODSR, X2_STEP_PIN) = step_outbits.x;
-  #endif
-    BITBAND_PERI(Y_STEP_PORT->PIO_ODSR, Y_STEP_PIN) = step_outbits.y;
-    BITBAND_PERI(Z_STEP_PORT->PIO_ODSR, Z_STEP_PIN) = step_outbits.z;
-  #ifdef A_STEP_PIN
+  #elif defined(A_STEP_PIN)
     BITBAND_PERI(A_STEP_PORT->PIO_ODSR, A_STEP_PIN) = step_outbits.a;
   #endif
-  #ifdef B_STEP_PIN
+
+    BITBAND_PERI(Y_STEP_PORT->PIO_ODSR, Y_STEP_PIN) = step_outbits.y;
+  #ifdef Y2_STEP_PIN
+    BITBAND_PERI(Y2_STEP_PORT->PIO_ODSR, Y2_STEP_PIN) = step_outbits.y;
+  #elif defined(B_STEP_PIN)
     BITBAND_PERI(B_STEP_PORT->PIO_ODSR, B_STEP_PIN) = step_outbits.b;
   #endif
-  #ifdef C_STEP_PIN
+
+    BITBAND_PERI(Z_STEP_PORT->PIO_ODSR, Z_STEP_PIN) = step_outbits.z;
+  #ifdef Z2_STEP_PIN
+    BITBAND_PERI(Z2_STEP_PORT->PIO_ODSR, Z2_STEP_PIN) = step_outbits.z;
+  #elif defined(C_STEP_PIN)
     BITBAND_PERI(C_STEP_PORT->PIO_ODSR, C_STEP_PIN) = step_outbits.c;
   #endif
 }
+#else
+inline static void set_step_outputs (axes_signals_t step_outbits_1)
+{
+    axes_signals_t step_outbits_2 = (step_outbits_1.mask & motors_2.mask) ^ settings.steppers.step_invert.mask;
+
+    step_outbits_1.mask = (step_outbits_1.mask & motors_1.mask) ^ settings.steppers.step_invert.mask;
+
+    BITBAND_PERI(X_STEP_PORT->PIO_ODSR, X_STEP_PIN) = step_outbits_1.x;
+  #ifdef X2_STEP_PIN
+    BITBAND_PERI(X2_STEP_PORT->PIO_ODSR, X2_STEP_PIN) = step_outbits_2.x;
+  #elif defined(A_STEP_PIN)
+    BITBAND_PERI(A_STEP_PORT->PIO_ODSR, A_STEP_PIN) = step_outbits_1.a;
+  #endif
+
+    BITBAND_PERI(Y_STEP_PORT->PIO_ODSR, Y_STEP_PIN) = step_outbits_1.y;
+  #ifdef Y2_STEP_PIN
+    BITBAND_PERI(Y2_STEP_PORT->PIO_ODSR, Y2_STEP_PIN) = step_outbits_2.y;
+  #elif defined(B_STEP_PIN)
+    BITBAND_PERI(B_STEP_PORT->PIO_ODSR, B_STEP_PIN) = step_outbits_1.b;
+  #endif
+
+    BITBAND_PERI(Z_STEP_PORT->PIO_ODSR, Z_STEP_PIN) = step_outbits_1.z;
+  #ifdef Z2_STEP_PIN
+    BITBAND_PERI(Z2_STEP_PORT->PIO_ODSR, Z2_STEP_PIN) = step_outbits_2.z;
+  #elif defined(C_STEP_PIN)
+    BITBAND_PERI(C_STEP_PORT->PIO_ODSR, C_STEP_PIN) = step_outbits_1.c;
+  #endif
+}
+#endif
 
 // Set stepper direction output pins
 inline static void set_dir_outputs (axes_signals_t dir_outbits)
@@ -380,13 +414,13 @@ inline static axes_signals_t limitsGetState()
 // Enable/disable motors for auto squaring of ganged axes
 static void StepperDisableMotors(axes_signals_t axes, squaring_mode_t mode)
 {
-    a_motors.mask = (mode == SquaringMode_A || SquaringMode_Both ? axes.mask : 0);
-    b_motors.mask = (mode == SquaringMode_B || SquaringMode_Both ? axes.mask : 0);
+    motors_1.mask = (mode == SquaringMode_A || SquaringMode_Both ? axes.mask : 0);
+    motors_2.mask = (mode == SquaringMode_B || SquaringMode_Both ? axes.mask : 0);
 
     if(hal.driver_cap.axis_ganged_x) {
-        BITBAND_PERI(X_DISABLE_PORT->PIO_ODSR, X_DISABLE_PIN) = a_motors.x ^ settings.steppers.enable_invert.mask.x;
+        BITBAND_PERI(X_DISABLE_PORT->PIO_ODSR, X_DISABLE_PIN) = motors_1.x ^ settings.steppers.enable_invert.mask.x;
       #ifdef A_DISABLE_PIN
-        BITBAND_PERI(A_DISABLE_PORT->PIO_ODSR, A_DISABLE_PIN) = b_motors.x ^ settings.steppers.enable_invert.mask.x;;
+        BITBAND_PERI(A_DISABLE_PORT->PIO_ODSR, A_DISABLE_PIN) = motors_2.x ^ settings.steppers.enable_invert.mask.x;;
       #endif
     }
 }
@@ -397,20 +431,20 @@ inline static axes_signals_t limitsGetHomeState()
 {
     axes_signals_t signals = {0};
 	
-    if(a_motors.mask) {
-        if(a_motors.x) {
+    if(motors_1.mask) {
+        if(motors_1.x) {
             signals.x = BITBAND_PERI(X_LIMIT_PORT->PIO_PDSR, X_LIMIT_PIN);
           #ifdef X_LIMIT_PIN_MAX
             signals.x |= BITBAND_PERI(X_LIMIT_PORT_MAX->PIO_PDSR, X_LIMIT_PIN_MAX);
           #endif
         }
-        if(a_motors.y) {
+        if(motors_1.y) {
             signals.y = BITBAND_PERI(Y_LIMIT_PORT->PIO_PDSR, Y_LIMIT_PIN);
           #ifdef Y_LIMIT_PIN_MAX
             signals.y |= BITBAND_PERI(Y_LIMIT_PORT_MAX->PIO_PDSR, Y_LIMIT_PIN_MAX);
           #endif
         }
-        if(a_motors.z) {
+        if(motors_1.z) {
             signals.z = BITBAND_PERI(Z_LIMIT_PORT->PIO_PDSR, Z_LIMIT_PIN);;
           #ifdef Z_LIMIT_PIN_MAX
             signals.z |= BITBAND_PERI(Z_LIMIT_PORT_MAX->PIO_PDSR, Z_LIMIT_PIN_MAX);
@@ -418,8 +452,8 @@ inline static axes_signals_t limitsGetHomeState()
         }
     }
 
-    if(b_motors.mask) {
-        if(a_motors.x) {
+    if(motors_2.mask) {
+        if(motors_1.x) {
             signals.x |= BITBAND_PERI(A_LIMIT_PORT->PIO_PDSR, A_LIMIT_PIN);
           #ifdef A_LIMIT_PIN_MAX
             signals.x |= signals.x | BITBAND_PERI(A_LIMIT_PORT_MAX->PIO_PDSR, A_LIMIT_PIN_MAX);
@@ -1179,35 +1213,33 @@ static bool driver_setup (settings_t *settings)
 
 #ifdef DRIVER_SETTINGS
 
-static bool driver_setting (uint_fast16_t param, float value, char *svalue)
+static status_code_t driver_setting (uint_fast16_t param, float value, char *svalue)
 {
-	bool claimed = false;
+    status_code_t status = Status_Unhandled;
 
 #if KEYPAD_ENABLE
-	claimed = keypad_setting(param, value, svalue);
+	status = keypad_setting(param, value, svalue);
 #endif
 
 #if TRINAMIC_ENABLE
-    if(!claimed)
-        claimed = trinamic_setting(param, value, svalue);
+    if(status == Status_Unhandled)
+        status  = trinamic_setting(param, value, svalue);
 #endif
 
-	if(claimed)
+	if(status == Status_OK)
 		hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
 
-    return claimed;
+    return status;
 }
 
-static void driver_settings_report (bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx)
+static void driver_settings_report (setting_type_t setting)
 {
 #if KEYPAD_ENABLE
-    if(!axis_settings) {
-    	keypad_settings_report(axis_settings, setting_type, axis_idx);
-    }
+    keypad_settings_report(setting);
 #endif
 
 #if TRINAMIC_ENABLE
-    trinamic_settings_report(axis_settings, setting_type, axis_idx);
+    trinamic_settings_report(setting);
 #endif
 }
 
@@ -1425,6 +1457,7 @@ bool driver_init (void)
     hal.user_mcode_validate = trinamic_MCodeValidate;
     hal.user_mcode_execute = trinamic_MCodeExecute;
     hal.driver_rt_report = trinamic_RTReport;
+    hal.driver_axis_settings_report = trinamic_axis_settings_report;
 #endif
 
     hal.set_bits_atomic = bitsSetAtomic;
@@ -1467,8 +1500,9 @@ bool driver_init (void)
     hal.driver_cap.sd_card = On;
 #endif
 
- // no need to move version check before init - compiler will fail any mismatch for existing entries
-    return hal.version == 5;
+    // No need to move version check before init.
+    // Compiler will fail any signature mismatch for existing entries.
+    return hal.version == 6;
 }
 
 /* interrupt handlers */
@@ -1575,7 +1609,7 @@ inline static void PIO_IRQHandler (input_signal_t *signals, uint32_t isr)
 
 #if KEYPAD_ENABLE
 	if(grp & INPUT_GROUP_KEYPAD)
-		keypad_keyclick_handler(gpio_get_level(inputpin[Input_KeypadStrobe].bit));
+		keypad_keyclick_handler(BITBAND_PERI(KEYPAD_PORT->PIO_PDSR, KEYPAD_PIN));
 #endif
 }
 

@@ -38,18 +38,18 @@
 // Set value to 1 to enable, 0 to disable
 
 #define USB_ENABLE      0
-#define KEYPAD_ENABLE   0 // I2C keypad for jogging etc.
-#define TRINAMIC_ENABLE	0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
-#define TRINAMIC_I2C    0 // Trinamic I2C - SPI bridge interface.
+#define KEYPAD_ENABLE   1 // I2C keypad for jogging etc.
+#define TRINAMIC_ENABLE	1 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
+#define TRINAMIC_I2C    1 // Trinamic I2C - SPI bridge interface.
 #define TRINAMIC_DEV    0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
-#define CNC_BOOSTERPACK 0
+#define CNC_BOOSTERPACK 1
 
 #if CNC_BOOSTERPACK
 #if N_AXIS > 3
 #error Max number of axes is 3!
 #endif
-#define SDCARD_ENABLE 0 // Run jobs from SD card.
-#define EEPROM_ENABLE 0 // I2C EEPROM (24LC16) support.
+#define SDCARD_ENABLE 1 // Run jobs from SD card.
+#define EEPROM_ENABLE 1 // I2C EEPROM (24LC16) support.
 #else
 #define SDCARD_ENABLE 0 // Run jobs from SD card.
 #define EEPROM_ENABLE 0 // I2C EEPROM (24LC16) support.

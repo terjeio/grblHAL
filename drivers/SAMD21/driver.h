@@ -154,9 +154,6 @@ extern driver_settings_t driver_settings;
 #define SPINDLE_PWM_CCREG	2
 #define SPINDLEPWMPIN		(6u)
 
-#if KEYPAD_ENABLE
-#define KEYPAD_PIN 5
-#endif
 
 #if IOEXPAND_ENABLE
 
@@ -180,13 +177,17 @@ typedef union {
 
 #endif // CNC Boosterpack pin assignments
 
+#if KEYPAD_ENABLE
+#define KEYPAD_PIN (5u)
+#endif
+
 // Define SD card detect pin.
 #define SD_CD_PIN   30
 
 void IRQRegister(int32_t IRQnum, void (*IRQhandler)(void));
 void IRQUnRegister(int32_t IRQnum);
 
-#if IOEXPAND_ENABLE || EEPROM_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
+#if KEYPAD_ENABLE || IOEXPAND_ENABLE || EEPROM_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
 
 // Define I2C port/pins
 #define I2C_PORT SERCOM0

@@ -32,13 +32,13 @@ static const uint8_t *flash_target = (uint8_t *)(FLASH_BANK1_END - FLASH_PAGE_SI
 
 bool memcpy_from_flash (uint8_t *dest)
 {
-    memcpy(dest, flash_target, GRBL_EEPROM_SIZE);
+    memcpy(dest, flash_target, hal.eeprom.size);
     return true;
 }
 
 bool memcpy_to_flash (uint8_t *source)
 {
-    if (!memcmp(source, flash_target, GRBL_EEPROM_SIZE))
+    if (!memcmp(source, flash_target, hal.eeprom.size))
         return true;
 
     HAL_FLASH_Unlock();
@@ -55,7 +55,7 @@ bool memcpy_to_flash (uint8_t *source)
     HAL_StatusTypeDef status = HAL_FLASHEx_Erase(&erase, &error);
 
     uint16_t *data = (uint16_t *)source;
-    uint32_t address = (uint32_t)flash_target, remaining = (uint32_t)GRBL_EEPROM_SIZE;
+    uint32_t address = (uint32_t)flash_target, remaining = (uint32_t)hal.eeprom.size;
 
     while(remaining && status == HAL_OK) {
     	status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, address, *data++);

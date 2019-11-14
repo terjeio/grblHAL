@@ -42,8 +42,8 @@ void I2C_keypad_setup (void);
 void process_keypress (uint_fast16_t state);
 void I2C_ISR_ExitCallback(void);
 
-bool driver_setting (uint_fast16_t setting, float value, char *svalue);
+status_code_t driver_setting (setting_type_t setting, float value, char *svalue);
 void driver_settings_restore (uint8_t restore_flag);
-void driver_settings_report (bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx);
+void driver_settings_report (setting_type_t setting);
 
 #endif

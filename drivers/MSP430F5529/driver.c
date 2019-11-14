@@ -708,8 +708,8 @@ bool driver_init (void)
 
     __bis_SR_register(GIE);	// Enable interrupts
 
-    // no need to move version check before init - compiler will fail any mismatch for existing entries
-    return hal.version == 5;
+    // no need to move version check before init - compiler will fail any signature mismatch for existing entries
+    return hal.version == 6;
 }
 
 /* interrupt handlers */

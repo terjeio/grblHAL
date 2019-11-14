@@ -5,7 +5,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2018 Terje Io
+  Copyright (c) 2018-2019 Terje Io
   Copyright (c) 2011-2015 Sungeun K. Jeon
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -46,8 +46,8 @@
 #define PWM_RAMPED              0 // Ramped spindle PWM.
 #define LASER_PPI               0 // Laser PPI (Pulses Per Inch) option.
 #define KEYPAD_ENABLE           0 // I2C keypad for jogging etc.
-#define SDCARD_ENABLE           0 // Run jobs from SD card.
-#define ETHERNET_ENABLE         0 // Ethernet streaming.
+#define SDCARD_ENABLE           1 // Run jobs from SD card.
+#define ETHERNET_ENABLE         1 // Ethernet streaming.
 #define M6_ENABLE               1 // Manual toolchange.
 #define TRINAMIC_ENABLE         0 // Trinamic TMC2130 stepper driver support.
 #define TRINAMIC_I2C            0 // Trinamic I2C - SPI bridge interface.
@@ -67,13 +67,23 @@
   #define CNC_BOOSTERPACK_A4998  0 // do not change!
 #endif
 
+#if ETHERNET_ENABLE
+#define NETWORK_HOSTNAME        "GRBL"
+#define NETWORK_IPMODE          IpMode_DHCP
+#if NETWORK_IPMODE != IpMode_DHCP
+#define NETWORK_IP              "192.168.5.1"
+#define NETWORK_GATEWAY         "192.168.5.1"
+#define NETWORK_MASK            "255.255.255.0"
+#endif
+#define NETWORK_TELNET_PORT     23
+#endif
+
 // End configuration
 
-#if TRINAMIC_ENABLE || KEYPAD_ENABLE
+#if TRINAMIC_ENABLE || KEYPAD_ENABLE || ETHERNET_ENABLE
 #define DRIVER_SETTINGS
 #endif
 
-#ifdef DRIVER_SETTINGS
 
 #if TRINAMIC_ENABLE
 #include "tmc2130/trinamic.h"
@@ -83,6 +93,10 @@
 #endif
 
 typedef struct {
+#ifdef DRIVER_SETTINGS
+#if ETHERNET_ENABLE
+    network_settings_t network;
+#endif
 #if TRINAMIC_ENABLE
     trinamic_settings_t trinamic;
 #endif
@@ -395,6 +409,6 @@ void laser_ppi_mode (bool on);
 
 #endif
 
-void selectStream (stream_setting_t stream);
+void selectStream (stream_type_t stream);
 
 #endif

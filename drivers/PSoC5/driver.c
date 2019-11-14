@@ -134,11 +134,6 @@ static void stepperWakeUp ()
 
 }
 
-// Disables stepper driver interrups, called from st_go_idle()
-static void stepperGoIdle (void)
-{
-    StepperTimer_Stop();
-}
 
 // Sets up stepper driver interrupt timeout, called from stepper_driver_interrupt_handler()
 static void stepperCyclesPerTick (uint32_t cycles_per_tick)
@@ -151,16 +146,12 @@ static void stepperCyclesPerTick (uint32_t cycles_per_tick)
 //        StepperTimer_Enable();
 }
 
-// Set stepper pulse output pins, called from st_reset()
-inline static void stepperSetStepOutputs (axes_signals_t step_outbits)
+// Disables stepper driver interrups, called from st_go_idle()
+static void stepperGoIdle (bool clear_signals)
 {
-    StepOutput_Write(step_outbits.value);
-}
-
-// Set stepper direction output pins, called from st_reset()
-inline static void stepperSetDirOutputs (axes_signals_t dir_outbits)
-{
-    DirOutput_Write(dir_outbits.value);
+    StepperTimer_Stop();
+    if(clear_signals)
+        StepOutput_Write(0);
 }
 
 // Sets stepper direction and pulse pins and starts a step pulse
@@ -168,7 +159,7 @@ static void stepperPulseStart (stepper_t *stepper)
 {
     if(stepper->new_block) {
         stepper->new_block = false;
-        stepperSetDirOutputs(stepper->dir_outbits);
+        DirOutput_Write(stepper->dir_outbits.value);
     }
 
     if(stepper->step_outbits.value)
@@ -181,7 +172,7 @@ static void stepperPulseStartDelayed (stepper_t *stepper)
 {
     if(stepper->new_block) {
         stepper->new_block = false;
-        stepperSetDirOutputs(stepper->dir_outbits);
+        DirOutput_Write(stepper->dir_outbits.value);
     }
     
     if(stepper->step_outbits.value) {
@@ -345,7 +336,6 @@ void settings_changed (settings_t *settings)
 // Initializes MCU peripherals for Grbl use
 static bool driver_setup (settings_t *settings)
 {
-
     StepPulseClock_Start();
     StepperTimer_Init();
     Stepper_Interrupt_SetVector(stepper_driver_isr);
@@ -381,7 +371,7 @@ static bool driver_setup (settings_t *settings)
 
     hal.spindle_set_state((spindle_state_t){0}, 0.0f);
     hal.coolant_set_state((coolant_state_t){0});
-    stepperSetDirOutputs((axes_signals_t){0});
+    DirOutput_Write(0);
 
 #ifdef HAS_KEYPAD
 
@@ -393,7 +383,7 @@ static bool driver_setup (settings_t *settings)
 
 #endif
 
-    return settings->version == 12;
+    return settings->version == 14;
 }
 
 // Initialize HAL pointers
@@ -413,8 +403,6 @@ bool driver_init (void)
 	hal.stepper_wake_up = stepperWakeUp;
 	hal.stepper_go_idle = stepperGoIdle;
 	hal.stepper_enable = stepperEnable;
-	hal.stepper_set_outputs = stepperSetStepOutputs;
-	hal.stepper_set_directions = stepperSetDirOutputs;
 	hal.stepper_cycles_per_tick = stepperCyclesPerTick;
 	hal.stepper_pulse_start = stepperPulseStart;
 
@@ -469,8 +457,9 @@ bool driver_init (void)
     hal.driver_cap.limits_pull_up = On;
     hal.driver_cap.probe_pull_up = On;
 
-    // no need to move version check before init - compiler will fail any mismatch for existing entries
-	return hal.version == 4;
+    // No need to move version check before init.
+    // Compiler will fail any signature mismatch for existing entries.
+    return hal.version == 6;
 }
 
 /* interrupt handlers */

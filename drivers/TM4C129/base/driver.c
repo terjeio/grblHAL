@@ -3,7 +3,7 @@
 
   For Texas Instruments SimpleLink ARM processors/LaunchPads
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2018-2019 Terje Io
 
@@ -55,6 +55,7 @@ static void trinamic_diag1_isr (void);
 #if ETHERNET_ENABLE
 #include "ethernet/enet.h"
 #include "ethernet/TCPStream.h"
+#include "posix/sys/socket.h"
 #endif
 
 #define USE_32BIT_TIMER 1
@@ -77,7 +78,7 @@ static uint16_t step_prescaler[3] = {
 #define STEPPER_PULSE_PRESCALER (120 - 1)
 
 const io_stream_t serial_stream = {
-    .type = StreamSetting_Serial,
+    .type = StreamType_Serial,
     .read = serialGetC,
     .write = serialWriteS,
     .write_all = serialWriteS,
@@ -97,7 +98,7 @@ const io_stream_t serial_stream = {
 static void enetStreamWriteS (const char *data);
 
 const io_stream_t ethernet_stream = {
-    .type = StreamSetting_Ethernet,
+    .type = StreamType_Telnet,
     .read = TCPStreamGetC,
     .write = TCPStreamWriteS,
     .write_all = enetStreamWriteS,
@@ -261,16 +262,16 @@ static void enetStreamWriteS (const char *data)
 }
 #endif
 
-void selectStream (stream_setting_t stream)
+void selectStream (stream_type_t stream)
 {
     switch(stream) {
 
 #if ETHERNET_ENABLE
-        case StreamSetting_Ethernet:
+        case StreamType_Telnet:
             memcpy(&hal.stream, &ethernet_stream, sizeof(io_stream_t));
             break;
 #endif
-        case StreamSetting_Serial:
+        case StreamType_Serial:
             memcpy(&hal.stream, &serial_stream, sizeof(io_stream_t));
             break;
 
@@ -1051,7 +1052,7 @@ static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t 
 
 static void modeSelect (bool mpg_mode)
 {
-    static stream_setting_t normal_stream = StreamSetting_Serial;
+    static stream_type_t normal_stream = StreamType_Serial;
 
     // Deny entering MPG mode if busy
     if(mpg_mode == sys.mpg_mode || (mpg_mode && (gc_state.file_run || !(sys.state == STATE_IDLE || (sys.state & (STATE_ALARM|STATE_ESTOP)))))) {
@@ -1117,15 +1118,15 @@ static void settings_changed (settings_t *settings)
         // NOTE: some interfaces may defer actual stream switch until stack is operational
         switch(settings->stream) {
 
-            case StreamSetting_Serial:
-                selectStream(StreamSetting_Serial);
+            case StreamType_Serial:
+                selectStream(StreamType_Serial);
                 break;
 
 #if ETHERNET_ENABLE
-            case StreamSetting_Ethernet:;
+            case StreamType_Telnet:;
                 static bool enet_ok = false;
                 if(!enet_ok)
-                    enet_ok = enet_init(23); // Start listening for connections on port 23
+                    enet_ok = enet_init(&driver_settings.network);
                 break;
 #endif
             default:
@@ -1501,6 +1502,9 @@ static bool driver_setup (settings_t *settings)
   #endif
 
 #if SDCARD_ENABLE
+  #ifdef __MSP432E401Y__
+    SDFatFS_init();
+  #endif
     sdcard_init();
 #endif
 
@@ -1566,38 +1570,148 @@ static bool driver_setup (settings_t *settings)
 
 #ifdef DRIVER_SETTINGS
 
-static bool driver_setting (setting_type_t param, float value, char *svalue)
+static status_code_t driver_setting (setting_type_t param, float value, char *svalue)
 {
-    bool claimed = false;
+    status_code_t status = Status_Unhandled;
+
+#if ETHERNET_ENABLE
+    if(svalue) switch(param) {
+
+#if TELNET_ENABLE
+      case Settings_TelnetPort:
+          if(isint(value) && value != NAN && value > 0.0f && value < 65536.0f) {
+              status = Status_OK;
+              driver_settings.network.telnet_port = (uint16_t)value;
+          } else
+              status = Status_InvalidStatement; //out of range...
+          break;
+#endif
+#if HTTP_ENABLE
+      case Settings_HttpPort:
+          if((claimed = (value != NAN && value > 0.0f && value < 65536.0f) {
+              status = Status_OK;
+              driver_settings.network.http_port = (uint16_t)value;
+          } else
+              status = Status_InvalidStatement; //out of range...
+          break;
+#endif
+/*
+      case Setting_WebSocketPort:
+          if(value != NAN && value > 0.0f && value < 65536.0f) {
+              status = Status_OK;
+              driver_settings.network.websocket_port = (uint16_t)value;
+          } else
+              status = Status_InvalidStatement; //out of range...
+          break;
+
+      case Settings_Hostname:
+          if(strlcpy(driver_settings.network.hostname, svalue, sizeof(driver_settings.network.hostname)) <= sizeof(driver_settings.network.hostname))
+              status = Status_OK;
+          else
+              status = Status_InvalidStatement; // too long...
+          break;
+*/
+/*
+      case Settings_IpMode:
+          if(isint(value) && >= 0.0d && value <= 2.0f) {
+              status = Status_OK;
+              driver_settings.network.ip_mode = (ip_mode_t)(uint8_t)value;
+          }
+          else
+              status = Status_InvalidStatement; // out of range...
+          break;
+
+      case Settings_IpAddress:
+          {
+              ip4_addr_t addr;
+              if(inet_pton(AF_INET, svalue, &addr) == 1) {
+                  status = Status_OK;
+                  *((ip4_addr_t *)driver_settings.network.ip) = addr;
+              } else
+                  status = Status_InvalidStatement;
+          }
+          break;
+
+      case Settings_Gateway:
+          {
+              ip4_addr_t addr;
+              if(inet_pton(AF_INET, svalue, &addr) == 1) {
+                  status = Status_OK;
+                  *((ip4_addr_t *)driver_settings.network.gateway) = addr;
+              } else
+                  status = Status_InvalidStatement;
+          }
+          break;
+
+      case Settings_NetMask:
+          {
+              ip4_addr_t addr;
+              if(inet_pton(AF_INET, svalue, &addr) == 1) {
+                  status = Status_OK;
+                  *((ip4_addr_t *)driver_settings.network.mask) = addr;
+              } else
+                  status = Status_InvalidStatement;
+          }
+          break;
+*/
+    }
+
+#endif
 
 #if KEYPAD_ENABLE
-    claimed = keypad_setting(param, value, svalue);
+    if(status == Status_Unhandled)
+        status = keypad_setting(param, value, svalue);
 #endif
 
 #if TRINAMIC_ENABLE
-    if(!claimed)
-        claimed = trinamic_setting(param, value, svalue);
+    if(status == Status_Unhandled)
+        status = trinamic_setting(param, value, svalue);
 #endif
 
-    if(claimed)
+    if(status == Status_OK)
         hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
 
-    return claimed;
+    return status;
 }
 
-static void driver_settings_report (bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx)
+static void driver_settings_report (setting_type_t setting)
 {
+#if ETHERNET_ENABLE
+    /*
+    char ip[INET6_ADDRSTRLEN];
+//    report_string_setting(Settings_Hostname, driver_settings.network.hostname);
+
+    if(driver_settings.network.ip_mode != IpMode_DHCP) {
+        report_string_setting(Settings_IpAddress, inet_ntop(AF_INET, &driver_settings.network.ip, ip, INET6_ADDRSTRLEN));
+        report_string_setting(Settings_Gateway, inet_ntop(AF_INET, &driver_settings.network.gateway, ip, INET6_ADDRSTRLEN));
+        report_string_setting(Settings_NetMask, inet_ntop(AF_INET, &driver_settings.network.mask, ip, INET6_ADDRSTRLEN));
+    }
+    report_uint_setting(Settings_IpMode, driver_settings.network.ip_mode);
+    */
+    if(setting == Setting_TelnetPort)
+        report_uint_setting(Setting_TelnetPort, driver_settings.network.telnet_port);
+#endif
 #if KEYPAD_ENABLE
-    keypad_settings_report(axis_settings, setting_type, axis_idx);
+    keypad_settings_report(setting);
 #endif
 #if TRINAMIC_ENABLE
-    trinamic_settings_report(axis_settings, setting_type, axis_idx);
+    trinamic_settings_report(setting);
 #endif
 }
 
 void driver_settings_restore (uint8_t restore_flag)
 {
     if(restore_flag & SETTINGS_RESTORE_DRIVER_PARAMETERS) {
+#if ETHERNET_ENABLE
+        /*
+        driver_settings.network.ip_mode = NETWORK_IPMODE;
+        strlcpy(driver_settings.network.hostname, NETWORK_HOSTNAME, sizeof(driver_settings.network.hostname));
+        strlcpy(driver_settings.network.ip, NETWORK_IP, sizeof(driver_settings.network.ip));
+        strlcpy(driver_settings.network.gateway, NETWORK_GATEWAY, sizeof(driver_settings.network.ip));
+        strlcpy(driver_settings.network.mask, NETWORK_MASK, sizeof(driver_settings.network.ip));
+        */
+        driver_settings.network.telnet_port = NETWORK_TELNET_PORT;
+#endif
 #if KEYPAD_ENABLE
         keypad_settings_restore(restore_flag);
 #endif
@@ -1704,7 +1818,7 @@ bool driver_init (void)
 
     hal.system_control_get_state = systemGetState;
 
-    selectStream(StreamSetting_Serial);
+    selectStream(StreamType_Serial);
 
     hal.eeprom.type = EEPROM_Physical;
     hal.eeprom.get_byte = eepromGetByte;
@@ -1735,6 +1849,7 @@ bool driver_init (void)
     hal.user_mcode_validate = trinamic_MCodeValidate;
     hal.user_mcode_execute = trinamic_MCodeExecute;
     hal.driver_rt_report = trinamic_RTReport;
+    hal.driver_axis_settings_report = trinamic_axis_settings_report;
 #endif
 
     hal.set_bits_atomic = bitsSetAtomic;
@@ -1763,10 +1878,6 @@ bool driver_init (void)
 #ifdef _ATC_H_
     hal.tool_select = atc_tool_selected;
     hal.tool_change = atc_tool_change;
-#endif
-
-#if SDCARD_ENABLE
-    hal.driver_reset = sdcard_reset;
 #endif
 
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
@@ -1800,8 +1911,8 @@ bool driver_init (void)
     hal.driver_cap.ethernet = On;
 #endif
 
-    // no need to move version check before init - compiler will fail any mismatch for existing entries
-    return hal.version == 5;
+    // no need to move version check before init - compiler will fail any signature mismatch for existing entries
+    return hal.version == 6;
 }
 
 /* interrupt handlers */

@@ -1,12 +1,12 @@
 //
 // enet.c - lw-IP/FreeRTOS TCP/IP stream implementation
 //
-// v1.0 / 2018-12-08 / Io Engineering / Terje
+// v1.0 / 2018-11-08 / Io Engineering / Terje
 //
 
 /*
 
-Copyright (c) 2018, Terje Io
+Copyright (c) 2018-2019, Terje Io
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -101,7 +101,7 @@ void setupServices (void *pvArg)
     TCPStreamListen(service_port);
 }
 
-bool lwIPTaskInit (void)
+bool lwIPTaskInit (network_settings_t *network)
 {
     uint32_t User0, User1;
     uint8_t MACAddress[6];
@@ -150,7 +150,12 @@ bool lwIPTaskInit (void)
     PREF(IntPrioritySet(FAULT_SYSTICK, SYSTICK_INT_PRIORITY));
 #endif
 
-    lwIPInit(configCPU_CLOCK_HZ, MACAddress, 0, 0, 0, IPADDR_USE_DHCP);
+    service_port = network->telnet_port;
+
+    if(network->ip_mode == IpMode_DHCP)
+        lwIPInit(configCPU_CLOCK_HZ, MACAddress, 0, 0, 0, IPADDR_USE_DHCP);
+    else
+        lwIPInit(configCPU_CLOCK_HZ, MACAddress, (uint32_t)network->ip, (uint32_t)network->gateway, (uint32_t)network->mask, network->ip_mode == IpMode_Static ? IPADDR_USE_STATIC : IPADDR_USE_AUTOIP);
 
     // Setup the remaining services inside the TCP/IP thread's context.
     tcpip_callback(setupServices, 0);
@@ -180,9 +185,7 @@ void vApplicationStackOverflowHook(xTaskHandle *pxTask, signed char *pcTaskName)
     while(true);
 }
 
-bool enet_init (uint16_t port)
+bool enet_init (network_settings_t *network)
 {
-    service_port = port;
-
-    return lwIPTaskInit();
+    return lwIPTaskInit(network);
 }

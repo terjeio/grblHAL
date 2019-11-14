@@ -1,7 +1,7 @@
 //
 // serial.c - (UART) port library for Tiva
 //
-// v1.00 / 2019-06-03 / Io Engineering / Terje
+// v1.00 / 2019-08-15 / Io Engineering / Terje
 //
 
 /*
@@ -41,16 +41,29 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define BUFCOUNT(head, tail, size) ((head >= tail) ? (head - tail) : (size - tail + head))
 
+typedef struct {
+    volatile uint16_t head;
+    volatile uint16_t tail;
+    bool overflow;
+    bool rts_state;
+    bool backup;
+    char data[RX_BUFFER_SIZE];
+} stream_rx_buffer_t;
+
+typedef struct {
+    volatile uint16_t head;
+    volatile uint16_t tail;
+    char data[TX_BUFFER_SIZE];
+} stream_tx_buffer_t;
+
 static void uart_interrupt_handler (void);
 
-static char rxbuf[RX_BUFFER_SIZE];
-static volatile uint16_t rx_head = 0, rx_tail = 0, rx_overflow = 0, rts_state = 0;
+static stream_tx_buffer_t txbuffer = {0};
+static stream_rx_buffer_t rxbuffer = {0}, rxbackup;
+static volatile uint16_t rts_state = 0;
 
-static char txbuf[TX_BUFFER_SIZE];
-static volatile uint16_t tx_head = 0, tx_tail = 0;
-
-void serialInit (void) {
-
+void serialInit (void)
+{
 #ifdef BACKCHANNEL
 
     #define UARTCH UART0_BASE
@@ -104,26 +117,26 @@ void serialInit (void) {
 int16_t serialGetC (void)
 {
     int16_t data;
-    uint16_t bptr = rx_tail;
+    uint16_t bptr = rxbuffer.tail;
 
-    if(bptr == rx_head)
+    if(bptr == rxbuffer.head)
         return -1; // no data available else EOF
 
 //    UARTIntDisable(UARTCH, UART_INT_RX|UART_INT_RT);
-    data = rxbuf[bptr++];                   // Get next character, increment tmp pointer
-    rx_tail = bptr & (RX_BUFFER_SIZE - 1);  // and update pointer
+    data = rxbuffer.data[bptr++];                   // Get next character, increment tmp pointer
+    rxbuffer.tail = bptr & (RX_BUFFER_SIZE - 1);  // and update pointer
 
 //    UARTIntEnable(UARTCH, UART_INT_RX|UART_INT_RT);
 
-    if (rts_state && BUFCOUNT(rx_head, rx_tail, RX_BUFFER_SIZE) < RX_BUFFER_LWM)    // Clear RTS if
-        GPIOPinWrite(RTS_PORT, RTS_PIN, rts_state = 0);                             // buffer count is below low water mark
+    if (rts_state && BUFCOUNT(rxbuffer.head, rxbuffer.tail, RX_BUFFER_SIZE) < RX_BUFFER_LWM)    // Clear RTS if
+        GPIOPinWrite(RTS_PORT, RTS_PIN, rts_state = 0);                                         // buffer count is below low water mark
 
     return data;
 }
 
 inline uint16_t serialRxCount (void)
 {
-    uint16_t head = rx_head, tail = rx_tail;
+    uint16_t head = rxbuffer.head, tail = rxbuffer.tail;
 
     return BUFCOUNT(head, tail, RX_BUFFER_SIZE);
 }
@@ -135,15 +148,15 @@ uint16_t serialRxFree (void)
 
 void serialRxFlush (void)
 {
-    rx_tail = rx_head;
+    rxbuffer.tail = rxbuffer.head;
     GPIOPinWrite(RTS_PORT, RTS_PIN, rts_state = 0);
 }
 
 void serialRxCancel (void)
 {
-    rxbuf[rx_head] = ASCII_CAN;
-    rx_tail = rx_head;
-    rx_head = (rx_tail + 1) & (RX_BUFFER_SIZE - 1);
+    rxbuffer.data[rxbuffer.head] = ASCII_CAN;
+    rxbuffer.tail = rxbuffer.head;
+    rxbuffer.head = (rxbuffer.tail + 1) & (RX_BUFFER_SIZE - 1);
 
     GPIOPinWrite(RTS_PORT, RTS_PIN, rts_state = 0);
 }
@@ -172,21 +185,21 @@ void serialWrite (const char *data, unsigned int length)
 
 }
 
-bool serialPutC (const char c) {
-
+bool serialPutC (const char c)
+{
     uint32_t next_head;
 
-    if(tx_head != tx_tail || !UARTCharPutNonBlocking(UARTCH, c)) {  // Send character without buffering if possible
+    if(txbuffer.head != txbuffer.tail || !UARTCharPutNonBlocking(UARTCH, c)) {  // Send character without buffering if possible
 
-        next_head = (tx_head + 1) & (TX_BUFFER_SIZE - 1);           // Get and update head pointer
+        next_head = (txbuffer.head + 1) & (TX_BUFFER_SIZE - 1);           // Get and update head pointer
 
-        while(tx_tail == next_head) {                               // Buffer full, block until space is available...
+        while(txbuffer.tail == next_head) {                               // Buffer full, block until space is available...
             if(!hal.stream_blocking_callback())
                 return false;
         }
 
-        txbuf[tx_head] = c;                                         // Add data to buffer
-        tx_head = next_head;                                        // and update head pointer
+        txbuffer.data[txbuffer.head] = c;                                         // Add data to buffer
+        txbuffer.head = next_head;                                        // and update head pointer
 
         UARTIntEnable(UARTCH, UART_INT_TX); // Enable interrupts
     }
@@ -194,37 +207,53 @@ bool serialPutC (const char c) {
     return true;
 }
 
+// "dummy" version of serialGetC
+static int16_t serialGetNull (void)
+{
+    return -1;
+}
+
+bool serialSuspendInput (bool suspend)
+{
+    if(suspend)
+        hal.stream.read = serialGetNull;
+    else if(rxbuffer.backup)
+        memcpy(&rxbuffer, &rxbackup, sizeof(stream_rx_buffer_t));
+
+    return rxbuffer.tail != rxbuffer.head;
+}
+
 uint16_t serialTxCount(void) {
 
-    uint16_t head = tx_head, tail = tx_tail;
+    uint16_t head = txbuffer.head, tail = txbuffer.tail;
 
     return BUFCOUNT(head, tail, TX_BUFFER_SIZE);
 }
 
-static void uart_interrupt_handler (void) {
-
+static void uart_interrupt_handler (void)
+{
     uint16_t bptr;
     int32_t data;
     uint32_t iflags = UARTIntStatus(UARTCH, true);
 
     if(iflags & UART_INT_TX) {
 
-        bptr = tx_tail;
+        bptr = txbuffer.tail;
 
-        if(tx_head != bptr) {
+        if(txbuffer.head != bptr) {
 
-            UARTCharPut(UARTCH, txbuf[bptr++]);                 // Put character in TXT FIFO
-            bptr &= (TX_BUFFER_SIZE - 1);                       // and update tmp tail pointer
+            UARTCharPut(UARTCH, txbuffer.data[bptr++]);                 // Put character in TXT FIFO
+            bptr &= (TX_BUFFER_SIZE - 1);                               // and update tmp tail pointer
 
-            while(tx_head != bptr && UARTSpaceAvail(UARTCH)) {  // While data in TX buffer and free space in TX FIFO
-                UARTCharPut(UARTCH, txbuf[bptr++]);             // put next character
-                bptr &= (TX_BUFFER_SIZE - 1);                   // and update tmp tail pointer
+            while(txbuffer.head != bptr && UARTSpaceAvail(UARTCH)) {    // While data in TX buffer and free space in TX FIFO
+                UARTCharPut(UARTCH, txbuffer.data[bptr++]);             // put next character
+                bptr &= (TX_BUFFER_SIZE - 1);                           // and update tmp tail pointer
             }
 
-            tx_tail = bptr;                                     //  Update tail pinter
+            txbuffer.tail = bptr;                                       //  Update tail pinter
 
-            if(bptr == tx_head)                                 // Disable TX  interrups
-                UARTIntDisable(UARTCH, UART_INT_TX);            // when TX buffer empty
+            if(bptr == txbuffer.head)                                   // Disable TX  interrups
+                UARTIntDisable(UARTCH, UART_INT_TX);                    // when TX buffer empty
 
 /*        } else {
             UARTIntDisable(UARTCH, UART_INT_TX);
@@ -235,20 +264,26 @@ static void uart_interrupt_handler (void) {
 
     if(iflags & (UART_INT_RX|UART_INT_RT)) {
 
-        bptr = (rx_head + 1) & (RX_BUFFER_SIZE - 1);    // Get next head pointer
+        bptr = (rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1);  // Get next head pointer
 
-        if(bptr == rx_tail) {                           // If buffer full
-            rx_overflow = 1;                            // flag overlow
-            UARTCharGet(UARTCH);                        // and do dummy read to clear interrupt;
+        if(bptr == rxbuffer.tail) {                         // If buffer full
+            rxbuffer.overflow = 1;                          // flag overflow
+            UARTCharGet(UARTCH);                            // and do dummy read to clear interrupt;
         } else {
             data = UARTCharGet(UARTCH);
-            if(!hal.stream.enqueue_realtime_command((char)data)) {
-                rxbuf[rx_head] = (char)data;   // Add data to buffer
-                rx_head = bptr;                // and update pointer
+            if(data == CMD_TOOL_ACK && !rxbuffer.backup) {
+                memcpy(&rxbackup, &rxbuffer, sizeof(stream_rx_buffer_t));
+                rxbuffer.backup = true;
+                rxbuffer.tail = rxbuffer.head;
+                hal.stream.read = serialGetC; // restore normal input
+
+            } else if(!hal.stream.enqueue_realtime_command((char)data)) {
+                rxbuffer.data[rxbuffer.head] = (char)data;  // Add data to buffer
+                rxbuffer.head = bptr;                       // and update pointer
             }
         }
 
-        if (!rts_state && BUFCOUNT(rx_head, rx_tail, RX_BUFFER_SIZE) >= RX_BUFFER_HWM)
+        if (!rts_state && BUFCOUNT(rxbuffer.head, rxbuffer.tail, RX_BUFFER_SIZE) >= RX_BUFFER_HWM)
             GPIOPinWrite(RTS_PORT, RTS_PIN, rts_state = RTS_PIN);
 
     }

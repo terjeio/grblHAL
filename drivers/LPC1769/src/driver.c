@@ -738,8 +738,10 @@ bool driver_init (void) {
 #if SDCARD_ENABLE
     hal.driver_cap.sd_card = On;
 #endif
-    // no need to move version check before init - compiler will fail any mismatch for existing entries
-    return hal.version == 5;
+
+    // No need to move version check before init.
+    // Compiler will fail any signature mismatch for existing entries.
+    return hal.version == 6;
 }
 
 /* interrupt handlers */

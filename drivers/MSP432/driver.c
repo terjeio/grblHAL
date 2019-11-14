@@ -1,8 +1,8 @@
 /*
 
-  driver.c - driver code for Texas Instruments MSP432 ARM processor
+  driver.c - driver code for Texas Instruments MSP432P401R ARM processor
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2017-2019 Terje Io
 
@@ -161,7 +161,7 @@ inline static float pid (pid_t *pid, float command, float actual, float sample_r
         error = 0.0f;
 */
     // calculate the proportional term
-    float pidres = pid->cfg.d_gain * error;
+    float pidres = pid->cfg.p_gain * error;
 
     // calculate and add the integral term
     pid->i_error += error * (pid->sample_rate_prev / sample_rate);
@@ -205,12 +205,15 @@ inline static float pid (pid_t *pid, float command, float actual, float sample_r
 
 static void driver_delay_ms (uint32_t ms, void (*callback)(void))
 {
+    if(delay.callback)
+        delay.callback();
+
     if((delay.ms = ms) > 0) {
         SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
         if(!(delay.callback = callback))
             while(delay.ms);
-    } else if(delay.callback)
-        delay.callback();
+    } else if(callback)
+        callback();
 }
 
 // Set stepper pulse output pins
@@ -823,8 +826,6 @@ static void modeSelect (bool mpg_mode)
         return;
     }
 
-    BITBAND_PERI(MODE_PORT->OUT, MODE_LED_PIN) = mpg_mode;
-
     serialSelect(mpg_mode);
 
     if(mpg_mode) {
@@ -848,9 +849,20 @@ static void modeSelect (bool mpg_mode)
     hal.stream.enqueue_realtime_command(mpg_mode ? CMD_STATUS_REPORT_ALL : CMD_STATUS_REPORT);
 }
 
-static void modechange (void)
+static void modeChange (void)
 {
     modeSelect((MODE_PORT->IN & MODE_SWITCH_BIT) == 0);
+}
+
+static void modeEnable (void)
+{
+    if(sys.mpg_mode != !BITBAND_PERI(MODE_PORT->IN, MODE_SWITCH_PIN))
+        modeSelect(true);
+    BITBAND_PERI(MODE_PORT->IFG, MODE_SWITCH_PIN) = 0;
+    BITBAND_PERI(MODE_PORT->IE, MODE_SWITCH_PIN) = 1;
+#if KEYPAD_ENABLE
+    KEYPAD_PORT->IE |= KEYPAD_IRQ_BIT;
+#endif
 }
 
 #endif
@@ -998,18 +1010,6 @@ void settings_changed (settings_t *settings)
         BITBAND_PERI(CONTROL_PORT_RST->IE, RESET_PIN) = 1;
 #endif
 
-#if MPG_MODE_ENABLE
-        if(hal.driver_cap.mpg_mode) {
-            BITBAND_PERI(MODE_PORT->OUT, MODE_SWITCH_PIN) = 1;
-            BITBAND_PERI(MODE_PORT->REN, MODE_SWITCH_PIN) = 1;
-            BITBAND_PERI(MODE_PORT->DIR, MODE_LED_PIN) = 1;
-            if(sys.mpg_mode != !BITBAND_PERI(MODE_PORT->IN, MODE_SWITCH_PIN))
-                modeSelect(true);
-            BITBAND_PERI(MODE_PORT->IFG, MODE_SWITCH_PIN) = 0;
-            BITBAND_PERI(MODE_PORT->IE, MODE_SWITCH_PIN) = 1;
-        }
-#endif
-
 #if LIMITS_OVERRIDE_ENABLE
         BITBAND_PERI(LIMITS_OVERRIDE_PORT->OUT, LIMITS_OVERRIDE_SWITCH_PIN) = 1;
         BITBAND_PERI(LIMITS_OVERRIDE_PORT->REN, LIMITS_OVERRIDE_SWITCH_PIN) = 1;
@@ -1054,7 +1054,24 @@ void settings_changed (settings_t *settings)
 
         BITBAND_PERI(PROBE_PORT->OUT, PROBE_PIN) = hal.driver_cap.probe_pull_up;
         BITBAND_PERI(PROBE_PORT->REN, PROBE_PIN) = 1;
+
+        /***************************
+         *  MPG mode input enable  *
+         ***************************/
+
+#if MPG_MODE_ENABLE
+        if(hal.driver_cap.mpg_mode) {
+            // Enable pullup and switch to input
+            BITBAND_PERI(MODE_PORT->OUT, MODE_SWITCH_PIN) = 1;
+            BITBAND_PERI(MODE_PORT->REN, MODE_SWITCH_PIN) = 1;
+            BITBAND_PERI(MODE_PORT->DIR, MODE_SWITCH_PIN) = 0;
+            // Delay mode enable a bit so grbl can finish statup and MPG controller can check ready status
+            hal.delay_ms(50, modeEnable);
+        }
+#endif
+
     }
+
 }
 
 // Initializes MCU peripherals for Grbl use
@@ -1181,8 +1198,9 @@ static bool driver_setup (settings_t *settings)
     BITBAND_PERI(KEYPAD_PORT->REN, KEYPAD_IRQ_PIN) = 1;
     BITBAND_PERI(KEYPAD_PORT->IES, KEYPAD_IRQ_PIN) = (KEYPAD_PORT->IN & KEYPAD_IRQ_BIT) ? 1 : 0;
     KEYPAD_PORT->IFG &= ~KEYPAD_IRQ_BIT;
+#if !MPG_MODE_ENABLE
     KEYPAD_PORT->IE |= KEYPAD_IRQ_BIT;
-
+#endif
     NVIC_EnableIRQ(KEYPAD_INT);  // Enable keypad  port interrupt
 #endif
 
@@ -1222,32 +1240,32 @@ static bool driver_setup (settings_t *settings)
 
 #ifdef DRIVER_SETTINGS
 
-static bool driver_setting (setting_type_t param, float value, char *svalue)
+static status_code_t driver_setting (setting_type_t param, float value, char *svalue)
 {
-    bool claimed = false;
+    status_code_t status = Status_Unhandled;
 
 #if KEYPAD_ENABLE
-    claimed = keypad_setting(param, value, svalue);
+    status = keypad_setting(param, value, svalue);
 #endif
 
 #if TRINAMIC_ENABLE
-    if(!claimed)
-        claimed = trinamic_setting(param, value, svalue);
+    if(status == Status_Unhandled)
+        status = trinamic_setting(param, value, svalue);
 #endif
 
-    if(claimed)
+    if(status == Status_OK)
         hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
 
-    return claimed;
+    return status;
 }
 
-static void driver_settings_report (bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx)
+static void driver_settings_report (setting_type_t setting)
 {
 #if KEYPAD_ENABLE
-    keypad_settings_report(axis_settings, setting_type, axis_idx);
+    keypad_settings_report(setting);
 #endif
 #if TRINAMIC_ENABLE
-    trinamic_settings_report(axis_settings, setting_type, axis_idx);
+    trinamic_settings_report(setting);
 #endif
 }
 
@@ -1285,6 +1303,12 @@ bool driver_init (void)
     SysTick->LOAD = (SystemCoreClock / 1000) - 1;
     SysTick->VAL = 0;
     SysTick->CTRL |= SysTick_CTRL_CLKSOURCE_Msk|SysTick_CTRL_TICKINT_Msk;
+
+#if MPG_MODE_ENABLE
+    // Drive MPG mode input pin low until setup complete
+    BITBAND_PERI(MODE_PORT->DIR, MODE_SWITCH_PIN) = 1;
+    BITBAND_PERI(MODE_PORT->OUT, MODE_SWITCH_PIN) = 0;
+#endif
 
     serialInit();
 
@@ -1346,7 +1370,7 @@ bool driver_init (void)
     assert(EEPROM_ADDR_TOOL_TABLE - (sizeof(driver_settings_t) + 2) > EEPROM_ADDR_GLOBAL + sizeof(settings_t) + 1);
     hal.eeprom.driver_area.address = EEPROM_ADDR_TOOL_TABLE - (sizeof(driver_settings_t) + 2);
   #else
-    hal.eeprom.driver_area.address = 1024;
+    hal.eeprom.driver_area.address = GRBL_EEPROM_SIZE;
   #endif
     hal.eeprom.driver_area.size = sizeof(driver_settings_t);
     hal.eeprom.size = GRBL_EEPROM_SIZE + sizeof(driver_settings_t) + 1;
@@ -1362,6 +1386,7 @@ bool driver_init (void)
     hal.user_mcode_validate = trinamic_MCodeValidate;
     hal.user_mcode_execute = trinamic_MCodeExecute;
     hal.driver_rt_report = trinamic_RTReport;
+    hal.driver_axis_settings_report = trinamic_axis_settings_report;
 #endif
 
     hal.set_bits_atomic = bitsSetAtomic;
@@ -1400,8 +1425,8 @@ bool driver_init (void)
     hal.driver_cap.mpg_mode = On;
 #endif
 
-    // no need to move version check before init - compiler will fail any mismatch for existing entries
-    return hal.version == 5;
+    // no need to move version check before init - compiler will fail any signature mismatch for existing entries
+    return hal.version == 6;
 }
 
 /* interrupt handlers */
@@ -1516,7 +1541,7 @@ void MODE_IRQHandler (void)
     if(iflags) {
         MODE_PORT->IFG &= ~iflags;
         if(delay.ms == 0) // Ignore if delay is active
-            driver_delay_ms(50, modechange);
+            driver_delay_ms(50, modeChange);
     }
 }
 
@@ -1584,7 +1609,7 @@ void CONTROL_SD_MODE_Handler (void)
   #if MPG_MODE_ENABLE
     if(iflags & MODE_SWITCH_BIT) {
         if(delay.ms == 0) // Ignore if delay is active
-            driver_delay_ms(50, modechange);
+            driver_delay_ms(50, modeChange);
     } else
   #endif
   #if TRINAMIC_I2C

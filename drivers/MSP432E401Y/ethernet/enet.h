@@ -1,12 +1,12 @@
 //
 // enet.h - lw-IP/FreeRTOS TCP/IP stream implementation
 //
-// v1.0 / 2018-12-08 / Io Engineering / Terje
+// v1.0 / 2018-11-08 / Io Engineering / Terje
 //
 
 /*
 
-Copyright (c) 2018, Terje Io
+Copyright (c) 2018-2019, Terje Io
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -39,9 +39,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __ENET_H__
 #define __ENET_H__
 
-#include <stdbool.h>
+#include "driver.h"
 
-bool enet_init (uint16_t port);
+bool enet_init (network_settings_t *network);
 char *enet_ip_address (void);
 
 #endif

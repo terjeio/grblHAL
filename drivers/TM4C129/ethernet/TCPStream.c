@@ -342,7 +342,7 @@ static err_t streamReceive (void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_
             streamSession->state = TCPState_Listen;
 
             // Switch grbl I/O stream back to UART
-            selectStream(StreamSetting_Serial);
+            selectStream(StreamType_Serial);
         }
     }
 
@@ -390,7 +390,7 @@ static err_t TCPStreamAccept (void *arg, struct tcp_pcb *pcb, err_t err)
     tcp_sent(pcb, streamSent);
 
     // Switch grbl I/O stream to TCP/IP connection
-    selectStream(StreamSetting_Ethernet);
+    selectStream(StreamType_Telnet);
 
     return ERR_OK;
 }
@@ -423,7 +423,7 @@ void TCPStreamClose (void)
     streamSession.linkLost = false;
 
     // Switch grbl I/O stream back to UART
-    selectStream(StreamSetting_Serial);
+    selectStream(StreamType_Serial);
 }
 
 void TCPStreamListen (uint16_t port)
