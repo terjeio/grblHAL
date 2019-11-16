@@ -350,16 +350,20 @@
 #define ENABLE_RESTORE_EEPROM_WIPE_ALL         // '$RST=*' Default enabled. Comment to disable.
 #define ENABLE_RESTORE_EEPROM_DEFAULT_SETTINGS // '$RST=$' Default enabled. Comment to disable.
 #define ENABLE_RESTORE_EEPROM_CLEAR_PARAMETERS // '$RST=#' Default enabled. Comment to disable.
-#define ENABLE_RESTORE_DRIVER_PARAMETERS       // '$RST=!' Default enabled. Comment to disable. For drivers that implements non-generic settings.
+#define ENABLE_RESTORE_DRIVER_PARAMETERS       // '$RST=&' Default enabled. Comment to disable. For drivers that implements non-generic settings.
 
 // Defines the EEPROM data restored upon a settings version change and `$RST=*` command. Whenever the
 // the settings or other EEPROM data structure changes between Grbl versions, Grbl will automatically
-// wipe and restore the EEPROM. This macro controls what data is wiped and restored. This is useful
+// wipe and restore the EEPROM. These macros controls what data is wiped and restored. This is useful
 // particularily for OEMs that need to retain certain data. For example, the BUILD_INFO string can be
-// written into the EEPROM via a separate .INO sketch to contain product data. Altering this
-// macro to not restore the build info EEPROM will ensure this data is retained after firmware upgrades.
-// NOTE: Uncomment to override defaults in settings.h
-// #define SETTINGS_RESTORE_ALL (SETTINGS_RESTORE_DEFAULTS|SETTINGS_RESTORE_PARAMETERS|SETTINGS_RESTORE_STARTUP_LINES|SETTINGS_RESTORE_BUILD_INFO|SETTINGS_RESTORE_DRIVER_PARAMETERS)
+// written into the EEPROM via a separate program to contain product data. Altering these
+// macros to not restore the build info EEPROM will ensure this data is retained after firmware upgrades.
+// 0 = do not restore, 1 = restore
+#define SETTINGS_RESTORE_DEFAULTS          1
+#define SETTINGS_RESTORE_PARAMETERS        1
+#define SETTINGS_RESTORE_STARTUP_LINES     1
+#define SETTINGS_RESTORE_BUILD_INFO        1
+#define SETTINGS_RESTORE_DRIVER_PARAMETERS 1
 
 // Enable the '$I=(string)' build info write command. If disabled, any existing build info data must
 // be placed into EEPROM via external means with a valid checksum value. This macro option is useful

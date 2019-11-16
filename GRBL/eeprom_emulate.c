@@ -203,7 +203,7 @@ bool eeprom_emu_init()
 
         // If no physical EEPROM available then import default settings to RAM
         if(physical_eeprom.type == EEPROM_None)
-            settings_restore(SETTINGS_RESTORE_ALL);
+            settings_restore((settings_restore_t){0xFF});
     }
 
     // Clear settings dirty flags

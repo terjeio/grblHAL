@@ -29,16 +29,6 @@
 // when firmware is upgraded. Always stored in byte 0 of eeprom
 #define SETTINGS_VERSION 14  // NOTE: Check settings_reset() when moving to next version.
 
-// Define settings restore bitflags.
-#define SETTINGS_RESTORE_DEFAULTS bit(0)
-#define SETTINGS_RESTORE_PARAMETERS bit(1)
-#define SETTINGS_RESTORE_STARTUP_LINES bit(2)
-#define SETTINGS_RESTORE_BUILD_INFO bit(3)
-#define SETTINGS_RESTORE_DRIVER_PARAMETERS bit(4)
-#ifndef SETTINGS_RESTORE_ALL
-  #define SETTINGS_RESTORE_ALL 0xFF // All bitflags
-#endif
-
 // Define persistent storage memory address location values for Grbl settings and parameters
 // NOTE: 1KB persistent storage is the minimum required. The upper half is reserved for parameters and
 // the startup script. The lower half contains the global settings and space for future
@@ -259,13 +249,20 @@ typedef enum {
     */
 } axis_setting_type_t;
 
-typedef enum {
-    StreamType_Serial = 0,
-    StreamType_Bluetooth,
-    StreamType_Telnet,
-    StreamType_WebSocket,
-    StreamType_SDCard
-} stream_type_t;
+typedef union {
+    uint8_t mask;
+    struct {
+        uint8_t defaults          :1,
+                parameters        :1,
+                startup_lines     :1,
+                build_info        :1,
+                driver_parameters :1,
+                unassigned        :3;
+
+    };
+} settings_restore_t;
+
+extern const settings_restore_t settings_all;
 
 typedef union {
     uint16_t value;
@@ -424,7 +421,7 @@ typedef struct {
     stepper_settings_t steppers;
     reportmask_t status_report; // Mask to indicate desired report data.
     settingflags_t flags;  // Contains default boolean settings
-    stream_type_t stream; // deprecated
+    uint8_t stream_deprecated; // no longer used, kept for now for backwards compatibility
     homing_settings_t homing;
     limit_settings_t limits;
     parking_settings_t parking;
@@ -454,9 +451,10 @@ typedef union {
         uint8_t telnet     :1,
                 websocket  :1,
                 http       :1,
+                dns        :1,
                 mdns       :1,
                 ssdp       :1,
-                unassigned :3;
+                unassigned :2;
     };
 } network_services_t;
 
@@ -510,7 +508,7 @@ extern settings_t settings;
 void settings_init();
 
 // Helper function to clear and restore persistent storage defaults
-void settings_restore(uint8_t restore_flag);
+void settings_restore(settings_restore_t restore_flags);
 
 // A helper method to set new settings from command line
 status_code_t settings_store_global_setting(setting_type_t setting, char *svalue);

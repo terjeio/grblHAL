@@ -107,6 +107,7 @@ typedef enum {
     Maslow_motorOffsetY,
     Maslow_AcorrScaling,
     Maslow_BcorrScaling,
+    Maslow_SettingMax,
 } maslow_config_t;
 
 typedef struct {
@@ -159,9 +160,9 @@ extern maslow_hal_t maslow_hal;
 
 // Initialize HAL pointers for Maslow Router kinematics
 void maslow_init (void);
-bool maslow_setting (setting_type_t param, float value, char *svalue);
-void maslow_settings_report (bool axis_settings, axis_setting_type_t setting_type, uint8_t axis_idx);
-void maslow_settings_restore (uint8_t restore_flag);
+status_code_t maslow_setting (setting_type_t param, float value, char *svalue);
+void maslow_settings_report (setting_type_t setting);
+void maslow_settings_restore (void);
 static status_code_t maslow_tuning (uint_fast16_t state, char *line, char *lcline);
 
 #endif

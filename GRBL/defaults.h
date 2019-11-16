@@ -92,7 +92,6 @@
 
 // Grbl default settings
 
-#define DEFAULT_STREAM 0 // 0 = Serial, 1 = Bluetooth, 2 = Ethernet, 3 = WiFi
 #define DEFAULT_X_STEPS_PER_MM 250.0f
 #define DEFAULT_Y_STEPS_PER_MM 250.0f
 #define DEFAULT_Z_STEPS_PER_MM 250.0f

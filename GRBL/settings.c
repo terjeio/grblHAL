@@ -24,11 +24,19 @@
 
 settings_t settings;
 
+const settings_restore_t settings_all = {
+    .defaults          = SETTINGS_RESTORE_DEFAULTS,
+    .parameters        = SETTINGS_RESTORE_PARAMETERS,
+    .startup_lines     = SETTINGS_RESTORE_STARTUP_LINES,
+    .build_info        = SETTINGS_RESTORE_BUILD_INFO,
+    .driver_parameters = SETTINGS_RESTORE_DRIVER_PARAMETERS
+};
+
 const settings_t defaults = {
 
     .version = SETTINGS_VERSION,
 
-    .stream = (stream_type_t)DEFAULT_STREAM, // deprecated, no longer used - kept for now to avoid triggering EEPROM reset
+    .stream_deprecated = 0, // deprecated, no longer used - kept for now to avoid triggering EEPROM reset
     .junction_deviation = DEFAULT_JUNCTION_DEVIATION,
     .arc_tolerance = DEFAULT_ARC_TOLERANCE,
     .g73_retract = DEFAULT_G73_RETRACT,
@@ -271,14 +279,14 @@ void write_global_settings ()
 
 
 // Restore Grbl global settings to defaults and write to persistent storage
-void settings_restore (uint8_t restore_flag) {
+void settings_restore (settings_restore_t restore) {
 
-    if (restore_flag & SETTINGS_RESTORE_DEFAULTS) {
+    if (restore.defaults) {
         memcpy(&settings, &defaults, sizeof(settings_t));
         write_global_settings();
     }
 
-    if (restore_flag & SETTINGS_RESTORE_PARAMETERS) {
+    if (restore.parameters) {
         uint_fast8_t idx;
         float coord_data[N_AXIS];
 
@@ -298,7 +306,7 @@ void settings_restore (uint8_t restore_flag) {
 #endif
     }
 
-    if (hal.eeprom.type != EEPROM_None && (restore_flag & SETTINGS_RESTORE_STARTUP_LINES)) {
+    if (hal.eeprom.type != EEPROM_None && restore.startup_lines) {
       #if N_STARTUP_LINE > 0
         hal.eeprom.put_byte(EEPROM_ADDR_STARTUP_BLOCK, 0);
       #endif
@@ -307,11 +315,11 @@ void settings_restore (uint8_t restore_flag) {
       #endif
     }
 
-    if ((restore_flag & SETTINGS_RESTORE_BUILD_INFO) && hal.eeprom.type != EEPROM_None)
-        hal.eeprom.put_byte(EEPROM_ADDR_BUILD_INFO , 0);
+    if (restore.build_info && hal.eeprom.type != EEPROM_None)
+        hal.eeprom.put_byte(EEPROM_ADDR_BUILD_INFO, 0);
 
-    if((restore_flag & SETTINGS_RESTORE_DRIVER_PARAMETERS) && hal.driver_settings_restore)
-        hal.driver_settings_restore(restore_flag);
+    if(restore.driver_parameters && hal.driver_settings_restore)
+        hal.driver_settings_restore();
 
     eeprom_emu_sync_physical();
 }
@@ -745,8 +753,10 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
 // Initialize the config subsystem
 void settings_init() {
     if(!read_global_settings()) {
+        settings_restore_t settings = settings_all;
+        settings.defaults = 1; // Ensure global settings get restored
         hal.report.status_message(Status_SettingReadFail);
-        settings_restore(SETTINGS_RESTORE_ALL); // Force restore all EEPROM data.
+        settings_restore(settings); // Force restore all EEPROM data.
         report_init();
         report_grbl_settings();
     } else {

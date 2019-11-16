@@ -91,6 +91,14 @@ typedef struct {
     void (*feedback_message)(message_code_t message_code);
 } report_t;
 
+typedef enum {
+    StreamType_Serial = 0,
+    StreamType_Bluetooth,
+    StreamType_Telnet,
+    StreamType_WebSocket,
+    StreamType_SDCard
+} stream_type_t;
+
 typedef struct {
     stream_type_t type;
     uint16_t (*get_rx_buffer_available)(void);
@@ -158,7 +166,7 @@ typedef struct HAL {
     void (*report_options)(void);
     void (*driver_reset)(void);
     status_code_t (*driver_setting)(setting_type_t setting, float value, char *svalue);
-    void (*driver_settings_restore)(uint8_t restore_flag);
+    void (*driver_settings_restore)(void);
     void (*driver_settings_report)(setting_type_t setting_type);
     void (*driver_axis_settings_report)(axis_setting_type_t setting_type, uint8_t axis_idx);
     spindle_data_t (*spindle_get_data)(spindle_data_request_t request);

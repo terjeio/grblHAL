@@ -179,7 +179,7 @@ status_code_t system_execute_line (char *line)
             } // Otherwise, no effect.
             break;
 
-        case 'H' : // Perform homing cycle [IDLE/ALARM]
+        case 'H': // Perform homing cycle [IDLE/ALARM]
             if(!(sys.state == STATE_IDLE || sys.state == STATE_ALARM))
                 retval = Status_IdleError;
             else {
@@ -251,7 +251,7 @@ status_code_t system_execute_line (char *line)
             }
             break;
 
-        case 'S' : // Puts Grbl to sleep [IDLE/ALARM]
+        case 'S': // Puts Grbl to sleep [IDLE/ALARM]
             if(!settings.flags.sleep_enable || !(line[2] == 'L' && line[3] == 'P' && line[4] == '\0'))
                 retval = Status_InvalidStatement;
             else if(!(sys.state == STATE_IDLE || sys.state == STATE_ALARM))
@@ -260,7 +260,7 @@ status_code_t system_execute_line (char *line)
                 system_set_exec_state_flag(EXEC_SLEEP); // Set to execute sleep mode immediately
             break;
 
-        case '#' : // Print Grbl NGC parameters
+        case '#': // Print Grbl NGC parameters
             if (line[2] != '\0')
                 retval = Status_InvalidStatement;
             else if (!(sys.state == STATE_IDLE || (sys.state & (STATE_ALARM|STATE_ESTOP))))
@@ -269,7 +269,7 @@ status_code_t system_execute_line (char *line)
                 report_ngc_parameters();
             break;
 
-        case 'I' : // Print or store build info. [IDLE/ALARM]
+        case 'I': // Print or store build info. [IDLE/ALARM]
             if (!(sys.state == STATE_IDLE || (sys.state & (STATE_ALARM|STATE_ESTOP))))
                 retval = Status_IdleError;
             else if (line[2] == '\0') {
@@ -284,48 +284,52 @@ status_code_t system_execute_line (char *line)
                 retval = Status_InvalidStatement;
             break;
 
-        case 'R' : // Restore defaults [IDLE/ALARM]
-            if (!(line[2] == 'S' && line[3] == 'T' && line[4] == '=' && line[6] == '\0'))
-                retval = Status_InvalidStatement;
-            else if (!(sys.state == STATE_IDLE || (sys.state & (STATE_ALARM|STATE_ESTOP))))
-                retval = Status_IdleError;
-            else switch (line[5]) {
-
-              #ifdef ENABLE_RESTORE_EEPROM_DEFAULT_SETTINGS
-                case '$':
-                    settings_restore SETTINGS_RESTORE_DEFAULTS;
-                    break;
-              #endif
-
-              #ifdef ENABLE_RESTORE_EEPROM_CLEAR_PARAMETERS
-                case '#':
-                    settings_restore(SETTINGS_RESTORE_PARAMETERS);
-                    break;
-              #endif
-
-              #ifdef ENABLE_RESTORE_EEPROM_WIPE_ALL
-                case '*':
-                    settings_restore(SETTINGS_RESTORE_ALL);
-                    break;
-              #endif
-
-              #ifdef ENABLE_RESTORE_DRIVER_PARAMETERS
-                case '&':
-                    settings_restore(SETTINGS_RESTORE_DRIVER_PARAMETERS);
-                    break;
-              #endif
-
-                default:
+        case 'R': // Restore defaults [IDLE/ALARM]
+            {
+                settings_restore_t restore = {0};
+                if (!(line[2] == 'S' && line[3] == 'T' && line[4] == '=' && line[6] == '\0'))
                     retval = Status_InvalidStatement;
-                    break;
-            }
-            if(retval == Status_OK) {
-                hal.report.feedback_message(Message_RestoreDefaults);
-                mc_reset(); // Force reset to ensure settings are initialized correctly.
+                else if (!(sys.state == STATE_IDLE || (sys.state & (STATE_ALARM|STATE_ESTOP))))
+                    retval = Status_IdleError;
+                else switch (line[5]) {
+
+                  #ifdef ENABLE_RESTORE_EEPROM_DEFAULT_SETTINGS
+                    case '$':
+                        restore.defaults = On;
+                        break;
+                  #endif
+
+                  #ifdef ENABLE_RESTORE_EEPROM_CLEAR_PARAMETERS
+                    case '#':
+                        restore.parameters = On;
+                        break;
+                  #endif
+
+                  #ifdef ENABLE_RESTORE_EEPROM_WIPE_ALL
+                    case '*':
+                        restore.mask = settings_all.mask;
+                        break;
+                  #endif
+
+                  #ifdef ENABLE_RESTORE_DRIVER_PARAMETERS
+                    case '&':
+                        restore.driver_parameters = On;
+                        break;
+                  #endif
+
+                    default:
+                        retval = Status_InvalidStatement;
+                        break;
+                }
+                if(retval == Status_OK && restore.mask) {
+                    settings_restore(restore);
+                    hal.report.feedback_message(Message_RestoreDefaults);
+                    mc_reset(); // Force reset to ensure settings are initialized correctly.
+                }
             }
             break;
 
-        case 'N' : // Startup lines. [IDLE/ALARM]
+        case 'N': // Startup lines. [IDLE/ALARM]
             if (!(sys.state == STATE_IDLE || (sys.state & (STATE_ALARM|STATE_ESTOP))))
                 retval = Status_IdleError;
             else if (line[2] == '\0') { // Print startup lines
@@ -367,7 +371,7 @@ status_code_t system_execute_line (char *line)
             break;
 #endif
 
-        default :
+        default:
             retval = Status_Unhandled;
 
             // Let user code have a peek at system commands before check for global setting
