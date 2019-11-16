@@ -26,7 +26,7 @@
 #include "i2c_keypad.h"
 #include "grbl.h"
 
-#define HAS_KEYPAD //uncomment to enable I2C keypad for jogging etc.
+//#define HAS_KEYPAD //uncomment to enable I2C keypad for jogging etc.
 
 // prescale step counter to 20Mhz (80 / (STEPPER_DRIVER_PRESCALER + 1))
 #define STEPPER_DRIVER_PRESCALER 3

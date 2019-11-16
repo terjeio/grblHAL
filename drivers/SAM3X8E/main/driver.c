@@ -1013,7 +1013,7 @@ static bool driver_setup (settings_t *settings)
 #ifdef DRIVER_SETTINGS
 	if(hal.eeprom.type != EEPROM_None) {
 		if(!hal.eeprom.memcpy_from_with_checksum((uint8_t *)&driver_settings, hal.eeprom.driver_area.address, sizeof(driver_settings)))
-			hal.driver_settings_restore(SETTINGS_RESTORE_DRIVER_PARAMETERS);
+			hal.driver_settings_restore();
 	}
 #endif
 
@@ -1243,17 +1243,15 @@ static void driver_settings_report (setting_type_t setting)
 #endif
 }
 
-void driver_settings_restore (uint8_t restore_flag)
+static void driver_settings_restore (void)
 {
-    if(restore_flag & SETTINGS_RESTORE_DRIVER_PARAMETERS) {
 #if KEYPAD_ENABLE
-    	keypad_settings_restore(restore_flag);
+	keypad_settings_restore();
 #endif
 #if TRINAMIC_ENABLE
-        trinamic_settings_restore(restore_flag);
+	trinamic_settings_restore();
 #endif
-    	hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
-    }
+	hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
 }
 
 #endif

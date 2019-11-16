@@ -43,7 +43,7 @@ void process_keypress (uint_fast16_t state);
 void I2C_ISR_ExitCallback(void);
 
 status_code_t driver_setting (setting_type_t setting, float value, char *svalue);
-void driver_settings_restore (uint8_t restore_flag);
+void driver_settings_restore (void);
 void driver_settings_report (setting_type_t setting);
 
 #endif

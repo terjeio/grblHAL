@@ -120,18 +120,16 @@ status_code_t driver_setting (setting_type_t setting, float value, char *svalue)
     return status;
 }
 
-void driver_settings_restore (uint8_t restore_flag)
+void driver_settings_restore (void)
 {
-    if(restore_flag & SETTINGS_RESTORE_DRIVER_PARAMETERS) {
-        jog_config.step_speed    = 100.0f;
-        jog_config.slow_speed    = 600.0f;
-        jog_config.fast_speed    = 3000.0f;
-        jog_config.step_distance = 0.25f;
-        jog_config.slow_distance = 500.0f;
-        jog_config.fast_distance = 3000.0f;
+    jog_config.step_speed    = 100.0f;
+    jog_config.slow_speed    = 600.0f;
+    jog_config.fast_speed    = 3000.0f;
+    jog_config.step_distance = 0.25f;
+    jog_config.slow_distance = 500.0f;
+    jog_config.fast_distance = 3000.0f;
 
-        keypad_write_settings();
-    }
+    keypad_write_settings();
 }
 
 void driver_settings_report (setting_type_t setting)
@@ -173,7 +171,7 @@ void I2C_keypad_setup (void)
     claim_eeprom();
 
     if(!keypad_read_settings())
-        driver_settings_restore(SETTINGS_RESTORE_DRIVER_PARAMETERS);
+        driver_settings_restore();
 
     I2C_Start();
     KeyPadInterrupt_StartEx(keyclick_int_handler); 

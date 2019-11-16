@@ -69,8 +69,8 @@
 
 #if ETHERNET_ENABLE
 #define NETWORK_HOSTNAME        "GRBL"
-#define NETWORK_IPMODE          IpMode_DHCP
-#if NETWORK_IPMODE != IpMode_DHCP
+#define NETWORK_IPMODE_STATIC   0 // do not change!
+#if NETWORK_IPMODE_STATIC
 #define NETWORK_IP              "192.168.5.1"
 #define NETWORK_GATEWAY         "192.168.5.1"
 #define NETWORK_MASK            "255.255.255.0"

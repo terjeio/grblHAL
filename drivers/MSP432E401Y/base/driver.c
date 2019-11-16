@@ -55,7 +55,6 @@ static void trinamic_diag1_isr (void);
 #if ETHERNET_ENABLE
 #include "ethernet/enet.h"
 #include "ethernet/TCPStream.h"
-#include "posix/sys/socket.h"
 #endif
 
 #define USE_32BIT_TIMER 1
@@ -1115,23 +1114,13 @@ static void settings_changed (settings_t *settings)
         trinamic_configure();
       #endif
 
-        // NOTE: some interfaces may defer actual stream switch until stack is operational
-        switch(settings->stream) {
-
-            case StreamType_Serial:
-                selectStream(StreamType_Serial);
-                break;
-
 #if ETHERNET_ENABLE
-            case StreamType_Telnet:;
-                static bool enet_ok = false;
-                if(!enet_ok)
-                    enet_ok = enet_init(&driver_settings.network);
-                break;
+
+        static bool enet_ok = false;
+        if(!enet_ok)
+            enet_ok = enet_init(&driver_settings.network);
+
 #endif
-            default:
-                break;
-        }
 
         stepperEnable(settings->steppers.deenergize);
 
@@ -1287,7 +1276,7 @@ static bool driver_setup (settings_t *settings)
 #ifdef DRIVER_SETTINGS
     if(hal.eeprom.driver_area.address != 0) {
         if(!hal.eeprom.memcpy_from_with_checksum((uint8_t *)&driver_settings, hal.eeprom.driver_area.address, sizeof(driver_settings)))
-            hal.driver_settings_restore(SETTINGS_RESTORE_DRIVER_PARAMETERS);
+            hal.driver_settings_restore();
       #if TRINAMIC_ENABLE && CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
         driver_settings.trinamic.driver_enable.mask = AXES_BITMASK;
       #endif
@@ -1575,87 +1564,7 @@ static status_code_t driver_setting (setting_type_t param, float value, char *sv
     status_code_t status = Status_Unhandled;
 
 #if ETHERNET_ENABLE
-    if(svalue) switch(param) {
-
-#if TELNET_ENABLE
-      case Settings_TelnetPort:
-          if(isint(value) && value != NAN && value > 0.0f && value < 65536.0f) {
-              status = Status_OK;
-              driver_settings.network.telnet_port = (uint16_t)value;
-          } else
-              status = Status_InvalidStatement; //out of range...
-          break;
-#endif
-#if HTTP_ENABLE
-      case Settings_HttpPort:
-          if((claimed = (value != NAN && value > 0.0f && value < 65536.0f) {
-              status = Status_OK;
-              driver_settings.network.http_port = (uint16_t)value;
-          } else
-              status = Status_InvalidStatement; //out of range...
-          break;
-#endif
-/*
-      case Setting_WebSocketPort:
-          if(value != NAN && value > 0.0f && value < 65536.0f) {
-              status = Status_OK;
-              driver_settings.network.websocket_port = (uint16_t)value;
-          } else
-              status = Status_InvalidStatement; //out of range...
-          break;
-
-      case Settings_Hostname:
-          if(strlcpy(driver_settings.network.hostname, svalue, sizeof(driver_settings.network.hostname)) <= sizeof(driver_settings.network.hostname))
-              status = Status_OK;
-          else
-              status = Status_InvalidStatement; // too long...
-          break;
-*/
-/*
-      case Settings_IpMode:
-          if(isint(value) && >= 0.0d && value <= 2.0f) {
-              status = Status_OK;
-              driver_settings.network.ip_mode = (ip_mode_t)(uint8_t)value;
-          }
-          else
-              status = Status_InvalidStatement; // out of range...
-          break;
-
-      case Settings_IpAddress:
-          {
-              ip4_addr_t addr;
-              if(inet_pton(AF_INET, svalue, &addr) == 1) {
-                  status = Status_OK;
-                  *((ip4_addr_t *)driver_settings.network.ip) = addr;
-              } else
-                  status = Status_InvalidStatement;
-          }
-          break;
-
-      case Settings_Gateway:
-          {
-              ip4_addr_t addr;
-              if(inet_pton(AF_INET, svalue, &addr) == 1) {
-                  status = Status_OK;
-                  *((ip4_addr_t *)driver_settings.network.gateway) = addr;
-              } else
-                  status = Status_InvalidStatement;
-          }
-          break;
-
-      case Settings_NetMask:
-          {
-              ip4_addr_t addr;
-              if(inet_pton(AF_INET, svalue, &addr) == 1) {
-                  status = Status_OK;
-                  *((ip4_addr_t *)driver_settings.network.mask) = addr;
-              } else
-                  status = Status_InvalidStatement;
-          }
-          break;
-*/
-    }
-
+    status = ethernet_setting(param, value, svalue);
 #endif
 
 #if KEYPAD_ENABLE
@@ -1677,49 +1586,32 @@ static status_code_t driver_setting (setting_type_t param, float value, char *sv
 static void driver_settings_report (setting_type_t setting)
 {
 #if ETHERNET_ENABLE
-    /*
-    char ip[INET6_ADDRSTRLEN];
-//    report_string_setting(Settings_Hostname, driver_settings.network.hostname);
-
-    if(driver_settings.network.ip_mode != IpMode_DHCP) {
-        report_string_setting(Settings_IpAddress, inet_ntop(AF_INET, &driver_settings.network.ip, ip, INET6_ADDRSTRLEN));
-        report_string_setting(Settings_Gateway, inet_ntop(AF_INET, &driver_settings.network.gateway, ip, INET6_ADDRSTRLEN));
-        report_string_setting(Settings_NetMask, inet_ntop(AF_INET, &driver_settings.network.mask, ip, INET6_ADDRSTRLEN));
-    }
-    report_uint_setting(Settings_IpMode, driver_settings.network.ip_mode);
-    */
-    if(setting == Setting_TelnetPort)
-        report_uint_setting(Setting_TelnetPort, driver_settings.network.telnet_port);
+    ethernet_settings_report(setting);
 #endif
+
 #if KEYPAD_ENABLE
     keypad_settings_report(setting);
 #endif
+
 #if TRINAMIC_ENABLE
     trinamic_settings_report(setting);
 #endif
 }
 
-void driver_settings_restore (uint8_t restore_flag)
+static void driver_settings_restore (void)
 {
-    if(restore_flag & SETTINGS_RESTORE_DRIVER_PARAMETERS) {
 #if ETHERNET_ENABLE
-        /*
-        driver_settings.network.ip_mode = NETWORK_IPMODE;
-        strlcpy(driver_settings.network.hostname, NETWORK_HOSTNAME, sizeof(driver_settings.network.hostname));
-        strlcpy(driver_settings.network.ip, NETWORK_IP, sizeof(driver_settings.network.ip));
-        strlcpy(driver_settings.network.gateway, NETWORK_GATEWAY, sizeof(driver_settings.network.ip));
-        strlcpy(driver_settings.network.mask, NETWORK_MASK, sizeof(driver_settings.network.ip));
-        */
-        driver_settings.network.telnet_port = NETWORK_TELNET_PORT;
+    ethernet_settings_restore();
 #endif
+
 #if KEYPAD_ENABLE
-        keypad_settings_restore(restore_flag);
+    keypad_settings_restore();
 #endif
+
 #if TRINAMIC_ENABLE
-        trinamic_settings_restore(restore_flag);
+    trinamic_settings_restore();
 #endif
-        hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
-    }
+    hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
 }
 
 #endif
@@ -1831,13 +1723,8 @@ bool driver_init (void)
 #endif
 
 #ifdef DRIVER_SETTINGS
-  #if !TRINAMIC_ENABLE
-    assert(EEPROM_ADDR_TOOL_TABLE - (sizeof(driver_settings_t) + 2) > EEPROM_ADDR_GLOBAL + sizeof(settings_t) + 1);
-    hal.eeprom.driver_area.address = EEPROM_ADDR_TOOL_TABLE - (sizeof(driver_settings_t) + 2);
-  #else
-    hal.eeprom.driver_area.address = 1024;
+    hal.eeprom.driver_area.address = GRBL_EEPROM_SIZE;
     hal.eeprom.size = GRBL_EEPROM_SIZE + sizeof(driver_settings_t) + 1;
-  #endif
     hal.eeprom.driver_area.size = sizeof(driver_settings_t);
     hal.driver_setting = driver_setting;
     hal.driver_settings_report = driver_settings_report;
