@@ -3,7 +3,7 @@
 
   Webserver backend
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2019 Terje Io
 

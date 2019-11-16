@@ -3,7 +3,7 @@
 
   Webserver backend
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2019 Terje Io
 
@@ -40,6 +40,7 @@
 #include "esp_spiffs.h"
 #include "esp_http_server.h"
 #include <cJSON.h>
+#include <sys/socket.h>
 
 #include "driver.h"
 #include "wifi.h"
@@ -83,10 +84,10 @@ static file_server_data_t file_server_data;
 
 /* Handler to redirect incoming GET request for /index.html to /
  * This can be overridden by uploading file with same name */
-static esp_err_t index_html_get_handler(httpd_req_t *req)
+static esp_err_t redirect_html_get_handler(httpd_req_t *req, char *location)
 {
     httpd_resp_set_status(req, "307 Temporary Redirect");
-    httpd_resp_set_hdr(req, "Location", "/");
+    httpd_resp_set_hdr(req, "Location", location);
     httpd_resp_send(req, NULL, 0);  // Response body can be empty
     return ESP_OK;
 }
@@ -94,7 +95,7 @@ static esp_err_t index_html_get_handler(httpd_req_t *req)
 /* Handler to respond with an icon file embedded in flash.
  * Browsers expect to GET website icon at URI /favicon.ico.
  * This can be overridden by uploading file with same name */
-/*
+
 static esp_err_t favicon_get_handler(httpd_req_t *req)
 {
     extern const unsigned char favicon_ico_start[] asm("_binary_favicon_ico_start");
@@ -104,7 +105,24 @@ static esp_err_t favicon_get_handler(httpd_req_t *req)
     httpd_resp_send(req, (const char *)favicon_ico_start, favicon_ico_size);
     return ESP_OK;
 }
-*/
+
+static esp_err_t index_html_get_handler(httpd_req_t *req)
+{
+    extern const unsigned char index_html_start[] asm("_binary_index_html_start");
+    extern const unsigned char index_html_end[]   asm("_binary_index_html_end");
+    const size_t index_html_size = (index_html_end - index_html_start);
+    httpd_resp_send(req, (const char *)index_html_start, index_html_size);
+    return ESP_OK;
+}
+
+static esp_err_t ap_login_html_get_handler(httpd_req_t *req)
+{
+    extern const unsigned char ap_login_html_start[] asm("_binary_ap_login_html_start");
+    extern const unsigned char ap_login_html_end[]   asm("_binary_ap_login_html_end");
+    httpd_resp_send(req, (const char *)ap_login_html_start, ap_login_html_end - ap_login_html_start);
+    return ESP_OK;
+}
+
 esp_err_t spiffs_get_handler(httpd_req_t *req)
 {
     return ESP_OK;
@@ -209,6 +227,9 @@ static esp_err_t sdcard_get_handler(httpd_req_t *req)
         return ESP_FAIL;
     }
 
+    if (!strcmp(filename, "/favicon.ico"))
+    	return favicon_get_handler(req);
+
     /* If name has trailing '/', respond with directory contents */
     if (filename[strlen(filename) - 1] == '/') {
    //     return http_resp_dir_html(req, filepath);
@@ -277,6 +298,61 @@ static esp_err_t sdcard_get_handler(httpd_req_t *req)
 
 #endif
 
+static esp_err_t get_handler(httpd_req_t *req)
+{
+	if(wifi_dns_running()) { // captive portal, redirect requests to ourself...
+
+	    if (!strcmp(req->uri, "/ap_login.html"))
+	    	return ap_login_html_get_handler(req);
+
+	    bool internal = false;
+		struct sockaddr_in6 addr;   // esp_http_server uses IPv6 addressing
+		socklen_t addr_size = sizeof(struct sockaddr_in6);
+		char ipstr[INET6_ADDRSTRLEN];
+
+		if (getpeername(httpd_req_to_sockfd(req), (struct sockaddr *)&addr, &addr_size) == 0) {
+
+			ap_list_t *ap_list = wifi_get_aplist();
+
+			if(ap_list) { // Request is from local STA?
+				internal = ap_list->ap_selected && memcmp(&ap_list->ip_addr, &addr.sin6_addr.un.u32_addr[3], sizeof(ip4_addr_t)) == 0;
+				wifi_release_aplist();
+			}
+
+			inet_ntop(AF_INET, &addr.sin6_addr.un.u32_addr[3], ipstr, sizeof(ipstr));
+			ESP_LOGI(TAG, "Client IP => %s", ipstr);
+
+			// From local AP?
+			if(!internal && memcmp(&driver_settings.wifi.ap.network.ip, &addr.sin6_addr.un.u32_addr[3], sizeof(ip4_addr_t))) {
+
+				char loc[50];
+
+				inet_ntop(AF_INET, &driver_settings.wifi.ap.network.ip, ipstr, sizeof(ipstr));
+
+				sprintf(loc, "http://%s/ap_login.html", ipstr);
+
+				ESP_LOGI(TAG, "Client Redirect => %s", loc);
+
+				return redirect_html_get_handler(req, loc);
+			}
+		}
+	}
+
+    if (!strcmp(req->uri, "/index.html") || !strcmp(req->uri, "/"))
+    	return index_html_get_handler(req);
+
+    if (!strcmp(req->uri, "/favicon.ico"))
+    	return favicon_get_handler(req);
+
+#if SDCARD_ENABLE
+	return sdcard_get_handler(req);
+#endif
+
+    httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "File does not exist");
+
+    return ESP_FAIL;
+}
+
 // add setting to the JSON response array
 static bool add_setting (int id, char *value)
 {
@@ -320,19 +396,18 @@ static void backendWriteS (const char *data)
 
 static esp_err_t settings_get_handler(httpd_req_t *req)
 {
-	sbuf[0] = '\0';
+	bool ok;
 
 //	size_t ql = httpd_req_get_url_query_len(req);
-	if(strlen(req->uri) > 9) {
-		setting = atoi(&req->uri[10]);
-	} else
-		setting = -1;
+
+	setting = strlen(req->uri) > 9 ? atoi(&req->uri[10]) : -1;
 
 	cJSON *root = cJSON_CreateObject();
 
-	if((root && (json_settings = cJSON_AddArrayToObject(root, "settings")))) {
+	if((ok = (root && (json_settings = cJSON_AddArrayToObject(root, "settings"))))) {
 
 		org_stream = hal.stream.write;
+
 		hal.stream.write = backendWriteS;
 
 		report_grbl_settings();
@@ -346,15 +421,13 @@ static esp_err_t settings_get_handler(httpd_req_t *req)
 
 		free(resp);
 
-	} else {
+	} else
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to generate response");
-        return ESP_FAIL;
-	}
 
 	if(root)
 		cJSON_Delete(root);
 
-    return ESP_OK;
+    return ok ? ESP_OK : ESP_FAIL;
 }
 
 static esp_err_t settings_set_handler(httpd_req_t *req)
@@ -434,6 +507,9 @@ static esp_err_t wifi_scan_handler (httpd_req_t *req)
 			ok = cJSON_AddStringToObject(root, "ap", ap_list->ap_selected ? (char *)ap_list->ap_selected : "") != NULL;
 			ok &= cJSON_AddStringToObject(root, "status", ap_list->ap_status) != NULL;
 
+			if(ap_list->ap_selected)
+				cJSON_AddStringToObject(root, "ip", ip4addr_ntoa(&ap_list->ip_addr));
+
 			if((aps = cJSON_AddArrayToObject(root, "aplist"))) {
 
 				for(int i = 0; i < ap_list->ap_num; i++) {
@@ -451,6 +527,9 @@ static esp_err_t wifi_scan_handler (httpd_req_t *req)
 
 			if(ok) {
 				char *resp = cJSON_PrintUnformatted(root);
+
+			    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+			    httpd_resp_set_hdr(req, "Access-Control-Allow-Methods", "POST,GET,OPTIONS");
 
 				httpd_resp_set_type(req, HTTPD_TYPE_JSON);
 				httpd_resp_send(req, resp, strlen(resp));
@@ -490,14 +569,12 @@ static esp_err_t wifi_login_handler (httpd_req_t *req)
 			cJSON_Delete(cred);
 		}
 
-		if(!ok)
-			ESP_LOGE(TAG, "Failed to parse %s!", buf);
-
 		if(ok) {
+			char resp[] = "Connecting...";
 			httpd_resp_set_status(req, "202 Accepted");
-			httpd_resp_send(req, NULL, 0);
+			httpd_resp_send(req, resp, sizeof(resp));
 		} else
-			httpd_resp_send_err(req, 400, "Invalid JSON data");
+			httpd_resp_send_err(req, 400, "Invalid login information");
 	}
 
 	if(buf)
@@ -506,43 +583,65 @@ static esp_err_t wifi_login_handler (httpd_req_t *req)
     return ok ? ESP_OK : ESP_FAIL;
 }
 
+static esp_err_t wifi_options_handler (httpd_req_t *req)
+{
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Methods", "POST,GET,OPTIONS");
+
+    return wifi_scan_handler(req);
+
+    httpd_resp_send(req, NULL, 0);  // Response body can be empty
+
+    return ESP_OK;
+}
+
 static const httpd_uri_t basic_handlers[] = {
+	{ .uri       = "/*",
+	  .method    = HTTP_GET,
+	  .handler   = get_handler,
+	  .user_ctx  = &file_server_data,
+	},
     { .uri      = "/spiffs",
       .method   = HTTP_GET,
       .handler  = spiffs_get_handler,
-      .user_ctx = NULL,
+      .user_ctx = NULL
     },
 #if SDCARD_ENABLE
     { .uri      = "/sdcard/*",
       .method   = HTTP_GET,
       .handler  = sdcard_get_handler,
-      .user_ctx = &file_server_data,
+      .user_ctx = &file_server_data
     },
 #endif
     { .uri      = "/settings",
       .method   = HTTP_GET,
       .handler  = settings_get_handler,
-      .user_ctx = NULL,
+      .user_ctx = NULL
     },
     { .uri      = "/settings/*",
       .method   = HTTP_GET,
       .handler  = settings_get_handler,
-      .user_ctx = NULL,
+      .user_ctx = NULL
     },
     { .uri      = "/settings",
       .method   = HTTP_POST,
       .handler  = settings_set_handler,
-      .user_ctx = NULL,
+      .user_ctx = NULL
     },
     { .uri      = "/wifi",
       .method   = HTTP_GET,
       .handler  = wifi_scan_handler,
-      .user_ctx = NULL,
+      .user_ctx = NULL
     },
     { .uri      = "/wifi",
       .method   = HTTP_POST,
       .handler  = wifi_login_handler,
-      .user_ctx = NULL,
+      .user_ctx = NULL
+    },
+    { .uri      = "/wifi",
+      .method   = HTTP_OPTIONS,
+      .handler  = wifi_scan_handler,
+      .user_ctx = NULL
     }
 };
 
@@ -555,7 +654,9 @@ void register_basic_handlers(httpd_handle_t hd)
 
 	wifi_mode_t currentMode;
 
-	if(esp_wifi_get_mode(&currentMode) != WIFI_MODE_APSTA)
+	esp_wifi_get_mode(&currentMode);
+
+	if(currentMode != WIFI_MODE_APSTA)
 		i -= 2;
 
     do {
@@ -584,6 +685,7 @@ bool httpdaemon_start (network_settings_t *network)
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
 
+    config.max_uri_handlers = max(config.max_uri_handlers, sizeof(basic_handlers) / sizeof(httpd_uri_t));
     config.server_port = network->http_port;
     config.uri_match_fn = httpd_uri_match_wildcard;
 	config.stack_size = 8192;

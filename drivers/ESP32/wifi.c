@@ -41,6 +41,7 @@
 #include "wifi.h"
 #include "driver.h"
 #include "TCPStream.h"
+#include "dns_server.h"
 #include "web/backend.h"
 
 static EventGroupHandle_t wifi_event_group;
@@ -52,6 +53,7 @@ static EventGroupHandle_t wifi_event_group;
 static network_settings_t *network;
 const static int CONNECTED_BIT = BIT0;
 const static int SCANNING_BIT = BIT1;
+const static int APSTA_BIT = BIT2;
 
 const static char *TAG = "grbl wifi";
 
@@ -74,6 +76,28 @@ void wifi_release_aplist (void)
 	xSemaphoreGive(aplist_mutex);
 }
 
+char *wifi_get_ip (void)
+{
+	static char address[INET6_ADDRSTRLEN];
+
+	ip4_addr_t *ip;
+
+#if NETWORK_IPMODE_STATIC
+	ip = (ip4_addr_t *)&driver_settings.wifi.sta.network.ip;
+#else
+	ip = ap_list.ap_selected ? &ap_list.ip_addr : (ip4_addr_t *)&driver_settings.wifi.ap.network.ip;
+#endif
+
+	inet_ntop(AF_INET, ip, address, INET6_ADDRSTRLEN);
+
+	return address;
+}
+
+bool wifi_dns_running (void)
+{
+	return services.dns == On;
+}
+
 static void lwIPHostTimerHandler (void *arg)
 {
 	if(services.telnet) {
@@ -84,14 +108,14 @@ static void lwIPHostTimerHandler (void *arg)
 
 static void start_services (void)
 {
-	if(network->services.telnet) {
+	if(network->services.telnet && !services.telnet) {
 		TCPStreamInit();
 		TCPStreamListen(network->telnet_port == 0 ? 23 : network->telnet_port);
 		services.telnet = On;
 		sys_timeout(STREAM_POLL_INTERVAL, lwIPHostTimerHandler, NULL);
 	}
 
-	if(network->services.http)
+	if(network->services.http && !services.http)
 		services.http = httpdaemon_start(network);
 
 	ESP_LOGI(TAG, "WIFI SERVICES %d\n", services.mask);
@@ -104,6 +128,9 @@ static void stop_services (void)
 
 	if(services.telnet)
 		TCPStreamClose();
+
+	if(services.dns)
+		dns_server_stop();
 
 	services.mask = 0;
 }
@@ -134,12 +161,16 @@ static esp_err_t wifi_event_handler (void *ctx, system_event_t *event)
     switch(event->event_id) {
 
     	case SYSTEM_EVENT_AP_START:
-			hal.stream.write_all("[MSG:WIFI READY]\r\n");
+			hal.stream.write_all("[MSG:WIFI AP READY]\r\n");
 			start_services();
+			if(xEventGroupGetBits(wifi_event_group) & APSTA_BIT) {
+				dns_server_start();
+				services.dns = On;
+			}
 			break;
 
 		case SYSTEM_EVENT_AP_STACONNECTED:
-			hal.stream.write_all("[MSG:WIFI CONNECTED]\r\n");
+			hal.stream.write_all("[MSG:WIFI AP CONNECTED]\r\n");
 //			start_services();
 //			ESP_LOGI(TAG, "station:"MACSTR" join, AID=%d", MAC2STR(event->event_info.sta_connected.mac), event->event_info.sta_connected.aid);
 			break;
@@ -171,7 +202,7 @@ static esp_err_t wifi_event_handler (void *ctx, system_event_t *event)
 
 		case SYSTEM_EVENT_AP_STADISCONNECTED:
 		    selectStream(StreamType_Serial); // Fall back to previous?
-    		hal.stream.write_all("[MSG:WIFI DISCONNECTED]\r\n");
+    		hal.stream.write_all("[MSG:WIFI AP DISCONNECTED]\r\n");
 //			ESP_LOGI(TAG, "station:"MACSTR"leave, AID=%d", MAC2STR(event->event_info.sta_disconnected.mac), event->event_info.sta_disconnected.aid);
 			break;
 				
@@ -182,18 +213,22 @@ static esp_err_t wifi_event_handler (void *ctx, system_event_t *event)
 
     	case SYSTEM_EVENT_STA_GOT_IP:
     		// handle IP change (ip_change)
-    		hal.stream.write_all("[MSG:WIFI ACTIVE]\r\n");
+    		hal.stream.write_all("[MSG:WIFI STA ACTIVE]\r\n");
 			xEventGroupSetBits(wifi_event_group, CONNECTED_BIT);
 			ap_list.ap_selected = wifi_sta_config.sta.ssid;
+			memcpy(&ap_list.ip_addr, &event->event_info.got_ip.ip_info.ip, sizeof(ip4_addr_t));
 			strcpy(ap_list.ap_status, "Connected");
 			start_services();
-//			ESP_LOGI(TAG, "got ip:%s\n",	ip4addr_ntoa(&event->event_info.got_ip.ip_info.ip));
+			if(services.dns) {
+				services.dns = Off;
+				dns_server_stop();
+			}
 			break;
 
     	case SYSTEM_EVENT_STA_DISCONNECTED:
 			//stop_services();
 		    selectStream(StreamType_Serial); // Fall back to previous?
-    		hal.stream.write_all("[MSG:WIFI DISCONNECTED]\r\n");
+    		hal.stream.write_all("[MSG:WIFI STA DISCONNECTED]\r\n");
 
     		ESP_LOGI(TAG, "WIFI STA DISCONNECT: %d\n", event->event_info.disconnected.reason);
 
@@ -324,6 +359,9 @@ bool wifi_init (wifi_settings_t *settings)
 		if(esp_wifi_set_config(ESP_IF_WIFI_AP, &wifi_config) != ESP_OK)
 			return false;
 
+		if(settings->mode == WiFiMode_APSTA)
+			xEventGroupSetBits(wifi_event_group, APSTA_BIT);
+
 		ESP_LOGI(TAG, "WIFI AP SSID:[%s] password:[%s]\n", wifi_config.ap.ssid, wifi_config.ap.password);
     }
 
@@ -390,8 +428,14 @@ bool wifi_ap_connect (char *ssid, char *password)
 	if(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_sta_config) != ESP_OK)
 		return false;
 
-	ap_list.ap_selected = wifi_sta_config.sta.ssid;
-	strcpy(ap_list.ap_status, "Connecting...");
+	if(xSemaphoreTake(aplist_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+
+		ap_list.ap_selected = wifi_sta_config.sta.ssid;
+		memset(&ap_list.ip_addr, 0, sizeof(ip4_addr_t));
+		strcpy(ap_list.ap_status, "Connecting...");
+
+		xSemaphoreGive(aplist_mutex);
+	}
 
 	esp_wifi_connect();
 
@@ -437,7 +481,7 @@ status_code_t wifi_setting (uint_fast16_t param, float value, char *svalue)
 
 		case Setting_WifiMode:
 			if(isintf(value) && value >= 0.0f && value < 4.0f) {
-#if !WIFI_SOFTAP
+#if WIFI_SOFTAP
 				status = Status_OK;
 				driver_settings.wifi.mode = (grbl_wifi_mode_t)(uint8_t)value;
 #else
@@ -470,7 +514,7 @@ status_code_t wifi_setting (uint_fast16_t param, float value, char *svalue)
 				status = Status_InvalidStatement; // too long...
 			break;
 
-#if !NETWORK_IPMODE_STATIC
+#if NETWORK_IPMODE_STATIC
 
 		case Setting_IpAddress:
 			{
@@ -627,7 +671,7 @@ void wifi_settings_report (setting_type_t setting)
 			report_string_setting(setting, driver_settings.wifi.sta.network.hostname);
 			break;
 
-#if !NETWORK_IPMODE_STATIC
+#if NETWORK_IPMODE_STATIC
 
 		case Setting_IpAddress:
 			{
@@ -740,7 +784,7 @@ void wifi_settings_restore (void)
 
 // Access Point
 
-	driver_settings.wifi.ap.network.ip_mode = NETWORK_AP_IPMODE;
+	driver_settings.wifi.ap.network.ip_mode = IpMode_Static;
 	strlcpy(driver_settings.wifi.ap.network.hostname, NETWORK_AP_HOSTNAME, sizeof(driver_settings.wifi.ap.network.hostname));
 	strlcpy(driver_settings.wifi.ap.ssid, WIFI_AP_SSID, sizeof(driver_settings.wifi.ap.ssid));
 	strlcpy(driver_settings.wifi.ap.password, WIFI_AP_PASSWORD, sizeof(driver_settings.wifi.ap.password));

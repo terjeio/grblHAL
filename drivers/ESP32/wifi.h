@@ -33,6 +33,7 @@ typedef struct {
 	uint16_t ap_num;
 	wifi_ap_record_t *ap_records;
 	uint8_t *ap_selected;
+	ip4_addr_t ip_addr;
 	char ap_status[20];
 } ap_list_t;
 
@@ -41,6 +42,8 @@ bool wifi_stop (void);
 bool wifi_ap_connect (char *ssid, char *password);
 ap_list_t *wifi_get_aplist (void);
 void wifi_release_aplist (void);
+char *wifi_get_ip (void);
+bool wifi_dns_running (void);
 
 status_code_t wifi_setting (uint_fast16_t param, float value, char *svalue);
 void wifi_settings_report (setting_type_t setting);

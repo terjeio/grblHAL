@@ -48,8 +48,8 @@
 #define KEYPAD_ENABLE    0 // I2C keypad for jogging etc.
 #define WIFI_ENABLE      0 // Streaming over WiFi.
 #define WIFI_SOFTAP      0 // Use Soft AP mode for WiFi.
-#define HTTP_ENABLE      1 // Enable http daemon - requires WiFi enabled
-#define TELNET_ENABLE	 1 // Enable telnet daemon - requires WiFi enabled
+#define HTTP_ENABLE      0 // Enable http daemon - requires WiFi enabled
+#define TELNET_ENABLE	 0 // Enable telnet daemon - requires WiFi enabled
 #define WEBSOCKET_ENABLE 0 // Enable websocket daemon - requires WiFi enabled (DO NOT ENABLE, NOT YET IMPLEMENTED!)
 #define BLUETOOTH_ENABLE 0 // Streaming over Bluetooth.
 #define SDCARD_ENABLE    0 // Run jobs from SD card.
@@ -67,11 +67,15 @@
 
 // WiFi Station (STA) settings
 #define NETWORK_HOSTNAME		"Grbl"
-#define NETWORK_IPMODE_STATIC 1
+#define NETWORK_IPMODE_STATIC 	0
 #if NETWORK_IPMODE_STATIC
 #define NETWORK_IP				"192.168.5.1"
 #define NETWORK_GATEWAY			"192.168.5.1"
 #define NETWORK_MASK     		"255.255.255.0"
+#endif
+
+#if NETWORK_IPMODE_STATIC && WIFI_SOFTAP
+#error "Cannot use static IP for station when soft AP is enabled!"
 #endif
 
 // WiFi Access Point (AP) settings
@@ -82,7 +86,6 @@
 #define NETWORK_AP_MASK     "255.255.255.0"
 #define WIFI_AP_SSID		"GRBL"
 #define WIFI_AP_PASSWORD	"GrblPassword" // Minimum 8 characters, or blank for open
-#define NETWORK_AP_IPMODE	IpMode_Static // Do not change!
 #define WIFI_MODE WiFiMode_AP; // OPTION: WiFiMode_APSTA
 #else
 #define WIFI_MODE WiFiMode_STA; // Do not change!

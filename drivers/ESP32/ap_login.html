@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Connect to Access Point</title>
+</head>
+<style>
+.apbtn {
+  display: block;
+  width: 80%;
+  border: 2px solid #008CBA;
+  background-color: white;
+  padding: 8px 20px;
+  font-size: 16px;
+  cursor: pointer;
+  text-align: center;
+}
+.apsbtn {
+  display: block;
+  width: 80%;
+  border: 2px solid #4CAF50;
+  background-color: white;
+  padding: 8px 20px;
+  font-size: 16px;
+  cursor: pointer;
+  text-align: center;
+}
+.actionbtn {
+  display: block;
+  width: 80%;
+  border: none;
+  color: black;
+  background-color: #e7e7e7;
+  padding: 12px 20px;
+  font-size: 16px;
+  cursor: pointer;
+  text-align: center;
+}
+</style>
+<script>
+function aplogin() { 
+  xhr = new XMLHttpRequest(); 
+  xhr.open("POST", "wifi", true); 
+  xhr.setRequestHeader("Content-Type", "application/json"); 
+  xhr.onreadystatechange = function() { 
+    if (xhr.readyState === 4 && xhr.status === 202) { 
+      document.querySelector('.result').innerHTML = this.responseText === "" ? "Connecting..." : this.responseText;
+   //   if(this.responseText === "")
+      	setTimeout(function(){getAPlist(true);}, 3000);
+    } 
+  }; 
+  xhr.send(JSON.stringify({"ssid":document.querySelector('#ssid').value,"password":document.querySelector('#pwd').value})); 
+}
+function getAPlist(refresh) {
+  xhr = new XMLHttpRequest(); 
+  xhr.open("GET", "wifi", true); 
+  xhr.setRequestHeader("Content-Type", "application/json");
+  xhr.onreadystatechange = function() { 
+    if (xhr.readyState === 4 && xhr.status === 200) {
+	  jsonObj = JSON.parse(xhr.responseText);
+	  document.querySelector('.result').innerHTML = jsonObj.status;
+	  if(jsonObj.status == "Connected")
+	  	document.querySelector('.result').innerHTML += " to " + jsonObj.ap + " (" + jsonObj.ip + ")";
+      else if(refresh === true)
+	    window.setTimeout(function(){getAPlist(true);}, 3000);
+	  if(refresh === false) {
+	    var count = Object.keys(jsonObj.aplist).length;
+        var container=document.getElementById('buttons');
+        container.innerHTML = "";
+        for(var i=0;i<count;i++){
+          var ap=jsonObj.aplist[i];
+          if(i == 0)
+          	document.querySelector('#ssid').value = ap.ssid;
+          var button = "<br><button class='apbtn' id='"+ap.ssid+"' onclick='setAP(\""+ap.ssid+"\")'>"+ap.ssid+"</button>"
+          container.innerHTML+=button;
+	    }
+	  }
+      if(jsonObj.ap != "")
+	    document.getElementById(jsonObj.ap).setAttribute("class", "apsbtn");
+    } 
+  }; 
+  xhr.send(); 
+}
+function setAP(ssid) {
+  document.querySelector('#ssid').value = ssid;
+}
+document.onreadystatechange = function() { 
+  if(document.readyState == "interactive") { 
+    getAPlist(false); 
+  } 
+} 
+</script>
+<body>
+ <div id="content">
+  <h4>AP connect test page.
+  <p>
+  <div id="buttons"></div>
+  <p><input type="text" id="ssid" placeholder="SSID"> 
+  <p><input type="text" id="pwd" placeholder="Password"> 
+  <p><button class='actionbtn' onclick="aplogin()">Connect</button>
+  <p><button class='actionbtn' onclick="getAPlist(false)">Refresh</button>
+  <p class="result" style="color:green"></p>
+ </div>
+</body>
+</html>

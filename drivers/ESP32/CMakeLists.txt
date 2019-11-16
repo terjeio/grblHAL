@@ -15,8 +15,11 @@ cmake_minimum_required(VERSION 3.5)
 # tmc2130/trinamic.c
 # sdcard/sdcard.c
 # web/backend.c
+# sdcard/sdcard.c
+# dns_server.c
+# wifi.c
 
-set(MAIN_SRCS main.c driver.c nvs.c esp32-hal-uart.c bluetooth.c wifi.c TCPStream.c
+set(MAIN_SRCS main.c driver.c nvs.c esp32-hal-uart.c bluetooth.c TCPStream.c
  i2c.c
  ioexpand.c
  eeprom.c
@@ -39,20 +42,24 @@ set(MAIN_SRCS main.c driver.c nvs.c esp32-hal-uart.c bluetooth.c wifi.c TCPStrea
  GRBL/system.c
 )
 
-#include_directories("$ENV{IDF_PATH}/components/freertos/include" "D:\Projects\Espressif\GrblDriver")
-#include_directories(BEFORE "D:/Projects/Espressif/GrblDriver")
-
-set(INCLUDE_DIRS "D:/Projects/Espressif/GrblDriver")
+set(INCLUDE_DIRS ".")
 
 #file(GLOB GRBL_SOURCE "GRBL/*.c")
-    
 #list (APPEND GRBL_SOURCE MAIN_SRCS)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+
 project(grbl)
-include_directories(BEFORE "D:/Projects/Espressif/GrblDriver")
+
+target_add_binary_data(grbl.elf "favicon.ico" BINARY)
+target_add_binary_data(grbl.elf "index.html" BINARY)
+target_add_binary_data(grbl.elf "ap_login.html" BINARY)
+
+include_directories(BEFORE ".")
 #target_compile_options(grbl PRIVATE -Werror -Wall -Wextra)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 #add_subdirectory (GRBL)
+
+#register_component()

@@ -6,6 +6,10 @@ A GrblHAL driver for the ESP32 processor.
 
 ---
 
+__Update 2019-11-16:__ Added initial \(and rather crude\) UI for captive portal when WiFi is configured in APSTA mode. Ajax-based, no postbacks for updates. It works with Firefox on my laptop...
+
+---
+
 __Update 2019-11-15:__ Added AP and APSTA WiFi options. Initial webserver support for reading/setting $-settings via JSON-messages. In APSTA WiFi mode webserver supports querying for available access points and connecting to selected, again via JSON messages. No UI for this yet though...
 
 __NOTE:__ IDF version 3.2 or later required for compilation if webserver is to be enabled.
@@ -68,5 +72,11 @@ Add: #include "esp_attr.h"
 Change: #define ISR_CODE to #define ISR_CODE IRAM_ATTR
 ```
 
+### Credits:
+
+dbs_server.c is Copyright (c) 2019 Tony Pottier - from his [ESP32 WiFi Manager](https://github.com/tonyp7/esp32-wifi-manager) 
+
+Snippets of code is extracted from Espressif ESP-IDF examples which are public domain.
+
 ---
-2018-12-14
+2019-11-16
