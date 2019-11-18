@@ -1,5 +1,6 @@
 /*
-  stream.h - some ASCII control character definitions
+  stream.h - some ASCII control character definitions and optional structures for stream buffers
+
   Part of Grbl
 
   Copyright (c) 2019 Terje Io
@@ -34,5 +35,34 @@
 #define ASCII_EM   0x19
 #define ASCII_DEL  0x7F
 #define ASCII_EOL  "\r\n"
+
+#ifndef RX_BUFFER_SIZE
+#define RX_BUFFER_SIZE 1024 // must be a power of 2
+#endif
+
+#ifndef TX_BUFFER_SIZE
+#define TX_BUFFER_SIZE 512  // must be a power of 2
+#endif
+
+#define BUFCOUNT(head, tail, size) ((head >= tail) ? (head - tail) : (size - tail + head))
+
+// These structures are not referenced in the core code, may be used by drivers
+
+typedef struct {
+    volatile uint_fast16_t head;
+    volatile uint_fast16_t tail;
+    bool overflow;
+#ifdef SERIAL_RTS_HANDSHAKE
+    bool rts_state;
+#endif
+    bool backup;
+    char data[RX_BUFFER_SIZE];
+} stream_rx_buffer_t;
+
+typedef struct {
+    volatile uint16_t head;
+    volatile uint16_t tail;
+    char data[TX_BUFFER_SIZE];
+} stream_tx_buffer_t;
 
 #endif

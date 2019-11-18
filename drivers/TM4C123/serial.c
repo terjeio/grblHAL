@@ -41,21 +41,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define BUFCOUNT(head, tail, size) ((head >= tail) ? (head - tail) : (size - tail + head))
 
-typedef struct {
-    volatile uint16_t head;
-    volatile uint16_t tail;
-    bool overflow;
-    bool rts_state;
-    bool backup;
-    char data[RX_BUFFER_SIZE];
-} stream_rx_buffer_t;
-
-typedef struct {
-    volatile uint16_t head;
-    volatile uint16_t tail;
-    char data[TX_BUFFER_SIZE];
-} stream_tx_buffer_t;
-
 static void uart_interrupt_handler (void);
 
 static stream_tx_buffer_t txbuffer = {0};

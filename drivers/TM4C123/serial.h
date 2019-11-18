@@ -1,7 +1,7 @@
 //
 // serial.h - (UART) port library for Tiva
 //
-// v1.00 / 2019-08-11 / Io Engineering / Terje
+// v1.00 / 2019-11-18 / Io Engineering / Terje
 //
 
 /*
@@ -45,8 +45,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define XONOK (ASCII_XON|0x80)
 #define XOFFOK (ASCII_XOFF|0x80)
-#define TX_BUFFER_SIZE 128      // must be a power of 2
-#define RX_BUFFER_SIZE 1024     // must be a power of 2
 #define RX_BUFFER_HWM 900
 #define RX_BUFFER_LWM 300
 //#define LINE_BUFFER_SIZE 20

@@ -47,7 +47,9 @@
 #define LASER_PPI               0 // Laser PPI (Pulses Per Inch) option.
 #define KEYPAD_ENABLE           0 // I2C keypad for jogging etc.
 #define SDCARD_ENABLE           1 // Run jobs from SD card.
-#define ETHERNET_ENABLE         1 // Ethernet streaming.
+#define ETHERNET_ENABLE         1 // Streaming over Ethernet.
+#define TELNET_ENABLE           1 // Enable telnet daemon - requires ethernet enabled
+#define WEBSOCKET_ENABLE        1 // Enable websocket daemon - requires ethernet enabled
 #define M6_ENABLE               1 // Manual toolchange.
 #define TRINAMIC_ENABLE         0 // Trinamic TMC2130 stepper driver support.
 #define TRINAMIC_I2C            0 // Trinamic I2C - SPI bridge interface.
@@ -67,6 +69,10 @@
   #define CNC_BOOSTERPACK_A4998  0 // do not change!
 #endif
 
+#if (TELNET_ENABLE || WEBSOCKET_ENABLE) && !ETHERNET_ENABLE
+#error "Telnet and/or websocket protocols requires ethernet enabled!"
+#endif
+
 #if ETHERNET_ENABLE
 #define NETWORK_HOSTNAME        "GRBL"
 #define NETWORK_IPMODE_STATIC   0 // do not change!
@@ -76,6 +82,8 @@
 #define NETWORK_MASK            "255.255.255.0"
 #endif
 #define NETWORK_TELNET_PORT     23
+#define NETWORK_WEBSOCKET_PORT  80
+#define NETWORK_HTTP_PORT       80
 #endif
 
 // End configuration
@@ -92,8 +100,9 @@
 #endif
 #endif
 
-typedef struct {
 #ifdef DRIVER_SETTINGS
+
+typedef struct {
 #if ETHERNET_ENABLE
     network_settings_t network;
 #endif

@@ -49,14 +49,16 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "posix/sys/socket.h"
 
 #include "base/driver.h"
-#include "TCPStream.h"
+#include "networking/TCPStream.h"
+#include "networking/WsStream.h"
 
 #define SYSTICK_INT_PRIORITY    0x80
 #define ETHERNET_INT_PRIORITY   0xC0
 
 static volatile bool linkUp = false;
 static uint32_t IPAddress = 0;
-static uint16_t service_port;
+static network_settings_t *network;
+static network_services_t services = {0};
 
 char *enet_ip_address (void)
 {
@@ -83,7 +85,14 @@ void lwIPHostTimerHandler (void)
         TCPStreamNotifyLinkStatus(linkUp);
     }
 
-    TCPStreamHandler();
+#if TELNET_ENABLE
+    if(services.telnet)
+        TCPStreamPoll();
+#endif
+#if WEBSOCKET_ENABLE
+    if(services.telnet)
+        WsStreamPoll();
+#endif
 }
 
 void setupServices (void *pvArg)
@@ -99,11 +108,23 @@ void setupServices (void *pvArg)
     LocatorAppTitleSet("Grbl CNC Controller");
 #endif
 
-    TCPStreamInit();
-    TCPStreamListen(service_port);
+#if TELNET_ENABLE
+    if(network->services.telnet && !services.telnet) {
+        TCPStreamInit();
+        TCPStreamListen(network->telnet_port == 0 ? 23 : network->telnet_port);
+        services.telnet = On;
+    }
+#endif
+#if WEBSOCKET_ENABLE
+    if(network->services.websocket && !services.websocket) {
+        WsStreamInit();
+        WsStreamListen(network->websocket_port == 0 ? 80 : network->websocket_port);
+        services.websocket = On;
+    }
+#endif
 }
 
-bool lwIPTaskInit (network_settings_t *network)
+bool lwIPTaskInit (network_settings_t *settings)
 {
     uint32_t User0, User1;
     uint8_t MACAddress[6];
@@ -121,6 +142,8 @@ bool lwIPTaskInit (network_settings_t *network)
     MACAddress[3] = ((User1 >>  0) & 0xFF);
     MACAddress[4] = ((User1 >>  8) & 0xFF);
     MACAddress[5] = ((User1 >> 16) & 0xFF);
+
+    network = settings;
 
     //
     // Lower the priority of the Ethernet interrupt handler to less than
@@ -152,8 +175,6 @@ bool lwIPTaskInit (network_settings_t *network)
     PREF(IntPrioritySet(FAULT_SYSTICK, SYSTICK_INT_PRIORITY));
 #endif
 
-    service_port = network->telnet_port;
-
     if(network->ip_mode == IpMode_DHCP)
         lwIPInit(configCPU_CLOCK_HZ, MACAddress, 0, 0, 0, IPADDR_USE_DHCP);
     else
@@ -161,7 +182,7 @@ bool lwIPTaskInit (network_settings_t *network)
 
 #if LWIP_NETIF_HOSTNAME
     extern struct netif *netif_default;
-    netif_set_hostname(netif_default, driver_settings.network.hostname);
+    netif_set_hostname(netif_default, network->hostname);
 #endif
 
     // Setup the remaining services inside the TCP/IP thread's context.
@@ -205,6 +226,25 @@ status_code_t ethernet_setting (setting_type_t param, float value, char *svalue)
 
     if(svalue) switch(param) {
 
+        case Setting_NetworkServices:
+            if(isintf(value) && value >= 0.0f && value < 256.0f) {
+                status = Status_OK;
+                network_services_t is_available = {0};
+#if TELNET_ENABLE
+                is_available.telnet = On;
+#endif
+#if HTTP_ENABLE
+                is_available.http = On;
+#endif
+#if WEBSOCKET_ENABLE
+                is_available.websocket = On;
+#endif
+                driver_settings.network.services.mask = (uint8_t)value & is_available.mask;
+                // TODO: fault if attempt to select services not available?
+            } else
+                status = Status_InvalidStatement; //out of range...
+            break;
+
 #if LWIP_NETIF_HOSTNAME
         case Setting_Hostname:
             if(strlen(svalue) < sizeof(hostname_t)) {
@@ -216,8 +256,8 @@ status_code_t ethernet_setting (setting_type_t param, float value, char *svalue)
 #endif
 
 #if TELNET_ENABLE
-      case Settings_TelnetPort:
-          if(isint(value) && value != NAN && value > 0.0f && value < 65536.0f) {
+      case Setting_TelnetPort:
+          if(isintf(value) && value != NAN && value > 0.0f && value < 65536.0f) {
               status = Status_OK;
               driver_settings.network.telnet_port = (uint16_t)value;
           } else
@@ -225,8 +265,18 @@ status_code_t ethernet_setting (setting_type_t param, float value, char *svalue)
           break;
 #endif
 
+#if WEBSOCKET_ENABLE
+      case Setting_WebSocketPort:
+          if(isintf(value) && value != NAN && value > 0.0f && value < 65536.0f) {
+              status = Status_OK;
+              driver_settings.network.websocket_port = (uint16_t)value;
+          } else
+              status = Status_InvalidStatement; //out of range...
+          break;
+#endif
+
 #if HTTP_ENABLE
-      case Settings_HttpPort:
+      case Setting_HttpPort:
           if((claimed = (value != NAN && value > 0.0f && value < 65536.0f) {
               status = Status_OK;
               driver_settings.network.http_port = (uint16_t)value;
@@ -297,15 +347,25 @@ void ethernet_settings_report (setting_type_t setting)
 {
     switch(setting) {
 
+        case Setting_NetworkServices:
+            report_uint_setting(setting, driver_settings.network.services.mask);
+            break;
+
 #if LWIP_NETIF_HOSTNAME
         case Setting_Hostname:
             report_string_setting(setting, driver_settings.network.hostname);
             break;
 #endif
-
+#if TELNET_ENABLE
         case Setting_TelnetPort:
             report_uint_setting(setting, driver_settings.network.telnet_port);
             break;
+#endif
+#if WEBSOCKET_ENABLE
+        case Setting_WebSocketPort:
+            report_uint_setting(setting, driver_settings.network.websocket_port);
+            break;
+#endif
     }
 
     /*
@@ -333,6 +393,20 @@ void ethernet_settings_restore (void)
     driver_settings.network.ip_mode = IpMode_DHCP;
 #endif
     driver_settings.network.telnet_port = NETWORK_TELNET_PORT;
+    driver_settings.network.http_port = NETWORK_HTTP_PORT;
+    driver_settings.network.websocket_port = NETWORK_WEBSOCKET_PORT;
+
+#if TELNET_ENABLE
+    driver_settings.network.services.telnet = On;
+#endif
+
+#if HTTP_ENABLE
+    driver_settings.network.services.http = On;
+#endif
+
+#if WEBSOCKET_ENABLE
+    driver_settings.network.services.websocket = On;
+#endif
 }
 
 #endif

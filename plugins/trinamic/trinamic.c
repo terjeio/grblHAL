@@ -224,42 +224,39 @@ status_code_t trinamic_setting (setting_type_t setting, float value, char *svalu
 }
 
 // Initialize default EEPROM settings
-void trinamic_settings_restore (uint8_t restore_flag)
+void trinamic_settings_restore (void)
 {
-    if(restore_flag & SETTINGS_RESTORE_DRIVER_PARAMETERS) {
+    uint_fast8_t idx = N_AXIS;
 
-        uint_fast8_t idx = N_AXIS;
+    driver_settings.trinamic.driver_enable.mask = 0;
+    driver_settings.trinamic.homing_enable.mask = 0;
 
-        driver_settings.trinamic.driver_enable.mask = 0;
-        driver_settings.trinamic.homing_enable.mask = 0;
+    do {
+        switch(--idx) {
 
-        do {
-            switch(--idx) {
+            case X_AXIS:
+                driver_settings.trinamic.driver_enable.x = TMC_X_ENABLE;
+                driver_settings.trinamic.driver[idx].current = TMC_X_CURRENT;
+                driver_settings.trinamic.driver[idx].microsteps = TMC_X_MICROSTEPS;
+                driver_settings.trinamic.driver[idx].r_sense = TMC_X_R_SENSE;
+                driver_settings.trinamic.driver[idx].homing_sensitivity = TMC_X_SGT;
+                break;
 
-                case X_AXIS:
-                    driver_settings.trinamic.driver_enable.x = TMC_X_ENABLE;
-                    driver_settings.trinamic.driver[idx].current = TMC_X_CURRENT;
-                    driver_settings.trinamic.driver[idx].microsteps = TMC_X_MICROSTEPS;
-                    driver_settings.trinamic.driver[idx].r_sense = TMC_X_R_SENSE;
-                    driver_settings.trinamic.driver[idx].homing_sensitivity = TMC_X_SGT;
-                    break;
+            case Y_AXIS:
+                driver_settings.trinamic.driver[idx].current = TMC_Y_CURRENT;
+                driver_settings.trinamic.driver[idx].microsteps = TMC_Y_MICROSTEPS;
+                driver_settings.trinamic.driver[idx].r_sense = TMC_Y_R_SENSE;
+                driver_settings.trinamic.driver[idx].homing_sensitivity = TMC_Y_SGT;
+                break;
 
-                case Y_AXIS:
-                    driver_settings.trinamic.driver[idx].current = TMC_Y_CURRENT;
-                    driver_settings.trinamic.driver[idx].microsteps = TMC_Y_MICROSTEPS;
-                    driver_settings.trinamic.driver[idx].r_sense = TMC_Y_R_SENSE;
-                    driver_settings.trinamic.driver[idx].homing_sensitivity = TMC_Y_SGT;
-                    break;
-
-                case Z_AXIS:
-                    driver_settings.trinamic.driver[idx].current = TMC_Z_CURRENT;
-                    driver_settings.trinamic.driver[idx].microsteps = TMC_Z_MICROSTEPS;
-                    driver_settings.trinamic.driver[idx].r_sense = TMC_Z_R_SENSE;
-                    driver_settings.trinamic.driver[idx].homing_sensitivity = TMC_Z_SGT;
-                    break;
-            }
-        } while(idx);
-    }
+            case Z_AXIS:
+                driver_settings.trinamic.driver[idx].current = TMC_Z_CURRENT;
+                driver_settings.trinamic.driver[idx].microsteps = TMC_Z_MICROSTEPS;
+                driver_settings.trinamic.driver[idx].r_sense = TMC_Z_R_SENSE;
+                driver_settings.trinamic.driver[idx].homing_sensitivity = TMC_Z_SGT;
+                break;
+        }
+    } while(idx);
 }
 
 // Append Trinamic settings to '$$' report

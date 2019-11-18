@@ -50,6 +50,17 @@ function aplogin() {
   }; 
   xhr.send(JSON.stringify({"ssid":document.querySelector('#ssid').value,"password":document.querySelector('#pwd').value})); 
 }
+function apdisconnect() { 
+  xhr = new XMLHttpRequest(); 
+  xhr.open("DELETE", "wifi", true); 
+  xhr.setRequestHeader("Content-Type", "application/json"); 
+  xhr.onreadystatechange = function() { 
+    if (xhr.readyState === 4 && xhr.status === 202) { 
+      	setTimeout(function(){getAPlist(true);}, 3000);
+    } 
+  }; 
+  xhr.send(JSON.stringify({"ssid":document.querySelector('#ssid').value,"password":document.querySelector('#pwd').value})); 
+}
 function getAPlist(refresh) {
   xhr = new XMLHttpRequest(); 
   xhr.open("GET", "wifi", true); 
@@ -98,6 +109,7 @@ document.onreadystatechange = function() {
   <p><input type="text" id="pwd" placeholder="Password"> 
   <p><button class='actionbtn' onclick="aplogin()">Connect</button>
   <p><button class='actionbtn' onclick="getAPlist(false)">Refresh</button>
+  <p><button class='actionbtn' onclick="apdisconnect()">Disconnect</button>
   <p class="result" style="color:green"></p>
  </div>
 </body>

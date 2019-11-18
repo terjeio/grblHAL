@@ -20,7 +20,7 @@
 */
 
 
-#ifdef ARDUINO_SAMD_MKRZERO
+#if defined(ARDUINO_SAMD_MKRZERO) || defined(__SAM3X8E__)
 #include "../../driver.h"
 #else
 #include "driver.h"
@@ -30,7 +30,7 @@
 
 #include "keypad.h"
 
-#ifdef ARDUINO_SAMD_MKRZERO
+#if defined(ARDUINO_SAMD_MKRZERO) || defined(__SAM3X8E__)
 #include "../../i2c.h"
 #include "../grbl/grbl.h"
 #else
@@ -88,16 +88,14 @@ status_code_t keypad_setting (setting_type_t setting, float value, char *svalue)
     return status;
 }
 
-void keypad_settings_restore (uint8_t restore_flag)
+void keypad_settings_restore (void)
 {
-    if(restore_flag & SETTINGS_RESTORE_DRIVER_PARAMETERS) {
-        driver_settings.jog.step_speed    = 100.0f;
-        driver_settings.jog.slow_speed    = 600.0f;
-        driver_settings.jog.fast_speed    = 3000.0f;
-        driver_settings.jog.step_distance = 0.25f;
-        driver_settings.jog.slow_distance = 500.0f;
-        driver_settings.jog.fast_distance = 3000.0f;
-    }
+    driver_settings.jog.step_speed    = 100.0f;
+    driver_settings.jog.slow_speed    = 600.0f;
+    driver_settings.jog.fast_speed    = 3000.0f;
+    driver_settings.jog.step_distance = 0.25f;
+    driver_settings.jog.slow_distance = 500.0f;
+    driver_settings.jog.fast_distance = 3000.0f;
 }
 
 void keypad_settings_report (setting_type_t setting)

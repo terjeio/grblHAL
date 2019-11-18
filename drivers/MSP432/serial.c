@@ -29,31 +29,6 @@
 
 #define BUFCOUNT(head, tail, size) ((head >= tail) ? (head - tail) : (size - tail + head))
 
-#ifndef RX_BUFFER_SIZE
-  #define RX_BUFFER_SIZE 128
-#endif
-#ifndef TX_BUFFER_SIZE
-  #define TX_BUFFER_SIZE 64
-#endif
-
-typedef struct {
-    volatile uint32_t head;
-    volatile uint32_t tail;
-    bool overflow;
-    bool rts_state;
-    bool backup;
-    char data[RX_BUFFER_SIZE];
-} stream_rx_buffer_t;
-
-typedef struct {
-    volatile uint32_t head;
-    volatile uint32_t tail;
-#ifdef ENABLE_XONXOFF
-    volatile uint8_t flow_ctrl = XON_SENT; // Flow control state variable
-#endif
-    char data[TX_BUFFER_SIZE];
-} stream_tx_buffer_t;
-
 static stream_tx_buffer_t txbuffer = {0};
 static stream_rx_buffer_t rxbuffer = {0}, rxbackup;
 

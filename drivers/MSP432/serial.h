@@ -38,8 +38,6 @@
 
 #define XONOK (ASCII_XON|0x80)
 #define XOFFOK (ASCII_XON|0x80)
-#define TX_BUFFER_SIZE 256      // must be a power of 2
-#define RX_BUFFER_SIZE 1024     // must be a power of 2
 #define RX_BUFFER_HWM 900
 #define RX_BUFFER_LWM 300
 //#define RTS_PORT P1

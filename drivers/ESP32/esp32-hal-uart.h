@@ -51,6 +51,8 @@ extern "C" {
 
 #define ESP_REG(addr) *((volatile uint32_t *)(addr))
 
+#define DEBUG_PRINT(string) uartWriteS(string)
+
 void uartInit (void);
 uint32_t uartAvailable (void);
 uint16_t uartRXFree (void);

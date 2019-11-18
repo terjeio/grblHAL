@@ -35,12 +35,11 @@
 
 #include "nvs_flash.h"
 
-#include <lwip/sockets.h>
-#include "lwip/timeouts.h"
+#include "networking/networking.h"
+//#include "lwip/timeouts.h"
 
 #include "wifi.h"
 #include "driver.h"
-#include "TCPStream.h"
 #include "dns_server.h"
 #include "web/backend.h"
 
@@ -100,35 +99,57 @@ bool wifi_dns_running (void)
 
 static void lwIPHostTimerHandler (void *arg)
 {
-	if(services.telnet) {
-		TCPStreamHandler();
+#if TELNET_ENABLE
+	if(services.telnet)
+		TCPStreamPoll();
+#endif
+#if WEBSOCKET_ENABLE
+	if(services.telnet)
+		WsStreamPoll();
+#endif
+	if(services.mask)
 		sys_timeout(STREAM_POLL_INTERVAL, lwIPHostTimerHandler, NULL);
-	}
 }
 
 static void start_services (void)
 {
+#if TELNET_ENABLE
 	if(network->services.telnet && !services.telnet) {
 		TCPStreamInit();
 		TCPStreamListen(network->telnet_port == 0 ? 23 : network->telnet_port);
 		services.telnet = On;
 		sys_timeout(STREAM_POLL_INTERVAL, lwIPHostTimerHandler, NULL);
 	}
-
+#endif
+#if WEBSOCKET_ENABLE
+	if(network->services.websocket && !services.websocket) {
+		WsStreamInit();
+		WsStreamListen(network->websocket_port == 0 ? 80 : network->websocket_port);
+		services.websocket = On;
+		sys_timeout(STREAM_POLL_INTERVAL, lwIPHostTimerHandler, NULL);
+	}
+#endif
+#if	HTTP_ENABLE
 	if(network->services.http && !services.http)
 		services.http = httpdaemon_start(network);
-
+#endif
 	ESP_LOGI(TAG, "WIFI SERVICES %d\n", services.mask);
 }
 
 static void stop_services (void)
 {
+#if	HTTP_ENABLE
 	if(services.http)
 		httpdaemon_stop();
-
+#endif
+#if TELNET_ENABLE
 	if(services.telnet)
 		TCPStreamClose();
-
+#endif
+#if WEBSOCKET_ENABLE
+	if(services.dns)
+		dns_server_stop();
+#endif
 	if(services.dns)
 		dns_server_stop();
 
@@ -222,6 +243,11 @@ static esp_err_t wifi_event_handler (void *ctx, system_event_t *event)
 			if(services.dns) {
 				services.dns = Off;
 				dns_server_stop();
+			}
+			if(xEventGroupGetBits(wifi_event_group) & APSTA_BIT) {
+				strcpy(driver_settings.wifi.sta.ssid, (char *)wifi_sta_config.sta.ssid);
+				strcpy(driver_settings.wifi.sta.password, (char *)wifi_sta_config.sta.password);
+				// commit to EEPROM
 			}
 			break;
 
@@ -411,35 +437,35 @@ bool wifi_init (wifi_settings_t *settings)
 
 bool wifi_ap_connect (char *ssid, char *password)
 {
-	if(strlen(ssid) == 0)
+	bool ok = !ssid || (strlen(ssid) > 0 && strlen(ssid) < sizeof(ssid_t) && strlen(password) < sizeof(password_t));
+
+	if(!ok)
 		return false;
 
 	if(xEventGroupGetBits(wifi_event_group) & CONNECTED_BIT)
-		esp_wifi_disconnect();
-
-	memset(&wifi_sta_config, 0, sizeof(wifi_config_t));
-
-	if(strlcpy((char *)wifi_sta_config.sta.ssid, ssid, sizeof(wifi_sta_config.sta.ssid)) >= sizeof(wifi_sta_config.sta.ssid))
-		return false;
-
-	if(strlcpy((char *)wifi_sta_config.sta.password, password, sizeof(wifi_sta_config.sta.password)) >= sizeof(wifi_sta_config.sta.password))
-		return false;
-
-	if(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_sta_config) != ESP_OK)
-		return false;
+		esp_wifi_disconnect(); // TODO: delay until response is sent...
 
 	if(xSemaphoreTake(aplist_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
 
-		ap_list.ap_selected = wifi_sta_config.sta.ssid;
+		ap_list.ap_selected = NULL;
 		memset(&ap_list.ip_addr, 0, sizeof(ip4_addr_t));
-		strcpy(ap_list.ap_status, "Connecting...");
+		strcpy(ap_list.ap_status, ssid ? "Connecting..." : "");
 
 		xSemaphoreGive(aplist_mutex);
 	}
 
-	esp_wifi_connect();
+	memset(&wifi_sta_config, 0, sizeof(wifi_config_t));
 
-	return esp_wifi_connect() == ESP_OK;
+	if(ssid) {
+
+		strcpy((char *)wifi_sta_config.sta.ssid, ssid);
+		strcpy((char *)wifi_sta_config.sta.password, password);
+
+		ok = esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_sta_config) == ESP_OK &&
+			  esp_wifi_connect() == ESP_OK;
+	}
+
+	return ok;
 }
 
 bool wifi_stop (void)

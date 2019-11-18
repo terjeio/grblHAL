@@ -27,20 +27,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define TX_BUFFER_SIZE 512      // must be a power of 2
-#define RX_BUFFER_SIZE 1024     // must be a power of 2
+#include "esp32-hal-uart.h"
+
 #define RX_BUFFER_HWM 900
 #define RX_BUFFER_LWM 300
-
-#define BUFCOUNT(head, tail, size) ((head >= tail) ? (head - tail) : (size - tail + head))
-
-typedef struct {
-    volatile uint16_t head;
-    volatile uint16_t tail;
-    bool overflow;
-    bool rts_state;
-    bool backup;
-    char data[RX_BUFFER_SIZE];
-} serial_rx_buffer_t;
 
 #endif

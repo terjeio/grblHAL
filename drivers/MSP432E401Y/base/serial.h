@@ -106,6 +106,9 @@
 #define RTS_PORT GPIO_PORTL_BASE
 #define RTS_PIN  GPIO_PIN_3
 */
+
+#define DEBUG_PRINT(string) serialWriteS(string)
+
 void serialInit (void);
 int16_t serialGetC (void);
 bool serialPutC (const char data);

@@ -61,15 +61,14 @@ static uint32_t connection = 0;
 static bluetooth_settings_t *bt_settings;
 static xSemaphoreHandle lock = NULL;
 
-static serial_rx_buffer_t rxbuffer = {
+static stream_rx_buffer_t rxbuffer = {
 	.head = 0,
 	.tail = 0,
 	.backup = false,
-	.overflow = false,
-	.rts_state = false
+	.overflow = false
 };
 
-static serial_rx_buffer_t rxbackup;
+static stream_rx_buffer_t rxbackup;
 
 static bt_tx_buffer_t tx_buffers[2], *txbuffer, *txbuffer_send;
 
@@ -159,7 +158,7 @@ bool BTStreamSuspendInput (bool suspend)
     if(suspend)
         hal.stream.read = BTStreamGetNull;
     else if(rxbuffer.backup)
-        memcpy(&rxbuffer, &rxbackup, sizeof(serial_rx_buffer_t));
+        memcpy(&rxbuffer, &rxbackup, sizeof(stream_rx_buffer_t));
     UART_MUTEX_UNLOCK();
     return rxbuffer.tail != rxbuffer.head;
 }
@@ -197,7 +196,7 @@ static void esp_spp_cb (esp_spp_cb_event_t event, esp_spp_cb_param_t *param)
 				c = *param->data_ind.data;
 				if(c == CMD_TOOL_ACK && !rxbuffer.backup) {
 
-					memcpy(&rxbackup, &rxbuffer, sizeof(serial_rx_buffer_t));
+					memcpy(&rxbackup, &rxbuffer, sizeof(stream_rx_buffer_t));
 					rxbuffer.backup = true;
 					rxbuffer.tail = rxbuffer.head;
 					hal.stream.read = BTStreamGetC; // restore normal input

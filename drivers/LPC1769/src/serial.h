@@ -28,30 +28,11 @@
 #define SERIAL_MODULE     LPC_UART0
 #define SERIAL_MODULE_INT UART0_IRQn
 
-#define TX_BUFFER_SIZE 128      // must be a power of 2
-#define RX_BUFFER_SIZE 1024     // must be a power of 2
 #define RX_BUFFER_HWM 900
 #define RX_BUFFER_LWM 300
 //#define RTS_PORT P1
 #define RTS_PIN  4
 #define RTS_BIT (1<<RTS_PIN)
-
-#define BUFCOUNT(head, tail, size) ((head >= tail) ? (head - tail) : (size - tail + head))
-
-typedef struct {
-    volatile uint16_t head;
-    volatile uint16_t tail;
-    bool overflow;
-//    bool rts_state;
-    bool backup;
-    char data[RX_BUFFER_SIZE];
-} stream_rx_buffer_t;
-
-typedef struct {
-    volatile uint16_t head;
-    volatile uint16_t tail;
-    char data[TX_BUFFER_SIZE];
-} stream_tx_buffer_t;
 
 void serialInit(void);
 int16_t serialGetC(void);

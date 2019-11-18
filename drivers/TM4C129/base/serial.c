@@ -24,27 +24,16 @@
 #include "driver.h"
 #include "serial.h"
 
-typedef struct {
-    volatile uint_fast16_t head;
-    volatile uint_fast16_t tail;
-    bool overflow;
-    bool rts_state;
-    bool backup;
-    char data[RX_BUFFER_SIZE];
-} serial_buffer_t;
-
-#define BUFCOUNT(head, tail, size) ((head >= tail) ? (head - tail) : (size - tail + head))
-
 static void uart_interrupt_handler (void);
 
-static serial_buffer_t rxbuffer = {
+static stream_rx_buffer_t rxbuffer = {
     .head = 0,
     .tail = 0,
     .backup = false,
     .overflow = false,
-    .rts_state = false
+ //   .rts_state = false
 };
-static serial_buffer_t rxbackup;
+static stream_rx_buffer_t rxbackup;
 
 static char txbuf[TX_BUFFER_SIZE];
 static volatile uint_fast16_t tx_head = 0, tx_tail = 0;
@@ -215,7 +204,7 @@ bool serialSuspendInput (bool suspend)
     if(suspend)
         hal.stream.read = serialGetNull;
     else if(rxbuffer.backup)
-        memcpy(&rxbuffer, &rxbackup, sizeof(serial_buffer_t));
+        memcpy(&rxbuffer, &rxbackup, sizeof(stream_rx_buffer_t));
 
     return rxbuffer.tail != rxbuffer.head;
 }
@@ -259,7 +248,7 @@ static void uart_interrupt_handler (void)
 
         if(c == CMD_TOOL_ACK && !rxbuffer.backup) {
 
-            memcpy(&rxbackup, &rxbuffer, sizeof(serial_buffer_t));
+            memcpy(&rxbackup, &rxbuffer, sizeof(stream_rx_buffer_t));
             rxbuffer.backup = true;
             rxbuffer.tail = rxbuffer.head;
             hal.stream.read = serialGetC; // restore normal input

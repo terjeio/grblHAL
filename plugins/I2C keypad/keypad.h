@@ -53,7 +53,7 @@ void keypad_keyclick_handler (bool keydown);
 void keypad_enqueue_keycode (char c);
 
 status_code_t keypad_setting (setting_type_t setting, float value, char *svalue);
-void keypad_settings_restore (uint8_t restore_flag);
+void keypad_settings_restore (void);
 void keypad_settings_report (setting_type_t setting_type);
 
 #endif

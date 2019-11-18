@@ -32,8 +32,6 @@
 #include "src/grbl/grbl.h"
 #include "src/grbl/stream.h"
 
-#define TX_BUFFER_SIZE 512      // must be a power of 2
-#define RX_BUFFER_SIZE 1024     // must be a power of 2
 #define RX_BUFFER_HWM 900
 #define RX_BUFFER_LWM 300
 
@@ -80,21 +78,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-typedef struct {
-    volatile uint16_t head;
-    volatile uint16_t tail;
-    bool overflow;
-    bool rts_state;
-    bool backup;
-    char data[RX_BUFFER_SIZE];
-} stream_rx_buffer_t;
-
-typedef struct {
-    volatile uint16_t head;
-    volatile uint16_t tail;
-    char data[TX_BUFFER_SIZE];
-} stream_tx_buffer_t;
 
 void serialInit(void);
 int16_t serialGetC(void);

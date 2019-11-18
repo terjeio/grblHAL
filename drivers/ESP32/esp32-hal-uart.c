@@ -67,15 +67,14 @@ static uart_t _uart_bus_array[3] = {
 };
 #endif
 
-static serial_rx_buffer_t rxbuffer = {
+static stream_rx_buffer_t rxbuffer = {
 	.head = 0,
 	.tail = 0,
 	.backup = false,
-	.overflow = false,
-	.rts_state = false
+	.overflow = false
 };
 
-static serial_rx_buffer_t rxbackup;
+static stream_rx_buffer_t rxbackup;
 static uart_t *rx_uart = NULL, *tx_uart = NULL;
 
 static void IRAM_ATTR _uart_isr (void *arg)
@@ -92,7 +91,7 @@ static void IRAM_ATTR _uart_isr (void *arg)
 
 		if(c == CMD_TOOL_ACK && !rxbuffer.backup) {
 
-			memcpy(&rxbackup, &rxbuffer, sizeof(serial_rx_buffer_t));
+			memcpy(&rxbackup, &rxbuffer, sizeof(stream_rx_buffer_t));
 			rxbuffer.backup = true;
 			rxbuffer.tail = rxbuffer.head;
 			hal.stream.read = uartRead; // restore normal input
@@ -317,7 +316,7 @@ bool uartSuspendInput (bool suspend)
     if(suspend)
         hal.stream.read = uartGetNull;
     else if(rxbuffer.backup)
-        memcpy(&rxbuffer, &rxbackup, sizeof(serial_rx_buffer_t));
+        memcpy(&rxbuffer, &rxbackup, sizeof(stream_rx_buffer_t));
     UART_MUTEX_UNLOCK();
     return rxbuffer.tail != rxbuffer.head;
 }

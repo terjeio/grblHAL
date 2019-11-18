@@ -53,8 +53,13 @@ static void trinamic_diag1_isr (void);
 #endif
 
 #if ETHERNET_ENABLE
-#include "ethernet/enet.h"
-#include "ethernet/TCPStream.h"
+  #include "ethernet/enet.h"
+  #if TELNET_ENABLE
+    #include "networking/TCPStream.h"
+  #endif
+  #if WEBSOCKET_ENABLE
+    #include "networking/WsStream.h"
+  #endif
 #endif
 
 #define USE_32BIT_TIMER 1
@@ -76,11 +81,70 @@ static uint16_t step_prescaler[3] = {
 
 #define STEPPER_PULSE_PRESCALER (120 - 1)
 
+#if ETHERNET_ENABLE
+
+static network_services_t services = {0};
+
+static void enetStreamWriteS (const char *data)
+{
+#if TELNET_ENABLE
+    if(services.telnet)
+        TCPStreamWriteS(data);
+#endif
+#if WEBSOCKET_ENABLE
+    if(services.websocket)
+        WsStreamWriteS(data);
+#endif
+    serialWriteS(data);
+}
+
+  #if TELNET_ENABLE
+    const io_stream_t ethernet_stream = {
+        .type = StreamType_Telnet,
+        .read = TCPStreamGetC,
+        .write = TCPStreamWriteS,
+        .write_all = enetStreamWriteS,
+        .get_rx_buffer_available = TCPStreamRxFree,
+        .reset_read_buffer = TCPStreamRxFlush,
+        .cancel_read_buffer = TCPStreamRxCancel,
+        .enqueue_realtime_command = protocol_enqueue_realtime_command,
+    #if M6_ENABLE
+        .suspend_read = NULL // for now...
+    #else
+        .suspend_read = NULL
+    #endif
+    };
+  #endif
+
+  #if WEBSOCKET_ENABLE
+    const io_stream_t websocket_stream = {
+        .type = StreamType_WebSocket,
+        .read = WsStreamGetC,
+        .write = WsStreamWriteS,
+        .write_all = enetStreamWriteS,
+        .get_rx_buffer_available = WsStreamRxFree,
+        .reset_read_buffer = WsStreamRxFlush,
+        .cancel_read_buffer = WsStreamRxCancel,
+        .enqueue_realtime_command = protocol_enqueue_realtime_command,
+    #if M6_ENABLE
+        .suspend_read = NULL // for now...
+    #else
+        .suspend_read = NULL
+    #endif
+    };
+  #endif
+
+#endif // ETHERNET_ENABLE
+
 const io_stream_t serial_stream = {
     .type = StreamType_Serial,
     .read = serialGetC,
     .write = serialWriteS,
+#if ETHERNET_ENABLE
+    .write_all = enetStreamWriteS,
+#else
     .write_all = serialWriteS,
+#endif
     .get_rx_buffer_available = serialRxFree,
     .reset_read_buffer = serialRxFlush,
     .cancel_read_buffer = serialRxCancel,
@@ -92,27 +156,6 @@ const io_stream_t serial_stream = {
 #endif
 };
 
-#if ETHERNET_ENABLE
-
-static void enetStreamWriteS (const char *data);
-
-const io_stream_t ethernet_stream = {
-    .type = StreamType_Telnet,
-    .read = TCPStreamGetC,
-    .write = TCPStreamWriteS,
-    .write_all = enetStreamWriteS,
-    .get_rx_buffer_available = TCPStreamRxFree,
-    .reset_read_buffer = TCPStreamRxFlush,
-    .cancel_read_buffer = TCPStreamRxCancel,
-    .enqueue_realtime_command = protocol_enqueue_realtime_command,
-#if M6_ENABLE
-    .suspend_read = NULL // for now...
-#else
-    .suspend_read = NULL
-#endif
-};
-
-#endif
 
 #if PWM_RAMPED
 
@@ -253,25 +296,27 @@ static uint8_t probe_invert;
 
 #endif
 
-#if ETHERNET_ENABLE
-static void enetStreamWriteS (const char *data)
-{
-    TCPStreamWriteS(data);
-    serialWriteS(data);
-}
-#endif
-
 void selectStream (stream_type_t stream)
 {
     switch(stream) {
 
-#if ETHERNET_ENABLE
+#if TELNET_ENABLE
         case StreamType_Telnet:
             memcpy(&hal.stream, &ethernet_stream, sizeof(io_stream_t));
+            services.telnet = On;
+            break;
+#endif
+#if WEBSOCKET_ENABLE
+        case StreamType_WebSocket:
+            memcpy(&hal.stream, &websocket_stream, sizeof(io_stream_t));
+            services.websocket = On;
             break;
 #endif
         case StreamType_Serial:
             memcpy(&hal.stream, &serial_stream, sizeof(io_stream_t));
+#if ETHERNET_ENABLE
+            services.mask = 0;
+#endif
             break;
 
         default:

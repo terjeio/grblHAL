@@ -42,12 +42,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdbool.h>
 #include <assert.h>
 
-//#include "driverlib/debug.h"
-
 #include "networking.h"
-
-//#include "FreeRTOS.h"
-//#include "task.h"
 
 #include "serial.h"
 #include "driver.h"
@@ -61,9 +56,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define CRLF "\r\n"
 #define SOCKET_TIMEOUT 0
-#define BUFCOUNT(head, tail, size) ((head >= tail) ? (head - tail) : (size - tail + head))
+#define MAX_HTTP_HEADER_SIZE 512
 
-static const char WS_HEADER[] = "Upgrade: websocket" CRLF;
 static const char WS_GUID[] = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 static const char WS_KEY[] = "Sec-WebSocket-Key: ";
 static const char WS_RSP[] = "HTTP/1.1 101 Switching Protocols" CRLF \
@@ -72,13 +66,8 @@ static const char WS_RSP[] = "HTTP/1.1 101 Switching Protocols" CRLF \
                              "Sec-WebSocket-Accept: ";
 static const char HTTP_400[] = "HTTP/1.1 400" CRLF \
                                "Status: 400 Bad Request" CRLF CRLF;
-static const char HTTP_404[] = "HTTP/1.1 404" CRLF \
-                               "Status: 404 Not Found" CRLF CRLF;
 static const char HTTP_500[] = "HTTP/1.1 500" CRLF \
                                "Status: 500 Internal Server Error" CRLF CRLF;
-
-#define WS_BASE64_LEN   29
-#define WS_RSP_LEN      (sizeof(WS_RSP) + sizeof(CRLF CRLF) - 2 + WS_BASE64_LEN)
 
 typedef enum {
     WsOpcode_Continuation = 0x00,
@@ -129,6 +118,7 @@ typedef struct ws_sessiondata
     struct pbuf *pbufHead;
     struct pbuf *pbufCurrent;
     uint32_t bufferIndex;
+    uint32_t rx_index;
     stream_rx_buffer_t rxbuf;
     stream_tx_buffer_t txbuf;
     TickType_t lastSendTime;
@@ -154,6 +144,7 @@ static const ws_sessiondata_t defaultSettings =
     .pbufHead = NULL,
     .pbufCurrent = NULL,
     .bufferIndex = 0,
+    .rx_index = 0,
     .rxbuf = {0},
     .txbuf = {0},
     .lastSendTime = 0,
@@ -176,8 +167,6 @@ static ws_sessiondata_t streamSession;
 char *stristr(const char *s1, const char *s2)
 {
     const char *s = s1, *p = s2, *r = NULL;
-
-//    size_t n2 = s2 ? strlen(s2) : 0;
 
     if (!s2 || strlen(s2) == 0)
         return (char *)s1;
@@ -258,18 +247,18 @@ void WsStreamRxCancel (void)
     streamSession.rxbuf.head = (streamSession.rxbuf.tail + 1) & (RX_BUFFER_SIZE - 1);
 }
 
-static void streamBufferRX (char c) {
+static bool streamBufferRX (char c) {
 
     uint_fast16_t bptr = (streamSession.rxbuf.head + 1) & (RX_BUFFER_SIZE - 1); // Get next head pointer
 
-    if(bptr == streamSession.rxbuf.tail) {                          // If buffer full TODO: remove this check?
-        streamSession.rxbuf.overflow = 1;                           // flag overlow
-    } else {
-        if(!hal.stream.enqueue_realtime_command(c)) {
-            streamSession.rxbuf.data[streamSession.rxbuf.head] = c; // Add data to buffer
-            streamSession.rxbuf.head = bptr;                        // and update pointer
-        }
+    if(bptr == streamSession.rxbuf.tail) {                      // If buffer full
+        streamSession.rxbuf.overflow = true;                    // flag overflow
+    } else if(!hal.stream.enqueue_realtime_command(c)) {        // If not a real time command
+        streamSession.rxbuf.data[streamSession.rxbuf.head] = c; // add data to buffer
+        streamSession.rxbuf.head = bptr;                        // and update pointer
     }
+
+    return streamSession.rxbuf.overflow;
 }
 
 bool WsStreamPutC (const char c) {
@@ -587,19 +576,27 @@ http_write(struct tcp_pcb *pcb, const void* ptr, u16_t *length, u8_t apiflags)
    return err;
 }
 
+static void http_write_error (ws_sessiondata_t *session, const char *status)
+{
+    uint16_t len = strlen(status);
+    http_write(session->pcbConnect, HTTP_500, &len, 1);
+    session->state = WsStateClosing;
+}
+
 //
 // Process connection handshake
 //
 static void WsConnectionHandler (ws_sessiondata_t *session)
 {
+    bool hdr_ok;
     static uint32_t ptr = 0;
 
     if(session->http_request == NULL) {
         ptr = 0;
-        session->http_request = malloc(512);
+        session->http_request = malloc(MAX_HTTP_HEADER_SIZE);
         if(session->http_request == NULL) {
-            uint16_t len = sizeof(HTTP_500);
-            http_write(session->pcbConnect, HTTP_500, &len, 1);
+            http_write_error(session, HTTP_500);
+            return;
         }
     }
 
@@ -608,7 +605,7 @@ static void WsConnectionHandler (ws_sessiondata_t *session)
     SYS_ARCH_DECL_PROTECT(lev);
 
     // 1. Process input
-    while(ptr < 512) {
+    while(ptr < MAX_HTTP_HEADER_SIZE) {
 
         // Get next pbuf chain to process
         if(session->pbufHead == NULL && session->rcvTail != session->rcvHead) {
@@ -643,68 +640,76 @@ static void WsConnectionHandler (ws_sessiondata_t *session)
 
     session->http_request[ptr] = '\0';
 
-    bool ok;
-
-    if((ok = strstr(session->http_request, "\r\n\r\n"))) {
+    if((hdr_ok = strstr(session->http_request, "\r\n\r\n"))) {
 
 #ifdef WSDEBUG
-	DEBUG_PRINT(session->http_request);
+    DEBUG_PRINT(session->http_request);
 #endif
 
         char *keyp, *key_hdr;
 
         if((key_hdr = stristr(session->http_request, WS_KEY))) {
+
             keyp = key_hdr + sizeof(WS_KEY) - 1;
+
             if((key_hdr = strstr(keyp, "\r\n"))) {
+
                 char key[64];
+                char rsp[150];
+
                 *key_hdr = '\0';
-                uint32_t len = key_hdr - keyp;
 
-                  char *retval_ptr = memcpy(session->http_request, WS_RSP, sizeof(WS_RSP) - 1);
-                  retval_ptr += sizeof(WS_RSP) - 1;
+                // Trim leading spaces from key
+                while(*keyp == ' ')
+                    keyp++;
 
-                  /* Concatenate key */
-                  strcpy(key, keyp);
-                  strcat(key, WS_GUID);
+                // Trim trailing spaces from key
+                while(*--key_hdr == ' ')
+                    key_hdr = '\0';
 
-                  /* Get SHA1 */
-                  int key_len = sizeof(WS_GUID) - 1 + len;
-                  BYTE sha1sum[SHA1_BLOCK_SIZE];
-                  SHA1_CTX ctx;
-                  sha1_init(&ctx);
-                  sha1_update(&ctx, (BYTE *)key, strlen(key));
-                  sha1_final(&ctx, sha1sum);
+                // Copy base response header to response buffer
+                char *response = memcpy(rsp /*session->http_request*/, WS_RSP, sizeof(WS_RSP) - 1);
 
-                  /* Base64 encode */
-                  size_t olen = WS_BASE64_LEN;
-                  olen = base64_encode((BYTE *)sha1sum, (BYTE *)retval_ptr, SHA1_BLOCK_SIZE, 0);
-                  if ((ok = olen > 0)) {
-                      memcpy(&retval_ptr[olen], CRLF CRLF, sizeof(CRLF CRLF));
+                // Concatenate keys
+                strcpy(key, keyp);
+                strcat(key, WS_GUID);
+
+                // Get SHA1 of keys
+                BYTE sha1sum[SHA1_BLOCK_SIZE];
+                SHA1_CTX ctx;
+                sha1_init(&ctx);
+                sha1_update(&ctx, (BYTE *)key, strlen(key));
+                sha1_final(&ctx, sha1sum);
+
+                // Base64 encode SHA1
+                size_t olen = base64_encode((BYTE *)sha1sum, (BYTE *)&response[sizeof(WS_RSP) - 1], SHA1_BLOCK_SIZE, 0);
+
+                // Upgrade...
+                if (olen) {
+                    response[olen + sizeof(WS_RSP) - 1] = '\0';
+                    strcat(response, CRLF CRLF);
 #ifdef WSDEBUG
-	DEBUG_PRINT(session->http_request);
+    DEBUG_PRINT(response);
 #endif
-                      len = WS_RSP_LEN - 1;
-                      http_write(session->pcbConnect, session->http_request, (u16_t *)&len, 1);
-                      session->traffic_handler = WsStreamHandler;
-                      selectStream(StreamType_WebSocket);
-                  }
+                    u16_t len = strlen(response);
+                    http_write(session->pcbConnect, response, (u16_t *)&len, 1);
+                    session->traffic_handler = WsStreamHandler;
+                    session->rx_index = 0;
+                    selectStream(StreamType_WebSocket);
+                }
             }
         }
-
-// got a header...
-        // Switch grbl I/O stream to TCP/IP connection
-//        selectStream(StreamType_Telnet);
-//        session->traffic_handler = WsStreamHandler;
-
-
         free(session->http_request);
         session->http_request = NULL;
     }
 
-    if(ptr >= 512) {
-        uint16_t len = sizeof(HTTP_400);
-        http_write(session->pcbConnect, HTTP_400, &len, 1);
-        // bad request, just close socket?
+    // Bad request?
+    if(ptr >= MAX_HTTP_HEADER_SIZE || (hdr_ok && session->traffic_handler != WsStreamHandler)) {
+        http_write_error(session, HTTP_400);
+        if(session->http_request) {
+            free(session->http_request);
+            session->http_request = NULL;
+        }
     }
 }
 
@@ -731,7 +736,7 @@ static err_t WsParse (ws_sessiondata_t *session, struct pbuf *p)
             case WsOpcode_Binary:
                 if (payload_len > 6) {
                     uint_fast16_t ws_payload_offset = 6;
-                    uint8_t *dptr = &payload[6], *kptr = &payload[2];
+                    uint8_t *dptr = &payload[6], *mask = &payload[2];
                     ws_payload_len = payload[1] & 0x7F;
 
                     if (ws_payload_len == 127) {
@@ -741,7 +746,7 @@ static err_t WsParse (ws_sessiondata_t *session, struct pbuf *p)
                     } else if (ws_payload_len == 126) {
                       /* extended length */
                       dptr += 2;
-                      kptr += 2;
+                      mask += 2;
                       ws_payload_offset += 2;
                       ws_payload_len = (payload[2] << 8) | payload[3];
                     }
@@ -755,12 +760,16 @@ static err_t WsParse (ws_sessiondata_t *session, struct pbuf *p)
 
                     //   if (data_len != len)
                     //    LWIP_DEBUGF(HTTPD_DEBUG, ("Warning: segmented frame received\n"));
+
+                    // Unmask and add data to input buffer
                     uint_fast32_t i;
-                    /* unmask */
-                    for (i = 0; i < ws_payload_len; i++) {
-                      *(dptr) ^= kptr[i % 4];
-                      streamBufferRX(*dptr++);
+                    session->rxbuf.overflow = false;
+                    for (i = session->rx_index; i < ws_payload_len; i++) {
+                        *dptr ^= mask[i % 4];
+                        if(streamBufferRX(*dptr++))
+                            break; // If overflow pend buffering rest of data until next polling
                     }
+                    session->rx_index = session->rxbuf.overflow ? i : 0;
                 }
                 break;
 
@@ -771,7 +780,8 @@ static err_t WsParse (ws_sessiondata_t *session, struct pbuf *p)
               return ERR_CLSD;
 
             case WsOpcode_Ping:
-//                ((ws_frame_start_t)data[0]).opcode = WsOpcode_Pong;
+                fs.opcode = WsOpcode_Pong;
+                payload[0] = fs.opcode;
                 tcp_write(session->pcbConnect, payload, payload_len, 1);
                 tcp_output(session->pcbConnect);
                 break;
@@ -813,10 +823,11 @@ static void WsStreamHandler (ws_sessiondata_t *session)
         if(payload == NULL)
             break; // No more data to be processed...
 
+        // Add data to input stream buffer
         WsParse(session, session->pbufCurrent);
 
-        // Add data to input stream buffer
-//        streamBufferRX(payload[session->bufferIndex++]);
+        if(session->rxbuf.overflow) // Failed to buffer all data, try again on next polling
+            break;
 
 //        if(session->bufferIndex >= session->pbufCurrent->len) {
             session->pbufCurrent = session->pbufCurrent->next;
@@ -866,12 +877,12 @@ static void WsStreamHandler (ws_sessiondata_t *session)
         }
 
 #ifdef WSDEBUG
-	DEBUG_PRINT(uitoa(tempBuffer[1]));
-	DEBUG_PRINT(" - ");
-	DEBUG_PRINT(uitoa(idx));
-	DEBUG_PRINT(" - ");
-	DEBUG_PRINT(uitoa(plen));
-	DEBUG_PRINT("\r\n");
+    DEBUG_PRINT(uitoa(tempBuffer[1]));
+    DEBUG_PRINT(" - ");
+    DEBUG_PRINT(uitoa(idx));
+    DEBUG_PRINT(" - ");
+    DEBUG_PRINT(uitoa(plen));
+    DEBUG_PRINT("\r\n");
 #endif
 
         tcp_write(session->pcbConnect, tempBuffer, (u16_t)idx, 1);

@@ -39,7 +39,14 @@
 
 #if WIFI_ENABLE
 #include "wifi.h"
-#include "TCPSTream.h"
+#endif
+
+#if TELNET_ENABLE
+#include "networking/TCPSTream.h"
+#endif
+
+#if WEBSOCKET_ENABLE
+#include "networking/WsSTream.h"
 #endif
 
 #if BLUETOOTH_ENABLE
@@ -122,11 +129,18 @@ static network_services_t services = {0};
 
 void tcpStreamWriteS (const char *data)
 {
+#if TELNET_ENABLE
 	if(services.telnet)
 		TCPStreamWriteS(data);
+#endif
+#if WEBSOCKET_ENABLE
+	if(services.websocket)
+		WsStreamWriteS(data);
+#endif
 	uartWriteS(data);
 }
 
+#if TELNET_ENABLE
 const io_stream_t telnet_stream = {
     .type = StreamType_Telnet,
     .read = TCPStreamGetC,
@@ -138,8 +152,28 @@ const io_stream_t telnet_stream = {
     .suspend_read = uartSuspendInput,
     .enqueue_realtime_command = protocol_enqueue_realtime_command
 };
-
 #endif
+
+#if WEBSOCKET_ENABLE
+const io_stream_t websocket_stream = {
+    .type = StreamType_WebSocket,
+    .read = WsStreamGetC,
+    .write = WsStreamWriteS,
+    .write_all = tcpStreamWriteS,
+    .get_rx_buffer_available = WsStreamRxFree,
+    .reset_read_buffer = WsStreamRxFlush,
+    .cancel_read_buffer = WsStreamRxCancel,
+    .enqueue_realtime_command = protocol_enqueue_realtime_command,
+#if M6_ENABLE
+    .suspend_read = NULL // for now...
+#else
+    .suspend_read = NULL
+#endif
+};
+#endif
+
+#endif // WIFI_ENABLE
+
 #if BLUETOOTH_ENABLE
 void btStreamWriteS (const char *data)
 {
@@ -234,19 +268,30 @@ void selectStream (stream_type_t stream)
 	static stream_type_t active_stream = StreamType_Serial;
 
     switch(stream) {
+
 #if BLUETOOTH_ENABLE
         case StreamType_Bluetooth:
             memcpy(&hal.stream, &bluetooth_stream, sizeof(io_stream_t));
             services.bluetooth = On;
             break;
 #endif
-#if WIFI_ENABLE
+
+#if TELNET_ENABLE
         case StreamType_Telnet:
             memcpy(&hal.stream, &telnet_stream, sizeof(io_stream_t));
             services.telnet = On;
         	hal.stream.write_all("[MSG:TELNET STREAM ACTIVE]\r\n");
             break;
 #endif
+
+#if WEBSOCKET_ENABLE
+        case StreamType_WebSocket:
+            memcpy(&hal.stream, &websocket_stream, sizeof(io_stream_t));
+            services.websocket = On;
+        	hal.stream.write_all("[MSG:WEBSOCKET STREAM ACTIVE]\r\n");
+            break;
+#endif
+
         case StreamType_Serial:
             memcpy(&hal.stream, &serial_stream, sizeof(io_stream_t));
 #if WIFI_ENABLE
