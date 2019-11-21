@@ -60,6 +60,7 @@ typedef struct
 {
     FATFS *fs;
     FIL *handle;
+    char name[50];
     size_t size;
     size_t pos;
     uint32_t line;
@@ -153,31 +154,47 @@ static FRESULT scan_dir (char *path, uint_fast8_t depth, char *buf)
     FILINFO fno;
     FRESULT res;
     file_status_t status;
+    bool subdirs = false;
 #if _USE_LFN
     static TCHAR lfn[_MAX_LFN + 1];   /* Buffer to store the LFN */
     fno.lfname = lfn;
     fno.lfsize = sizeof(lfn);
 #endif
 
-   if((res = f_opendir(&dir, path)) != FR_OK)
+    if((res = f_opendir(&dir, path)) != FR_OK)
         return res;
 
+    // Pass 1: Scan files
     while(true) {
+
+		if((res = f_readdir(&dir, &fno)) != FR_OK || fno.fname[0] == '\0')
+			break;
+
+		subdirs |= fno.fattrib & AM_DIR;
+
+		if(!(fno.fattrib & AM_DIR) && (status = allowed(get_name(&fno), true)) != Filename_Filtered) {
+			sprintf(buf, "[FILE:%s/%s|SIZE:%ul%s]\r\n", path, get_name(&fno), (uint32_t)fno.fsize, status == Filename_Invalid ? "|UNUSABLE" : "");
+			hal.stream.write(buf);
+		}
+    }
+
+    if((subdirs = (subdirs && --depth)))
+    	f_readdir(&dir, NULL); // Rewind
+
+    // Pass 2: Scan directories
+    while(subdirs) {
 
         if((res = f_readdir(&dir, &fno)) != FR_OK || fno.fname[0] == '\0')
             break;
 
         if(fno.fattrib & AM_DIR) { // It is a directory
-            if((status = allowed(get_name(&fno), false)) == Filename_Valid) {
-                if(strlen(path) + strlen(get_name(&fno)) > (MAX_PATHLEN - 1))
-                    break;
-                sprintf(&path[strlen(path)], "/%s", get_name(&fno));
-                if(!(--depth && (res = scan_dir(path, depth, buf)) == FR_OK))
-                    break;
-            }
-        } else if((status = allowed(get_name(&fno), true)) != Filename_Filtered) { // It is a file
-            sprintf(buf, "[FILE:%s/%s|SIZE:%ul%s]\r\n", path, get_name(&fno), (uint32_t)fno.fsize, status == Filename_Invalid ? "|UNUSABLE" : "");
-            hal.stream.write(buf);
+            size_t pathlen = strlen(path);
+			if(pathlen + strlen(get_name(&fno)) > (MAX_PATHLEN - 1))
+				break;
+			sprintf(&path[pathlen], "/%s", get_name(&fno));
+			if((res = scan_dir(path, depth, buf)) != FR_OK)
+				break;
+			path[pathlen] = '\0';
         }
     }
 
@@ -207,6 +224,9 @@ static bool file_open (char *filename)
         file.pos = 0;
         file.line = 0;
         file.eol = false;
+        char *leafname = strrchr(filename, '/');
+        strncpy(file.name, leafname ? leafname + 1 : filename, sizeof(file.name));
+        file.name[sizeof(file.name) - 1] = '\0';
     }
 
     return file.handle != NULL;
@@ -300,7 +320,7 @@ static int16_t await_cycle_start (void)
 }
 
 // Drop input from current stream except realtime commands
-ISR_CODE bool drop_input_stream (char c)
+static ISR_CODE bool drop_input_stream (char c)
 {
     active_stream.enqueue_realtime_command(c);
 
@@ -316,7 +336,7 @@ static void trap_state_change_request(uint_fast16_t state)
     }
 }
 
-static void trap_status_report (status_code_t status_code)
+static status_code_t trap_status_report (status_code_t status_code)
 {
     if(status_code != Status_OK) { // TODO: all errors should terminate job?
         char buf[50]; // TODO: check if extended error reports are permissible
@@ -324,9 +344,11 @@ static void trap_status_report (status_code_t status_code)
         hal.stream.write(buf);
         sdcard_end_job();
     }
+
+    return status_code;
 }
 
-static void trap_feedback_message (message_code_t message_code)
+static message_code_t trap_feedback_message (message_code_t message_code)
 {
     report_feedback_message(message_code);
 
@@ -341,14 +363,16 @@ static void trap_feedback_message (message_code_t message_code)
         } else
             sdcard_end_job();
     }
+
+    return message_code;
 }
 
 static void sdcard_report (stream_write_ptr stream_write)
 {
     stream_write("|SD:");
     stream_write(ftoa((float)file.pos / (float)file.size * 100.0f, 1));
-//    stream_write(",");
-//    stream_write(get_name(file.handle));
+    stream_write(",");
+    stream_write(file.name);
 }
 
 #if M6_ENABLE
@@ -395,11 +419,11 @@ static status_code_t sdcard_parse (uint_fast16_t state, char *line, char *lcline
             if (state != STATE_IDLE)
                 retval = Status_SystemGClock;
             else {
-                if(file_open(&line[3])) {
+                if(file_open(&lcline[3])) {
                     gc_state.last_error = Status_OK;                            // Start with no errors
                     hal.report.status_message(Status_OK);                       // and confirm command to originator
                     memcpy(&active_stream, &hal.stream, sizeof(io_stream_t));   // Save current stream pointers
-                    hal.stream.type = StreamType_SDCard;                     // then redirect to read from SD card instead
+                    hal.stream.type = StreamType_SDCard;                        // then redirect to read from SD card instead
                     hal.stream.read = sdcard_read;                              // ...
                     hal.stream.enqueue_realtime_command = drop_input_stream;    // Drop input from current stream except realtime commands
 #if M6_ENABLE

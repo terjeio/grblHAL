@@ -46,6 +46,15 @@
 
 #define BUFCOUNT(head, tail, size) ((head >= tail) ? (head - tail) : (size - tail + head))
 
+typedef enum {
+    StreamType_Serial = 0,
+    StreamType_Bluetooth,
+    StreamType_Telnet,
+    StreamType_WebSocket,
+    StreamType_SDCard,
+    StreamType_FlashFs
+} stream_type_t;
+
 // These structures are not referenced in the core code, may be used by drivers
 
 typedef struct {

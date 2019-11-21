@@ -212,7 +212,8 @@ bool protocol_main_loop(bool cold_start)
                         break;
 
                     case '$':
-                        // Do not uppercase system command - will destroy passwords etc...
+                    case '[':
+                        // Do not uppercase system or user commands - will destroy passwords etc...
                         if(char_counter == 0)
                             nocaps = keep_rt_commands = true;
                         break;

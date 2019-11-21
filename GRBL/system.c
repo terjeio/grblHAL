@@ -76,6 +76,9 @@ void system_execute_startup (char *line)
 // the lines that are processed afterward, not necessarily real-time during a cycle,
 // since there are motions already stored in the buffer. However, this 'lag' should not
 // be an issue, since these commands are not typically used during a cycle.
+
+// NOTE: Code calling system_execute_line() needs to provide a line buffer of at least LINE_BUFFER_SIZE
+
 status_code_t system_execute_line (char *line)
 {
     status_code_t retval = Status_OK;

@@ -42,13 +42,13 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdbool.h>
 #include <assert.h>
 
-#include "networking.h"
-
 #include "serial.h"
 #include "driver.h"
+#include "networking.h"
 #include "WsStream.h"
 #include "base64.h"
 #include "sha1.h"
+#include "utils.h"
 
 #include "GRBL/grbl.h"
 
@@ -159,39 +159,10 @@ static const ws_sessiondata_t defaultSettings =
 
 static const ws_frame_start_t wshdr0 = {
   .fin    = true,
-  .opcode = WsOpcode_Text
+  .opcode = WsOpcode_Binary
 };
 
 static ws_sessiondata_t streamSession;
-
-char *stristr(const char *s1, const char *s2)
-{
-    const char *s = s1, *p = s2, *r = NULL;
-
-    if (!s2 || strlen(s2) == 0)
-        return (char *)s1;
-
-    while(*s && *p) {
-
-        if(CAPS(*p) == CAPS(*s)) {
-            if(!r)
-                r = s;
-            p++;
-        } else {
-            p = s2;
-            if(r)
-                s = r + 1;
-            if(CAPS(*p) == CAPS(*s)) {
-                r = s;
-                p++;
-            } else
-                r = NULL;
-        }
-        s++;
-    }
-
-    return *p ? NULL : (char *)r;
-}
 
 void WsStreamInit (void)
 {
@@ -247,18 +218,18 @@ void WsStreamRxCancel (void)
     streamSession.rxbuf.head = (streamSession.rxbuf.tail + 1) & (RX_BUFFER_SIZE - 1);
 }
 
-static bool streamBufferRX (char c) {
+bool WsStreamRxInsert (char c) {
 
     uint_fast16_t bptr = (streamSession.rxbuf.head + 1) & (RX_BUFFER_SIZE - 1); // Get next head pointer
 
-    if(bptr == streamSession.rxbuf.tail) {                      // If buffer full
+    if(bptr == streamSession.rxbuf.tail)                        // If buffer full
         streamSession.rxbuf.overflow = true;                    // flag overflow
-    } else if(!hal.stream.enqueue_realtime_command(c)) {        // If not a real time command
+    else if(!hal.stream.enqueue_realtime_command(c)) {          // If not a real time command
         streamSession.rxbuf.data[streamSession.rxbuf.head] = c; // add data to buffer
         streamSession.rxbuf.head = bptr;                        // and update pointer
     }
 
-    return streamSession.rxbuf.overflow;
+    return !streamSession.rxbuf.overflow;
 }
 
 bool WsStreamPutC (const char c) {
@@ -430,10 +401,8 @@ static err_t streamReceive (void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_
                 session->rcvHead = session->rcvHead->next;
                 SYS_ARCH_UNPROTECT(lev);
             }
-        } else {
-            // Null packet received, means close connection
+        } else // Null packet received, means close connection
             closeSocket(session, pcb);
-        }
     }
 
     return ERR_OK;
@@ -549,37 +518,38 @@ void WsStreamListen (uint16_t port)
  * @param apiflags directly passed to tcp_write
  * @return the return value of tcp_write
  */
-static err_t
-http_write(struct tcp_pcb *pcb, const void* ptr, u16_t *length, u8_t apiflags)
+static err_t http_write(struct tcp_pcb *pcb, const void* ptr, u16_t *length, u8_t apiflags)
 {
-   u16_t len;
-   err_t err;
-   LWIP_ASSERT("length != NULL", length != NULL);
-   len = *length;
-   if (len == 0) {
-     return ERR_OK;
-   }
-   do {
-     err = tcp_write(pcb, ptr, len, apiflags);
-     if (err == ERR_MEM) {
-       if ((tcp_sndbuf(pcb) == 0) ||
-           (tcp_sndqueuelen(pcb) >= TCP_SND_QUEUELEN)) {
-         /* no need to try smaller sizes */
-         len = 1;
-       } else {
-         len /= 2;
-       }
-     }
-   } while ((err == ERR_MEM) && (len > 1));
+    u16_t len;
+    err_t err;
 
-   *length = len;
-   return err;
+    LWIP_ASSERT("length != NULL", length != NULL);
+
+    len = *length;
+
+    if (len == 0)
+        return ERR_OK;
+
+    do {
+        err = tcp_write(pcb, ptr, len, apiflags);
+        if (err == ERR_MEM) {
+            if (tcp_sndbuf(pcb) == 0 || tcp_sndqueuelen(pcb) >= TCP_SND_QUEUELEN)
+        /* no need to try smaller sizes */
+                len = 1;
+            else
+                len /= 2;
+        }
+    } while (err == ERR_MEM && len > 1);
+
+    *length = len;
+
+    return err;
 }
 
 static void http_write_error (ws_sessiondata_t *session, const char *status)
 {
     uint16_t len = strlen(status);
-    http_write(session->pcbConnect, HTTP_500, &len, 1);
+    http_write(session->pcbConnect, status, &len, 1);
     session->state = WsStateClosing;
 }
 
@@ -766,7 +736,7 @@ static err_t WsParse (ws_sessiondata_t *session, struct pbuf *p)
                     session->rxbuf.overflow = false;
                     for (i = session->rx_index; i < ws_payload_len; i++) {
                         *dptr ^= mask[i % 4];
-                        if(streamBufferRX(*dptr++))
+                        if(!WsStreamRxInsert(*dptr++))
                             break; // If overflow pend buffering rest of data until next polling
                     }
                     session->rx_index = session->rxbuf.overflow ? i : 0;

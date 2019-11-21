@@ -28,13 +28,13 @@
 void report_init (void);
 
 // Prints system status messages.
-void report_status_message (status_code_t status_code);
+status_code_t report_status_message (status_code_t status_code);
 
 // Prints system alarm messages.
-void report_alarm_message (alarm_code_t alarm_code);
+alarm_code_t report_alarm_message (alarm_code_t alarm_code);
 
 // Prints miscellaneous feedback messages.
-void report_feedback_message (message_code_t message_code);
+message_code_t report_feedback_message (message_code_t message_code);
 
 // Prints welcome message.
 void report_init_message (void);

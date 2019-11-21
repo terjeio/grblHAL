@@ -54,5 +54,6 @@ uint16_t WsStreamRxCount(void);
 uint16_t WsStreamRxFree(void);
 void WsStreamRxFlush(void);
 void WsStreamRxCancel(void);
+bool WsStreamRxInsert (char c);
 
 #endif

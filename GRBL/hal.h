@@ -31,6 +31,7 @@
 #include "spindle_control.h"
 #include "stepper.h"
 #include "eeprom.h"
+#include "stream.h"
 
 #define HAL_VERSION 6
 
@@ -71,9 +72,9 @@ typedef axes_signals_t (*limits_get_state_ptr)(void);
 
 /* TODO: add to HAL so that a different formatting (xml, json etc) of reports may be implemented by driver? */
 typedef struct {
-    void (*report_status_message)(status_code_t status_code);
-    void (*report_alarm_message)(alarm_code_t alarm_code);
-    void (*report_feedback_message)(message_code_t message_code);
+	status_code_t (*report_status_message)(status_code_t status_code);
+	alarm_code_t (*report_alarm_message)(alarm_code_t alarm_code);
+	message_code_t (*report_feedback_message)(message_code_t message_code);
     void (*report_init_message)(void);
     void (*report_grbl_help)(void);
     void (*report_grbl_settings)(void);
@@ -87,17 +88,9 @@ typedef struct {
 } HAL_report_t;
 
 typedef struct {
-    void (*status_message)(status_code_t status_code);
-    void (*feedback_message)(message_code_t message_code);
+	status_code_t (*status_message)(status_code_t status_code);
+	message_code_t (*feedback_message)(message_code_t message_code);
 } report_t;
-
-typedef enum {
-    StreamType_Serial = 0,
-    StreamType_Bluetooth,
-    StreamType_Telnet,
-    StreamType_WebSocket,
-    StreamType_SDCard
-} stream_type_t;
 
 typedef struct {
     stream_type_t type;

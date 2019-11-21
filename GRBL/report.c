@@ -40,7 +40,7 @@ alarm_code_t current_alarm = Alarm_None;
 
 // Append a number of strings to the static buffer
 // NOTE: do NOT use for several int/float conversions as these share the same underlying buffer!
-char *appendbuf (int argc, ...)
+static char *appendbuf (int argc, ...)
 {
     char c, *s = buf, *arg;
 
@@ -169,7 +169,7 @@ void report_init (void)
 // operation. Errors events can originate from the g-code parser, settings module, or asynchronously
 // from a critical error, such as a triggered hard limit. Interface should always monitor for these
 // responses.
-void report_status_message (status_code_t status_code)
+status_code_t report_status_message (status_code_t status_code)
 {
     switch(status_code) {
 
@@ -181,15 +181,19 @@ void report_status_message (status_code_t status_code)
             hal.stream.write(appendbuf(3, "error:", uitoa((uint32_t)status_code), "\r\n"));
             break;
     }
+
+    return status_code;
 }
 
 
 // Prints alarm messages.
-void report_alarm_message (alarm_code_t alarm_code)
+alarm_code_t report_alarm_message (alarm_code_t alarm_code)
 {
     current_alarm = alarm_code;
     hal.stream.write_all(appendbuf(3, "ALARM:", uitoa((uint32_t)alarm_code), "\r\n"));
-    hal.delay_ms(500, 0); // Force delay to ensure message clears output stream buffer.
+    hal.delay_ms(500, NULL); // Force delay to ensure message clears output stream buffer.
+
+    return alarm_code;
 }
 
 // Prints feedback messages. This serves as a centralized method to provide additional
@@ -197,7 +201,7 @@ void report_alarm_message (alarm_code_t alarm_code)
 // messages such as setup warnings, switch toggling, and how to exit alarms.
 // NOTE: For interfaces, messages are always placed within brackets. And if silent mode
 // is installed, the message number codes are less than zero.
-void report_feedback_message(message_code_t message_code)
+message_code_t report_feedback_message(message_code_t message_code)
 {
     hal.stream.write_all("[MSG:");
 
@@ -266,6 +270,8 @@ void report_feedback_message(message_code_t message_code)
     }
 
     hal.stream.write_all("]\r\n");
+
+    return message_code;
 }
 
 
