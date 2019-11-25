@@ -49,6 +49,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "base64.h"
 #include "sha1.h"
 #include "utils.h"
+#include "strutils.h"
 
 #include "GRBL/grbl.h"
 
@@ -829,8 +830,6 @@ static void WsStreamHandler (ws_sessiondata_t *session)
 
         if(TXCount > sizeof(tempBuffer) - 4)
             TXCount = sizeof(tempBuffer) - 4;
-
-        uint_fast16_t plen = TXCount;
 
         tempBuffer[idx++] = wshdr0.start;
         tempBuffer[idx++] = TXCount < 126 ? TXCount : 126;

@@ -1,5 +1,5 @@
 //
-// utils.c - Assorted utilities for networking plugin - sourced from internet and possibly modified (public domain)
+// utils.c - Assorted utilities for networking plugin - some sourced from internet and possibly modified (public domain)
 //
 // Part of GrblHAL
 //
@@ -11,54 +11,24 @@
 #include "utils.h"
 #include "GRBL/grbl.h"
 
-char *stristr(const char *s1, const char *s2)
+char *btoa (uint64_t bytes)
 {
-    const char *s = s1, *p = s2, *r = NULL;
+	uint_fast8_t n = 0;
+	uint64_t size = bytes;
 
-    if (!s2 || strlen(s2) == 0)
-        return (char *)s1;
+	while(size > 1024) {
+		size >>= 10;
+		n++;
+	}
 
-    while(*s && *p) {
+	char *res = ftoa((float)bytes / (float)(1ULL << 10 * n), n ? 2 : 0);
 
-        if(CAPS(*p) == CAPS(*s)) {
-            if(!r)
-                r = s;
-            p++;
-        } else {
-            p = s2;
-            if(r)
-                s = r + 1;
-            if(CAPS(*p) == CAPS(*s)) {
-                r = s;
-                p++;
-            } else
-                r = NULL;
-        }
-        s++;
-    }
+	if(n == 0) // remove trailing decimal point...
+		res[strlen(res) - 1] = '\0';
 
-    return *p ? NULL : (char *)r;
-}
+	strcat(res, n == 0 ? " B" : n == 1 ? " KB" : n == 2 ? " MB" : " GB");
 
-// NOTE: ensure buf is large enough to hold concatenated strings!
-char *strappend (char *buf, int argc, ...)
-{
-    char c, *s = buf, *arg;
-
-    va_list list;
-    va_start(list, argc);
-
-    while(argc--) {
-        arg = va_arg(list, char *);
-        do {
-            c = *s++ = *arg++;
-        } while(c);
-        s--;
-    }
-
-    va_end(list);
-
-    return buf;
+	return res;
 }
 
 bool is_valid_port (uint16_t port)

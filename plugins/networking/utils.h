@@ -18,8 +18,7 @@
 #define PASSWORD_LENGTH_MIN 8
 #define PASSWORD_LENGTH_MAX 64
 
-char *stristr(const char *s1, const char *s2);
-char *strappend (char *buf, int argc, ...);
+char *btoa (uint64_t bytes);
 bool is_valid_port (uint16_t port);
 bool is_valid_hostname (const char *hostname);
 bool is_valid_ssid (const char *ssid);

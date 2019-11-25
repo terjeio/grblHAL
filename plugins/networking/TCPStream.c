@@ -91,9 +91,9 @@ typedef struct
     uint8_t errorCount;
     uint8_t reconnectCount;
     uint8_t connectCount;
-} SessionData_t;
+} sessiondata_t;
 
-static const SessionData_t defaultSettings =
+static const sessiondata_t defaultSettings =
 {
     .port = 23,
     .state = TCPState_Listen,
@@ -114,11 +114,11 @@ static const SessionData_t defaultSettings =
     .lastErr = ERR_OK
 };
 
-static SessionData_t streamSession;
+static sessiondata_t streamSession;
 
 void TCPStreamInit (void)
 {
-    memcpy(&streamSession, &defaultSettings, sizeof(SessionData_t));
+    memcpy(&streamSession, &defaultSettings, sizeof(sessiondata_t));
 
     // turn the packet queue array into a circular linked list
     uint_fast8_t idx;
@@ -170,22 +170,22 @@ void TCPStreamRxCancel (void)
     streamSession.rxbuf.head = (streamSession.rxbuf.tail + 1) & (RX_BUFFER_SIZE - 1);
 }
 
-static void streamBufferRX (char c) {
-
+static bool streamBufferRX (char c)
+{
     uint_fast16_t bptr = (streamSession.rxbuf.head + 1) & (RX_BUFFER_SIZE - 1); // Get next head pointer
 
-    if(bptr == streamSession.rxbuf.tail) {                          // If buffer full TODO: remove this check?
-        streamSession.rxbuf.overflow = 1;                           // flag overlow
-    } else {
-        if(!hal.stream.enqueue_realtime_command(c)) {
-            streamSession.rxbuf.data[streamSession.rxbuf.head] = c; // Add data to buffer
-            streamSession.rxbuf.head = bptr;                        // and update pointer
-        }
+    if(bptr == streamSession.rxbuf.tail)                        // If buffer full
+        streamSession.rxbuf.overflow = true;                    // flag overflow
+    else if(!hal.stream.enqueue_realtime_command(c)) {          // If not a real time command
+        streamSession.rxbuf.data[streamSession.rxbuf.head] = c; // add data to buffer
+        streamSession.rxbuf.head = bptr;                        // and update pointer
     }
+
+    return !streamSession.rxbuf.overflow;
 }
 
-bool TCPStreamPutC (const char c) {
-
+bool TCPStreamPutC (const char c)
+{
     uint32_t next_head = (streamSession.txbuf.head + 1) & (TX_BUFFER_SIZE - 1);  // Get and update head pointer
 
     while(streamSession.txbuf.tail == next_head) {                               // Buffer full, block until space is available...
@@ -247,22 +247,22 @@ void TCPStreamTxFlush (void)
     streamSession.txbuf.tail = streamSession.txbuf.head;
 }
 
-static void streamFreeBuffers (SessionData_t *streamSession)
+static void streamFreeBuffers (sessiondata_t *session)
 {
     SYS_ARCH_DECL_PROTECT(lev);
     SYS_ARCH_PROTECT(lev);
 
     // Free any buffer chain currently beeing processed
-    if(streamSession->pbufHead != NULL) {
-        pbuf_free(streamSession->pbufHead);
-        streamSession->pbufHead = streamSession->pbufCurrent = NULL;
-        streamSession->bufferIndex = 0;
+    if(session->pbufHead != NULL) {
+        pbuf_free(session->pbufHead);
+        session->pbufHead = session->pbufCurrent = NULL;
+        session->bufferIndex = 0;
     }
 
     // Free any queued buffer chains
-    while(streamSession->rcvTail != streamSession->rcvHead) {
-        pbuf_free(streamSession->rcvTail->pbuf);
-        streamSession->rcvTail = streamSession->rcvTail->next;
+    while(session->rcvTail != session->rcvHead) {
+        pbuf_free(session->rcvTail->pbuf);
+        session->rcvTail = session->rcvTail->next;
     }
 
     SYS_ARCH_UNPROTECT(lev);
@@ -276,32 +276,51 @@ void TCPStreamNotifyLinkStatus (bool up)
 
 static void streamError (void *arg, err_t err)
 {
-    SessionData_t *streamSession = arg;
+    sessiondata_t *session = arg;
 
-    streamFreeBuffers(streamSession);
+    streamFreeBuffers(session);
 
-    streamSession->state = TCPState_Listen;
-    streamSession->errorCount++;
-    streamSession->lastErr = err;
-    streamSession->pcbConnect = NULL;
-    streamSession->timeout = 0;
-    streamSession->pbufHead = streamSession->pbufCurrent = NULL;
-    streamSession->bufferIndex = 0;
-    streamSession->lastSendTime = 0;
-    streamSession->linkLost = false;
-    streamSession->rcvTail = streamSession->rcvHead;
+    session->state = TCPState_Listen;
+    session->errorCount++;
+    session->lastErr = err;
+    session->pcbConnect = NULL;
+    session->timeout = 0;
+    session->pbufHead = session->pbufCurrent = NULL;
+    session->bufferIndex = 0;
+    session->lastSendTime = 0;
+    session->linkLost = false;
+    session->rcvTail = session->rcvHead;
 }
 
 static err_t streamPoll (void *arg, struct tcp_pcb *pcb)
 {
-    SessionData_t *streamSession = arg;
+    sessiondata_t *session = arg;
 
-    streamSession->timeout++;
+    session->timeout++;
 
-    if(streamSession->timeoutMax && streamSession->timeout > streamSession->timeoutMax)
+    if(session->timeoutMax && session->timeout > session->timeoutMax)
         tcp_abort(pcb);
 
     return ERR_OK;
+}
+
+static void closeSocket (sessiondata_t *session, struct tcp_pcb *pcb)
+{
+    tcp_arg(pcb, NULL);
+    tcp_recv(pcb, NULL);
+    tcp_sent(pcb, NULL);
+    tcp_err(pcb, NULL);
+    tcp_poll(pcb, NULL, 1);
+
+    tcp_close(pcb);
+
+    streamFreeBuffers(session);
+
+    session->pcbConnect = NULL;
+    session->state = TCPState_Listen;
+
+    // Switch grbl I/O stream back to UART
+    selectStream(StreamType_Serial);
 }
 
 //
@@ -311,40 +330,24 @@ static err_t streamReceive (void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_
 {
     if(err == ERR_OK) {
 
-        SessionData_t *streamSession = arg;
+        sessiondata_t *session = arg;
 
         if(p) {
             // Attempt to queue data
             SYS_ARCH_DECL_PROTECT(lev);
             SYS_ARCH_PROTECT(lev);
 
-            if(streamSession->rcvHead->next == streamSession->rcvTail) {
+            if(session->rcvHead->next == session->rcvTail) {
                 // Queue full, discard
                 SYS_ARCH_UNPROTECT(lev);
                 pbuf_free(p);
             } else {
-                streamSession->rcvHead->pbuf = p;
-                streamSession->rcvHead = streamSession->rcvHead->next;
+                session->rcvHead->pbuf = p;
+                session->rcvHead = session->rcvHead->next;
                 SYS_ARCH_UNPROTECT(lev);
             }
-        } else {
-            // Null packet received, means close connection
-            tcp_arg(pcb, NULL);
-            tcp_recv(pcb, NULL);
-            tcp_sent(pcb, NULL);
-            tcp_err(pcb, NULL);
-            tcp_poll(pcb, NULL, 1);
-
-            tcp_close(pcb);
-
-            streamFreeBuffers(streamSession);
-
-            streamSession->pcbConnect = NULL;
-            streamSession->state = TCPState_Listen;
-
-            // Switch grbl I/O stream back to UART
-            selectStream(StreamType_Serial);
-        }
+        } else // Null packet received, means close connection
+            closeSocket(session, pcb);;
     }
 
     return ERR_OK;
@@ -352,37 +355,37 @@ static err_t streamReceive (void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_
 
 static err_t streamSent (void *arg, struct tcp_pcb *pcb, u16_t ui16len)
 {
-    ((SessionData_t *)arg)->timeout = 0;
+    ((sessiondata_t *)arg)->timeout = 0;
 
     return ERR_OK;
 }
 
 static err_t TCPStreamAccept (void *arg, struct tcp_pcb *pcb, err_t err)
 {
-    SessionData_t *streamSession = arg;
+    sessiondata_t *session = arg;
 
-    if(streamSession->state != TCPState_Listen) {
+    if(session->state != TCPState_Listen) {
 
-        if(!streamSession->linkLost)
+        if(!session->linkLost)
             return ERR_CONN; // Busy, refuse connection
 
         // Link was previously lost, abort current connection
 
-        tcp_abort(streamSession->pcbConnect);
+        tcp_abort(session->pcbConnect);
 
-        streamFreeBuffers(streamSession);
+        streamFreeBuffers(session);
 
-        streamSession->linkLost = false;
+        session->linkLost = false;
     }
 
-    streamSession->pcbConnect = pcb;
-    streamSession->state = TCPState_Connected;
+    session->pcbConnect = pcb;
+    session->state = TCPState_Connected;
 
     tcp_accepted(pcb);
 
     TCPStreamRxFlush();
 
-    streamSession->timeout = 0;
+    session->timeout = 0;
 
     tcp_setprio(pcb, TCP_PRIO_MIN);
     tcp_recv(pcb, streamReceive);
@@ -481,7 +484,6 @@ void TCPStreamPoll (void)
         if(payload == NULL)
             break; // No more data to be processed...
 
-        // Add data to input stream buffer
         streamBufferRX(payload[streamSession.bufferIndex++]);
 
         if(streamSession.bufferIndex >= streamSession.pbufCurrent->len) {
