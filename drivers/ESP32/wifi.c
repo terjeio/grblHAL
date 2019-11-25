@@ -36,6 +36,7 @@
 #include "nvs_flash.h"
 
 #include "networking/networking.h"
+#include "networking/utils.h"
 //#include "lwip/timeouts.h"
 
 #include "wifi.h"
@@ -75,10 +76,14 @@ void wifi_release_aplist (void)
 	xSemaphoreGive(aplist_mutex);
 }
 
+char *iptoa(void *ip) {
+	static char aip[INET6_ADDRSTRLEN];
+	inet_ntop(AF_INET, ip, aip, INET6_ADDRSTRLEN);
+	return aip;
+}
+
 char *wifi_get_ip (void)
 {
-	static char address[INET6_ADDRSTRLEN];
-
 	ip4_addr_t *ip;
 
 #if NETWORK_IPMODE_STATIC
@@ -87,9 +92,7 @@ char *wifi_get_ip (void)
 	ip = ap_list.ap_selected ? &ap_list.ip_addr : (ip4_addr_t *)&driver_settings.wifi.ap.network.ip;
 #endif
 
-	inet_ntop(AF_INET, ip, address, INET6_ADDRSTRLEN);
-
-	return address;
+	return iptoa(ip);
 }
 
 bool wifi_dns_running (void)
@@ -133,7 +136,6 @@ static void start_services (void)
 	if(network->services.http && !services.http)
 		services.http = httpdaemon_start(network);
 #endif
-	ESP_LOGI(TAG, "WIFI SERVICES %d\n", services.mask);
 }
 
 static void stop_services (void)
@@ -212,7 +214,7 @@ static esp_err_t wifi_event_handler (void *ctx, system_event_t *event)
 				if((ap_list.ap_records = (wifi_ap_record_t *)malloc(sizeof(wifi_ap_record_t) * ap_list.ap_num)) != NULL)
 					esp_wifi_scan_get_ap_records(&ap_list.ap_num, ap_list.ap_records);
 
-				hal.stream.write_all("[MSG:WIFI CSNNAE]\r\n");
+				hal.stream.write_all("[MSG:WIFI AP SCAN COMPLETED]" ASCII_EOL);
 
 				xSemaphoreGive(aplist_mutex);
 			}
@@ -255,8 +257,6 @@ static esp_err_t wifi_event_handler (void *ctx, system_event_t *event)
 			//stop_services();
 		    selectStream(StreamType_Serial); // Fall back to previous?
     		hal.stream.write_all("[MSG:WIFI STA DISCONNECTED]\r\n");
-
-    		ESP_LOGI(TAG, "WIFI STA DISCONNECT: %d\n", event->event_info.disconnected.reason);
 
     		switch(event->event_info.disconnected.reason) {
 
@@ -316,6 +316,11 @@ bool wifi_init (wifi_settings_t *settings)
 {
 	esp_err_t ret;
 	wifi_mode_t currentMode;
+
+#if	!WIFI_SOFTAP
+	if(settings->mode == WiFiMode_APSTA) // Reset to default
+		settings->mode = WIFI_MODE;
+#endif
 
 	if(esp_wifi_get_mode(&currentMode) == ESP_ERR_WIFI_NOT_INIT) {
 
@@ -388,7 +393,7 @@ bool wifi_init (wifi_settings_t *settings)
 		if(settings->mode == WiFiMode_APSTA)
 			xEventGroupSetBits(wifi_event_group, APSTA_BIT);
 
-		ESP_LOGI(TAG, "WIFI AP SSID:[%s] password:[%s]\n", wifi_config.ap.ssid, wifi_config.ap.password);
+//		ESP_LOGI(TAG, "WIFI AP SSID:[%s] password:[%s]\n", wifi_config.ap.ssid, wifi_config.ap.password);
     }
 
     if(currentMode != settingToMode(settings->mode) && (settings->mode == WiFiMode_STA || settings->mode == WiFiMode_APSTA)) {
@@ -402,7 +407,7 @@ bool wifi_init (wifi_settings_t *settings)
 
     	memset(&wifi_sta_config, 0, sizeof(wifi_config));
 
-    	if(settings->sta.ssid[0] != '\0' && false) {
+    	if(settings->sta.ssid[0] != '\0') {
 
 			if(strlcpy((char *)wifi_sta_config.sta.ssid, settings->sta.ssid, sizeof(wifi_sta_config.sta.ssid)) >= sizeof(wifi_sta_config.sta.ssid))
 				return false;
@@ -417,7 +422,7 @@ bool wifi_init (wifi_settings_t *settings)
 		if(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_sta_config) != ESP_OK)
 			return false;
 
-		ESP_LOGI(TAG, "WIFI STA SSID:[%s] password:[%s]\n", wifi_sta_config.sta.ssid, wifi_sta_config.sta.password);
+//		ESP_LOGI(TAG, "WIFI STA SSID:[%s] password:[%s]\n", wifi_sta_config.sta.ssid, wifi_sta_config.sta.password);
 	}
 
     if(esp_wifi_start() != ESP_OK)
@@ -512,7 +517,7 @@ status_code_t wifi_setting (uint_fast16_t param, float value, char *svalue)
 				driver_settings.wifi.mode = (grbl_wifi_mode_t)(uint8_t)value;
 #else
 				grbl_wifi_mode_t mode = (grbl_wifi_mode_t)(uint8_t)value;
-				if((status = mode = WiFiMode_AP || mode == WiFiMode_APSTA ? Status_InvalidStatement : Status_OK) == Status_OK)
+				if((status = (mode == WiFiMode_AP || mode == WiFiMode_APSTA) ? Status_InvalidStatement : Status_OK) == Status_OK)
 					driver_settings.wifi.mode = mode;
 #endif
 			} else
@@ -520,7 +525,7 @@ status_code_t wifi_setting (uint_fast16_t param, float value, char *svalue)
 			break;
 
 		case Setting_WiFi_STA_SSID:
-			if(strlcpy(driver_settings.wifi.sta.ssid, svalue, sizeof(ssid_t)) <= sizeof(ssid_t))
+			if(is_valid_ssid(svalue) && strlcpy(driver_settings.wifi.sta.ssid, svalue, sizeof(ssid_t)) <= sizeof(ssid_t))
 				status = Status_OK;
 			else
 				status = Status_InvalidStatement; // too long...
@@ -534,13 +539,13 @@ status_code_t wifi_setting (uint_fast16_t param, float value, char *svalue)
 			break;
 
 		case Setting_Hostname:
-			if(strlcpy(driver_settings.wifi.sta.network.hostname, svalue, sizeof(hostname_t)) <= sizeof(hostname_t))
+			if(is_valid_hostname(svalue) && strlcpy(driver_settings.wifi.sta.network.hostname, svalue, sizeof(hostname_t)) <= sizeof(hostname_t))
 				status = Status_OK;
 			else
 				status = Status_InvalidStatement; // too long...
 			break;
 
-#if NETWORK_IPMODE_STATIC
+#if NETWORK_IPMODE_STATIC || true
 
 		case Setting_IpAddress:
 			{
@@ -580,7 +585,7 @@ status_code_t wifi_setting (uint_fast16_t param, float value, char *svalue)
 #if WIFI_SOFTAP
 
 		case Setting_WiFi_AP_SSID:
-			if(strlcpy(driver_settings.wifi.ap.ssid, svalue, sizeof(ssid_t)) <= sizeof(ssid_t))
+			if(is_valid_ssid(svalue) && strlcpy(driver_settings.wifi.ap.ssid, svalue, sizeof(ssid_t)) <= sizeof(ssid_t))
 				status = Status_OK;
 			else
 				status = Status_InvalidStatement; // too long...
@@ -637,7 +642,7 @@ status_code_t wifi_setting (uint_fast16_t param, float value, char *svalue)
 
 #if TELNET_ENABLE
 		case Setting_TelnetPort:
-			if(isintf(value) && value > 0.0f && value < 65536.0f) {
+			if(isintf(value) && is_valid_port((uint16_t)value)) {
 				status = Status_OK;
 				driver_settings.wifi.sta.network.telnet_port =
 				driver_settings.wifi.ap.network.telnet_port = (uint16_t)value;
@@ -648,7 +653,7 @@ status_code_t wifi_setting (uint_fast16_t param, float value, char *svalue)
 
 #if HTTP_ENABLE
 		case Setting_HttpPort:
-			if(isintf(value) && value > 0.0f && value < 65536.0f) {
+			if(isintf(value) && is_valid_port((uint16_t)value)) {
 				status = Status_OK;
 				driver_settings.wifi.sta.network.http_port =
 				driver_settings.wifi.ap.network.http_port = (uint16_t)value;
@@ -659,7 +664,7 @@ status_code_t wifi_setting (uint_fast16_t param, float value, char *svalue)
 
 #if	WEBSOCKET_ENABLE
 		case Setting_WebSocketPort:
-			if(isintf(value) && value > 0.0f && value < 65536.0f) {
+			if(isintf(value) && is_valid_port((uint16_t)value)) {
 				status = Status_OK;
 				driver_settings.wifi.sta.network.websocket_port =
 				driver_settings.wifi.ap.network.websocket_port = (uint16_t)value;
@@ -697,7 +702,7 @@ void wifi_settings_report (setting_type_t setting)
 			report_string_setting(setting, driver_settings.wifi.sta.network.hostname);
 			break;
 
-#if NETWORK_IPMODE_STATIC
+#if NETWORK_IPMODE_STATIC || true
 
 		case Setting_IpAddress:
 			{
@@ -783,7 +788,9 @@ void wifi_settings_report (setting_type_t setting)
 
 void wifi_settings_restore (void)
 {
+#if NETWORK_IPMODE_STATIC || WIFI_SOFTAP
 	ip4_addr_t addr;
+#endif
 
 	driver_settings.wifi.mode = WIFI_MODE;
 
@@ -810,6 +817,8 @@ void wifi_settings_restore (void)
 
 // Access Point
 
+#if WIFI_SOFTAP
+
 	driver_settings.wifi.ap.network.ip_mode = IpMode_Static;
 	strlcpy(driver_settings.wifi.ap.network.hostname, NETWORK_AP_HOSTNAME, sizeof(driver_settings.wifi.ap.network.hostname));
 	strlcpy(driver_settings.wifi.ap.ssid, WIFI_AP_SSID, sizeof(driver_settings.wifi.ap.ssid));
@@ -823,6 +832,8 @@ void wifi_settings_restore (void)
 
 	if(inet_pton(AF_INET, NETWORK_AP_MASK, &addr) == 1)
 		*((ip4_addr_t *)driver_settings.wifi.ap.network.mask) = addr;
+
+#endif
 
 // Common
 
@@ -850,5 +861,5 @@ void wifi_settings_restore (void)
 #endif
 }
 
-#endif
+#endif // WIFI_ENABLE
 

@@ -94,7 +94,7 @@ void I2CInit (void)
 		};
 
 		i2c_param_config(I2C_PORT, &i2c_config);
-		esp_err_t ret = i2c_driver_install(I2C_PORT, i2c_config.mode, 0, 0, 0);
+		i2c_driver_install(I2C_PORT, i2c_config.mode, 0, 0, 0);
 
 		i2cQueue = xQueueCreate(5, sizeof(i2c_task_t));
 		i2cBusy = xSemaphoreCreateBinary();

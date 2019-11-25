@@ -38,26 +38,87 @@
 
 #include "GRBL/grbl.h"
 
+//
+// Set config from compile definitions in CMakeLists.txt
+//
+
+#ifdef WEBUI_ENABLE
+#undef WEBUI_ENABLE
+#define WEBUI_ENABLE 1
+#endif
+#ifdef SDCARD_ENABLE
+#undef SDCARD_ENABLE
+#define SDCARD_ENABLE 1
+#endif
+#ifdef NETWORKING_ENABLE
+#define WIFI_ENABLE      1
+#define HTTP_ENABLE      1
+#define TELNET_ENABLE	 1
+#define WEBSOCKET_ENABLE 1
+#endif
+#ifdef KEYPAD_ENABLE
+#undef KEYPAD_ENABLE
+#define KEYPAD_ENABLE 1
+#endif
+#ifdef TRINAMIC_ENABLE
+#undef TRINAMIC_ENABLE
+#define TRINAMIC_ENABLE 1
+#define TRINAMIC_I2C    1
+#endif
+
+//
+
 // Configuration
 // Set value to 1 to enable, 0 to disable
+
+// The following options should be set in CMakeLists.txt to ensure
+// all relevant files are included for compilation
+
+#ifndef KEYPAD_ENABLE
+#define KEYPAD_ENABLE    0 // I2C keypad for jogging etc.
+#endif
+
+#ifndef NETWORKING_ENABLE
+#define WIFI_ENABLE      0 // Streaming over WiFi.
+#define HTTP_ENABLE      0 // Enable http daemon - requires WiFi enabled
+#define TELNET_ENABLE	 0 // Enable telnet daemon - requires WiFi enabled
+#define WEBSOCKET_ENABLE 0 // Enable websocket daemon - requires WiFi enabled
+#endif
+
+#ifndef SDCARD_ENABLE
+#define SDCARD_ENABLE    0 // Run jobs from SD card.
+#endif
+#ifndef WEBUI_ENABLE
+#define WEBUI_ENABLE	 0 // Enables WebUi - requires WiFi enabled. Note: experimental - only partly implemented!
+#endif
+#define IOEXPAND_ENABLE  0 // I2C IO expander for some output signals.
+#ifndef TRINAMIC_ENABLE
+#define TRINAMIC_ENABLE  0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
+#define TRINAMIC_I2C     0 // Trinamic I2C - SPI bridge interface.
+#endif
 
 #define CNC_BOOSTERPACK  0 // do not change!
 #define PWM_RAMPED       0 // Ramped spindle PWM.
 #define PROBE_ENABLE     1 // Probe input
 #define PROBE_ISR        0 // Catch probe state change by interrupt TODO: needs verification!
-#define KEYPAD_ENABLE    0 // I2C keypad for jogging etc.
-#define WIFI_ENABLE      0 // Streaming over WiFi.
 #define WIFI_SOFTAP      0 // Use Soft AP mode for WiFi.
-#define HTTP_ENABLE      0 // Enable http daemon - requires WiFi enabled
-#define TELNET_ENABLE	 0 // Enable telnet daemon - requires WiFi enabled
-#define WEBSOCKET_ENABLE 0 // Enable websocket daemon - requires WiFi enabled (DO NOT ENABLE, NOT YET IMPLEMENTED!)
 #define BLUETOOTH_ENABLE 0 // Streaming over Bluetooth.
-#define SDCARD_ENABLE    0 // Run jobs from SD card.
-#define IOEXPAND_ENABLE  0 // I2C IO expander for some output signals.
-#define EEPROM_ENABLE    0 // I2C EEPROM (24LC16) support.
-#define TRINAMIC_ENABLE  0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
-#define TRINAMIC_I2C     0 // Trinamic I2C - SPI bridge interface.
 #define TRINAMIC_DEV     0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
+#define EEPROM_ENABLE    0 // I2C EEPROM (24LC16) support.
+
+// end configuration
+
+#if WEBUI_ENABLE
+
+#undef WIFI_ENABLE
+#undef HTTP_ENABLE
+#undef WEBSOCKET_ENABLE
+
+#define WIFI_ENABLE      1
+#define HTTP_ENABLE      1
+#define WEBSOCKET_ENABLE 1
+
+#endif
 
 #if WIFI_ENABLE
 
@@ -91,6 +152,8 @@
 #define WIFI_MODE WiFiMode_STA; // Do not change!
 #endif
 
+#elif HTTP_ENABLE || TELNET_ENABLE || WEBSOCKET_ENABLE
+#error "Networking protocols reqires WiFi enabled!"
 #endif // WIFI_ENABLE
 
 // End configuration

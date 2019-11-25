@@ -168,7 +168,6 @@ static void esp_spp_cb (esp_spp_cb_event_t event, esp_spp_cb_param_t *param)
     switch (event) {
 
     	case ESP_SPP_INIT_EVT:
-
 			esp_bt_dev_set_device_name(bt_settings->device_name);
 			esp_bt_gap_set_scan_mode(ESP_BT_SCAN_MODE_CONNECTABLE_DISCOVERABLE);
 			esp_spp_start_srv(ESP_SPP_SEC_AUTHENTICATE, ESP_SPP_ROLE_SLAVE, 0, bt_settings->service_name);
@@ -235,16 +234,15 @@ void esp_bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param)
 {
     switch (event) {
 
-		case ESP_BT_GAP_AUTH_CMPL_EVT:{
+		case ESP_BT_GAP_AUTH_CMPL_EVT:
 			if (param->auth_cmpl.stat == ESP_BT_STATUS_SUCCESS)
 				esp_log_buffer_hex(SPP_TAG, param->auth_cmpl.bda, ESP_BD_ADDR_LEN);
 			else {
 				ESP_LOGE(SPP_TAG, "authentication failed, status:%d", param->auth_cmpl.stat);
-			}
 			break;
 		}
 
-		case ESP_BT_GAP_PIN_REQ_EVT:{
+		case ESP_BT_GAP_PIN_REQ_EVT:
 			if (param->pin_req.min_16_digit) {
 				ESP_LOGI(SPP_TAG, "Input pin code: 0000 0000 0000 0000");
 				esp_bt_pin_code_t pin_code = {0};
@@ -258,7 +256,6 @@ void esp_bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param)
 				esp_bt_gap_pin_reply(param->pin_req.bda, true, 4, pin_code);
 			}
 			break;
-		}
 
 		case ESP_BT_GAP_CFM_REQ_EVT:
 			ESP_LOGI(SPP_TAG, "ESP_BT_GAP_CFM_REQ_EVT Please compare the numeric value: %d", param->cfm_req.num_val);

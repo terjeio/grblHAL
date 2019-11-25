@@ -41,6 +41,10 @@
 #include "wifi.h"
 #endif
 
+#if WEBUI_ENABLE
+#include "webui/response.h"
+#endif
+
 #if TELNET_ENABLE
 #include "networking/TCPSTream.h"
 #endif
@@ -366,7 +370,7 @@ void vTimerCallback (TimerHandle_t xTimer)
     xDelayTimer = NULL;
 }
 
-static void driver_delay_ms (uint32_t ms, void (*callback)(void))
+IRAM_ATTR static void driver_delay_ms (uint32_t ms, void (*callback)(void))
 {
     if(callback) {
         BaseType_t xHigherPriorityTaskWoken = pdFALSE;
@@ -1077,6 +1081,10 @@ static bool driver_setup (settings_t *settings)
 
 #if TRINAMIC_ENABLE
     trinamic_init();
+#endif
+
+#if WEBUI_ENABLE
+    webui_init();
 #endif
 
   // Set defaults

@@ -130,7 +130,7 @@ static void uartEnableInterrupt (uart_t* uart)
     esp_intr_alloc(UART_INTR_SOURCE(rx_uart->num), (int)ESP_INTR_FLAG_IRAM, _uart_isr, NULL, &rx_uart->intr_handle);
     UART_MUTEX_UNLOCK();
 }
-
+/*
 static void uartDisableInterrupt (uart_t *uart)
 {
     UART_MUTEX_LOCK();
@@ -143,7 +143,7 @@ static void uartDisableInterrupt (uart_t *uart)
 
     UART_MUTEX_UNLOCK();
 }
-
+*/
 static void uartSetBaudRate (uart_t *uart, uint32_t baud_rate)
 {
     if(uart == NULL)

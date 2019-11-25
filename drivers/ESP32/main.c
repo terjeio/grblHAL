@@ -50,5 +50,5 @@ static void vGrblTask (void *pvParameters)
 
 void app_main(void)
 {
-	xTaskCreatePinnedToCore(vGrblTask, "Grbl", 3200, NULL, 0, NULL, 1);
+	xTaskCreatePinnedToCore(vGrblTask, "Grbl", 4096, NULL, 0, NULL, 1);
 }

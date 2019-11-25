@@ -66,7 +66,7 @@ static void StartI2C (bool read)
 			i2c_master_stop(cmd);
 		}
 
-		esp_err_t ret = i2c_master_cmd_begin(I2C_PORT, cmd, 1000 / portTICK_PERIOD_MS);
+		i2c_master_cmd_begin(I2C_PORT, cmd, 1000 / portTICK_PERIOD_MS);
 //		printf("EE %d %d %d\n", read, i2c.count, ret);
 		i2c_cmd_link_delete(cmd);
 

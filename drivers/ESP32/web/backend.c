@@ -30,20 +30,26 @@
 #include <sys/param.h>
 #include <sys/unistd.h>
 #include <sys/stat.h>
+#include <sys/socket.h>
 #include <dirent.h>
 
 #include <esp_log.h>
 #include "esp_wifi.h"
 #include <esp_system.h>
 #include <esp_http_server.h>
-#include "esp_vfs.h"
 #include "esp_spiffs.h"
-#include "esp_http_server.h"
 #include <cJSON.h>
-#include <sys/socket.h>
 
-#include "driver.h"
+#include "backend.h"
 #include "wifi.h"
+#include "upload.h"
+#include "networking/urldecode.h"
+
+#if WEBUI_ENABLE
+#include "webui/server.h"
+#endif
+
+//#define CORS_ENABLE 1 // Enable only when debugging
 
 #if SDCARD_ENABLE
 #include "sdcard/sdcard.h"
@@ -69,18 +75,10 @@ static const char *TAG = "httpd_server";
 #define MAX_FILE_SIZE   (200*1024) // 200 KB
 #define MAX_FILE_SIZE_STR "200KB"
 
-/* Scratch buffer size */
-#define SCRATCH_BUFSIZE  8192
-
-typedef struct {
-    /* Base path of file storage */
-    char base_path[ESP_VFS_PATH_MAX + 1];
-
-    /* Scratch buffer for temporary storage during file transfer */
-    char scratch[SCRATCH_BUFSIZE];
-} file_server_data_t;
-
-static file_server_data_t file_server_data;
+static file_server_data_t file_server_data, spiff_fs_data;
+#if WEBUI_ENABLE
+static file_server_data_t sd_fs_data;
+#endif
 
 /* Handler to redirect incoming GET request for /index.html to /
  * This can be overridden by uploading file with same name */
@@ -108,11 +106,15 @@ static esp_err_t favicon_get_handler(httpd_req_t *req)
 
 static esp_err_t index_html_get_handler(httpd_req_t *req)
 {
+#if WEBUI_ENABLE
+	return webui_index_html_get_handler(req);
+#else
     extern const unsigned char index_html_start[] asm("_binary_index_html_start");
     extern const unsigned char index_html_end[]   asm("_binary_index_html_end");
     const size_t index_html_size = (index_html_end - index_html_start);
     httpd_resp_send(req, (const char *)index_html_start, index_html_size);
     return ESP_OK;
+#endif
 }
 
 static esp_err_t ap_login_html_get_handler(httpd_req_t *req)
@@ -123,26 +125,24 @@ static esp_err_t ap_login_html_get_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-esp_err_t spiffs_get_handler(httpd_req_t *req)
-{
-    return ESP_OK;
-}
-
 #define IS_FILE_EXT(filename, ext) \
     (strcasecmp(&filename[strlen(filename) - sizeof(ext) + 1], ext) == 0)
 
 /* Set HTTP response content type according to file extension */
-static esp_err_t set_content_type_from_file(httpd_req_t *req, const char *filename)
+esp_err_t set_content_type_from_file(httpd_req_t *req, const char *filename)
 {
-    if (IS_FILE_EXT(filename, ".pdf")) {
-        return httpd_resp_set_type(req, "application/pdf");
-    } else if (IS_FILE_EXT(filename, ".html")) {
-        return httpd_resp_set_type(req, "text/html");
-    } else if (IS_FILE_EXT(filename, ".jpeg")) {
-        return httpd_resp_set_type(req, "image/jpeg");
-    } else if (IS_FILE_EXT(filename, ".ico")) {
-        return httpd_resp_set_type(req, "image/x-icon");
-    }
+	if(filename && strlen(filename) > 3) {
+		if (IS_FILE_EXT(filename, ".pdf"))
+			return httpd_resp_set_type(req, "application/pdf");
+		else if (IS_FILE_EXT(filename, ".html"))
+			return httpd_resp_set_type(req, "text/html");
+		else if (IS_FILE_EXT(filename, ".jpeg") || IS_FILE_EXT(filename, ".jpg"))
+			return httpd_resp_set_type(req, "image/jpeg");
+		else if (IS_FILE_EXT(filename, ".ico"))
+			return httpd_resp_set_type(req, "image/x-icon");
+		else if (IS_FILE_EXT(filename, ".gz"))
+			return httpd_resp_set_type(req, "application/x-gzip");
+	}
     /* This is a limited set only */
     /* For any other type always set as plain text */
     return httpd_resp_set_type(req, "text/plain");
@@ -150,75 +150,70 @@ static esp_err_t set_content_type_from_file(httpd_req_t *req, const char *filena
 
 /* Copies the full path into destination buffer and returns
  * pointer to path (skipping the preceding base path) */
-static const char* get_path_from_uri(char *dest, const char *base_path, const char *uri, size_t destsize)
+static const char *get_path_from_uri (char *dest, httpd_req_t *req, size_t destsize)
 {
-    const size_t base_pathlen = strlen(base_path);
-    size_t pathlen = strlen(uri);
+	*dest = '\0';
+	if(req->user_ctx)
+		strcpy(dest, ((file_server_data_t *)req->user_ctx)->base_path);
 
-    const char *quest = strchr(uri, '?');
-    if (quest)
-        pathlen = MIN(pathlen, quest - uri);
+	char *uri = (char *)req->uri, *p;
+    const size_t base_pathlen = strlen(dest);
+	size_t pathlen = strlen(uri);
+	if(pathlen >= base_pathlen && !strncmp(dest, uri, base_pathlen)) {
+		uri += base_pathlen;
+		pathlen -= base_pathlen;
+	}
 
-    const char *hash = strchr(uri, '#');
-    if (hash)
-        pathlen = MIN(pathlen, hash - uri);
+    if ((p = strchr(uri, '?')))
+        pathlen = MIN(pathlen, p - uri);
 
+    if ((p = strchr(uri, '#')))
+        pathlen = MIN(pathlen, p - uri);
 
     if (base_pathlen + pathlen + 1 > destsize)
         /* Full path string won't fit into destination buffer */
         return NULL;
 
-    /* Construct full path (base + path) */
-    strcpy(dest, base_path);
-    strlcpy(dest + base_pathlen, uri, pathlen + 1);
+    urldecode(dest + base_pathlen, uri);
+
+    dest[base_pathlen + pathlen] = '\0';
 
     /* Return pointer to path, skipping the base */
     return dest + base_pathlen;
 }
 
-static bool getPayload(httpd_req_t *req, char *buf)
+static bool getPayload (httpd_req_t *req, char *buf)
 {
-	size_t off = 0;
 	int ret;
+	size_t off = 0;
 
 	if (buf == NULL) {
-		ESP_LOGE(TAG, "Failed to allocate memory of %d bytes!", req->content_len + 1);
+		// Failed to allocate memory for payload
 		httpd_resp_send_500(req);
 		return false;
 	}
 
+	 // Process received data
 	while (off < req->content_len) {
-		/* Read data received in the request */
-		ret = httpd_req_recv(req, buf + off, req->content_len - off);
-		if (ret <= 0) {
+
+		if ((ret = httpd_req_recv(req, buf + off, req->content_len - off)) <= 0) {
 			if (ret == HTTPD_SOCK_ERR_TIMEOUT)
 				httpd_resp_send_408(req);
 			return false;
 		}
+
 		off += ret;
-		ESP_LOGI(TAG, "/echo handler recv length %d", ret);
 	}
+
 	buf[off] = '\0';
 
 	return true;
 }
 
-#if SDCARD_ENABLE
-
-/* Handler to download a file kept on the server */
-static esp_err_t sdcard_get_handler(httpd_req_t *req)
+esp_err_t spiffs_get_handler(httpd_req_t *req)
 {
     char filepath[FILE_PATH_MAX];
-
- //   sdcard_getfs(); // ensure card is mounted
-
-    const char *filename = get_path_from_uri(filepath, ((file_server_data_t *)req->user_ctx)->base_path, &req->uri[7], sizeof(filepath));
-
-//const char *filename = &req->uri[7];
-
-//strcpy(filepath, filename);
-
-	ESP_LOGE(TAG, "%s - %s", req->uri, filename);
+    const char *filename = get_path_from_uri(filepath, req, sizeof(filepath));
 
 	if (!filename) {
         ESP_LOGE(TAG, "Filename is too long");
@@ -235,10 +230,10 @@ static esp_err_t sdcard_get_handler(httpd_req_t *req)
    //     return http_resp_dir_html(req, filepath);
     }
 
-    FIL sdfile, *fh;
-//    size_t fsize;
+    FILE *file;
+    struct stat st;
 
-    if (f_open(&sdfile, filename, FA_READ) != FR_OK) {
+    if (stat(filepath, &st) != 0) {
         /* If file not present on SPIFFS check if URI
          * corresponds to one of the hardcoded paths */
         if (strcmp(filename, "/index.html") == 0) {
@@ -246,57 +241,159 @@ static esp_err_t sdcard_get_handler(httpd_req_t *req)
         } else if (strcmp(filename, "/favicon.ico") == 0) {
       //      return favicon_get_handler(req);
         }
-        ESP_LOGE(TAG, "Failed to stat file : %s", filepath);
-        /* Respond with 404 Not Found */
         httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "File does not exist");
         return ESP_FAIL;
     }
 
-    fh = &sdfile;
-
-    if (fh == NULL) {
-        ESP_LOGE(TAG, "Failed to read existing file : %s", filepath);
-        /* Respond with 500 Internal Server Error */
+    if ((file = fopen(filepath, "r")) == NULL) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to read existing file");
         return ESP_FAIL;
     }
 
-//    fsize = f_size(fh);
-
-//    ESP_LOGI(TAG, "Sending file : %s (%ul bytes)...", filename, fsize);
     set_content_type_from_file(req, filename);
 
-    /* Retrieve the pointer to scratch buffer for temporary storage */
-    char *chunk = ((file_server_data_t *)req->user_ctx)->scratch;
     size_t chunksize;
-    do {
-        /* Read file in chunks into the scratch buffer */
-        f_read(fh, chunk, SCRATCH_BUFSIZE, &chunksize);
+    char *chunk = ((file_server_data_t *)req->user_ctx)->scratch;
 
-        /* Send the buffer contents as HTTP response chunk */
+    do {
+    	chunksize = fread(chunk, sizeof(char), sizeof(fs_scratch_t), file);
+
         if (httpd_resp_send_chunk(req, chunk, chunksize) != ESP_OK) {
-        	f_close(fh);
-            ESP_LOGE(TAG, "File sending failed!");
-            /* Abort sending file */
+        	fclose(file);
             httpd_resp_sendstr_chunk(req, NULL);
-            /* Respond with 500 Internal Server Error */
             httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to send file");
             return ESP_FAIL;
         }
 
-        /* Keep looping till the whole file is sent */
     } while (chunksize != 0);
 
-    /* Close file after sending complete */
-    f_close(fh);
-    ESP_LOGI(TAG, "File sending complete");
-
-    /* Respond with an empty chunk to signal HTTP response completion */
+    fclose(file);
     httpd_resp_send_chunk(req, NULL, 0);
+
     return ESP_OK;
 }
 
-#endif
+#if SDCARD_ENABLE
+
+static esp_err_t sdcard_get_handler(httpd_req_t *req)
+{
+    char filepath[FILE_PATH_MAX];
+    const char *filename = get_path_from_uri(filepath, req, sizeof(filepath));
+
+ //   sdcard_getfs(); // ensure card is mounted
+
+	ESP_LOGE(TAG, "%s - %s", req->uri, filename);
+
+	if (!filename) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Filename too long");
+        return ESP_FAIL;
+    }
+
+    if (!strcmp(filename, "/favicon.ico"))
+    	return favicon_get_handler(req);
+
+    /* If name has trailing '/', respond with directory contents */
+    if (filename[strlen(filename) - 1] == '/') {
+   //     return http_resp_dir_html(req, filepath);
+    }
+
+    FIL file;
+	FILINFO st;
+
+    if(f_stat(filename, &st) != FR_OK) {
+        /* If file not present on SPIFFS check if URI
+         * corresponds to one of the hardcoded paths */
+        if (strcmp(filename, "/index.html") == 0) {
+            return index_html_get_handler(req);
+        } else if (strcmp(filename, "/favicon.ico") == 0) {
+      //      return favicon_get_handler(req);
+        }
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "File does not exist");
+        return ESP_FAIL;
+    }
+
+    if (f_open(&file, filename, FA_READ) != FR_OK) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to read existing file");
+        return ESP_FAIL;
+    }
+
+    set_content_type_from_file(req, filename);
+
+    size_t chunksize;
+    char *chunk = ((file_server_data_t *)req->user_ctx)->scratch;
+
+    do {
+        f_read(&file, chunk, sizeof(fs_scratch_t), &chunksize);
+        if (httpd_resp_send_chunk(req, chunk, chunksize) != ESP_OK) {
+        	f_close(&file);
+            httpd_resp_sendstr_chunk(req, NULL);
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to send file");
+            return ESP_FAIL;
+        }
+    } while (chunksize != 0);
+
+    f_close(&file);
+    httpd_resp_send_chunk(req, NULL, 0);
+
+    return ESP_OK;
+}
+
+#if !WEBUI_ENABLE
+
+static esp_err_t sdcard_form_upload_handler (httpd_req_t *req)
+{
+	bool ok = false;
+	int ret;
+
+	char *rqhdr = NULL, *boundary;
+	size_t len = httpd_req_get_hdr_value_len(req, "Content-Type");
+
+	if(len) {
+		rqhdr = malloc(len + 1);
+		httpd_req_get_hdr_value_str(req, "Content-Type", rqhdr, len + 1);
+
+		if((ok = (boundary = strstr(rqhdr, "boundary=")))) {
+			boundary += strlen("boundary=");
+			ok = upload_start(req, boundary, true);
+		}
+	}
+
+	char *scratch = ((file_server_data_t *)req->user_ctx)->scratch;
+	file_upload_t *upload = (file_upload_t *)req->sess_ctx;
+
+	if (ok) do { // Process received data
+
+		if ((ret = httpd_req_recv(req, scratch, sizeof(fs_scratch_t))) <= 0) {
+			ok = false;
+			if (ret == HTTPD_SOCK_ERR_TIMEOUT)
+				httpd_resp_send_408(req);
+			break;
+		}
+
+		upload_chunk(req, scratch, (size_t)ret);
+
+	} while(upload->state != Upload_Complete);
+
+	if(ok) {
+		httpd_resp_set_status(req, "202 Accepted");
+		httpd_resp_send(req, NULL, 0);
+	} else
+		httpd_resp_send_err(req, 400, "Upload failed");
+
+	if(req->sess_ctx && req->free_ctx) {
+		req->free_ctx(req->sess_ctx);
+		req->sess_ctx = NULL;
+	}
+
+	if(rqhdr)
+		free(rqhdr);
+
+	return ok ? ESP_OK : ESP_FAIL;
+}
+
+#endif // WEBUI_ENABLE
+
+#endif //SDCARD_ENABLE
 
 static esp_err_t get_handler(httpd_req_t *req)
 {
@@ -320,7 +417,6 @@ static esp_err_t get_handler(httpd_req_t *req)
 			}
 
 			inet_ntop(AF_INET, &addr.sin6_addr.un.u32_addr[3], ipstr, sizeof(ipstr));
-			ESP_LOGI(TAG, "Client IP => %s", ipstr);
 
 			// From local AP?
 			if(!internal && memcmp(&driver_settings.wifi.ap.network.ip, &addr.sin6_addr.un.u32_addr[3], sizeof(ip4_addr_t))) {
@@ -331,22 +427,39 @@ static esp_err_t get_handler(httpd_req_t *req)
 
 				sprintf(loc, "http://%s/ap_login.html", ipstr);
 
-				ESP_LOGI(TAG, "Client Redirect => %s", loc);
-
 				return redirect_html_get_handler(req, loc);
 			}
 		}
 	}
+
+    char filepath[FILE_PATH_MAX];
+    const char *filename = get_path_from_uri(filepath, req, sizeof(filepath));
+
+#if SDCARD_ENABLE
+	// If file exists on SD card get it from there
+	FILINFO file;
+	if(f_stat(filename, &file) == FR_OK) {
+#if WEBUI_ENABLE
+    	req->user_ctx = &sd_fs_data;
+#endif
+		return sdcard_get_handler(req);
+	}
+#endif
+
+	// If file exists in spiffs get it from there
+	struct stat st;
+    strcat(strcpy(spiff_fs_data.scratch, spiff_fs_data.base_path), filename);
+
+    if (stat(spiff_fs_data.scratch, &st) == 0) {
+    	req->user_ctx = &spiff_fs_data;
+    	return spiffs_get_handler(req);
+    }
 
     if (!strcmp(req->uri, "/index.html") || !strcmp(req->uri, "/"))
     	return index_html_get_handler(req);
 
     if (!strcmp(req->uri, "/favicon.ico"))
     	return favicon_get_handler(req);
-
-#if SDCARD_ENABLE
-	return sdcard_get_handler(req);
-#endif
 
     httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "File does not exist");
 
@@ -527,14 +640,12 @@ static esp_err_t wifi_scan_handler (httpd_req_t *req)
 
 			if(ok) {
 				char *resp = cJSON_PrintUnformatted(root);
-
+#if	xCORS_ENABLE
 			    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
 			    httpd_resp_set_hdr(req, "Access-Control-Allow-Methods", "POST,GET,OPTIONS");
-
+#endif
 				httpd_resp_set_type(req, HTTPD_TYPE_JSON);
 				httpd_resp_send(req, resp, strlen(resp));
-
-				ESP_LOGI(TAG, "%s\n", resp);
 
 				free(resp);
 			}
@@ -543,16 +654,17 @@ static esp_err_t wifi_scan_handler (httpd_req_t *req)
 				cJSON_Delete(root);
 		}
 
-		wifi_release_aplist();
-
 		if(!ok)
 			httpd_resp_send_500(req);
 	}
 
+	if(ap_list)
+		wifi_release_aplist();
+
 	return ok ? ESP_OK : ESP_FAIL;
 }
 
-static esp_err_t wifi_login_handler (httpd_req_t *req)
+static esp_err_t wifi_connect_handler (httpd_req_t *req)
 {
 	bool ok;
     char *buf = malloc(req->content_len + 1);
@@ -574,7 +686,7 @@ static esp_err_t wifi_login_handler (httpd_req_t *req)
 			httpd_resp_set_status(req, "202 Accepted");
 			httpd_resp_send(req, resp, sizeof(resp));
 		} else
-			httpd_resp_send_err(req, 400, "Invalid login information");
+			httpd_resp_send_err(req, 400, "Invalid connect information");
 	}
 
 	if(buf)
@@ -583,17 +695,35 @@ static esp_err_t wifi_login_handler (httpd_req_t *req)
     return ok ? ESP_OK : ESP_FAIL;
 }
 
-static esp_err_t wifi_options_handler (httpd_req_t *req)
+static esp_err_t wifi_disconnect_handler (httpd_req_t *req)
 {
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Methods", "POST,GET,OPTIONS");
+	bool disconnect = false;
 
-    return wifi_scan_handler(req);
+	ap_list_t *ap_list = wifi_get_aplist();
 
-    httpd_resp_send(req, NULL, 0);  // Response body can be empty
+	if(ap_list) {
+		disconnect = ap_list->ap_selected;
+		wifi_release_aplist();
+	}
+
+	if(disconnect)
+		wifi_ap_connect(NULL, NULL);
+
+	httpd_resp_send(req, NULL, 0);
 
     return ESP_OK;
 }
+
+#if	CORS_ENABLE
+static esp_err_t wifi_options_handler (httpd_req_t *req)
+{
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    httpd_resp_set_hdr(req, "Access-Control-Request-Headers", "*");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS");
+
+    return wifi_scan_handler(req);
+}
+#endif
 
 static const httpd_uri_t basic_handlers[] = {
 	{ .uri       = "/*",
@@ -601,17 +731,55 @@ static const httpd_uri_t basic_handlers[] = {
 	  .handler   = get_handler,
 	  .user_ctx  = &file_server_data,
 	},
-    { .uri      = "/spiffs",
+    { .uri      = "/spiffs/*",
       .method   = HTTP_GET,
       .handler  = spiffs_get_handler,
-      .user_ctx = NULL
+      .user_ctx = &spiff_fs_data
     },
 #if SDCARD_ENABLE
+  #if WEBUI_ENABLE
+    { .uri      = "/upload",
+      .method   = HTTP_GET,
+      .handler  = webui_sdcard_handler,
+      .user_ctx = &file_server_data
+    },
+    { .uri      = "/upload",
+      .method   = HTTP_POST,
+      .handler  = webui_sdcard_upload_handler,
+      .user_ctx = &file_server_data
+    },
+    { .uri      = "/files",
+      .method   = HTTP_GET,
+      .handler  = webui_spiffs_handler,
+      .user_ctx = &spiff_fs_data
+    },
+    { .uri      = "/files/*",
+      .method   = HTTP_GET,
+      .handler  = webui_spiffs_handler,
+      .user_ctx = &spiff_fs_data
+    },
+    { .uri      = "/files",
+      .method   = HTTP_POST,
+      .handler  = webui_spiffs_upload_handler,
+      .user_ctx = &spiff_fs_data
+    },
+    { .uri      = "/SD/*",
+      .method   = HTTP_GET,
+      .handler  = sdcard_get_handler,
+      .user_ctx = &sd_fs_data
+    },
+  #else
     { .uri      = "/sdcard/*",
       .method   = HTTP_GET,
       .handler  = sdcard_get_handler,
       .user_ctx = &file_server_data
     },
+    { .uri      = "/sdcard",
+      .method   = HTTP_POST,
+      .handler  = sdcard_form_upload_handler,
+      .user_ctx = &file_server_data
+    },
+  #endif
 #endif
     { .uri      = "/settings",
       .method   = HTTP_GET,
@@ -633,14 +801,28 @@ static const httpd_uri_t basic_handlers[] = {
       .handler  = wifi_scan_handler,
       .user_ctx = NULL
     },
+#if WEBUI_ENABLE
+    { .uri      = "/command",
+      .method   = HTTP_GET,
+      .handler  = webui_http_command_handler,
+      .user_ctx = NULL
+    },
+#endif
+#if	CORS_ENABLE
+    { .uri      = "/wifi",
+      .method   = HTTP_OPTIONS,
+      .handler  = wifi_options_handler,
+      .user_ctx = NULL
+    },
+#endif
     { .uri      = "/wifi",
       .method   = HTTP_POST,
-      .handler  = wifi_login_handler,
+      .handler  = wifi_connect_handler,
       .user_ctx = NULL
     },
     { .uri      = "/wifi",
-      .method   = HTTP_OPTIONS,
-      .handler  = wifi_scan_handler,
+      .method   = HTTP_DELETE,
+      .handler  = wifi_disconnect_handler,
       .user_ctx = NULL
     }
 };
@@ -648,9 +830,6 @@ static const httpd_uri_t basic_handlers[] = {
 void register_basic_handlers(httpd_handle_t hd)
 {
     uint32_t i = sizeof(basic_handlers) / sizeof(httpd_uri_t);
-
-    ESP_LOGI(TAG, "Registering basic handlers");
-    ESP_LOGI(TAG, "No of handlers = %d", i);
 
 	wifi_mode_t currentMode;
 
@@ -665,16 +844,12 @@ void register_basic_handlers(httpd_handle_t hd)
             return;
         }
     } while(i);
-
-    ESP_LOGI(TAG, "Success");
 }
 
 void httpdaemon_stop (void)
 {
-    if(httpdaemon) {
+    if(httpdaemon)
 		httpd_stop(httpdaemon);
-//		ESP_LOGI(TAG, "HTTPD Stop: Current free memory: %d", esp_get_free_heap_size());
-    }
 
     httpdaemon = NULL;
 }
@@ -688,24 +863,21 @@ bool httpdaemon_start (network_settings_t *network)
     config.max_uri_handlers = max(config.max_uri_handlers, sizeof(basic_handlers) / sizeof(httpd_uri_t));
     config.server_port = network->http_port;
     config.uri_match_fn = httpd_uri_match_wildcard;
-	config.stack_size = 8192;
+	config.stack_size = 10240;
 
     httpdaemon_stop();
 
     /* This check should be a part of http_server */
     config.max_open_sockets = (CONFIG_LWIP_MAX_SOCKETS - 3);
 
-    file_server_data.base_path[0] = '\0';
+    *file_server_data.base_path = '\0';
+    strcpy(spiff_fs_data.base_path, "/spiffs");
+#if WEBUI_ENABLE
+    strcpy(sd_fs_data.base_path, "/SD");
+#endif
 
-    if (httpd_start(&httpdaemon, &config) == ESP_OK) {
-        ESP_LOGI(TAG, "Started HTTP server on port: '%d'", config.server_port);
-        ESP_LOGI(TAG, "Max URI handlers: '%d'", config.max_uri_handlers);
-        ESP_LOGI(TAG, "Max Open Sessions: '%d'", config.max_open_sockets);
-        ESP_LOGI(TAG, "Max Header Length: '%d'", HTTPD_MAX_REQ_HDR_LEN);
-        ESP_LOGI(TAG, "Max URI Length: '%d'", HTTPD_MAX_URI_LEN);
-        ESP_LOGI(TAG, "Max Stack Size: '%d'", config.stack_size);
+    if (httpd_start(&httpdaemon, &config) == ESP_OK)
 		register_basic_handlers(httpdaemon);
-	}
 
     return httpdaemon != NULL;
 }

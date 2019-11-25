@@ -1,13 +1,11 @@
 /*
-  backend.h - An embedded CNC Controller with rs274/ngc (g-code) support
+  webui/response.h - An embedded CNC Controller with rs274/ngc (g-code) support
 
-  Webserver backend
+  WebUI backend for https://github.com/luc-github/ESP3D-webui
 
   Part of GrblHAL
 
   Copyright (c) 2019 Terje Io
-
-  Some parts of the code is based on example code by Espressif, in the public domain
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,26 +21,17 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef __WEB_BACKEND_H__
-#define __WEB_BACKEND_H__
+#ifndef __WEBUI_RESPONSE_H__
+#define __WEBUI_RESPONSE_H__
 
-#include <esp_vfs.h>
 #include <esp_http_server.h>
 
-#include "driver.h"
-
-#define SCRATCH_BUFSIZE  8192
-
-typedef char fs_scratch_t[SCRATCH_BUFSIZE];
-
-typedef struct {
-    char base_path[ESP_VFS_PATH_MAX + 1];
-    fs_scratch_t scratch;
-} file_server_data_t;
-
-bool httpdaemon_start(network_settings_t *network);
-void httpdaemon_stop();
-esp_err_t set_content_type_from_file(httpd_req_t *req, const char *filename);
+void webui_init (void);
+void webui_print (const char *s);
+void webui_print_chunk (const char *s);
+void webui_print_flush (void);
+void webui_print_is_json (void);
+void webui_set_http_request (httpd_req_t *req);
 
 #endif
 

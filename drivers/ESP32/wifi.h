@@ -49,5 +49,7 @@ status_code_t wifi_setting (uint_fast16_t param, float value, char *svalue);
 void wifi_settings_report (setting_type_t setting);
 void wifi_settings_restore (void);
 
+char *iptoa(void *ip);
+
 #endif
 

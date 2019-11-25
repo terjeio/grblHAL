@@ -6,6 +6,16 @@ A GrblHAL driver for the ESP32 processor.
 
 ---
 
+__Update 2019-11-25:__ Added basic support for Luc's [ESP3D-WEBUI](https://github.com/luc-github/ESP3D-webui) with a backend written from scratch utilizing GrblHALs function pointer based API.
+
+Currently missing is authentication and notification support, and possibly something else that I have overlooked. All GrblHAL settings are available from the GRBL configuration page, however the extended settings provided by GrblHAL does not show any help text. The ESP3D Settings page does not show settings not supported by this backend implementation.
+
+This addon has not yet been tested connected to a machine - I challenge some brave souls to do that and report back by posting issues!
+
+__NOTE:__ Configuration has been simplified a bit, primarily change options in [`CMakeLists.txt`](https://github.com/terjeio/grblHAL/blob/master/drivers/ESP32/CMakeLists.txt) to enable/disable. Enabled plugin code still has to be copied from the plugins folder though.
+
+---
+
 __Update 2019-11-16:__ Added initial \(and rather crude\) UI for captive portal when WiFi is configured in APSTA mode. Ajax-based, no postbacks for updates. It works with Firefox on my laptop...
 
 ---
@@ -20,7 +30,7 @@ __IMPORTANT:__ [Network setting-id's](https://github.com/terjeio/grblHAL/wiki/Ad
 
 __Update 2019-08-01:__ Now uses code for keypad and SD card options from common plugins. Added support for Trinamic TMC2130 plugin (currently via SPI <> I2C bridge).
 
-__NOTE:__ If plugins are to be used `driver.h` and `CMakeLists.txt` has to be updated. Details can be found in these files.
+__NOTE:__ If plugins are to be used [`driver.h`](https://github.com/terjeio/grblHAL/blob/master/drivers/ESP32/driver.h) and [`CMakeLists.txt`](https://github.com/terjeio/grblHAL/blob/master/drivers/ESP32/CMakeLists.txt) has to be updated. Details can be found in these files.
 
 
 __Update 2018-12-14:__ Prototype [CNC BoosterPack](https://github.com/terjeio/CNC_Boosterpack) "motherboard" up and running.
@@ -73,6 +83,8 @@ Change: #define ISR_CODE to #define ISR_CODE IRAM_ATTR
 ```
 
 ### Credits:
+
+index.htm.gz is Copyright (c) 2019 Luc Lebosse - from his [ESP3D-WEBUI](https://github.com/luc-github/ESP3D-webui), I may have pulled a few lines from his backend code too.
 
 dbs_server.c is Copyright (c) 2019 Tony Pottier - from his [ESP32 WiFi Manager](https://github.com/tonyp7/esp32-wifi-manager) 
 
