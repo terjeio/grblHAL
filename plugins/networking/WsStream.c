@@ -560,15 +560,16 @@ static void http_write_error (ws_sessiondata_t *session, const char *status)
 static void WsConnectionHandler (ws_sessiondata_t *session)
 {
     bool hdr_ok;
+    size_t hdrsize = MAX_HTTP_HEADER_SIZE;
     static uint32_t ptr = 0;
 
     if(session->http_request == NULL) {
         ptr = 0;
-        session->http_request = malloc(MAX_HTTP_HEADER_SIZE);
-        if(session->http_request == NULL) {
+        if((session->http_request = malloc(hdrsize)) == NULL) {
             http_write_error(session, HTTP_500);
             return;
         }
+        hdrsize--;
     }
 
     uint8_t *payload = session->pbufCurrent ? session->pbufCurrent->payload : NULL;
@@ -576,9 +577,18 @@ static void WsConnectionHandler (ws_sessiondata_t *session)
     SYS_ARCH_DECL_PROTECT(lev);
 
     // 1. Process input
-    while(ptr < MAX_HTTP_HEADER_SIZE) {
+    while(true) {
 
-        // Get next pbuf chain to process
+    	if(ptr == hdrsize) {
+    		hdrsize += 129;
+    		if((session->http_request = realloc(session->http_request, hdrsize)) == NULL) {
+                http_write_error(session, HTTP_500);
+                return;
+    		}
+            hdrsize--;
+    	}
+
+    	// Get next pbuf chain to process
         if(session->pbufHead == NULL && session->rcvTail != session->rcvHead) {
             SYS_ARCH_PROTECT(lev);
             session->pbufCurrent = session->pbufHead = session->rcvTail->pbuf;
@@ -675,7 +685,7 @@ static void WsConnectionHandler (ws_sessiondata_t *session)
     }
 
     // Bad request?
-    if(ptr >= MAX_HTTP_HEADER_SIZE || (hdr_ok && session->traffic_handler != WsStreamHandler)) {
+    if(ptr > (MAX_HTTP_HEADER_SIZE * 2) || (hdr_ok && session->traffic_handler != WsStreamHandler)) {
         http_write_error(session, HTTP_400);
         if(session->http_request) {
             free(session->http_request);
