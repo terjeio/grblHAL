@@ -1,7 +1,7 @@
 //
 // WsStream.c - lw-IP/FreeRTOS websocket stream implementation
 //
-// v1.0 / 2019-11-18 / Io Engineering / Terje
+// v1.0 / 2019-11-27 / Io Engineering / Terje
 //
 
 /*
@@ -61,6 +61,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 static const char WS_GUID[] = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 static const char WS_KEY[] = "Sec-WebSocket-Key: ";
+static const char WS_PROT[] = "Sec-WebSocket-Protocol: ";
 static const char WS_RSP[] = "HTTP/1.1 101 Switching Protocols" CRLF \
                              "Upgrade: websocket" CRLF \
                              "Connection: Upgrade" CRLF \
@@ -108,6 +109,7 @@ typedef struct ws_sessiondata
 {
     uint16_t port;
     websocket_state_t state;
+    ws_frame_start_t ftype;
     bool linkLost;
     uint32_t timeout;
     uint32_t timeoutMax;
@@ -127,12 +129,29 @@ typedef struct ws_sessiondata
     uint8_t errorCount;
     uint8_t reconnectCount;
     uint8_t connectCount;
+    uint8_t pingCount;
     char *http_request;
+    uint32_t hdrsize;
     void (*traffic_handler)(struct ws_sessiondata *session);
 } ws_sessiondata_t;
 
 static void WsConnectionHandler (ws_sessiondata_t *session);
 static void WsStreamHandler (ws_sessiondata_t *session);
+
+static const ws_frame_start_t wshdr_txt = {
+  .fin    = true,
+  .opcode = WsOpcode_Text
+};
+
+static const ws_frame_start_t wshdr_bin = {
+  .fin    = true,
+  .opcode = WsOpcode_Binary
+};
+
+static const ws_frame_start_t wshdr_ping = {
+  .fin    = true,
+  .opcode = WsOpcode_Ping
+};
 
 static const ws_sessiondata_t defaultSettings =
 {
@@ -153,14 +172,11 @@ static const ws_sessiondata_t defaultSettings =
     .connectCount = 0,
     .reconnectCount = 0,
     .errorCount = 0,
+	.pingCount = 0,
     .lastErr = ERR_OK,
     .http_request = NULL,
+	.hdrsize = MAX_HTTP_HEADER_SIZE,
     .traffic_handler = WsConnectionHandler
-};
-
-static const ws_frame_start_t wshdr0 = {
-  .fin    = true,
-  .opcode = WsOpcode_Binary
 };
 
 static ws_sessiondata_t streamSession;
@@ -318,6 +334,7 @@ static void streamFreeBuffers (ws_sessiondata_t *session)
     if(session->http_request) {
         free(session->http_request);
         session->http_request = NULL;
+        session->hdrsize = MAX_HTTP_HEADER_SIZE;
     }
 
     SYS_ARCH_UNPROTECT(lev);
@@ -434,9 +451,11 @@ static err_t WsStreamAccept (void *arg, struct tcp_pcb *pcb, err_t err)
         session->linkLost = false;
     }
 
+    session->ftype = wshdr_txt;
     session->pcbConnect = pcb;
     session->state = WsState_Connected;
     session->traffic_handler = WsConnectionHandler;
+    session->pingCount = 0;
 
     tcp_accepted(pcb);
 
@@ -560,32 +579,32 @@ static void http_write_error (ws_sessiondata_t *session, const char *status)
 static void WsConnectionHandler (ws_sessiondata_t *session)
 {
     bool hdr_ok;
-    size_t hdrsize = MAX_HTTP_HEADER_SIZE;
     static uint32_t ptr = 0;
 
     if(session->http_request == NULL) {
         ptr = 0;
-        if((session->http_request = malloc(hdrsize)) == NULL) {
+        if((session->http_request = malloc(session->hdrsize)) == NULL) {
             http_write_error(session, HTTP_500);
             return;
         }
-        hdrsize--;
     }
 
     uint8_t *payload = session->pbufCurrent ? session->pbufCurrent->payload : NULL;
 
     SYS_ARCH_DECL_PROTECT(lev);
 
+    uint32_t hdrsize = session->hdrsize - 1;
+
     // 1. Process input
     while(true) {
 
     	if(ptr == hdrsize) {
-    		hdrsize += 129;
-    		if((session->http_request = realloc(session->http_request, hdrsize)) == NULL) {
+    		session->hdrsize += 128;
+    		if((session->http_request = realloc(session->http_request, session->hdrsize)) == NULL) {
                 http_write_error(session, HTTP_500);
                 return;
     		}
-            hdrsize--;
+            hdrsize = session->hdrsize - 1;
     	}
 
     	// Get next pbuf chain to process
@@ -676,20 +695,46 @@ static void WsConnectionHandler (ws_sessiondata_t *session)
                     http_write(session->pcbConnect, response, (u16_t *)&len, 1);
                     session->traffic_handler = WsStreamHandler;
                     session->rx_index = 0;
+                    session->lastSendTime = xTaskGetTickCount();
                     selectStream(StreamType_WebSocket);
                 }
             }
         }
+
+        if((key_hdr = stristr(session->http_request, WS_PROT))) {
+
+            keyp = key_hdr + sizeof(WS_PROT) - 1;
+
+            if((key_hdr = strstr(keyp, "\r\n"))) {
+
+                *key_hdr = '\0';
+
+                // Trim leading spaces from key
+                while(*keyp == ' ')
+                    keyp++;
+
+                // Trim trailing spaces from key
+                while(*--key_hdr == ' ')
+                    key_hdr = '\0';
+
+                // Switch to binary frames if protocol is: arduino
+                if(!strcmp(keyp, "arduino"))
+					session->ftype = wshdr_bin;
+            }
+        }
+
         free(session->http_request);
         session->http_request = NULL;
+    	session->hdrsize = MAX_HTTP_HEADER_SIZE;
     }
 
     // Bad request?
-    if(ptr > (MAX_HTTP_HEADER_SIZE * 2) || (hdr_ok && session->traffic_handler != WsStreamHandler)) {
+    if(hdr_ok ? session->traffic_handler != WsStreamHandler : ptr > (MAX_HTTP_HEADER_SIZE * 2)) {
         http_write_error(session, HTTP_400);
         if(session->http_request) {
             free(session->http_request);
             session->http_request = NULL;
+        	session->hdrsize = MAX_HTTP_HEADER_SIZE;
         }
     }
 }
@@ -713,8 +758,10 @@ static err_t WsParse (ws_sessiondata_t *session, struct pbuf *p)
 
         switch ((websocket_opcode_t)fs.opcode) {
 
+			case WsOpcode_Binary:
+				session->ftype = wshdr_bin; // Switch to binary responses if client talks binary to us
+                //  No break
             case WsOpcode_Text:
-            case WsOpcode_Binary:
                 if (payload_len > 6) {
                     uint_fast16_t ws_payload_offset = 6;
                     uint8_t *dptr = &payload[6], *mask = &payload[2];
@@ -761,13 +808,16 @@ static err_t WsParse (ws_sessiondata_t *session, struct pbuf *p)
               return ERR_CLSD;
 
             case WsOpcode_Ping:
-                fs.opcode = WsOpcode_Pong;
-                payload[0] = fs.opcode;
-                tcp_write(session->pcbConnect, payload, payload_len, 1);
-                tcp_output(session->pcbConnect);
+            	if(streamSession.state != WsStateClosing) {
+					fs.opcode = WsOpcode_Pong;
+					payload[0] = fs.opcode;
+					tcp_write(session->pcbConnect, payload, payload_len, 1);
+					tcp_output(session->pcbConnect);
+            	}
                 break;
 
             case WsOpcode_Pong:
+            	session->pingCount = 0;
                 break;
 
             default:
@@ -841,7 +891,7 @@ static void WsStreamHandler (ws_sessiondata_t *session)
         if(TXCount > sizeof(tempBuffer) - 4)
             TXCount = sizeof(tempBuffer) - 4;
 
-        tempBuffer[idx++] = wshdr0.start;
+        tempBuffer[idx++] = session->ftype.start;
         tempBuffer[idx++] = TXCount < 126 ? TXCount : 126;
         if(TXCount >= 126) {
             tempBuffer[idx++] = (TXCount >> 8) & 0xFF;
@@ -868,6 +918,22 @@ static void WsStreamHandler (ws_sessiondata_t *session)
         tcp_output(session->pcbConnect);
 
         session->lastSendTime = xTaskGetTickCount();
+    }
+
+    // Send ping every 3 seconds if no outgoing traffic.
+    // Disconnect session after 3 failed pings (9 seconds).
+    if(session->pingCount > 3)
+    	streamSession.state = WsStateClosing;
+    else if(streamSession.state != WsStateClosing && (xTaskGetTickCount() - session->lastSendTime) > (3 * configTICK_RATE_HZ)) {
+    	if(tcp_sndbuf(session->pcbConnect) > 4) {
+			tempBuffer[0] = wshdr_ping.start;
+			tempBuffer[1] = 2;
+			strcpy((char *)&tempBuffer[2], "Hi");
+			tcp_write(session->pcbConnect, tempBuffer, 4, 1);
+			tcp_output(session->pcbConnect);
+			session->lastSendTime = xTaskGetTickCount();
+			session->pingCount++;
+		}
     }
 }
 
