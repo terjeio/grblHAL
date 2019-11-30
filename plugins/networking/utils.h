@@ -18,6 +18,7 @@
 #define HOSTNAME_LENGTH_MAX (sizeof(hostname_t) - 1)
 #define PASSWORD_LENGTH_MIN 8
 #define PASSWORD_LENGTH_MAX (sizeof(password_t) - 1)
+#define HIDDEN_PASSWORD "********"
 
 char *btoa (uint64_t bytes);
 bool is_valid_port (uint16_t port);

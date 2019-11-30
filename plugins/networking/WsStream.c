@@ -1,7 +1,7 @@
 //
 // WsStream.c - lw-IP/FreeRTOS websocket stream implementation
 //
-// v1.0 / 2019-11-27 / Io Engineering / Terje
+// v1.0 / 2019-11-29 / Io Engineering / Terje
 //
 
 /*
@@ -58,6 +58,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define CRLF "\r\n"
 #define SOCKET_TIMEOUT 0
 #define MAX_HTTP_HEADER_SIZE 512
+#define FRAME_NONE 0xFF
 
 static const char WS_GUID[] = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 static const char WS_KEY[] = "Sec-WebSocket-Key: ";
@@ -89,7 +90,7 @@ typedef enum
 } websocket_state_t;
 
 typedef union {
-    uint8_t start;
+    uint8_t token;
     struct {
         uint8_t opcode :4,
                 rsv3   :1,
@@ -98,6 +99,18 @@ typedef union {
                 fin    :1;
     };
 } ws_frame_start_t;
+
+typedef struct {
+    uint32_t idx;
+    uint32_t payload_len;
+    uint32_t payload_rem;
+    uint32_t rx_index;
+    uint8_t *frame;
+    uint32_t mask;
+    bool masked;
+    bool complete;
+    uint8_t data[13];
+} frame_header_t;
 
 typedef struct pbuf_entry
 {
@@ -110,6 +123,9 @@ typedef struct ws_sessiondata
     uint16_t port;
     websocket_state_t state;
     ws_frame_start_t ftype;
+    websocket_opcode_t fragment_opcode;
+    ws_frame_start_t start;
+    frame_header_t header;
     bool linkLost;
     uint32_t timeout;
     uint32_t timeoutMax;
@@ -121,7 +137,6 @@ typedef struct ws_sessiondata
     struct pbuf *pbufHead;
     struct pbuf *pbufCurrent;
     uint32_t bufferIndex;
-    uint32_t rx_index;
     stream_rx_buffer_t rxbuf;
     stream_tx_buffer_t txbuf;
     TickType_t lastSendTime;
@@ -157,6 +172,8 @@ static const ws_sessiondata_t defaultSettings =
 {
     .port = 80,
     .state = WsState_Listen,
+	.fragment_opcode = WsOpcode_Continuation,
+    .start.token = FRAME_NONE,
     .timeout = 0,
     .timeoutMax = SOCKET_TIMEOUT,
     .pcbConnect = NULL,
@@ -164,7 +181,6 @@ static const ws_sessiondata_t defaultSettings =
     .pbufHead = NULL,
     .pbufCurrent = NULL,
     .bufferIndex = 0,
-    .rx_index = 0,
     .rxbuf = {0},
     .txbuf = {0},
     .lastSendTime = 0,
@@ -244,6 +260,7 @@ bool WsStreamRxInsert (char c) {
     else if(!hal.stream.enqueue_realtime_command(c)) {          // If not a real time command
         streamSession.rxbuf.data[streamSession.rxbuf.head] = c; // add data to buffer
         streamSession.rxbuf.head = bptr;                        // and update pointer
+ //       uartPutC(c);
     }
 
     return !streamSession.rxbuf.overflow;
@@ -336,6 +353,9 @@ static void streamFreeBuffers (ws_sessiondata_t *session)
         session->http_request = NULL;
         session->hdrsize = MAX_HTTP_HEADER_SIZE;
     }
+
+    if(session->header.frame)
+    	free(session->header.frame);
 
     SYS_ARCH_UNPROTECT(lev);
 }
@@ -454,6 +474,10 @@ static err_t WsStreamAccept (void *arg, struct tcp_pcb *pcb, err_t err)
     session->ftype = wshdr_txt;
     session->pcbConnect = pcb;
     session->state = WsState_Connected;
+    session->fragment_opcode = WsOpcode_Continuation;
+    session->start.token = FRAME_NONE;
+	memset(&session->header, 0, sizeof(frame_header_t));
+
     session->traffic_handler = WsConnectionHandler;
     session->pingCount = 0;
 
@@ -694,7 +718,6 @@ static void WsConnectionHandler (ws_sessiondata_t *session)
                     u16_t len = strlen(response);
                     http_write(session->pcbConnect, response, (u16_t *)&len, 1);
                     session->traffic_handler = WsStreamHandler;
-                    session->rx_index = 0;
                     session->lastSendTime = xTaskGetTickCount();
                     selectStream(StreamType_WebSocket);
                 }
@@ -742,93 +765,174 @@ static void WsConnectionHandler (ws_sessiondata_t *session)
 //
 // Process data for streaming
 //
-static err_t WsParse (ws_sessiondata_t *session, struct pbuf *p)
+
+static bool WsCollectFrame (frame_header_t *header, uint8_t *payload, uint32_t len)
 {
-    uint8_t *payload = (uint8_t *)p->payload;
-    uint_fast16_t payload_len = p->len, ws_payload_len = 0;
+	if(header->payload_rem > len && header->payload_rem == header->payload_len) {
+		if((header->frame = malloc(header->payload_len + header->idx)))
+			memcpy(header->frame, &header->data, header->idx);
+	}
 
-    if (payload && payload_len > 1) {
+	header->payload_rem -= len;
 
-        ws_frame_start_t fs = (ws_frame_start_t)payload[0];
+	if(header->frame)
+		memcpy(header->frame + header->idx + header->payload_len - header->payload_rem - 1, payload, len);
 
-        if (!fs.fin) {
-        //        LWIP_DEBUGF(HTTPD_DEBUG, ("Warning: continuation frames not supported\n"));
-            return ERR_OK;
-        }
+	return header->frame != NULL;
+}
+
+static uint32_t WsParse (ws_sessiondata_t *session, uint8_t *payload, uint32_t len)
+{
+	bool frame_done = false;
+	uint32_t plen = len;
+
+	// Collect frame header
+    while(!session->header.complete && plen) {
+
+    	session->header.data[session->header.idx++] = *payload++;
+
+    	if(session->header.idx == 2) {
+    		session->header.masked      = session->header.data[1] & 0x80; // always true from client
+    		session->header.payload_len = session->header.data[1] & 0x7F;
+    	}
+
+    	if(session->header.idx >= 6) {
+    		if((session->header.complete = (session->header.idx == (session->header.payload_len == 126 ? 8 : 6)))) {
+				if(session->header.payload_len == 126) {
+					session->header.payload_len = (session->header.data[2] << 8) | session->header.data[3];
+					memcpy(&session->header.mask, &session->header.data[4], sizeof(uint32_t));
+				} else
+					memcpy(&session->header.mask, &session->header.data[2], sizeof(uint32_t));
+				session->header.payload_rem = session->header.payload_len;
+			}
+    	}
+
+    	plen--;
+    }
+
+//    if(session->start.token != FRAME_NONE)
+//        DEBUG_PRINT("\r\n!span\r\n");
+
+    // Process frame
+    if (session->header.complete && (plen || session->header.payload_rem == 0)) {
+
+        ws_frame_start_t fs = (ws_frame_start_t)session->header.data[0];
+
+        if (!fs.fin && (websocket_opcode_t)fs.opcode != WsOpcode_Continuation)
+        	session->fragment_opcode = (websocket_opcode_t)fs.opcode;
+
+        if((websocket_opcode_t)fs.opcode == WsOpcode_Continuation)
+        	fs.opcode = session->fragment_opcode;
 
         switch ((websocket_opcode_t)fs.opcode) {
 
+        	case WsOpcode_Continuation:
+        		// Something went wrong, exit fragment handling mode
+        		session->fragment_opcode = WsOpcode_Continuation;
+        		break;
+
 			case WsOpcode_Binary:
-				session->ftype = wshdr_bin; // Switch to binary responses if client talks binary to us
+//				session->ftype = wshdr_bin; // Switch to binary responses if client talks binary to us
                 //  No break
             case WsOpcode_Text:
-                if (payload_len > 6) {
-                    uint_fast16_t ws_payload_offset = 6;
-                    uint8_t *dptr = &payload[6], *mask = &payload[2];
-                    ws_payload_len = payload[1] & 0x7F;
 
-                    if (ws_payload_len == 127) {
-                      /* most likely won't happen inside non-fragmented frame */
-                    //         LWIP_DEBUGF(HTTPD_DEBUG, ("Warning: frame is too long\n"));
-                      return ERR_OK;
-                    } else if (ws_payload_len == 126) {
-                      /* extended length */
-                      dptr += 2;
-                      mask += 2;
-                      ws_payload_offset += 2;
-                      ws_payload_len = (payload[2] << 8) | payload[3];
-                    }
+                if (fs.fin)
+                	session->fragment_opcode = WsOpcode_Continuation;
 
-                    payload_len -= ws_payload_offset;
+                if (session->header.payload_rem) {
 
-                    if (ws_payload_len > payload_len) {
-                    //    LWIP_DEBUGF(HTTPD_DEBUG, ("Error: incorrect frame size\n"));
-                      return ERR_VAL;
-                    }
+                	uint8_t *mask = (uint8_t *)&session->header.mask;
+                	uint_fast16_t payload_len = session->header.payload_rem > plen ? plen : session->header.payload_rem;
 
-                    //   if (data_len != len)
-                    //    LWIP_DEBUGF(HTTPD_DEBUG, ("Warning: segmented frame received\n"));
-
+                    session->start.token = session->header.payload_rem > plen ? fs.token : FRAME_NONE;
+/*
+                    if(session->start.token != FRAME_NONE)
+                        DEBUG_PRINT("\r\n!span!\r\n");
+                    if(session->rxbuf.overflow)
+                        DEBUG_PRINT("\r\n!overflow\r\n");
+                    DEBUG_PRINT("\r\nPLEN:");
+                    DEBUG_PRINT(uitoa(session->header.payload_rem));
+                    DEBUG_PRINT(" ");
+                    DEBUG_PRINT(uitoa(payload_len));
+                    DEBUG_PRINT("\r\n");
+*/
                     // Unmask and add data to input buffer
-                    uint_fast32_t i;
+                    uint_fast16_t i = session->header.rx_index;
                     session->rxbuf.overflow = false;
-                    for (i = session->rx_index; i < ws_payload_len; i++) {
-                        *dptr ^= mask[i % 4];
-                        if(!WsStreamRxInsert(*dptr++))
+
+                    while (payload_len--) {
+                        if(!WsStreamRxInsert(*payload++ ^ mask[i % 4]))
                             break; // If overflow pend buffering rest of data until next polling
+                        plen--;
+                        i++;
                     }
-                    session->rx_index = session->rxbuf.overflow ? i : 0;
+
+                    session->header.rx_index = i;
+                    frame_done = (session->header.payload_rem = session->header.payload_len - session->header.rx_index) == 0;
                 }
                 break;
 
-            case WsOpcode_Close: // close
-              tcp_write(session->pcbConnect, payload, payload_len, 1);
-              tcp_output(session->pcbConnect);
-              session->state = WsStateClosing;
-              return ERR_CLSD;
+            case WsOpcode_Close:
+            	if((frame_done = plen >= session->header.payload_rem)) {
+            		plen -= session->header.payload_rem;
+					if(WsCollectFrame(&session->header, payload, session->header.payload_rem))
+						payload = session->header.frame;
+					tcp_write(session->pcbConnect, payload, session->header.payload_len, 1);
+					tcp_output(session->pcbConnect);
+					session->state = WsStateClosing;
+            	} else {
+            		WsCollectFrame(&session->header, payload, plen);
+            		plen = 0;
+            	}
+				break;
 
             case WsOpcode_Ping:
-            	if(streamSession.state != WsStateClosing) {
-					fs.opcode = WsOpcode_Pong;
-					payload[0] = fs.opcode;
-					tcp_write(session->pcbConnect, payload, payload_len, 1);
-					tcp_output(session->pcbConnect);
+            	if((frame_done = plen >= session->header.payload_rem)) {
+					if(streamSession.state != WsStateClosing) {
+	            		plen -= session->header.payload_rem;
+						if(WsCollectFrame(&session->header, payload, session->header.payload_rem))
+							payload = session->header.frame;
+						fs.opcode = WsOpcode_Pong;
+						payload[0] = fs.token;
+						tcp_write(session->pcbConnect, payload, session->header.payload_len, 1);
+						tcp_output(session->pcbConnect);
+					}
+            	} else {
+            		WsCollectFrame(&session->header, payload, plen);
+            		plen = 0;
             	}
                 break;
 
             case WsOpcode_Pong:
-            	session->pingCount = 0;
+            	if((frame_done = plen >= session->header.payload_rem)) {
+					session->pingCount = 0;
+            		plen -= session->header.payload_rem;
+            	} else {
+            		session->header.payload_rem -= plen;
+            		plen = 0;
+            	}
                 break;
 
             default:
-//              LWIP_DEBUGF(HTTPD_DEBUG, ("Unsupported opcode 0x%hX\n", opcode));
-              break;
+            	// Unsupported/undefined opcode - ditch any payload(?)
+            	if((frame_done = plen >= session->header.payload_rem))
+            		plen -= session->header.payload_rem;
+            	else {
+            		session->header.payload_rem -= plen;
+            		plen = 0;
+            	}
+            	break;
         }
-        return ERR_OK;
-    }
-    return ERR_VAL;
-}
 
+        if(frame_done) {
+    		if(session->header.frame)
+    			free(session->header.frame);
+        	memset(&session->header, 0, sizeof(frame_header_t));
+        }
+    }
+
+    return len - plen;
+}
 
 static void WsStreamHandler (ws_sessiondata_t *session)
 {
@@ -855,16 +959,22 @@ static void WsStreamHandler (ws_sessiondata_t *session)
             break; // No more data to be processed...
 
         // Add data to input stream buffer
-        WsParse(session, session->pbufCurrent);
+        session->bufferIndex += WsParse(session, &payload[session->bufferIndex], session->pbufCurrent->len - session->bufferIndex);
 
         if(session->rxbuf.overflow) // Failed to buffer all data, try again on next polling
             break;
-
-//        if(session->bufferIndex >= session->pbufCurrent->len) {
+/*
+        DEBUG_PRINT("\r\nBLEN:");
+        DEBUG_PRINT(uitoa(session->pbufCurrent->len));
+        DEBUG_PRINT(" ");
+        DEBUG_PRINT(uitoa(session->bufferIndex));
+        DEBUG_PRINT("\r\n");
+*/
+        if(session->bufferIndex >= session->pbufCurrent->len) {
             session->pbufCurrent = session->pbufCurrent->next;
             session->bufferIndex = 0;
             payload = session->pbufCurrent ? session->pbufCurrent->payload : NULL;
-//        }
+        }
 
         // ACK current pbuf chain when all data has been processed
         if((session->pbufCurrent == NULL) && (session->bufferIndex == 0)) {
@@ -891,7 +1001,7 @@ static void WsStreamHandler (ws_sessiondata_t *session)
         if(TXCount > sizeof(tempBuffer) - 4)
             TXCount = sizeof(tempBuffer) - 4;
 
-        tempBuffer[idx++] = session->ftype.start;
+        tempBuffer[idx++] = session->ftype.token;
         tempBuffer[idx++] = TXCount < 126 ? TXCount : 126;
         if(TXCount >= 126) {
             tempBuffer[idx++] = (TXCount >> 8) & 0xFF;
@@ -926,7 +1036,7 @@ static void WsStreamHandler (ws_sessiondata_t *session)
     	streamSession.state = WsStateClosing;
     else if(streamSession.state != WsStateClosing && (xTaskGetTickCount() - session->lastSendTime) > (3 * configTICK_RATE_HZ)) {
     	if(tcp_sndbuf(session->pcbConnect) > 4) {
-			tempBuffer[0] = wshdr_ping.start;
+			tempBuffer[0] = wshdr_ping.token;
 			tempBuffer[1] = 2;
 			strcpy((char *)&tempBuffer[2], "Hi");
 			tcp_write(session->pcbConnect, tempBuffer, 4, 1);

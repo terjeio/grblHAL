@@ -73,5 +73,9 @@ bool is_valid_ssid (const char *ssid)
 bool is_valid_password (const char *password)
 {
 	size_t len = strlen(password);
+
+	if(len == strlen(HIDDEN_PASSWORD) && memcmp(password, HIDDEN_PASSWORD, len) == 0)
+		len = PASSWORD_LENGTH_MAX + 1;
+
     return len >= PASSWORD_LENGTH_MIN && len <= PASSWORD_LENGTH_MAX;
 }
