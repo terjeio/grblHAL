@@ -237,10 +237,9 @@ void esp_bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param)
 		case ESP_BT_GAP_AUTH_CMPL_EVT:
 			if (param->auth_cmpl.stat == ESP_BT_STATUS_SUCCESS)
 				esp_log_buffer_hex(SPP_TAG, param->auth_cmpl.bda, ESP_BD_ADDR_LEN);
-			else {
+			else
 				ESP_LOGE(SPP_TAG, "authentication failed, status:%d", param->auth_cmpl.stat);
 			break;
-		}
 
 		case ESP_BT_GAP_PIN_REQ_EVT:
 			if (param->pin_req.min_16_digit) {

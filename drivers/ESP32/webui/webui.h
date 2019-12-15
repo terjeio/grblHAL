@@ -31,7 +31,5 @@
 #include "server.h"
 #include "flashfs.h"
 
-#define HIDDEN_PASSWORD "********"
-
 #endif
 

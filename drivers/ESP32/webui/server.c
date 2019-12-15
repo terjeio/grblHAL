@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#include <sys/socket.h>
 
 #include <cJSON.h>
 
@@ -43,40 +44,45 @@
 #include "esp_vfs_fat.h"
 #endif
 
-char *get_key_value (char *qstring, char *key, char *s)
+#if AUTH_ENABLE
+static webui_auth_t *sessions = NULL;
+static webui_auth_level_t get_auth_level (httpd_req_t *req);
+#endif
+
+bool is_authorized (httpd_req_t *req, webui_auth_level_t min_level)
 {
-	char buf[100];
+#if AUTH_ENABLE
+	webui_auth_level_t auth_level;
 
-	if(httpd_query_key_value(qstring, key, buf, sizeof(buf)) == ESP_OK)
-		urldecode(s, buf);
-	else
-		*s = '\0';
-
-	return key;
+	if((auth_level = get_auth_level(req)) < min_level) {
+		httpd_resp_set_type(req, HTTPD_TYPE_TEXT);
+		httpd_resp_set_status(req, auth_level < WebUIAuth_User ? "401 Unauthorized" : "403 Forbidden");
+		httpd_resp_sendstr(req, auth_level < WebUIAuth_User ? "Login and try again\n" : "Not authorized\n");
+		return false;
+	}
+#endif
+	return true;
 }
 
 esp_err_t webui_http_command_handler (httpd_req_t *req)
 {
 	bool ok;
-	char *data = NULL, *cmd;
+	char data[100], *cmd, *query = NULL;
+	size_t qlen = httpd_req_get_url_query_len(req);
 
-	char buf[200];
+	if(qlen && (query = malloc(qlen + 1))) {
 
-	buf[100] = '\0';
+		httpd_req_get_url_query_str(req, query, qlen);
 
-	httpd_req_get_url_query_str(req, buf, sizeof(buf));
+		if(http_get_key_value(query, "commandText", data, sizeof(data)) == NULL)
+			http_get_key_value(query, "plain", data, sizeof(data));
 
-	if(httpd_query_key_value(buf, "commandText", &buf[100], sizeof(buf) - 100) == ESP_OK) {
-		buf[0] = '\0';
-		data = urldecode(buf, &buf[100]);
-	} else if(httpd_query_key_value(buf, "plain", &buf[100], sizeof(buf) - 100) == ESP_OK) {
-		buf[0] = '\0';
-		data = urldecode(buf, &buf[100]);
-	}
+		free(query);
 
-//	hal.delay_ms(100, NULL);
+	} else
+		*data = '\0';
 
-	if((ok = (data != NULL))) {
+	if((ok = (*data != '\0'))) {
 
 		if((cmd = strstr(data, "[ESP"))) {
 
@@ -86,11 +92,18 @@ esp_err_t webui_http_command_handler (httpd_req_t *req)
 
 			if((ok = (args = strchr(cmd, ']')))) {
 				*args++ = '\0';
+#if AUTH_ENABLE
+//				if(!is_authorized(req, get_auth_required(atol(cmd), args)))
+//					return ESP_OK;
+#endif
 				webui_set_http_request(req);
 				ok = webui_command_handler(atol(cmd), args) == Status_OK;
 			}
 
 		} else { // GCode - add to websocket input buffer
+
+//			if(!is_authorized(req, WebUIAuth_User))
+//				return ESP_OK;
 
 			if(strlen(data) == 1)
 				WsStreamRxInsert(*data);
@@ -131,17 +144,6 @@ static bool add_file (cJSON *files, char *path, FILINFO *file)
 {
 	bool ok;
 
-/*
-	char buf[200];
-
-	if(strlen(path) > 1) {
-		strcpy(buf, &path[1]);
-		strcat(buf, "/");
-	} else
-		*buf = '\0';
-
-	strcat(buf, file->fname);
-*/
 	cJSON *fileinfo;
 
 	if((ok = (fileinfo = cJSON_CreateObject()) != NULL))
@@ -294,7 +296,7 @@ static bool sd_rmdir (char *path)
 
     	strcat(strcat(path, "/"), fno.fname);
 
-        ok = (fno.fattrib & AM_DIR) ? sd_rmdir(path) : f_unlink(path) == FR_OK;
+        ok = ((fno.fattrib & AM_DIR) ? sd_rmdir(path) : f_unlink(path)) == FR_OK;
 
         path[pathlen] = '\0';
     }
@@ -310,19 +312,24 @@ esp_err_t webui_sdcard_handler (httpd_req_t *req)
 {
 	bool ok;
 	char *query = NULL;
-	char path[100], filename[100], action[20], status[100];
+	fs_path_t path;
+	fs_filename_t filename;
+	char action[20], status[sizeof(fs_filename_t) + 50];
+
+	if(!is_authorized(req, WebUIAuth_User))
+		return ESP_OK;
 
 	size_t qlen = httpd_req_get_url_query_len(req);
 
 	*status = '\0';
 
-	if(qlen && (query = malloc(qlen))) {
+	if(qlen && (query = malloc(qlen + 1))) {
 
 		httpd_req_get_url_query_str(req, query, qlen);
 
-		get_key_value(query, "path", path);
-		get_key_value(query, "filename", filename);
-		get_key_value(query, "action", action);
+		http_get_key_value(query, "path", path, sizeof(path));
+		http_get_key_value(query, "filename", filename, sizeof(filename));
+		http_get_key_value(query, "action", action, sizeof(action));
 
 		if(*action && *filename) {
 
@@ -390,6 +397,9 @@ esp_err_t webui_sdcard_upload_handler (httpd_req_t *req)
 	bool ok = false;
 	int ret;
 
+	if(!is_authorized(req, WebUIAuth_User))
+		return ESP_OK;
+
 	char *rqhdr = NULL, *boundary;
 	size_t len = httpd_req_get_hdr_value_len(req, "Content-Type");
 
@@ -403,7 +413,7 @@ esp_err_t webui_sdcard_upload_handler (httpd_req_t *req)
 		}
 	}
 
-	char path[100];
+	fs_path_t path;
 	char *scratch = ((file_server_data_t *)req->user_ctx)->scratch;
 	file_upload_t *upload = (file_upload_t *)req->sess_ctx;
 
@@ -554,7 +564,7 @@ static bool spiffs_rmdir (char *path)
 	bool ok = true;
     DIR *dir;
     struct dirent *entry;
-    char filepath[200];
+    fs_path_t filepath;
 
     if(!(dir = opendir("/spiffs")))
         return false;
@@ -563,10 +573,10 @@ static bool spiffs_rmdir (char *path)
 
     size_t pathlen = strlen(path);
 
-    while((entry = readdir(dir))) {
+    while(ok && (entry = readdir(dir))) {
     	if(strlen(entry->d_name) >= pathlen && memcmp(entry->d_name, path, pathlen) == 0) {
     		strcat(strcpy(filepath, "/spiffs/"), entry->d_name);
-    		ok = ok & (unlink(filepath) == 0);
+    		ok = unlink(filepath) == 0;
         }
     }
 
@@ -579,19 +589,28 @@ esp_err_t webui_spiffs_handler (httpd_req_t *req)
 {
 	bool ok;
 	char *query = NULL;
-	char path[100], filename[100], action[20], status[100];
+	fs_path_t path;
+	fs_filename_t filename;
+	char action[20], status[sizeof(fs_filename_t) + 50];
 	size_t qlen = httpd_req_get_url_query_len(req);
 
-	*path = '\0';
 	*status = '\0';
 
-	if(qlen && (query = malloc(qlen))) {
+	if(!is_authorized(req, WebUIAuth_User))
+		return ESP_OK;
+
+	if(get_auth_level(req) == WebUIAuth_User)
+		strcpy(path, "/user");
+	else
+		*path = '\0';
+
+	if(qlen && (query = malloc(qlen + 1))) {
 
 		httpd_req_get_url_query_str(req, query, qlen);
 
-		get_key_value(query, "path", path);
-		get_key_value(query, "filename", filename);
-		get_key_value(query, "action", action);
+		http_get_key_value(query, "path", path + strlen(path), sizeof(path - strlen(path)));
+		http_get_key_value(query, "filename", filename, sizeof(filename));
+		http_get_key_value(query, "action", action, sizeof(action));
 
 		if(*action && *filename) {
 
@@ -667,10 +686,15 @@ esp_err_t webui_spiffs_handler (httpd_req_t *req)
     return ok ? ESP_OK : ESP_FAIL;
 }
 
+webui_auth_level_t auth_level;
+
 esp_err_t webui_spiffs_upload_handler (httpd_req_t *req)
 {
 	bool ok = false;
 	int ret;
+
+	if(!is_authorized(req, WebUIAuth_User))
+		return ESP_OK;
 
 	char *rqhdr = NULL, *boundary;
 	size_t len = httpd_req_get_hdr_value_len(req, "Content-Type");
@@ -685,7 +709,7 @@ esp_err_t webui_spiffs_upload_handler (httpd_req_t *req)
 		}
 	}
 
-	char path[100];
+	fs_path_t path;
 	char *scratch = ((file_server_data_t *)req->user_ctx)->scratch;
 	file_upload_t *upload = (file_upload_t *)req->sess_ctx;
 
@@ -726,12 +750,317 @@ esp_err_t webui_spiffs_upload_handler (httpd_req_t *req)
 
 #endif
 
+#if AUTH_ENABLE
+
+static struct sockaddr_in6 *get_ipaddress (httpd_req_t *req)
+{
+	static struct sockaddr_in6 addr;   // esp_http_server uses IPv6 addressing
+	socklen_t addr_size = sizeof(struct sockaddr_in6);
+
+	if(getpeername(httpd_req_to_sockfd(req), (struct sockaddr *)&addr, &addr_size) != 0)
+		memset(&addr, 0, sizeof(struct sockaddr_in6));
+
+	return &addr;
+}
+
+static webui_auth_level_t check_authenticated (struct sockaddr_in6 *ip, const session_id_t *session_id)
+{
+	webui_auth_t *current = sessions, *previous = NULL;
+	TickType_t now = xTaskGetTickCount();
+
+	webui_auth_level_t level = WebUIAuth_Guest;
+
+	while(current) {
+		if(now - current->last_access > 360000) {
+			if(current == sessions) {
+				sessions = current->next;
+				free(current);
+				current = sessions;
+			} else {
+				previous->next = current->next;
+				free(current);
+				current = previous->next;
+			}
+		} else {
+			if (memcmp(ip, &current->ip, sizeof(struct sockaddr_in6)) == 0 && memcmp(session_id, current->session_id, sizeof(session_id_t)) == 0) {
+				current->last_access = now;
+				level = current->level;
+			}
+			previous = current;
+			current = current->next;
+		}
+	}
+
+	return level;
+}
+
+static session_id_t *create_session_id (struct sockaddr_in6 *ip)
+{
+	static session_id_t session_id;
+
+	uint32_t addr;
+
+	memcpy(&addr, &ip->sin6_addr.un.u32_addr[3], sizeof(uint32_t));
+
+	if(sprintf(session_id, "%08X%04X%08X", addr, (uint16_t)ntohs(ip->sin6_port), (uint32_t)xTaskGetTickCount()) != 20)
+		memset(session_id, 0, sizeof(session_id_t));
+
+	return &session_id;
+}
+
+static session_id_t *get_session_id (httpd_req_t *req, session_id_t *session_id)
+{
+	char *cookie = NULL, *token = NULL, *end = NULL;;
+	size_t len = httpd_req_get_hdr_value_len(req, "Cookie");
+
+	if(len && (cookie = malloc(len + 1))) {
+
+		httpd_req_get_hdr_value_str(req, "Cookie", cookie, len + 1);
+
+		if((token = strstr(cookie, COOKIEPREFIX))) {
+			token += strlen(COOKIEPREFIX);
+			if((end = strchr(token, ';')))
+				*end = '\0';
+			if(strlen(token) == sizeof(session_id_t) - 1)
+				strcpy((char *)session_id, token);
+			else
+				token = NULL;
+		}
+
+		free(cookie);
+    }
+
+    return token ? session_id : NULL;
+}
+
+static bool unlink_session (httpd_req_t *req)
+{
+	bool ok = false;
+	session_id_t session_id;
+
+	if(get_session_id(req, &session_id)) {
+
+		webui_auth_t *current = sessions, *previous = NULL;
+
+		while(current) {
+
+			if(memcmp(session_id, current->session_id, sizeof(session_id_t)) == 0) {
+				ok = true;
+				if(current == sessions) {
+					sessions = current->next;
+					free(current);
+					current = NULL;
+				} else {
+					previous->next = current->next;
+					free(current);
+					current = NULL;
+				}
+			} else {
+				previous = current;
+				current = current->next;
+			}
+		}
+	}
+
+	return ok;
+}
+
+static webui_auth_level_t get_auth_level (httpd_req_t *req)
+{
+	session_id_t session_id;
+	webui_auth_level_t auth_level = WebUIAuth_None;
+
+	if(get_session_id(req, &session_id))
+		auth_level = check_authenticated(get_ipaddress(req), &session_id);
+
+    return auth_level;
+}
+
+#endif
+
+static char *authleveltostr (webui_auth_level_t level)
+{
+	return level == WebUIAuth_None ? "???" : level == WebUIAuth_Guest ? "guest" : level == WebUIAuth_User ? "user" : "admin";
+}
+
+esp_err_t webui_login_handler (httpd_req_t *req)
+{
+	bool ok = false;
+	uint32_t status = 200;
+	char msg[20] = "Ok";
+	webui_auth_level_t auth_level = WebUIAuth_None;
+
+#if AUTH_ENABLE
+
+	user_id_t user;
+	password_t password;
+	char cookie[64], *query = NULL;
+
+	size_t qlen = httpd_req_get_url_query_len(req);
+
+	if(qlen) {
+
+		if((query = malloc(qlen + 1))) {
+
+			httpd_req_get_url_query_str(req, query, qlen);
+
+			if(http_get_key_value(query, "DISCONNECT", password, sizeof(password))) {
+				unlink_session(req);
+				auth_level = WebUIAuth_None;
+				httpd_resp_set_hdr(req, "Set-Cookie", strcat(strcpy(cookie, COOKIEPREFIX), "; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"));
+
+			} else if(http_get_key_value(query, "SUBMIT", password, sizeof(password))) {
+
+				 if(http_get_key_value(query, "NEWPASSWORD", password, sizeof(password))) {
+
+					strcpy(user, authleveltostr((auth_level = get_auth_level(req))));
+
+					// TODO: validation against original password needed?
+
+					if(*user && is_valid_password(password)) {
+
+						switch(strlookup(user, "user,admin", ',')) {
+
+							case 0:
+								if(hal.driver_setting(Setting_UserPassword, NAN, password) != Status_OK) {
+									status = 401;
+									strcpy(msg, "Error: Cannot apply changes");
+								}
+								break;
+
+							case 1:
+								ESP_LOGI("newp", "admin");
+
+								if(hal.driver_setting(Setting_AdminPassword, NAN, password) != Status_OK) {
+									ESP_LOGI("newp", "admin failed");
+									status = 401;
+									strcpy(msg, "Error: Cannot apply changes");
+								}
+								break;
+
+							default:
+								status = 401;
+								strcpy(msg, "Wrong authentication!");
+								break;
+						}
+					} else {
+						status = 500;
+						strcpy(msg, "Error: Incorrect password");
+					}
+
+				 } else {
+
+					http_get_key_value(query, "USER", user, sizeof(user));
+					http_get_key_value(query, "PASSWORD", password, sizeof(password));
+
+					if(*user) {
+
+						auth_level = WebUIAuth_Guest;
+
+						switch(strlookup(user, "user,admin", ',')) {
+
+							case 0:
+								if(strcmp(password, driver_settings.wifi.user_password)) {
+									status = 401;
+									strcpy(msg, "Error: Incorrect password");
+								} else
+									auth_level = WebUIAuth_User;
+								break;
+
+							case 1:
+								if(strcmp(password, driver_settings.wifi.admin_password)) {
+									status = 401;
+									strcpy(msg, "Error: Incorrect password");
+								} else
+									auth_level = WebUIAuth_Admin;
+								break;
+
+							default:
+								status = 401;
+								strcpy(msg, "Error: Unknown user");
+								break;
+						}
+					} else {
+						status = 500;
+						strcpy(msg, "Error: Missing data");
+					}
+				}
+			} else {
+				status = 500;
+				strcpy(msg, "Error: Missing data");
+			}
+
+			free(query);
+
+		} else {
+			status = 500;
+			strcpy(msg, "Error: Missing data");
+		}
+	}
+
+    httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
+
+    webui_auth_level_t current_level = get_auth_level(req);
+
+	if(auth_level != current_level) {
+
+		unlink_session(req);
+
+		if(auth_level != WebUIAuth_None) {
+
+			webui_auth_t *session;
+
+			if((session = malloc(sizeof(webui_auth_t)))) {
+				memset(session, 0, sizeof(webui_auth_t));
+				memcpy(&session->ip, get_ipaddress(req), sizeof(struct sockaddr_in6));
+				memcpy(session->session_id, create_session_id(&session->ip), sizeof(session_id_t));
+				session->level = auth_level;
+				strcpy(session->user_id, user);
+				session->last_access = xTaskGetTickCount();
+				session->next = sessions;
+				sessions = session;
+			}
+
+			httpd_resp_set_hdr(req, "Set-Cookie", strcat(strcat(strcpy(cookie, COOKIEPREFIX), session->session_id), "; path=/"));
+		}
+	}
+
+	if(status != 200) {
+		sprintf(password, "%d %s", status, msg);
+		httpd_resp_set_status(req, password);
+	}
+
+#endif
+
+	cJSON *root;
+
+	if((root = cJSON_CreateObject())) {
+
+		ok = cJSON_AddStringToObject(root, "status", msg) != NULL;
+		ok &= cJSON_AddStringToObject(root, "authentication_lvl", authleveltostr(auth_level)) != NULL;
+
+		if(ok) {
+			char *resp = cJSON_PrintUnformatted(root);
+			httpd_resp_set_type(req, HTTPD_TYPE_JSON);
+			httpd_resp_send(req, resp, strlen(resp));
+			free(resp);
+		}
+
+		if(root)
+			cJSON_Delete(root);
+	}
+
+	if(!ok)
+		httpd_resp_send(req, NULL, 0);
+
+	return ok && status == 200 ? ESP_OK : ESP_FAIL;
+}
+
 esp_err_t webui_index_html_get_handler (httpd_req_t *req)
 {
     extern const unsigned char index_html_gz_start[] asm("_binary_index_html_gz_start");
     extern const unsigned char index_html_gz_end[]   asm("_binary_index_html_gz_end");
     set_content_type_from_file(req, "index.html");
     httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
-    httpd_resp_send(req, (const char *)index_html_gz_start, index_html_gz_end - index_html_gz_start);
-    return ESP_OK;
+    return httpd_resp_send(req, (const char *)index_html_gz_start, index_html_gz_end - index_html_gz_start);
 }

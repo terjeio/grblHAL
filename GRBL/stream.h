@@ -52,7 +52,9 @@ typedef enum {
     StreamType_Telnet,
     StreamType_WebSocket,
     StreamType_SDCard,
-    StreamType_FlashFs
+    StreamType_FlashFs,
+    StreamType_Redirected,
+    StreamType_Null
 } stream_type_t;
 
 // These structures are not referenced in the core code, may be used by drivers

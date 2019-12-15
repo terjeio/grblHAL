@@ -22,6 +22,10 @@
 
 #include "grbl.h"
 
+#ifdef ENABLE_SPINDLE_LINEARIZATION
+#include <stdio.h>
+#endif
+
 settings_t settings;
 
 const settings_restore_t settings_all = {
@@ -36,7 +40,6 @@ const settings_t defaults = {
 
     .version = SETTINGS_VERSION,
 
-    .stream_deprecated = 0, // deprecated, no longer used - kept for now to avoid triggering EEPROM reset
     .junction_deviation = DEFAULT_JUNCTION_DEVIATION,
     .arc_tolerance = DEFAULT_ARC_TOLERANCE,
     .g73_retract = DEFAULT_G73_RETRACT,
@@ -107,6 +110,26 @@ const settings_t defaults = {
     .spindle.pid.i_gain = DEFAULT_SPINDLE_I_GAIN,
     .spindle.pid.d_gain = DEFAULT_SPINDLE_D_GAIN,
     .spindle.pid.i_max_error = DEFAULT_SPINDLE_I_MAX,
+#if SPINDLE_NPWM_PIECES > 0
+    .spindle.pwm_piece[0].rpm = NAN,
+    .spindle.pwm_piece[0].start = 0.0f,
+    .spindle.pwm_piece[0].end = 0.0f,
+#endif
+#if SPINDLE_NPWM_PIECES > 1
+    .spindle.pwm_piece[1].rpm = NAN,
+    .spindle.pwm_piece[1].start = 0.0f,
+    .spindle.pwm_piece[1].end = 0.0f,
+#endif
+#if SPINDLE_NPWM_PIECES > 2
+    .spindle.pwm_piece[2].rpm = NAN,
+    .spindle.pwm_piece[2].start = 0.0f,
+    .spindle.pwm_piece[2].end = 0.0f,
+#endif
+#if SPINDLE_NPWM_PIECES > 3
+    .spindle.pwm_piece[3].rpm = NAN,
+    .spindle.pwm_piece[3].start = 0.0f,
+    .spindle.pwm_piece[3].end = 0.0f,
+#endif
 
     .coolant_invert.flood = INVERT_COOLANT_FLOOD_PIN,
     .coolant_invert.mist = INVERT_COOLANT_MIST_PIN,
@@ -393,7 +416,7 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 break;
         }
 
-        if(!(found || (hal.driver_setting && hal.driver_setting(setting, value, svalue))))
+        if(!(found || (hal.driver_setting && hal.driver_setting(setting, value, svalue) == Status_OK)))
             return Status_InvalidStatement;
 
     } else {
@@ -696,6 +719,30 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
 
 #endif
 
+#ifdef ENABLE_SPINDLE_LINEARIZATION
+
+            case Setting_LinearSpindlePiece1:
+            case Setting_LinearSpindlePiece2:
+            case Setting_LinearSpindlePiece3:
+            case Setting_LinearSpindlePiece4:
+                {
+                    uint32_t idx = setting - Setting_LinearSpindlePiece1;
+                    float rpm, start, end;
+
+                    if(svalue[0] == '0' && svalue[1] == '\0') {
+                        settings.spindle.pwm_piece[idx].rpm = NAN;
+                        settings.spindle.pwm_piece[idx].start =
+                        settings.spindle.pwm_piece[idx].end = 0.0f;
+                    } else if(sscanf(svalue, "%f,%f,%f", &rpm, &start, &end) == 3) {
+                        settings.spindle.pwm_piece[idx].rpm = rpm;
+                        settings.spindle.pwm_piece[idx].start = start;
+                        settings.spindle.pwm_piece[idx].end = end;
+                    } else
+                        return Status_InvalidStatement;
+                }
+                break;
+#endif
+
             case Setting_SpindlePGain:
                 settings.spindle.pid.p_gain = value;
                 break;
@@ -734,10 +781,8 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
 
             default:;
             	status_code_t status;
-                if(hal.driver_setting && (status = hal.driver_setting(setting, value, svalue)) != Status_Unhandled)
-                    return status;
-                else
-                    return Status_InvalidStatement;
+                if(hal.driver_setting && (status = hal.driver_setting(setting, value, svalue)) != Status_OK)
+                    return status == Status_Unhandled ? Status_InvalidStatement : status;
         }
     }
 

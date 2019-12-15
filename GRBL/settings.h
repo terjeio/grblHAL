@@ -23,25 +23,24 @@
 #ifndef settings_h
 #define settings_h
 
+#include "config.h"
 #include "system.h"
 
 // Version of the persistent storage data. Will be used to migrate existing data from older versions of Grbl
 // when firmware is upgraded. Always stored in byte 0 of eeprom
-#define SETTINGS_VERSION 14  // NOTE: Check settings_reset() when moving to next version.
+#define SETTINGS_VERSION 15  // NOTE: Check settings_reset() when moving to next version.
 
 // Define persistent storage memory address location values for Grbl settings and parameters
 // NOTE: 1KB persistent storage is the minimum required. The upper half is reserved for parameters and
 // the startup script. The lower half contains the global settings and space for future
 // developments.
 #define EEPROM_ADDR_GLOBAL         1U
-#ifdef ENABLE_BACKLASH_COMPENSATION
-#define EEPROM_ADDR_TOOL_TABLE     300U
-#else
-#define EEPROM_ADDR_TOOL_TABLE     256U
-#endif
 #define EEPROM_ADDR_PARAMETERS     512U
-#define EEPROM_ADDR_STARTUP_BLOCK  768U
 #define EEPROM_ADDR_BUILD_INFO     942U
+#define EEPROM_ADDR_STARTUP_BLOCK  (EEPROM_ADDR_BUILD_INFO - 1 - N_STARTUP_LINE * (MAX_STORED_LINE_LENGTH + 1))
+#ifdef N_TOOLS
+#define EEPROM_ADDR_TOOL_TABLE     (EEPROM_ADDR_PARAMETERS - 1 - N_TOOLS * (sizeof(tool_data_t) + 1))
+#endif
 
 // Define persistent storage address indexing for coordinate parameters
 #if COMPATIBILITY_LEVEL <= 1
@@ -49,14 +48,14 @@
 #else
 #define N_COORDINATE_SYSTEM 6  // Number of supported work coordinate systems (from index 1)
 #endif
-#define SETTING_INDEX_NCOORD N_COORDINATE_SYSTEM+2 // Total number of coordinate system stored (from index 0)
+#define SETTING_INDEX_NCOORD (N_COORDINATE_SYSTEM + 2)  // Total number of coordinate system stored (from index 0)
 // NOTE: Work coordinate indices are (0=G54, 1=G55, ... , 6=G59)
-#define SETTING_INDEX_G28    N_COORDINATE_SYSTEM    // Home position 1
-#define SETTING_INDEX_G30    N_COORDINATE_SYSTEM+1  // Home position 2
+#define SETTING_INDEX_G28    N_COORDINATE_SYSTEM        // Home position 1
+#define SETTING_INDEX_G30    (N_COORDINATE_SYSTEM + 1)  // Home position 2
 #if N_COORDINATE_SYSTEM >= 9
-#define SETTING_INDEX_G59_3  N_COORDINATE_SYSTEM-1  // G59.3 position
+#define SETTING_INDEX_G59_3  (N_COORDINATE_SYSTEM - 1)  // G59.3 position
 #endif
-#define SETTING_INDEX_G92    N_COORDINATE_SYSTEM+2  // Coordinate offset
+#define SETTING_INDEX_G92    (N_COORDINATE_SYSTEM + 2)  // Coordinate offset
 
 typedef enum {
     SettingIndex_G54 = 0,
@@ -155,7 +154,12 @@ typedef enum {
     Setting_HoldActions = 63,
     Setting_ForceInitAlarm = 64,
     Setting_ProbingFeedOverride = 65,
-
+// Optional driver implemented settings for piecewise linear spindle PWM algorithm
+    Setting_LinearSpindlePiece1 = 66,
+    Setting_LinearSpindlePiece2 = 67,
+    Setting_LinearSpindlePiece3 = 68,
+    Setting_LinearSpindlePiece4 = 69,
+//
 #endif
 
 // Optional driver implemented settings for additional streams
@@ -197,31 +201,31 @@ typedef enum {
     Setting_TrinamicDriver = 256,
     Setting_TrinamicHoming = 257,
 
-	// Normally used for Ethernet or WiFi Station
-	Setting_Hostname = 300,
-	Setting_IpAddress = 301,
-	Setting_Gateway = 302,
-	Setting_NetMask = 303,
-	Setting_IpMode = 304,
+    // Normally used for Ethernet or WiFi Station
+    Setting_Hostname = 300,
+    Setting_IpMode = 301,
+    Setting_IpAddress = 302,
+    Setting_Gateway = 303,
+    Setting_NetMask = 304,
     Setting_TelnetPort = 305,
     Setting_HttpPort = 306,
     Setting_WebSocketPort = 307,
 
-	// Normally used for WiFi Access Point
-	Setting_Hostname2 = 310,
-	Setting_IpAddress2 = 311,
-	Setting_Gateway2 = 312,
-	Setting_NetMask2 = 313,
-	Setting_IpMode2 = 314,
+    // Normally used for WiFi Access Point
+    Setting_Hostname2 = 310,
+    Setting_IpMode2 = 311,
+    Setting_IpAddress2 = 312,
+    Setting_Gateway2 = 313,
+    Setting_NetMask2 = 314,
     Setting_TelnetPort2 = 315,
     Setting_HttpPort2 = 316,
     Setting_WebSocketPort2 = 317,
 
-	Setting_Hostname3 = 320,
-	Setting_IpAddress3 = 321,
-	Setting_Gateway3 = 322,
-	Setting_NetMask3 = 323,
-	Setting_IpMode3 = 324,
+    Setting_Hostname3 = 320,
+    Setting_IpMode3 = 321,
+    Setting_IpAddress3 = 322,
+    Setting_Gateway3 = 323,
+    Setting_NetMask3 = 324,
     Setting_TelnetPort3 = 325,
     Setting_HttpPort3 = 326,
     Setting_WebSocketPort3 = 327,
@@ -229,7 +233,7 @@ typedef enum {
     Setting_AdminPassword = 330,
     Setting_UserPassword = 331,
 
-	Setting_SettingsMax
+    Setting_SettingsMax
 //
 } setting_type_t;
 
@@ -276,11 +280,11 @@ typedef union {
                 sleep_enable                    :1,
                 disable_laser_during_hold       :1,
                 force_initialization_alarm      :1,
-                wifi_ap_mode                    :1,
+                unassigned0                     :1,
                 allow_probing_feed_override     :1,
                 report_alarm_substate           :1,
                 restore_after_feed_hold         :1,
-                unassigned                      :1,
+                unassigned1                     :1,
                 force_buffer_sync_on_wco_change :1,
                 lathe_mode                      :1;
     };
@@ -291,12 +295,12 @@ typedef union {
     struct {
         uint8_t machine_position  :1,
                 buffer_state      :1,
-				line_numbers      :1,
-				feed_speed        :1,
-				pin_state         :1,
-				work_coord_offset :1,
-				overrides         :1,
-				probe_coordinates :1;
+                line_numbers      :1,
+                feed_speed        :1,
+                pin_state         :1,
+                work_coord_offset :1,
+                overrides         :1,
+                probe_coordinates :1;
     };
 } reportmask_t;
 
@@ -338,6 +342,7 @@ typedef struct {
     float pwm_off_value;
     float pwm_min_value;
     float pwm_max_value;
+    pwm_piece_t pwm_piece[SPINDLE_NPWM_PIECES];
     pid_values_t pid;
     uint16_t ppr; // Spindle encoder pulses per revolution
     spindle_state_t invert;
@@ -420,12 +425,11 @@ typedef struct {
     spindle_settings_t spindle;
     stepper_settings_t steppers;
     reportmask_t status_report; // Mask to indicate desired report data.
-    settingflags_t flags;  // Contains default boolean settings
-    uint8_t stream_deprecated; // no longer used, kept for now for backwards compatibility
+    settingflags_t flags;       // Contains default boolean settings
     homing_settings_t homing;
     limit_settings_t limits;
     parking_settings_t parking;
-    position_pid_t position; // Used for synchronized motion
+    position_pid_t position;    // Used for synchronized motion
 } settings_t;
 
 // Setting structs that may be used by drivers
@@ -440,8 +444,8 @@ typedef struct {
 } jog_settings_t;
 
 typedef enum {
-	IpMode_Static = 0,
-	IpMode_DHCP,
+    IpMode_Static = 0,
+    IpMode_DHCP,
     IpMode_AutoIP
 } ip_mode_t;
 
@@ -475,23 +479,23 @@ typedef struct {
 } network_settings_t;
 
 typedef enum {
-	WiFiMode_NULL = 0,
-	WiFiMode_STA,
-	WiFiMode_AP,
-	WiFiMode_APSTA
+    WiFiMode_NULL = 0,
+    WiFiMode_STA,
+    WiFiMode_AP,
+    WiFiMode_APSTA
 } grbl_wifi_mode_t;
 
 typedef struct {
-	ssid_t ssid;
-	password_t password;
+    ssid_t ssid;
+    password_t password;
     char country[4];
     uint8_t channel;
     network_settings_t network;
 } wifi_ap_settings_t;
 
 typedef struct {
-	ssid_t ssid;
-	password_t password;
+    ssid_t ssid;
+    password_t password;
     network_settings_t network;
 } wifi_sta_settings_t;
 

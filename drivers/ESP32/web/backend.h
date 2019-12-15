@@ -34,15 +34,20 @@
 #define SCRATCH_BUFSIZE  8192
 
 typedef char fs_scratch_t[SCRATCH_BUFSIZE];
+typedef char fs_path_t[ESP_VFS_PATH_MAX + 1];
+typedef char fs_filename_t[CONFIG_SPIFFS_OBJ_NAME_LEN + 1];
+typedef char fs_filepath_t[ESP_VFS_PATH_MAX + CONFIG_SPIFFS_OBJ_NAME_LEN + 1];
+typedef char fs_queryarg_t[100];
 
 typedef struct {
-    char base_path[ESP_VFS_PATH_MAX + 1];
+	fs_path_t base_path;
     fs_scratch_t scratch;
 } file_server_data_t;
 
 bool httpdaemon_start(network_settings_t *network);
 void httpdaemon_stop();
 esp_err_t set_content_type_from_file(httpd_req_t *req, const char *filename);
+char *http_get_key_value (char *qstring, char *key, char *s, size_t val_size);
 
 #endif
 

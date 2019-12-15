@@ -55,12 +55,9 @@ const static int CONNECTED_BIT = BIT0;
 const static int SCANNING_BIT = BIT1;
 const static int APSTA_BIT = BIT2;
 
-const static char *TAG = "grbl wifi";
-
 static network_services_t services = {0};
 static wifi_config_t wifi_sta_config;
 static SemaphoreHandle_t aplist_mutex = NULL;
-
 static ap_list_t ap_list = {0};
 
 ap_list_t *wifi_get_aplist (void)
@@ -545,6 +542,22 @@ status_code_t wifi_setting (uint_fast16_t param, float value, char *svalue)
 				status = Status_InvalidStatement; // too long...
 			break;
 
+#if AUTH_ENABLE
+		case Setting_AdminPassword:
+			if(is_valid_password(svalue) && strlcpy(driver_settings.wifi.admin_password, svalue, sizeof(password_t)) <= sizeof(password_t))
+				status = Status_OK;
+			else
+				status = Status_InvalidStatement; // too long...
+			break;
+
+		case Setting_UserPassword:
+			if(is_valid_password(svalue) && strlcpy(driver_settings.wifi.user_password, svalue, sizeof(password_t)) <= sizeof(password_t))
+				status = Status_OK;
+			else
+				status = Status_InvalidStatement; // too long...
+			break;
+#endif
+
 #if NETWORK_IPMODE_STATIC || true
 
 		case Setting_IpAddress:
@@ -781,6 +794,16 @@ void wifi_settings_report (setting_type_t setting)
 			break;
 #endif
 
+#if AUTH_ENABLE
+		case Setting_AdminPassword:
+			report_string_setting(setting, hal.stream.type == StreamType_Serial ? driver_settings.wifi.admin_password : HIDDEN_PASSWORD);
+			break;
+
+		case Setting_UserPassword:
+			report_string_setting(setting, hal.stream.type == StreamType_Serial ? driver_settings.wifi.user_password : HIDDEN_PASSWORD);
+			break;
+#endif
+
 		default:
 			break;
 	}
@@ -843,7 +866,6 @@ void wifi_settings_restore (void)
 	driver_settings.wifi.ap.network.http_port = NETWORK_HTTP_PORT;
 	driver_settings.wifi.sta.network.websocket_port =
 	driver_settings.wifi.ap.network.websocket_port = NETWORK_WEBSOCKET_PORT;
-
 
 #if TELNET_ENABLE
 	driver_settings.wifi.sta.network.services.telnet =

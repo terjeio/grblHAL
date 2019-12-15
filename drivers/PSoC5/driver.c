@@ -367,7 +367,7 @@ static bool driver_setup (settings_t *settings)
     DelayTimer_Interrupt_Enable();
     DelayTimer_Start();
 
-    IOInitDone = settings->version == 14;
+    IOInitDone = settings->version == 15;
 
     hal.spindle_set_state((spindle_state_t){0}, 0.0f);
     hal.coolant_set_state((coolant_state_t){0});

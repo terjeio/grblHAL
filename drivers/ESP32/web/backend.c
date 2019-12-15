@@ -67,9 +67,6 @@ static stream_write_ptr org_stream;
 
 static const char *TAG = "httpd_server";
 
-/* Max length a file path can have on storage */
-#define FILE_PATH_MAX (ESP_VFS_PATH_MAX + CONFIG_SPIFFS_OBJ_NAME_LEN)
-
 /* Max size of an individual file. Make sure this
  * value is same as that set in upload_script.html */
 #define MAX_FILE_SIZE   (200*1024) // 200 KB
@@ -100,8 +97,7 @@ static esp_err_t favicon_get_handler(httpd_req_t *req)
     extern const unsigned char favicon_ico_end[]   asm("_binary_favicon_ico_end");
     const size_t favicon_ico_size = (favicon_ico_end - favicon_ico_start);
     httpd_resp_set_type(req, "image/x-icon");
-    httpd_resp_send(req, (const char *)favicon_ico_start, favicon_ico_size);
-    return ESP_OK;
+    return httpd_resp_send(req, (const char *)favicon_ico_start, favicon_ico_size);
 }
 
 static esp_err_t index_html_get_handler(httpd_req_t *req)
@@ -112,8 +108,7 @@ static esp_err_t index_html_get_handler(httpd_req_t *req)
     extern const unsigned char index_html_start[] asm("_binary_index_html_start");
     extern const unsigned char index_html_end[]   asm("_binary_index_html_end");
     const size_t index_html_size = (index_html_end - index_html_start);
-    httpd_resp_send(req, (const char *)index_html_start, index_html_size);
-    return ESP_OK;
+    return httpd_resp_send(req, (const char *)index_html_start, index_html_size);
 #endif
 }
 
@@ -121,8 +116,7 @@ static esp_err_t ap_login_html_get_handler(httpd_req_t *req)
 {
     extern const unsigned char ap_login_html_start[] asm("_binary_ap_login_html_start");
     extern const unsigned char ap_login_html_end[]   asm("_binary_ap_login_html_end");
-    httpd_resp_send(req, (const char *)ap_login_html_start, ap_login_html_end - ap_login_html_start);
-    return ESP_OK;
+    return httpd_resp_send(req, (const char *)ap_login_html_start, ap_login_html_end - ap_login_html_start);
 }
 
 #define IS_FILE_EXT(filename, ext) \
@@ -146,6 +140,19 @@ esp_err_t set_content_type_from_file(httpd_req_t *req, const char *filename)
     /* This is a limited set only */
     /* For any other type always set as plain text */
     return httpd_resp_set_type(req, "text/plain");
+}
+
+// Fetch and decode value for query key
+char *http_get_key_value (char *qstring, char *key, char *val, size_t val_size)
+{
+	if(httpd_query_key_value(qstring, key, val, val_size) == ESP_OK)
+		urldecode(val, val);
+	else {
+		*val = '\0';
+		val = NULL;
+	}
+
+	return val;
 }
 
 /* Copies the full path into destination buffer and returns
@@ -210,9 +217,9 @@ static bool getPayload (httpd_req_t *req, char *buf)
 	return true;
 }
 
-esp_err_t spiffs_get_handler(httpd_req_t *req)
+esp_err_t spiffs_get_handler (httpd_req_t *req)
 {
-    char filepath[FILE_PATH_MAX];
+	fs_filepath_t filepath;
     const char *filename = get_path_from_uri(filepath, req, sizeof(filepath));
 
 	if (!filename) {
@@ -275,14 +282,12 @@ esp_err_t spiffs_get_handler(httpd_req_t *req)
 
 #if SDCARD_ENABLE
 
-static esp_err_t sdcard_get_handler(httpd_req_t *req)
+static esp_err_t sdcard_get_handler (httpd_req_t *req)
 {
-    char filepath[FILE_PATH_MAX];
+	fs_filepath_t filepath;
     const char *filename = get_path_from_uri(filepath, req, sizeof(filepath));
 
  //   sdcard_getfs(); // ensure card is mounted
-
-	ESP_LOGE(TAG, "%s - %s", req->uri, filename);
 
 	if (!filename) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Filename too long");
@@ -432,7 +437,7 @@ static esp_err_t get_handler(httpd_req_t *req)
 		}
 	}
 
-    char filepath[FILE_PATH_MAX];
+	fs_filepath_t filepath;
     const char *filename = get_path_from_uri(filepath, req, sizeof(filepath));
 
 #if SDCARD_ENABLE
@@ -805,6 +810,11 @@ static const httpd_uri_t basic_handlers[] = {
     { .uri      = "/command",
       .method   = HTTP_GET,
       .handler  = webui_http_command_handler,
+      .user_ctx = NULL
+    },
+    { .uri      = "/login",
+      .method   = HTTP_GET,
+      .handler  = webui_login_handler,
       .user_ctx = NULL
     },
 #endif

@@ -63,9 +63,10 @@ typedef struct {
     float rpm_factor;
     float pulse_distance;                   // Encoder pulse distance in fraction of one revolution
     float timer_resolution;                 // Timer resolution (seconds per tick)
+    float rpm;                              // Last RPM, only available when spindle PID is enabled
     volatile uint32_t timer_value_index;    // Timer value at last encoder index pulse
     volatile uint32_t timer_value_last;     // Timer value at last encoder pulse
-    volatile uint32_t timer_value_step;     // Timer value at last stepper timeout TODO: not needed?
+//    volatile uint32_t timer_value_step;     // Timer value at last stepper timeout TODO: not needed?
     volatile uint32_t tpp;                  // Last timer tics per spindle encoder pulse
     uint32_t maximum_tt;                    // Maximum timer tics since last spindle encoder pulse before RPM = 0 is returned
     uint32_t pulse_counter_trigger;         // Number of encoder pulses per interrupt generated
@@ -99,7 +100,7 @@ static uint8_t probe_invert;
 static axes_signals_t next_step_outbits;
 static spindle_pwm_t spindle_pwm;
 static spindle_data_t spindle_data;
-static spindle_encoder_t spindle_encoder;
+static spindle_encoder_t spindle_encoder = {0};
 static spindle_sync_t spindle_tracker;
 static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
 
@@ -623,6 +624,7 @@ static void spindleSetStateVariable (spindle_state_t state, float rpm)
         if(delay.ms == 0)
             SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
         spindle_encoder.pid_state = PIDState_Disabled;
+        spindle_encoder.rpm = 0.0f;
         spindle_encoder.pid.error = 0.0f;
         spindle_encoder.pid.i_error = 0.0f;
         spindle_encoder.pid.d_error = 0.0f;
@@ -647,9 +649,9 @@ static void spindleSetStateVariable (spindle_state_t state, float rpm)
     spindle_data.rpm_programmed = spindle_data.rpm = rpm;
 }
 
-inline static float spindle_calc_rpm (void)
+inline static float spindle_calc_rpm (uint32_t tpp)
 {
-    return 1.0f / ((float)spindle_encoder.tpp * spindle_encoder.rpm_factor);
+    return spindle_encoder.rpm_factor / (float)tpp;
 }
 
 static spindle_data_t spindleGetData (spindle_data_request_t request)
@@ -672,7 +674,7 @@ static spindle_data_t spindleGetData (spindle_data_request_t request)
 
         case SpindleData_RPM:
             if(!stopped)
-                spindle_data.rpm = spindle_calc_rpm();
+                spindle_data.rpm = spindle_encoder.pid.enabled ? spindle_encoder.rpm : spindle_calc_rpm(spindle_encoder.tpp);
             break;
 
         case SpindleData_AngularPosition:
@@ -686,12 +688,12 @@ static spindle_data_t spindleGetData (spindle_data_request_t request)
     return spindle_data;
 }
 
-inline static void spindle_rpm_pid (void)
+inline static void spindle_rpm_pid (uint32_t tpp)
 {
     spindleLock = true;
 
-    float rpm = spindle_calc_rpm();
-    float error = pid(&spindle_encoder.pid, spindle_data.rpm_programmed, rpm, 1.0);
+    spindle_encoder.rpm = spindle_calc_rpm(tpp);
+    float error = pid(&spindle_encoder.pid, spindle_data.rpm_programmed, spindle_encoder.rpm, 1.0);
 
 #ifdef sPID_LOG
     if(sys.pid_log.idx < PID_LOG) {
@@ -718,7 +720,8 @@ static void spindleDataReset (void)
 
 //    if(spindleGetData(SpindleData_RPM).rpm > 0.0f) // wait for index pulse if running
 //        while(index_count != spindle_data.index_count);
-    spindle_encoder.pid_state = PIDState_Pending;
+    if(spindle_encoder.pid.enabled)
+        spindle_encoder.pid_state = PIDState_Pending;
 
     RPM_TIMER->LOAD = 0; // Reload RPM timer
     RPM_COUNTER->CTL = 0;
@@ -870,6 +873,8 @@ static void modeEnable (void)
 // Configure perhipherals when settings are initialized or changed
 void settings_changed (settings_t *settings)
 {
+    uint_fast8_t idx;
+
     if((hal.driver_cap.variable_spindle = settings->spindle.rpm_min < settings->spindle.rpm_max)) {
         if(settings->spindle.pwm_freq > 200.0f)
             SPINDLE_PWM_TIMER->CTL &= ~TIMER_A_CTL_ID__8;
@@ -888,19 +893,24 @@ void settings_changed (settings_t *settings)
     }
 
     if((spindle_encoder.pid.enabled = hal.spindle_get_data && settings->spindle.pid.p_gain != 0.0f)) {
-        memcpy(&spindle_encoder.pid.cfg, &settings->spindle.pid, sizeof(pid_values_t));
-        spindle_encoder.pid.cfg.i_max_error = spindle_encoder.pid.cfg.i_max_error / settings->spindle.pid.i_gain; // Makes max value sensible?
-        SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
-    }
+        if(memcmp(&spindle_encoder.pid.cfg, &settings->spindle.pid, sizeof(pid_values_t)) != 0) {
+            spindle_set_state((spindle_state_t){0}, 0.0f);
+            memcpy(&spindle_encoder.pid.cfg, &settings->spindle.pid, sizeof(pid_values_t));
+      //      spindle_encoder.pid.cfg.i_max_error = spindle_encoder.pid.cfg.i_max_error / settings->spindle.pid.i_gain; // Makes max value sensible?
+            SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
+        }
+    } else
+        spindle_encoder.pid_state = PIDState_Disabled;
 
     if(hal.spindle_get_data && spindle_encoder.ppr != settings->spindle.ppr) {
+        spindle_set_state((spindle_state_t){0}, 0.0f);
         spindle_encoder.ppr = settings->spindle.ppr;
         spindle_encoder.pulse_counter_trigger = 4;
         spindle_encoder.pulse_distance = 1.0f / spindle_encoder.ppr;
         spindle_encoder.tpp = 0;
         spindle_encoder.timer_resolution = 1.0f / (float)(SystemCoreClock / 16);
         spindle_encoder.maximum_tt = (uint32_t)(0.25f / spindle_encoder.timer_resolution) * spindle_encoder.pulse_counter_trigger; // 250 mS
-        spindle_encoder.rpm_factor = (spindle_encoder.timer_resolution * (float)spindle_encoder.ppr) / 60.0f;
+        spindle_encoder.rpm_factor = 60.0f / ((spindle_encoder.timer_resolution * (float)spindle_encoder.ppr));
         NVIC_EnableIRQ(RPM_INDEX_INT);
         spindleDataReset();
         //        spindle_data.rpm = 60.0f / ((float)(spindle_encoder.tpp * spindle_encoder.ppr) * spindle_encoder.timer_resolution); // TODO: get rid of division
@@ -909,18 +919,14 @@ void settings_changed (settings_t *settings)
     if(!hal.spindle_get_data)
         NVIC_DisableIRQ(RPM_INDEX_INT);
 
-#if (STEP_OUTMODE == GPIO_MAP) || (DIRECTION_OUTMODE == GPIO_MAP)
-    uint_fast8_t i;
-#endif
-
 #if STEP_OUTMODE == GPIO_MAP
-    for(i = 0; i < sizeof(step_outmap); i++)
-        step_outmap[i] = c_step_outmap[i] ^ c_step_outmap[settings->steppers.step_invert.mask];
+    for(idx = 0; idx < sizeof(step_outmap); idx++)
+        step_outmap[idx] = c_step_outmap[idx] ^ c_step_outmap[settings->steppers.step_invert.mask];
 #endif
 
 #if DIRECTION_OUTMODE == GPIO_MAP
-    for(i = 0; i < sizeof(dir_outmap); i++)
-        dir_outmap[i] = c_dir_outmap[i] ^ c_dir_outmap[settings->steppers.dir_invert.mask];
+    for(idx = 0; idx < sizeof(dir_outmap); idx++)
+        dir_outmap[idx] = c_dir_outmap[idx] ^ c_dir_outmap[settings->steppers.dir_invert.mask];
 #endif
 
     if(IOInitDone) {
@@ -1065,7 +1071,7 @@ void settings_changed (settings_t *settings)
             BITBAND_PERI(MODE_PORT->OUT, MODE_SWITCH_PIN) = 1;
             BITBAND_PERI(MODE_PORT->REN, MODE_SWITCH_PIN) = 1;
             BITBAND_PERI(MODE_PORT->DIR, MODE_SWITCH_PIN) = 0;
-            // Delay mode enable a bit so grbl can finish statup and MPG controller can check ready status
+            // Delay mode enable a bit so grbl can finish startup and MPG controller can check ready status
             hal.delay_ms(50, modeEnable);
         }
 #endif
@@ -1227,7 +1233,7 @@ static bool driver_setup (settings_t *settings)
 
 #endif
 
-    IOInitDone = settings->version == 14;
+    IOInitDone = settings->version == 15;
 
     settings_changed(settings);
 
@@ -1240,17 +1246,20 @@ static bool driver_setup (settings_t *settings)
 
 #ifdef DRIVER_SETTINGS
 
-static status_code_t driver_setting (setting_type_t param, float value, char *svalue)
+#include <stdio.h>
+
+static status_code_t driver_setting (setting_type_t setting, float value, char *svalue)
 {
     status_code_t status = Status_Unhandled;
 
 #if KEYPAD_ENABLE
-    status = keypad_setting(param, value, svalue);
+    if(status == Status_Unhandled)
+        status = keypad_setting(setting, value, svalue);
 #endif
 
 #if TRINAMIC_ENABLE
     if(status == Status_Unhandled)
-        status = trinamic_setting(param, value, svalue);
+        status = trinamic_setting(setting, value, svalue);
 #endif
 
     if(status == Status_OK)
@@ -1264,6 +1273,7 @@ static void driver_settings_report (setting_type_t setting)
 #if KEYPAD_ENABLE
     keypad_settings_report(setting);
 #endif
+
 #if TRINAMIC_ENABLE
     trinamic_settings_report(setting);
 #endif
@@ -1274,13 +1284,29 @@ void driver_settings_restore (void)
 #if KEYPAD_ENABLE
     keypad_settings_restore();
 #endif
+
 #if TRINAMIC_ENABLE
     trinamic_settings_restore();
 #endif
     hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
 }
 
+#endif // DRIVER_SETTINGS
+
+static void driver_rt_report (stream_write_ptr stream_write, report_tracking_flags_t report)
+{
+#ifdef ENABLE_SPINDLE_LINEARIZATION
+    if(report.pwm) {
+        char sbuf[20];
+        sprintf(sbuf, "|PWM:%d", settings.spindle.invert.pwm ? spindle_pwm.period - SPINDLE_PWM_TIMER->CCR[2] - 1 : SPINDLE_PWM_TIMER->CCR[2]);
+        stream_write(sbuf);
+    }
 #endif
+
+#if TRINAMIC_ENABLE
+    trinamic_RTReport(stream_write, report);
+#endif
+}
 
 // Initialize HAL pointers, setup serial comms and enable EEPROM
 // NOTE: Grbl is not yet configured (from EEPROM data), driver_setup() will be called when done
@@ -1364,29 +1390,23 @@ bool driver_init (void)
 #endif
 
 #ifdef DRIVER_SETTINGS
-  #if !TRINAMIC_ENABLE
-    assert(EEPROM_ADDR_TOOL_TABLE - (sizeof(driver_settings_t) + 2) > EEPROM_ADDR_GLOBAL + sizeof(settings_t) + 1);
-    hal.eeprom.driver_area.address = EEPROM_ADDR_TOOL_TABLE - (sizeof(driver_settings_t) + 2);
-  #else
     hal.eeprom.driver_area.address = GRBL_EEPROM_SIZE;
-  #endif
     hal.eeprom.driver_area.size = sizeof(driver_settings_t);
     hal.eeprom.size = GRBL_EEPROM_SIZE + sizeof(driver_settings_t) + 1;
 
     hal.driver_setting = driver_setting;
     hal.driver_settings_report = driver_settings_report;
     hal.driver_settings_restore = driver_settings_restore;
-
 #endif
 
 #if TRINAMIC_ENABLE
     hal.user_mcode_check = trinamic_MCodeCheck;
     hal.user_mcode_validate = trinamic_MCodeValidate;
     hal.user_mcode_execute = trinamic_MCodeExecute;
-    hal.driver_rt_report = trinamic_RTReport;
     hal.driver_axis_settings_report = trinamic_axis_settings_report;
 #endif
 
+    hal.driver_rt_report = driver_rt_report;
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
@@ -1412,6 +1432,7 @@ bool driver_init (void)
     hal.driver_cap.spindle_pid = On;
     hal.driver_cap.variable_spindle = On;
     hal.driver_cap.spindle_pwm_invert = On;
+    hal.driver_cap.spindle_pwm_linearization = On;
     hal.driver_cap.mist_control = On;
     hal.driver_cap.software_debounce = On;
     hal.driver_cap.step_pulse_delay = On;
@@ -1433,7 +1454,7 @@ bool driver_init (void)
 void STEPPER_IRQHandler (void)
 {
     STEPPER_TIMER->INTCLR = 0;
-    spindle_encoder.timer_value_step = RPM_TIMER->VALUE; // to be used for spindle synchronized motion?
+//    spindle_encoder.timer_value_step = RPM_TIMER->VALUE; // to be used for spindle synchronized motion?
     hal.stepper_interrupt_callback();
 }
 
@@ -1472,7 +1493,7 @@ void DEBOUNCE_IRQHandler (void)
     DEBOUNCE_TIMER->CCTL[0] &= ~TIMER_A_CCTLN_CCIFG; // Clear interrupt flag and
     DEBOUNCE_TIMER->CTL &= ~(TIMER_A_CTL_MC0|TIMER_A_CTL_MC1); // stop debounce timer
 
-    axes_signals_t state = (axes_signals_t)limitsGetState();
+    axes_signals_t state = limitsGetState();
 
     if(state.mask) //TODO: add check for limit switches having same state as when limit_isr were invoked?
         hal.limit_interrupt_callback(state);
@@ -1657,20 +1678,35 @@ void TRINAMIC_DIAG_IRQHandler (void)
 // Interrupt handler for 1 ms interval timer
 void SysTick_Handler (void)
 {
-    static uint32_t spid = SPINDLE_PID_SAMPLE_RATE;
+    static uint32_t spid = SPINDLE_PID_SAMPLE_RATE, tpp = 0;
 
     switch(spindle_encoder.pid_state) {
 
         case PIDState_Pending:
+            if(pid_count == 0) {
+                tpp = 0;
+                spid = SPINDLE_PID_SAMPLE_RATE;
+            }
+
             if(pid_count < 500)
                 pid_count++;
             else if(spindle_data.index_count > 2)
                 spindle_encoder.pid_state = PIDState_Active;
+
+            tpp += spindle_encoder.tpp;
+
+            if(--spid == 0) {
+                spindle_encoder.rpm = spindle_calc_rpm(tpp / SPINDLE_PID_SAMPLE_RATE);
+                tpp = 0;
+                spid = SPINDLE_PID_SAMPLE_RATE;
+            }
             break;
 
         case PIDState_Active:
+            tpp += spindle_encoder.tpp;
             if(--spid == 0) {
-                spindle_rpm_pid();
+                spindle_rpm_pid(tpp / SPINDLE_PID_SAMPLE_RATE);
+                tpp = 0;
                 spid = SPINDLE_PID_SAMPLE_RATE;
             }
             break;

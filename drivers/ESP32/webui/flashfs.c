@@ -180,7 +180,7 @@ static message_code_t trap_feedback_message (message_code_t message_code)
     return message_code;
 }
 
-static void flashfs_report (stream_write_ptr stream_write)
+static void flashfs_report (stream_write_ptr stream_write, report_tracking_flags_t report)
 {
     stream_write("|SD:");
     stream_write(ftoa((float)file.pos / (float)file.size * 100.0f, 1));

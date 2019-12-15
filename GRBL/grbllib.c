@@ -87,7 +87,6 @@ int grbl_enter (void)
 {
 #ifdef N_TOOLS
     assert(EEPROM_ADDR_GLOBAL + sizeof(settings_t) + 1 < EEPROM_ADDR_TOOL_TABLE);
-    assert(EEPROM_ADDR_TOOL_TABLE + N_TOOLS * (sizeof(tool_data_t) + 1) < EEPROM_ADDR_PARAMETERS);
 #else
     assert(EEPROM_ADDR_GLOBAL + sizeof(settings_t) + 1 < EEPROM_ADDR_PARAMETERS);
 #endif
@@ -157,6 +156,10 @@ int grbl_enter (void)
     sys.message = NULL;
 
     driver_ok = driver_ok && hal.driver_setup(&settings);
+
+#ifdef ENABLE_SPINDLE_LINEARIZATION
+    driver_ok = driver_ok && hal.driver_cap.spindle_pwm_linearization;
+#endif
 
     if(!driver_ok) {
         hal.stream.write("GrblHAL: incompatible driver\r\n");

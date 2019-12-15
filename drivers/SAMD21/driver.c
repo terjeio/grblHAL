@@ -778,7 +778,7 @@ static bool driver_setup (settings_t *settings)
 
  // Set defaults
 
-    IOInitDone = settings->version == 14;
+    IOInitDone = settings->version == 15;
 
     settings_changed(settings);
 

@@ -34,6 +34,8 @@
 #endif
 #endif
 
+#if TRINAMIC_ENABLE
+
 #define tmc_write_register(axis, reg, val) { TMC2130_datagram_t *p = TMC2130_GetRegPtr(&stepper[axis], reg); p->payload.value = val; TMC2130_WriteRegister(&stepper[ axis], p); }
 
 #define tmc_stealthChop(axis, val)      { stepper[axis].gconf.reg.en_pwm_mode = val; TMC2130_WriteRegister(&stepper[axis], (TMC2130_datagram_t *)&stepper[axis].gconf); }
@@ -158,6 +160,8 @@ void trinamic_warn_handler (void);
 user_mcode_t trinamic_MCodeCheck (user_mcode_t mcode);
 status_code_t trinamic_MCodeValidate (parser_block_t *gc_block, uint32_t *value_words);
 void trinamic_MCodeExecute (uint_fast16_t state, parser_block_t *gc_block);
-void trinamic_RTReport (stream_write_ptr stream_write);
+void trinamic_RTReport (stream_write_ptr stream_write, report_tracking_flags_t report);
+
+#endif
 
 #endif

@@ -39,31 +39,32 @@
 typedef union {
     uint32_t value;
     struct {
-        uint32_t mist_control            :1,
-                 variable_spindle        :1,
-                 safety_door             :1,
-                 spindle_dir             :1,
-                 software_debounce       :1,
-                 step_pulse_delay        :1,
-                 limits_pull_up          :1,
-                 control_pull_up         :1,
-                 probe_pull_up           :1,
-                 amass_level             :2, // 0...3
-                 program_stop            :1,
-                 spindle_at_speed        :1,
-                 laser_ppi_mode          :1,
-                 spindle_sync            :1,
-                 sd_card                 :1,
-                 bluetooth               :1,
-                 ethernet                :1,
-                 wifi                    :1,
-                 spindle_pwm_invert      :1,
-                 spindle_pid             :1,
-                 axis_ganged_x           :1,
-                 axis_ganged_y           :1,
-                 axis_ganged_z           :1,
-                 mpg_mode                :1,
-                 unassigned              :7;
+        uint32_t mist_control              :1,
+                 variable_spindle          :1,
+                 safety_door               :1,
+                 spindle_dir               :1,
+                 software_debounce         :1,
+                 step_pulse_delay          :1,
+                 limits_pull_up            :1,
+                 control_pull_up           :1,
+                 probe_pull_up             :1,
+                 amass_level               :2, // 0...3
+                 program_stop              :1,
+                 spindle_at_speed          :1,
+                 laser_ppi_mode            :1,
+                 spindle_sync              :1,
+                 sd_card                   :1,
+                 bluetooth                 :1,
+                 ethernet                  :1,
+                 wifi                      :1,
+                 spindle_pwm_invert        :1,
+                 spindle_pid               :1,
+                 axis_ganged_x             :1,
+                 axis_ganged_y             :1,
+                 axis_ganged_z             :1,
+                 mpg_mode                  :1,
+                 spindle_pwm_linearization :1,
+                 unassigned                :6;
     };
 } driver_cap_t;
 
@@ -149,7 +150,7 @@ typedef struct HAL {
     void (*user_mcode_execute)(uint_fast16_t state, parser_block_t *gc_block);
     status_code_t (*user_command_execute)(char *line);
     void (*driver_rt_command_execute)(uint8_t cmd);
-    void (*driver_rt_report)(stream_write_ptr stream_write);
+    void (*driver_rt_report)(stream_write_ptr stream_write, report_tracking_flags_t report);
     void (*driver_feedback_message)(stream_write_ptr stream_write);
     status_code_t (*driver_sys_command_execute)(uint_fast16_t state, char *line, char *lcline); // return Status_Unhandled
     bool (*get_position)(int32_t (*position)[N_AXIS]);

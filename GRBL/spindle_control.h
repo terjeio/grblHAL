@@ -51,10 +51,8 @@ typedef struct {
     uint_fast16_t min_value;
     uint_fast16_t max_value;
     float pwm_gradient;
-#if SPINDLE_RPM_PIECES
     uint_fast16_t n_pieces;
-    pwm_piece_t pieces[SPINDLE_RPM_PIECES];
-#endif
+    pwm_piece_t piece[SPINDLE_NPWM_PIECES];
 } spindle_pwm_t;
 
 // Used when HAL driver supports spindle synchronization

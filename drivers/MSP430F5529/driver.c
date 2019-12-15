@@ -606,17 +606,15 @@ static bool driver_setup (settings_t *settings)
 
   // Set defaults
 
-    IOInitDone = settings->version == 14;
+    IOInitDone = settings->version == 15;
 
     settings_changed(settings);
-
 
     hal.stepper_go_idle(true);
     hal.spindle_set_state((spindle_state_t){0}, 0.0f);
     hal.coolant_set_state((coolant_state_t){0});
 
     return IOInitDone;
-
 }
 
 // Initialize HAL pointers, setup serial comms and enable EEPROM

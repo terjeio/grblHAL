@@ -2,7 +2,7 @@
   eeprom_emulate.h - RAM based EEPROM emulation
   Part of Grbl
 
-  Copyright (c) 2017-2018 Terje Io
+  Copyright (c) 2017-2019 Terje Io
   Copyright (c) 2012-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -45,9 +45,11 @@ typedef struct {
 #define EEPROM_GRP_STARTUP 3
 #define EEPROM_GRP_BUILD 4
 
-#define TOOL_ADDR(n) (EEPROM_ADDR_TOOL_TABLE + n * (sizeof(tool_data_t) + 1))
 #define PARAMETER_ADDR(n) (EEPROM_ADDR_PARAMETERS + n * (sizeof(coord_data_t) + 1))
 #define STARTLINE_ADDR(n) (EEPROM_ADDR_STARTUP_BLOCK + n * (MAX_STORED_LINE_LENGTH + 1))
+#ifdef N_TOOLS
+#define TOOL_ADDR(n) (EEPROM_ADDR_TOOL_TABLE + n * (sizeof(tool_data_t) + 1))
+#endif
 
 static const emap_t target[] = {
     {EEPROM_ADDR_GLOBAL, EEPROM_GRP_GLOBAL, 0},

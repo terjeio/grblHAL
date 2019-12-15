@@ -151,6 +151,17 @@ bool spindle_precompute_pwm_values (spindle_pwm_t *pwm_data, uint32_t clock_hz)
         pwm_data->pwm_gradient = (float)(pwm_data->max_value - pwm_data->min_value) / (settings.spindle.rpm_max - settings.spindle.rpm_min);
     }
 
+#ifdef ENABLE_SPINDLE_LINEARIZATION
+    uint_fast8_t idx;
+
+    pwm_data->n_pieces = 0;
+
+    for(idx = 0; idx < SPINDLE_NPWM_PIECES; idx++) {
+        if(!isnan(settings.spindle.pwm_piece[idx].rpm) && settings.spindle.pwm_piece[idx].start != 0.0f)
+            memcpy(&pwm_data->piece[pwm_data->n_pieces++], &settings.spindle.pwm_piece[idx], sizeof(pwm_piece_t));
+    }
+#endif
+
     return settings.spindle.rpm_max > settings.spindle.rpm_min;
 }
 
@@ -159,20 +170,21 @@ uint_fast16_t spindle_compute_pwm_value (spindle_pwm_t *pwm_data, float rpm, boo
 {
     uint_fast16_t pwm_value;
 
-#if SPINDLE_RPM_PIECES
-    uint_fast8_t idx = pwm_data->n_pieces - 1;
-
-    if(idx) {
-        do {
-            if(rpm > pwm_data->pieces[idx].rpm) {
-                pwm_value = floorf(pwm_data->pieces[idx].start * rpm - pwm_data->pieces[idx].end);
-                break;
-            }
-        } while(--idx);
-    } else
-#endif
-
     if(rpm > 0.0f) {
+      #ifdef ENABLE_SPINDLE_LINEARIZATION
+        // Compute intermediate PWM value with linear spindle speed model via piecewise linear fit model.
+        uint_fast8_t idx = pwm_data->n_pieces;
+
+        if(idx) {
+            do {
+                idx--;
+                if(idx == 0 || rpm > pwm_data->piece[idx].rpm) {
+                    pwm_value = floorf(pwm_data->piece[idx].start * rpm - pwm_data->piece[idx].end);
+                    break;
+                }
+            } while(idx);
+        } else
+      #endif
         // Compute intermediate PWM value with linear spindle speed model.
         pwm_value = (uint_fast16_t)floorf((rpm - settings.spindle.rpm_min) * pwm_data->pwm_gradient) + pwm_data->min_value;
 

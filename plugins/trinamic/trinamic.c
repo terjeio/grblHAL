@@ -298,7 +298,7 @@ void trinamic_axis_settings_report (axis_setting_type_t setting, uint8_t axis_id
 }
 
 // Add warning info to next realtime report when warning flag set by drivers
-void trinamic_RTReport (stream_write_ptr stream_write)
+void trinamic_RTReport (stream_write_ptr stream_write, report_tracking_flags_t report)
 {
     if(warning) {
         warning = false;

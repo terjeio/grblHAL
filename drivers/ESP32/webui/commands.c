@@ -33,6 +33,7 @@
 #include <cJSON.h>
 
 #include <esp_log.h>
+#include <esp_spiffs.h>
 
 #include "driver.h"
 #include "wifi.h"
@@ -73,15 +74,15 @@ typedef enum {
 	WebUICmd_PrintSD = 220,
 	WebUICmd_GetSettings = 400,
 	WebUICmd_SetEEPROMSetting = 401,
-	//WebUICmd_GetAPList = 410,
+	WebUICmd_GetAPList = 410,
 	WebUICmd_GetStatus = 420,
-	//WebUICmd_Reboot = 444,
+	WebUICmd_Reboot = 444,
 	//WebUICmd_SetUserPassword = 555,
-	//WebUICmd_SendMessage = 600,S
+	//WebUICmd_SendMessage = 600,
 	//WebUICmd_GetSetNotifications = 600,
 	WebUICmd_ReadLocalFile = 700,
-//	WebUICmd_FormatFlashFS = 710,
-//	WebUICmd_GetFlashFSCapacity = 720,
+	WebUICmd_FormatFlashFS = 710,
+	WebUICmd_GetFlashFSCapacity = 720,
 	WebUICmd_GetFirmwareSpec = 800
 } webui_cmd_t;
 
@@ -361,7 +362,7 @@ static bool get_firmware_spec (void)
 	strcat(buf, "No SD");
 	#endif
 	strcat(buf, " # primary sd:/sd # secondary sd:none # authentication:");
-	#ifdef ENABLE_AUTHENTICATION
+	#if AUTH_ENABLE
 	strcat(buf, "yes");
 	#else
 	strcat(buf, "no");
@@ -382,6 +383,51 @@ static bool get_firmware_spec (void)
 
 	return true;
 }
+
+static bool get_ap_list (void)
+{
+	bool ok = false;
+	ap_list_t *ap_list = wifi_get_aplist();
+
+	if(ap_list && ap_list->ap_records) {
+
+		cJSON *root;
+
+		if((root = cJSON_CreateObject())) {
+
+			cJSON *ap, *aps;
+
+			if((aps = cJSON_AddArrayToObject(root, "AP_LIST"))) {
+
+				for(int i = 0; i < ap_list->ap_num; i++) {
+					if((ok = (ap = cJSON_CreateObject()) != NULL))
+					{
+						ok = cJSON_AddStringToObject(ap, "SSID", (char *)ap_list->ap_records[i].ssid) != NULL;
+						ok &= cJSON_AddNumberToObject(ap, "SIGNAL",  (double)ap_list->ap_records[i].rssi) != NULL;
+						ok &= cJSON_AddStringToObject(ap, "IS_PROTECTED", ap_list->ap_records[i].authmode == WIFI_AUTH_OPEN ? "0" : "1") != NULL;
+						if(ok)
+							cJSON_AddItemToArray(aps, ap);
+					}
+				}
+			}
+
+			if(ok) {
+				char *resp = cJSON_PrintUnformatted(root);
+				webui_print(resp);
+				free(resp);
+			}
+
+			if(root)
+				cJSON_Delete(root);
+		}
+	}
+
+	if(ap_list)
+		wifi_release_aplist();
+
+	return ok;
+}
+
 
 // Used for trapping settings report
 static void stream_trap (const char *data)
@@ -413,6 +459,15 @@ static char *get_setting_value (char *data, setting_type_t setting)
 	tmpstr = NULL;
 
 	return *data ? strchr(data, '=') + 1 : NULL;
+}
+
+static status_code_t sys_execute(char *cmd)
+{
+	char syscmd[LINE_BUFFER_SIZE]; // system_execute_line() needs at least this buffer size!
+
+	strcpy(syscmd, cmd);
+
+	return report_status_message(system_execute_line(syscmd));
 }
 
 status_code_t webui_command_handler (uint32_t command, char *args)
@@ -447,7 +502,7 @@ status_code_t webui_command_handler (uint32_t command, char *args)
 					}
 				} else {
 					sprintf(response, "$%d=%s", map->setting, args);
-					status = report_status_message(system_execute_line(response));
+					status = sys_execute(response);
 				}
 			} else switch(map->command) {
 
@@ -461,7 +516,7 @@ status_code_t webui_command_handler (uint32_t command, char *args)
 						int32_t mode = strlookup(get_arg(args, NULL, true), "STATIC,DHCP,AUTOIP", ',');
 						if(mode >= 0) {
 							sprintf(response, "$%d=%d", Setting_IpMode, mode);
-							status = report_status_message(system_execute_line(response));
+							status = sys_execute(response);
 						}
 					}
 					break;
@@ -479,17 +534,17 @@ status_code_t webui_command_handler (uint32_t command, char *args)
 							if((ip = get_arg(args, " IP=", true)) && status == Status_OK) {
 								found = true;
 								sprintf(response, "$%d=%s", Setting_IpAddress, ip);
-								status = report_status_message(system_execute_line(response));
+								status = sys_execute(response);
 							}
 							if((ip = get_arg(args, " GW=", true)) && status == Status_OK) {
 								found = true;
 								sprintf(response, "$%d=%s", Setting_Gateway, ip);
-								status = report_status_message(system_execute_line(response));
+								status = sys_execute(response);
 							}
 							if((ip = get_arg(args, " MSK=", true)) && status == Status_OK) {
 								found = true;
 								sprintf(response, "$%d=%s", Setting_NetMask, ip);
-								status = report_status_message(system_execute_line(response));
+								status = sys_execute(response);
 							}
 							if(!found)
 								status = Status_Unhandled;
@@ -507,7 +562,7 @@ status_code_t webui_command_handler (uint32_t command, char *args)
 						int32_t mode = strlookup(get_arg(args, NULL, true), "OFF,STA,AP,APSTA", ',');
 						if(mode >= 0) {
 							sprintf(response, "$%d=%d", Setting_WifiMode, mode);
-							status = report_status_message(system_execute_line(response));
+							status = sys_execute(response);
 						}
 					}
 					break;
@@ -527,7 +582,7 @@ status_code_t webui_command_handler (uint32_t command, char *args)
 								else
 									tmask ^= pmask;
 								sprintf(response, "$%d=%d", map->setting, tmask);
-								status = report_status_message(system_execute_line(response));
+								status = sys_execute(response);
 							}
 						}
 					}
@@ -546,13 +601,12 @@ status_code_t webui_command_handler (uint32_t command, char *args)
 			webui_print_chunk(strappend(response, 3, args, wifi_get_ip(), "\n"));
 			break;
 
-		case WebUICmd_GetSDCardContent:
-			status = report_status_message(system_execute_line("$F"));
-
-			break;
-
 		case WebUICmd_GetSDCardStatus:
 			webui_print(hal.stream.type == StreamType_SDCard ? "Busy\n" : "SD card detected\n");
+			break;
+
+		case WebUICmd_GetSDCardContent:
+				status = sys_execute("$F");
 			break;
 
 		case WebUICmd_PrintSD:
@@ -560,13 +614,12 @@ status_code_t webui_command_handler (uint32_t command, char *args)
 			if(hal.stream.type != StreamType_SDCard) { // Already streaming a file?
 				char *cmd = get_arg(args, NULL, false);
 				if(strlen(cmd) > 0) {
-					char fcmd[LINE_BUFFER_SIZE]; // system_execute_line() needs at least this buffer size!
-					strcpy(fcmd, "$F=");
-					strcat(fcmd, cmd);
-					status = report_status_message(system_execute_line(fcmd));
+					strcpy(response, "$F=");
+					strcat(response, cmd);
+					status = sys_execute(response);
 				}
 			}
-			webui_print(status != Status_OK ? "ok" : "error:cannot stream file");
+			webui_print(status == Status_OK ? "ok" : "error:cannot stream file");
 			break;
 
 		case WebUICmd_GetSettings:
@@ -577,8 +630,25 @@ status_code_t webui_command_handler (uint32_t command, char *args)
 			set_setting(args);
 			break;
 
+		case WebUICmd_GetAPList:
+			if(!get_ap_list())
+				webui_print("error");
+			break;
+
 		case WebUICmd_GetStatus:
 			get_system_status();
+			break;
+
+		case WebUICmd_Reboot:
+			{
+				char *cmd = get_arg(args, NULL, false);
+				if(!strcmp(cmd, "RESTART")) {
+	             	hal.stream.write_all("[MSG:Restart ongoing]\r\n");
+	             	hal.delay_ms(1000, esp_restart); // do the restart after a 1s delay, to allow the response to be sent
+				} else
+					status = Status_InvalidStatement;
+				webui_print(status == Status_OK ? "ok" : "Error:Incorrect Command");
+			}
 			break;
 
 		case WebUICmd_ReadLocalFile:
@@ -586,13 +656,39 @@ status_code_t webui_command_handler (uint32_t command, char *args)
 			if(hal.stream.type != StreamType_FlashFs) { // Already streaming a file?
 				char *cmd = get_arg(args, NULL, false);
 				if(strlen(cmd) > 0) {
-					char fcmd[LINE_BUFFER_SIZE]; // system_execute_line() needs at least this buffer size!
-					strcpy(fcmd, "/spiffs");
-					strcat(fcmd, cmd);
-					status = report_status_message(flashfs_stream_file(fcmd));
+					strcpy(response, "/spiffs");
+					strcat(response, cmd);
+					status = report_status_message(flashfs_stream_file(response));
 				}
 			}
 			webui_print(status == Status_OK ? "ok" : "error:cannot stream file");
+			break;
+
+		case WebUICmd_FormatFlashFS:
+			{
+				char *cmd = get_arg(args, NULL, false);
+				status = Status_InvalidStatement;
+				if(!strcmp(cmd, "FORMAT") && esp_spiffs_mounted(NULL)) {
+					webui_print_chunk("Formating"); // sic
+					if(esp_spiffs_format(NULL) == ESP_OK)
+						status = Status_OK;
+				}
+				webui_print(status == Status_OK ? "...Done\n" : "error\n");
+			}
+			break;
+
+		case WebUICmd_GetFlashFSCapacity:
+			{
+				size_t total = 0, used = 0;
+				if(esp_spiffs_info(NULL, &total, &used) == ESP_OK) {
+					strcpy(response, "SPIFFS  Total:");
+					strcat(response, btoa(total));
+					strcat(response, " Used:");
+					strcat(response, btoa(used));
+					webui_print(strcat(response, "\n"));
+				} else
+					status = Status_InvalidStatement;
+			}
 			break;
 
 		case WebUICmd_GetFirmwareSpec:
@@ -608,3 +704,53 @@ status_code_t webui_command_handler (uint32_t command, char *args)
 
     return status;
 }
+
+webui_auth_level_t get_auth_required (uint32_t command, char *args)
+{
+	webui_auth_level_t level = WebUIAuth_None;
+
+	switch(command) {
+
+		case WebUICmd_GetSetSTA_SSID:
+		case WebUICmd_GetSetSTA_IPMode:
+		case WebUICmd_GetSetSTA_IP:
+		case WebUICmd_GetSetAP_SSID:
+		case WebUICmd_GetSetAP_IP:
+		case WebUICmd_GetSetAP_Channel:
+		case WebUICmd_GetSetRadioMode:
+		case WebUICmd_GetSetHostname:
+		case WebUICmd_GetSetHTTPOnOff:
+		case WebUICmd_GetSetHttpPort:
+		case WebUICmd_GetSetTelnetOnOff:
+		case WebUICmd_GetSetTelnetPort:
+		case WebUICmd_GetSetBluetoothName:
+			level = *args ? WebUIAuth_Guest : WebUIAuth_Admin;
+			break;
+
+
+		case WebUICmd_GetSetSTA_Password:
+		case WebUICmd_GetSetAP_Password:
+		case WebUICmd_SetEEPROMSetting:
+		case WebUICmd_Reboot:
+		case WebUICmd_FormatFlashFS:
+			level = WebUIAuth_Admin;
+			break;
+
+		case WebUICmd_GetSDCardStatus:
+		case WebUICmd_GetSDCardContent:
+		case WebUICmd_PrintSD:
+		case WebUICmd_GetSettings:
+		case WebUICmd_GetAPList:
+		case WebUICmd_GetStatus:
+		case WebUICmd_ReadLocalFile:
+		case WebUICmd_GetFlashFSCapacity:
+			level = WebUIAuth_User;
+			break;
+
+		default:
+			break;
+	}
+
+	return level;
+}
+

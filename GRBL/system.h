@@ -180,7 +180,9 @@ typedef union {
                  tool       :1, // Tool changed.
                  wco        :1, // Add work coordinates.
                  gwco       :1, // Add work coordinate.
-                 unused     :6;
+                 pwm        :1, // Add PWM information (optional: to be added by driver).
+                 motor      :1, // Add motor information (optional: to be added by driver).
+                 unused     :4;
     };
 } report_tracking_flags_t;
 

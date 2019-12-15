@@ -31,6 +31,10 @@
 
 #include "grbl.h"
 
+#ifdef ENABLE_SPINDLE_LINEARIZATION
+#include <stdio.h>
+#endif
+
 static char buf[(STRLEN_COORDVALUE + 1) * N_AXIS];
 static char *(*get_axis_values)(float *axis_values);
 static char *(*get_rate_value)(float value);
@@ -397,10 +401,21 @@ void report_grbl_settings (void)
     report_uint_setting(Setting_ForceInitAlarm, settings.flags.force_initialization_alarm);
     report_uint_setting(Setting_ProbingFeedOverride, settings.flags.allow_probing_feed_override);
 
+  #ifdef ENABLE_SPINDLE_LINEARIZATION
+    for(idx = 0 ; idx < SPINDLE_NPWM_PIECES ; idx++) {
+        if(isnan(settings.spindle.pwm_piece[idx].rpm))
+            report_float_setting((setting_type_t)(Setting_LinearSpindlePiece1 + idx), settings.spindle.pwm_piece[idx].rpm, N_DECIMAL_RPMVALUE);
+        else {
+            sprintf(buf, "$%d=%f,%f,%f\r\n", (setting_type_t)(Setting_LinearSpindlePiece1 + idx), settings.spindle.pwm_piece[idx].rpm, settings.spindle.pwm_piece[idx].start, settings.spindle.pwm_piece[idx].end);
+            hal.stream.write(buf);
+        }
+    }
+  #endif
+
 #endif
 
     if(hal.driver_settings_report) {
-    	for(idx = Setting_ProbingFeedOverride + 1; idx < Setting_SpindlePGain; idx++)
+    	for(idx = Setting_LinearSpindlePiece4 + 1; idx < Setting_SpindlePGain; idx++)
     		hal.driver_settings_report((setting_type_t)idx);
     }
 
@@ -1064,15 +1079,13 @@ void report_realtime_status (void)
 
         if(sys.report.tool)
             hal.stream.write_all(appendbuf(2, "|T:", uitoa((uint32_t)gc_state.tool->tool)));
-
-        sys.report.value = 0;
-
     }
 
-    sys.report.wco = settings.status_report.work_coord_offset && wco_counter == 0; // Set to report on next request
-
     if(hal.driver_rt_report)
-        hal.driver_rt_report(hal.stream.write_all);
+        hal.driver_rt_report(hal.stream.write_all, sys.report);
+
+    sys.report.value = 0;
+    sys.report.wco = settings.status_report.work_coord_offset && wco_counter == 0; // Set to report on next request
 
     hal.stream.write_all(">\r\n");
 }

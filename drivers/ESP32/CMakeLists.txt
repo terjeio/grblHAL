@@ -1,15 +1,16 @@
 # CMake for GrblHAL driver for ESP32
-# 2019-11-25
+# 2019-11-26
 
 cmake_minimum_required(VERSION 3.5)
 
-# The following plugins are supported:
+# The following plugins/options are supported:
 
 OPTION(Networking "Wifi + protocols" OFF)
 OPTION(Keypad "I2C Keypad" OFF)
 OPTION(SDcard "SD Card Streaming" OFF)
 OPTION(Trinamic "Trinamic driver support over I2C" OFF)
 OPTION(WebUI "WebUI services" OFF)
+OPTION(WebAuth "WebUI authentication" OFF)
 
 set(SDCARD_SOURCE sdcard/sdcard.c)
 set(KEYPAD_SOURCE keypad/keypad.c)
@@ -80,6 +81,9 @@ endif()
 if(WebUI)
 target_compile_definitions(grbl.elf PUBLIC WEBUI_ENABLE)
 target_add_binary_data(grbl.elf "index.html.gz" BINARY)
+if(WebUI)
+target_compile_definitions(grbl.elf PUBLIC AUTH_ENABLE)
+endif()
 endif()
 
 if(Trinamic) 
@@ -99,6 +103,7 @@ unset(Keypad CACHE)
 unset(SDcard CACHE)
 unset(Trinamic CACHE)
 unset(WebUI CACHE)
+unset(WebAuth CACHE)
 
 include_directories(BEFORE ".")
 

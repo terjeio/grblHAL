@@ -36,18 +36,18 @@
 // Configuration
 // Set value to 1 to enable, 0 to disable
 
-#define KEYPAD_ENABLE          1 // I2C keypad for jogging etc.
+#define KEYPAD_ENABLE          0 // I2C keypad for jogging etc.
 #define ATC_ENABLE             0 // do not change!
-#define MPG_MODE_ENABLE        1 // Additional serial input for MPG (with GPIO input for enable)
-#define LIMITS_OVERRIDE_ENABLE 1 // Adds input for overriding limit switches
-#define TRINAMIC_ENABLE        1 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
-#define TRINAMIC_I2C           1 // Trinamic I2C - SPI bridge interface.
-#define TRINAMIC_DEV           1 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
-#define CNC_BOOSTERPACK        1 // do not change!
+#define MPG_MODE_ENABLE        0 // Additional serial input for MPG (with GPIO input for enable)
+#define LIMITS_OVERRIDE_ENABLE 0 // Adds input for overriding limit switches
+#define TRINAMIC_ENABLE        0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
+#define TRINAMIC_I2C           0 // Trinamic I2C - SPI bridge interface.
+#define TRINAMIC_DEV           0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
+#define CNC_BOOSTERPACK        0 // do not change!
 
 #if CNC_BOOSTERPACK
   #define EEPROM_ENABLE           1 // only change if BoosterPack does not have EEPROM mounted
-  #define CNC_BOOSTERPACK_SHORTS  0 // shorts added to BoosterPack for some signals (for faster and simpler driver)
+  #define CNC_BOOSTERPACK_SHORTS  1 // shorts added to BoosterPack for some signals (for faster and simpler driver)
   #define CNC_BOOSTERPACK_A4998   1 // using Polulu A4998 drivers - for suppying VDD via GPIO (PE5)
 #else
   #define EEPROM_ENABLE          0 // do not change!
@@ -62,25 +62,28 @@
 
 #include "msp.h"
 
-#include "GRBL\grbl.h"
-
-#if TRINAMIC_ENABLE || KEYPAD_ENABLE
-#define DRIVER_SETTINGS
-#endif
-
-#ifdef DRIVER_SETTINGS
+#include "GRBL/grbl.h"
 
 #if TRINAMIC_ENABLE
 #include "tmc2130/trinamic.h"
 #endif
 
+#if TRINAMIC_ENABLE || KEYPAD_ENABLE || defined(SPINDLE_RPM_PIECES)
+#define DRIVER_SETTINGS
+#endif
+
+#ifdef DRIVER_SETTINGS
+
 typedef struct {
+
 #if TRINAMIC_ENABLE
     trinamic_settings_t trinamic;
 #endif
+
 #if KEYPAD_ENABLE
     jog_settings_t jog;
 #endif
+
 } driver_settings_t;
 
 extern driver_settings_t driver_settings;
@@ -102,7 +105,6 @@ extern driver_settings_t driver_settings;
 #define I2CportQ(p) EUSCI ## p ## _IRQn
 #define I2CportHANDLER(p) I2CportH(p)
 #define I2CportH(p) EUSCI ## p ## _IRQHandler
-
 
 #define timer(p) timerN(p)
 #define timerN(p) TIMER_ ## p
@@ -376,7 +378,7 @@ extern driver_settings_t driver_settings;
 #define SPINDLE_PWM_PIN   5
 #define SPINDLE_PWM_BIT   (1<<SPINDLE_PWM_PIN)
 
-#define SPINDLE_PID_SAMPLE_RATE 10 // ms
+#define SPINDLE_PID_SAMPLE_RATE 5 // ms
 
 /*
  * CNC Boosterpack GPIO assignments
