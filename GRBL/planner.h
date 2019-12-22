@@ -78,6 +78,7 @@ typedef struct {
     spindle_t spindle;    // Block spindle speed. Copied from pl_line_data.
 
     char *message;                // Message to be displayed when block is executed.
+    output_command_t *output_commands;
 } plan_block_t;
 
 
@@ -90,6 +91,7 @@ typedef struct {
     int32_t line_number;            // Desired line number to report when executing.
 //    void *parameters;               // TODO: pointer to extra parameters, for canned cycles and threading?
     char *message;                  // Message to be displayed when block is executed.
+    output_command_t *output_commands;
 } plan_line_data_t;
 
 

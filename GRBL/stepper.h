@@ -40,17 +40,18 @@ typedef enum {
 // discarded when entirely consumed and completed by the segment buffer. Also, AMASS alters this
 // data for its own use.
 typedef struct st_block {
-    uint_fast8_t id;                // Id may be used by driver to track changes
-    struct st_block *next;          // Pointer to next element in cirular list of blocks
+    uint_fast8_t id;                  // Id may be used by driver to track changes
+    struct st_block *next;            // Pointer to next element in cirular list of blocks
     uint32_t steps[N_AXIS];
     uint32_t step_event_count;
     axes_signals_t direction_bits;
-    gc_override_flags_t overrides;  // Block bitfield variable for overrides
+    gc_override_flags_t overrides;    // Block bitfield variable for overrides
     float steps_per_mm;
     float millimeters;
     float programmed_rate;
-    char *message;                  // Message to be displayed when block is executed
-    bool dynamic_rpm;               // Tracks motions that require dynamic RPM adjustment
+    char *message;                     // Message to be displayed when block is executed
+    output_command_t *output_commands; // Output commands (linked list) to be performed when block is executed
+    bool dynamic_rpm;                  // Tracks motions that require dynamic RPM adjustment
     bool backlash_motion;
 } st_block_t;
 

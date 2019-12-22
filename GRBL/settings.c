@@ -111,24 +111,16 @@ const settings_t defaults = {
     .spindle.pid.d_gain = DEFAULT_SPINDLE_D_GAIN,
     .spindle.pid.i_max_error = DEFAULT_SPINDLE_I_MAX,
 #if SPINDLE_NPWM_PIECES > 0
-    .spindle.pwm_piece[0].rpm = NAN,
-    .spindle.pwm_piece[0].start = 0.0f,
-    .spindle.pwm_piece[0].end = 0.0f,
+    .spindle.pwm_piece[0] = { .rpm = NAN, .start = 0.0f, .end = 0.0f },
 #endif
 #if SPINDLE_NPWM_PIECES > 1
-    .spindle.pwm_piece[1].rpm = NAN,
-    .spindle.pwm_piece[1].start = 0.0f,
-    .spindle.pwm_piece[1].end = 0.0f,
+    .spindle.pwm_piece[1] = { .rpm = NAN, .start = 0.0f, .end = 0.0f },
 #endif
 #if SPINDLE_NPWM_PIECES > 2
-    .spindle.pwm_piece[2].rpm = NAN,
-    .spindle.pwm_piece[2].start = 0.0f,
-    .spindle.pwm_piece[2].end = 0.0f,
+    .spindle.pwm_piece[2] = { .rpm = NAN, .start = 0.0f, .end = 0.0f },
 #endif
 #if SPINDLE_NPWM_PIECES > 3
-    .spindle.pwm_piece[3].rpm = NAN,
-    .spindle.pwm_piece[3].start = 0.0f,
-    .spindle.pwm_piece[3].end = 0.0f,
+    .spindle.pwm_piece[3] = { .rpm = NAN, .start = 0.0f, .end = 0.0f },
 #endif
 
     .coolant_invert.flood = INVERT_COOLANT_FLOOD_PIN,
@@ -354,12 +346,12 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
     float value;
 
     if (!read_float(svalue, &set_idx, &value)) {
-		status_code_t status;
-		if(hal.driver_setting && (status = hal.driver_setting(setting, NAN, svalue)) != Status_Unhandled)
-			return status;
-		else
-			return Status_BadNumberFormat;
-	}
+        status_code_t status;
+        if(hal.driver_setting && (status = hal.driver_setting(setting, NAN, svalue)) != Status_Unhandled)
+            return status;
+        else
+            return Status_BadNumberFormat;
+    }
 
 #if COMPATIBILITY_LEVEL <= 1
 
@@ -780,7 +772,7 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 break;
 
             default:;
-            	status_code_t status;
+                status_code_t status;
                 if(hal.driver_setting && (status = hal.driver_setting(setting, value, svalue)) != Status_OK)
                     return status == Status_Unhandled ? Status_InvalidStatement : status;
         }

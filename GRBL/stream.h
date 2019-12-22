@@ -64,15 +64,15 @@ typedef struct {
     volatile uint_fast16_t tail;
     bool overflow;
 #ifdef SERIAL_RTS_HANDSHAKE
-    bool rts_state;
+    volatile bool rts_state;
 #endif
     bool backup;
     char data[RX_BUFFER_SIZE];
 } stream_rx_buffer_t;
 
 typedef struct {
-    volatile uint16_t head;
-    volatile uint16_t tail;
+    volatile uint_fast16_t head;
+    volatile uint_fast16_t tail;
     char data[TX_BUFFER_SIZE];
 } stream_tx_buffer_t;
 

@@ -1,4 +1,7 @@
 ## GrblHAL ##
+---
+
+Build 20191222: Added digital and analog output support to the core \(and HAL\) as per [linuxcnc specifications for M62 - M68](http://linuxcnc.org/docs/html/gcode/m-code.html#mcode:m62-m65), number of outputs available \(if any\) is driver dependent. Adding support for these M-commands makes it fairly easy to add driver code \(for up to 256 outputs\) as parsing and synchronization is taken care of by the core.
 
 ---
 
@@ -66,8 +69,10 @@ List of Supported G-Codes in GrblHAL v1.1:
   - Spindle Control: M3, M4, M5
   - Tool Change: M6* (Two modes possible: manual** - supports jogging, ATC), M61
   - Switches: M49, M50, M51, M53
+  - Output control***: M62, M63, M64, M65, M66, M67, M68
   - Valid Non-Command Words: A*, B*, C*, F, H*, I, J, K, L, N, P, Q*, R, S, T, X, Y, Z
 
-  *  driver/configuration dependent
-  ** requires compatible GCode sender due to protocol extensions, new state and RT command
+  *  driver/configuration dependent.
+  ** requires compatible GCode sender due to protocol extensions, new state and RT command.
+  *** number of outputs supported dependent on driver implementation.
 ```

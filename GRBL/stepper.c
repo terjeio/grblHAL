@@ -277,6 +277,18 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
                 if(st.exec_block->overrides.sync)
                     sys.override.control = st.exec_block->overrides;
 
+                // Execute output commands to be syncronized with motion
+                while(st.exec_block->output_commands) {
+                    output_command_t *cmd = st.exec_block->output_commands;
+                    if(cmd->is_digital)
+                        hal.port.digital_out(cmd->port, cmd->value != 0.0f);
+                    else
+                        hal.port.analog_out(cmd->port, cmd->value);
+                    cmd = cmd->next;
+                    free(st.exec_block->output_commands);
+                    st.exec_block->output_commands = cmd;
+                }
+
                 // "Enqueue" any message to be displayed (by foreground process)
                 if(st.exec_block->message) {
                     protocol_message(st.exec_block->message);
@@ -585,6 +597,7 @@ void st_prep_buffer()
                 st_prep_block->millimeters = pl_block->millimeters;
                 st_prep_block->steps_per_mm = (float)pl_block->step_event_count / pl_block->millimeters;
                 st_prep_block->message = pl_block->message;
+                st_prep_block->output_commands = pl_block->output_commands;
                 st_prep_block->overrides = pl_block->overrides;
                 st_prep_block->backlash_motion = pl_block->condition.backlash_motion;
 

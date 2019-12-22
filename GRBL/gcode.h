@@ -78,6 +78,7 @@ typedef enum {
     Status_LimitsEngaged = 45,
     Status_HomingRequired = 46,
     Status_GCodeToolError = 47,
+    Status_ValueWordConflict = 48,
 
     Status_EStop = 50,
     Status_Unhandled = 59, // For internal use only
@@ -273,6 +274,23 @@ typedef enum {
     SpindleSpeedMode_RPM = 0,  // G96 (Default: Must be zero)
     SpindleSpeedMode_CSS = 1   // G97 (Do not alter value)
 } spindle_rpm_mode_t;
+
+
+typedef struct output_command {
+    bool is_digital;
+    uint8_t port;
+    int32_t value;
+    struct output_command *next;
+} output_command_t;
+
+typedef enum {
+    WaitMode_Immediate = 0,
+    WaitMode_Rise,
+    WaitMode_Fall,
+    WaitMode_High,
+    WaitMode_Low,
+    WaitMode_Max // Used for validation only
+} wait_mode_t;
 
 // Modal Group M10: User defined M commands
 // NOTE: Not used by core, may be used by driver code
@@ -502,6 +520,7 @@ typedef struct {
     bool user_mcode_sync;
     gc_modal_t modal;
     gc_values_t values;
+    output_command_t output_command;
 } parser_block_t;
 
 // Initialize the parser

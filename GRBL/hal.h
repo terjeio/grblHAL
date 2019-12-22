@@ -106,6 +106,14 @@ typedef struct {
     bool (*enqueue_realtime_command)(char data); // NOTE: set by grbl at startup
 } io_stream_t;
 
+typedef struct {
+    uint8_t num_digital;
+    uint8_t num_analog;
+    void (*digital_out)(uint8_t port, bool on);
+    bool (*analog_out)(uint8_t port, float value);
+    int32_t (*wait_on_input)(bool digital, uint8_t port, wait_mode_t wait_mode, float timeout);
+} io_port_t;
+
 typedef struct HAL {
     uint32_t version;
     char *info;
@@ -171,6 +179,8 @@ typedef struct HAL {
 #endif
 
     eeprom_io_t eeprom;
+
+    io_port_t port;
 
     // entry points set by grbl at reset
     report_t report;

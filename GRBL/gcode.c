@@ -58,8 +58,8 @@ tool_data_t tool_table;
 #define FAIL(status) return(status);
 
 static scale_factor_t scale_factor;
-
 static gc_thread_data thread;
+static output_command_t *output_commands = NULL; // Linked list
 
 // Simple hypotenuse computation function.
 inline static float hypot_f (float x, float y)
@@ -131,6 +131,13 @@ void gc_init(bool cold_start)
         // TODO: restore offsets, tool offset mode?
     }
 
+    // Clear any pending output commands
+    while(output_commands) {
+        output_command_t *next = output_commands->next;
+        free(output_commands);
+        output_commands = next;
+    }
+
     // Load default override status
     gc_state.modal.override_ctrl = sys.override.control;
     gc_state.spindle.css.max_rpm = settings.spindle.rpm_max; // default max speed for CSS mode
@@ -151,6 +158,28 @@ void gc_init(bool cold_start)
 void gc_set_laser_ppimode (bool on)
 {
 	gc_state.is_laser_ppi_mode = on;
+}
+
+// Add output command to linked list
+static bool add_output_command (output_command_t *command)
+{
+    output_command_t *add_cmd;
+
+    if((add_cmd = malloc(sizeof(output_command_t)))) {
+
+        memcpy(add_cmd, command, sizeof(output_command_t));
+
+        if(output_commands == NULL)
+            output_commands = add_cmd;
+        else {
+            output_command_t *cmd = output_commands;
+            while(cmd->next)
+                cmd = cmd->next;
+            cmd->next = add_cmd;
+        }
+    }
+
+    return add_cmd != NULL;
 }
 
 // Executes one block (line) of 0-terminated G-Code. The block is assumed to contain only uppercase
@@ -185,6 +214,7 @@ status_code_t gc_execute_block(char *block, char *message)
 
     bool set_tool = false;
     axis_command_t axis_command = AxisCommand_None;
+    uint_fast8_t port_command = 0;
     plane_t plane;
 
     // Initialize bitflag tracking variables for axis indices compatible operations.
@@ -518,6 +548,31 @@ status_code_t gc_execute_block(char *block, char *message)
                         word_bit.group = ModalGroup_M6; //??
                         break;
 
+                    case 62:
+                    case 63:
+                    case 64:
+                    case 65:
+                        if(hal.port.digital_out == NULL || hal.port.num_digital == 0)
+                            FAIL(Status_GcodeUnsupportedCommand); // [Unsupported M command]
+                        word_bit.group = ModalGroup_M10;
+                        port_command = int_value;
+                        break;
+
+                    case 66:
+                        if(hal.port.wait_on_input == NULL || (hal.port.num_digital == 0 && hal.port.num_analog == 0))
+                            FAIL(Status_GcodeUnsupportedCommand); // [Unsupported M command]
+                        word_bit.group = ModalGroup_M10;
+                        port_command = int_value;
+                        break;
+
+                    case 67:
+                    case 68:
+                        if(hal.port.analog_out == NULL || hal.port.num_analog == 0)
+                            FAIL(Status_GcodeUnsupportedCommand); // [Unsupported M command]
+                        word_bit.group = ModalGroup_M10;
+                        port_command = int_value;
+                        break;
+
                     default:
                         if(hal.user_mcode_check && (gc_block.user_mcode = hal.user_mcode_check((user_mcode_t)int_value)))
                             word_bit.group = ModalGroup_M10;
@@ -847,7 +902,7 @@ status_code_t gc_execute_block(char *block, char *message)
     // [5. Select tool ]: If not supported then only tracks value. T is negative (done.) Not an integer (done).
     if(set_tool) { // G61
         if(bit_isfalse(value_words, bit(Word_Q)))
-            FAIL(Status_ExpectedCommandLetter);
+            FAIL(Status_GcodeValueWordMissing);
         if (floorf(gc_block.values.q) - gc_block.values.q != 0.0f)
             FAIL(Status_GcodeCommandValueNotInteger);
         if ((int32_t)gc_block.values.q < 1 || (int32_t)gc_block.values.q > MAX_TOOL_NUMBER)
@@ -858,6 +913,72 @@ status_code_t gc_execute_block(char *block, char *message)
         bit_false(value_words, bit(Word_Q));
     } else if (bit_isfalse(value_words, bit(Word_T)))
         gc_block.values.t = gc_state.tool_pending;
+
+    if(bit_istrue(command_words, bit(ModalGroup_M10)) && port_command) {
+
+        switch(port_command) {
+
+            case 62:
+            case 63:
+            case 64:
+            case 65:
+                if(bit_isfalse(value_words, bit(Word_P)))
+                    FAIL(Status_GcodeValueWordMissing);
+                if((uint32_t)gc_block.values.p + 1 > hal.port.num_digital)
+                    FAIL(Status_GcodeValueOutOfRange);
+                gc_block.output_command.is_digital = true;
+                gc_block.output_command.port = (uint8_t)gc_block.values.p;
+                gc_block.output_command.value = port_command == 62 || port_command == 64 ? 1.0f : 0.0f;
+                bit_false(value_words, bit(Word_P));
+                break;
+
+            case 66:
+                if(bit_isfalse(value_words, bit(Word_L)|bit(Word_Q)))
+                    FAIL(Status_GcodeValueWordMissing);
+
+                if(bit_istrue(value_words, bit(Word_P)) && bit_istrue(value_words, bit(Word_E)))
+                    FAIL(Status_ValueWordConflict);
+
+                if(gc_block.values.l >= (uint8_t)WaitMode_Max)
+                    FAIL(Status_GcodeValueOutOfRange);
+
+                if((wait_mode_t)gc_block.values.l != WaitMode_Immediate && gc_block.values.q == 0.0f)
+                    FAIL(Status_GcodeValueOutOfRange);
+
+                if(bit_istrue(value_words, bit(Word_P))) {
+                    if((uint32_t)gc_block.values.p + 1 > hal.port.num_digital)
+                        FAIL(Status_GcodeValueOutOfRange);
+
+                    gc_block.output_command.is_digital = true;
+                    gc_block.output_command.port = (uint8_t)gc_block.values.p;
+                }
+
+                if(bit_istrue(value_words, bit(Word_E))) {
+                    if((uint32_t)gc_block.values.e + 1 > hal.port.num_analog)
+                        FAIL(Status_GcodeValueOutOfRange);
+                    if((wait_mode_t)gc_block.values.l != WaitMode_Immediate)
+                        FAIL(Status_GcodeValueOutOfRange);
+
+                    gc_block.output_command.is_digital = false;
+                    gc_block.output_command.port = (uint8_t)gc_block.values.e;
+                }
+
+                bit_false(value_words, bit(Word_E)|bit(Word_L)|bit(Word_P)|bit(Word_Q));
+                break;
+
+            case 67:
+            case 68:
+                if(bit_isfalse(value_words, bit(Word_E)|bit(Word_Q)))
+                    FAIL(Status_GcodeValueWordMissing);
+                if((uint32_t)gc_block.values.e + 1 > hal.port.num_analog)
+                    FAIL(Status_GcodeRPMOutOfRange);
+                gc_block.output_command.is_digital = false;
+                gc_block.output_command.port = (uint8_t)gc_block.values.e;
+                gc_block.output_command.value = gc_block.values.q;
+                bit_false(value_words, bit(Word_E)|bit(Word_Q));
+            break;
+        }
+    }
 
     // bit_false(value_words,bit(Word_T)); // NOTE: Single-meaning value word. Set at end of error-checking.
 
@@ -903,7 +1024,7 @@ status_code_t gc_execute_block(char *block, char *message)
     }
 
     // [9a. User defined M commands ]:
-    if (bit_istrue(command_words, bit(ModalGroup_M10))) {
+    if (bit_istrue(command_words, bit(ModalGroup_M10)) && gc_block.user_mcode) {
         if((int_value = (uint_fast16_t)hal.user_mcode_validate(&gc_block, &value_words)))
             FAIL((status_code_t)int_value);
         axis_words = ijk_words = 0;
@@ -1857,6 +1978,36 @@ status_code_t gc_execute_block(char *block, char *message)
             sys.report.tool = On;
     }
 
+    // [5a. HAL pin I/O ]: M62 - M68. (Modal group M10)
+
+    if(port_command) {
+
+        switch(port_command) {
+
+            case 62:
+            case 63:
+                add_output_command(&gc_block.output_command);
+                break;
+
+            case 64:
+            case 65:
+                hal.port.digital_out(gc_block.output_command.port, gc_block.output_command.value != 0.0f);
+                break;
+
+            case 66:
+                hal.port.wait_on_input(gc_block.output_command.is_digital, gc_block.output_command.port, (wait_mode_t)gc_block.values.l, gc_block.values.q);
+                break;
+
+            case 67:
+                add_output_command(&gc_block.output_command);
+                break;
+
+            case 68:
+                hal.port.analog_out(gc_block.output_command.port, gc_block.output_command.value);
+                break;
+        }
+    }
+
     // [6. Change tool ]: Delegated to (possible) driver implementation
     if (bit_istrue(command_words, bit(ModalGroup_M6)) && !set_tool) {
         protocol_buffer_synchronize();
@@ -2067,140 +2218,147 @@ status_code_t gc_execute_block(char *block, char *message)
     gc_state.modal.motion = gc_block.modal.motion;
     gc_state.modal.canned_cycle_active = gc_block.modal.canned_cycle_active;
 
-    if (gc_state.modal.motion != MotionMode_None) {
+    if (gc_state.modal.motion != MotionMode_None && axis_command == AxisCommand_MotionMode) {
 
-        if (axis_command == AxisCommand_MotionMode) {
+        plan_data.output_commands = output_commands;
+        output_commands = NULL;
 
-            pos_update_t gc_update_pos = GCUpdatePos_Target;
+        pos_update_t gc_update_pos = GCUpdatePos_Target;
 
-            switch(gc_state.modal.motion) {
+        switch(gc_state.modal.motion) {
 
-                case MotionMode_Linear:
-                    if(gc_state.modal.feed_mode == FeedMode_UnitsPerRev) {
-                        plan_data.condition.spindle.synchronized = On;
-                    //??    gc_state.distance_per_rev = plan_data.feed_rate;
-                        // check initial feed rate - fail if zero?
-                    }
+            case MotionMode_Linear:
+                if(gc_state.modal.feed_mode == FeedMode_UnitsPerRev) {
+                    plan_data.condition.spindle.synchronized = On;
+                //??    gc_state.distance_per_rev = plan_data.feed_rate;
+                    // check initial feed rate - fail if zero?
+                }
+                mc_line(gc_block.values.xyz, &plan_data);
+                break;
+
+            case MotionMode_Seek:
+                plan_data.condition.rapid_motion = On; // Set rapid motion condition flag.
+                mc_line(gc_block.values.xyz, &plan_data);
+                break;
+
+            case MotionMode_CwArc:
+            case MotionMode_CcwArc:
+                // fail if spindle synchronized motion?
+                mc_arc(gc_block.values.xyz, &plan_data, gc_state.position, gc_block.values.ijk, gc_block.values.r,
+                        plane, gc_parser_flags.arc_is_clockwise);
+                break;
+
+            case MotionMode_SpindleSynchronized:
+                {
+                    protocol_buffer_synchronize(); // Wait until any previous moves are finished.
+
+                    gc_override_flags_t overrides = sys.override.control; // Save current override disable status.
+
+                    plan_data.condition.inverse_time = Off;
+                    plan_data.feed_rate = gc_state.distance_per_rev = thread.pitch;
+                    plan_data.condition.is_rpm_pos_adjusted = Off;   // Switch off CSS.
+                    plan_data.overrides = overrides;                 // Use current override flags and
+                    plan_data.overrides.sync = On;                   // set to sync overrides on execution of motion.
+
+                    // Disable feed rate and spindle overrides for the duration of the cycle.
+                    plan_data.overrides.feed_hold_disable = On;
+                    plan_data.overrides.spindle_rpm_disable = sys.override.control.spindle_rpm_disable = On;
+                    plan_data.overrides.feed_rate_disable = sys.override.control.feed_rate_disable = On;
+                    sys.override.spindle_rpm = DEFAULT_SPINDLE_RPM_OVERRIDE;
+                    // TODO: need for gc_state.distance_per_rev to be reset on modal change?
+                    gc_block.values.f = hal.spindle_get_data(SpindleData_RPM).rpm;
+                    gc_block.values.f = plan_data.feed_rate * gc_block.values.f;
+
+                    if(gc_block.values.f == 0.0f)
+                        FAIL(Status_GcodeSpindleNotRunning); // [Spindle not running]
+
+                    if(gc_block.values.f > settings.max_rate[Z_AXIS])
+                        FAIL(Status_GcodeMaxFeedRateExceeded); // [Feed rate too high]
+
+                    mc_dwell(0.01f); // Needed for now since initial spindle sync is done just before st_wake_up
+
                     mc_line(gc_block.values.xyz, &plan_data);
-                    break;
 
-                case MotionMode_Seek:
-                    plan_data.condition.rapid_motion = On; // Set rapid motion condition flag.
-                    mc_line(gc_block.values.xyz, &plan_data);
-                    break;
+                    protocol_buffer_synchronize();    // Wait until thread is finished,
+                    sys.override.control = overrides; // then restore previous override disable status.
+                }
+                break;
 
-                case MotionMode_CwArc:
-                case MotionMode_CcwArc:
-                    // fail if spindle synchronized motion?
-                    mc_arc(gc_block.values.xyz, &plan_data, gc_state.position, gc_block.values.ijk, gc_block.values.r,
-                            plane, gc_parser_flags.arc_is_clockwise);
-                    break;
+            case MotionMode_Threading:
+                {
+                    protocol_buffer_synchronize(); // Wait until any previous moves are finished.
 
-                case MotionMode_SpindleSynchronized:
-                    {
-                        protocol_buffer_synchronize(); // Wait until any previous moves are finished.
+                    gc_override_flags_t overrides = sys.override.control; // Save current override disable status.
 
-                        gc_override_flags_t overrides = sys.override.control; // Save current override disable status.
+                    plan_data.condition.inverse_time = Off;
+                    plan_data.feed_rate = gc_state.distance_per_rev = thread.pitch;
+                    plan_data.condition.is_rpm_pos_adjusted = Off;   // Switch off CSS.
+                    plan_data.overrides = overrides;                 // Use current override flags and
+                    plan_data.overrides.sync = On;                   // set to sync overrides on execution of motion.
 
-                        plan_data.condition.inverse_time = Off;
-                        plan_data.feed_rate = gc_state.distance_per_rev = thread.pitch;
-                        plan_data.condition.is_rpm_pos_adjusted = Off;   // Switch off CSS.
-                        plan_data.overrides = overrides;                 // Use current override flags and
-                        plan_data.overrides.sync = On;                   // set to sync overrides on execution of motion.
+                    // Disable feed rate and spindle overrides for the duration of the cycle.
+                    plan_data.overrides.spindle_rpm_disable = sys.override.control.spindle_rpm_disable = On;
+                    plan_data.overrides.feed_rate_disable = sys.override.control.feed_rate_disable = On;
+                    sys.override.spindle_rpm = DEFAULT_SPINDLE_RPM_OVERRIDE;
+                    // TODO: need for gc_state.distance_per_rev to be reset on modal change?
+                    gc_block.values.f = hal.spindle_get_data(SpindleData_RPM).rpm;
+                    gc_block.values.f = plan_data.feed_rate * gc_block.values.f;
 
-                        // Disable feed rate and spindle overrides for the duration of the cycle.
-                        plan_data.overrides.feed_hold_disable = On;
-                        plan_data.overrides.spindle_rpm_disable = sys.override.control.spindle_rpm_disable = On;
-                        plan_data.overrides.feed_rate_disable = sys.override.control.feed_rate_disable = On;
-                        sys.override.spindle_rpm = DEFAULT_SPINDLE_RPM_OVERRIDE;
-                        // TODO: need for gc_state.distance_per_rev to be reset on modal change?
-                        gc_block.values.f = hal.spindle_get_data(SpindleData_RPM).rpm;
-                        gc_block.values.f = plan_data.feed_rate * gc_block.values.f;
+                    if(gc_block.values.f == 0.0f)
+                        FAIL(Status_GcodeSpindleNotRunning); // [Spindle not running]
 
-                        if(gc_block.values.f == 0.0f)
-                            FAIL(Status_GcodeSpindleNotRunning); // [Spindle not running]
+                    if(gc_block.values.f > settings.max_rate[Z_AXIS])
+                        FAIL(Status_GcodeMaxFeedRateExceeded); // [Feed rate too high]
 
-                        if(gc_block.values.f > settings.max_rate[Z_AXIS])
-                            FAIL(Status_GcodeMaxFeedRateExceeded); // [Feed rate too high]
+                    mc_thread(&plan_data, gc_state.position, &thread, overrides.feed_hold_disable);
 
-                        mc_dwell(0.01f); // Needed for now since initial spindle sync is done just before st_wake_up
+                    protocol_buffer_synchronize();    // Wait until thread is finished,
+                    sys.override.control = overrides; // then restore previous override disable status.
+                }
+                break;
 
-                        mc_line(gc_block.values.xyz, &plan_data);
+            case MotionMode_DrillChipBreak:
+            case MotionMode_CannedCycle81:
+            case MotionMode_CannedCycle82:
+            case MotionMode_CannedCycle83:;
+                plan_data.spindle.rpm = gc_block.values.s;
+                gc_state.canned.retract_mode = gc_state.modal.retract_mode;
+                mc_canned_drill(gc_state.modal.motion, gc_block.values.xyz, &plan_data, gc_state.position, plane, gc_block.values.l, &gc_state.canned);
+                break;
 
-                        protocol_buffer_synchronize();    // Wait until thread is finished,
-                        sys.override.control = overrides; // then restore previous override disable status.
-                    }
-                    break;
+            case MotionMode_ProbeToward:
+            case MotionMode_ProbeTowardNoError:
+            case MotionMode_ProbeAway:
+            case MotionMode_ProbeAwayNoError:
+                // NOTE: gc_block.values.xyz is returned from mc_probe_cycle with the updated position value. So
+                // upon a successful probing cycle, the machine position and the returned value should be the same.
+                plan_data.condition.no_feed_override = !settings.flags.allow_probing_feed_override;
+                gc_update_pos = (pos_update_t)mc_probe_cycle(gc_block.values.xyz, &plan_data, gc_parser_flags);
+                break;
 
-                case MotionMode_Threading:
-                    {
-                        protocol_buffer_synchronize(); // Wait until any previous moves are finished.
-
-                        gc_override_flags_t overrides = sys.override.control; // Save current override disable status.
-
-                        plan_data.condition.inverse_time = Off;
-                        plan_data.feed_rate = gc_state.distance_per_rev = thread.pitch;
-                        plan_data.condition.is_rpm_pos_adjusted = Off;   // Switch off CSS.
-                        plan_data.overrides = overrides;                 // Use current override flags and
-                        plan_data.overrides.sync = On;                   // set to sync overrides on execution of motion.
-
-                        // Disable feed rate and spindle overrides for the duration of the cycle.
-                        plan_data.overrides.spindle_rpm_disable = sys.override.control.spindle_rpm_disable = On;
-                        plan_data.overrides.feed_rate_disable = sys.override.control.feed_rate_disable = On;
-                        sys.override.spindle_rpm = DEFAULT_SPINDLE_RPM_OVERRIDE;
-                        // TODO: need for gc_state.distance_per_rev to be reset on modal change?
-                        gc_block.values.f = hal.spindle_get_data(SpindleData_RPM).rpm;
-                        gc_block.values.f = plan_data.feed_rate * gc_block.values.f;
-
-                        if(gc_block.values.f == 0.0f)
-                            FAIL(Status_GcodeSpindleNotRunning); // [Spindle not running]
-
-                        if(gc_block.values.f > settings.max_rate[Z_AXIS])
-                            FAIL(Status_GcodeMaxFeedRateExceeded); // [Feed rate too high]
-
-                        mc_thread(&plan_data, gc_state.position, &thread, overrides.feed_hold_disable);
-
-                        protocol_buffer_synchronize();    // Wait until thread is finished,
-                        sys.override.control = overrides; // then restore previous override disable status.
-                    }
-                    break;
-
-                case MotionMode_DrillChipBreak:
-                case MotionMode_CannedCycle81:
-                case MotionMode_CannedCycle82:
-                case MotionMode_CannedCycle83:;
-                    plan_data.spindle.rpm = gc_block.values.s;
-                    gc_state.canned.retract_mode = gc_state.modal.retract_mode;
-                    mc_canned_drill(gc_state.modal.motion, gc_block.values.xyz, &plan_data, gc_state.position, plane, gc_block.values.l, &gc_state.canned);
-                    break;
-
-                case MotionMode_ProbeToward:
-                case MotionMode_ProbeTowardNoError:
-                case MotionMode_ProbeAway:
-                case MotionMode_ProbeAwayNoError:
-                    // NOTE: gc_block.values.xyz is returned from mc_probe_cycle with the updated position value. So
-                    // upon a successful probing cycle, the machine position and the returned value should be the same.
-                    plan_data.condition.no_feed_override = !settings.flags.allow_probing_feed_override;
-                    gc_update_pos = (pos_update_t)mc_probe_cycle(gc_block.values.xyz, &plan_data, gc_parser_flags);
-                    break;
-
-                default:
-                    break;
-            }
-
-            // Do not update position on cancel (already done in protocol_exec_rt_system)
-            if(sys.cancel)
-                gc_update_pos = GCUpdatePos_None;
-
-            // As far as the parser is concerned, the position is now == target. In reality the
-            // motion control system might still be processing the action and the real tool position
-            // in any intermediate location.
-            if (gc_update_pos == GCUpdatePos_Target)
-                memcpy(gc_state.position, gc_block.values.xyz, sizeof(gc_state.position)); // gc_state.position[] = gc_block.values.xyz[]
-            else if (gc_update_pos == GCUpdatePos_System)
-                gc_sync_position(); // gc_state.position[] = sys_position
-            // == GCUpdatePos_None
+            default:
+                break;
         }
+
+        // Do not update position on cancel (already done in protocol_exec_rt_system)
+        if(sys.cancel)
+            gc_update_pos = GCUpdatePos_None;
+
+        //  Clean out any remaining output commands (may linger on error)
+        while(plan_data.output_commands) {
+            output_command_t *next = plan_data.output_commands;
+            free(plan_data.output_commands);
+            plan_data.output_commands = next;
+        }
+
+        // As far as the parser is concerned, the position is now == target. In reality the
+        // motion control system might still be processing the action and the real tool position
+        // in any intermediate location.
+        if (gc_update_pos == GCUpdatePos_Target)
+            memcpy(gc_state.position, gc_block.values.xyz, sizeof(gc_state.position)); // gc_state.position[] = gc_block.values.xyz[]
+        else if (gc_update_pos == GCUpdatePos_System)
+            gc_sync_position(); // gc_state.position[] = sys_position
+        // == GCUpdatePos_None
     }
 
     if(plan_data.message)
@@ -2266,6 +2424,14 @@ status_code_t gc_execute_block(char *block, char *message)
                 sys.report.spindle = On; // Set to report change immediately
                 sys.report.coolant = On; // ...
             }
+
+            // Clear any pending output commands
+            while(output_commands) {
+                output_command_t *next = output_commands->next;
+                free(output_commands);
+                output_commands = next;
+            }
+
             hal.report.feedback_message(Message_ProgramEnd);
         }
         gc_state.modal.program_flow = ProgramFlow_Running; // Reset program flow.

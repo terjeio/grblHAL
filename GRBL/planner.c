@@ -184,15 +184,27 @@ static void planner_recalculate ()
     }
 }
 
+inline static void plan_cleanup (plan_block_t *block)
+{
+    if(block->message) {
+        free(block->message);
+        block->message = NULL;
+    }
+
+    while(block->output_commands) {
+        output_command_t *next = block->output_commands->next;
+        free(block->output_commands);
+        block->output_commands = next;
+    }
+}
+
 
 inline static void plan_reset_buffer (bool soft_reset)
 {
     if((block_buffer_tail = soft_reset ? BLOCK_BUFFER_SIZE : 0))
-      do { // Free memory for any pending messages after soft reset
-        if(block_buffer[--block_buffer_tail].message) {
-            free(block_buffer[block_buffer_tail].message);
-            block_buffer[block_buffer_tail].message = NULL;
-        }
+      do { // Free memory for any pending messages and output commands after soft reset
+          block_buffer_tail--;
+          plan_cleanup(&block_buffer[block_buffer_tail]);
     } while(block_buffer_tail);
     block_buffer_head = 0;      // Empty = tail
     next_buffer_head = 1;       // plan_next_block_index(block_buffer_head)
@@ -213,10 +225,7 @@ void plan_discard_current_block ()
 {
     if (block_buffer_head != block_buffer_tail) { // Discard non-empty buffer.
         uint_fast8_t block_index = plan_next_block_index(block_buffer_tail);
-        if(block_buffer[block_buffer_tail].message) {
-            free(block_buffer[block_buffer_tail].message);
-            block_buffer[block_buffer_tail].message = NULL;
-        }
+        plan_cleanup(&block_buffer[block_buffer_tail]);
         // Push block_buffer_planned pointer, if encountered.
         if (block_buffer_tail == block_buffer_planned)
             block_buffer_planned = block_index;
@@ -328,6 +337,7 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
     block->overrides = pl_data->overrides;
     block->line_number = pl_data->line_number;
     block->message = pl_data->message;
+    block->output_commands = pl_data->output_commands;
 
     // Copy position data based on type of motion being planned.
     memcpy(position_steps, block->condition.system_motion ? sys_position : pl.position, sizeof(position_steps));
@@ -380,7 +390,8 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
     if (block->step_event_count == 0)
         return false;
 
-    pl_data->message = NULL; // Indicate message is queued for display on execution
+    pl_data->message = NULL;         // Indicate message is already queued for display on execution
+    pl_data->output_commands = NULL; // Indicate commands are already queued for execution
 
     // Calculate the unit vector of the line move and the block maximum feed rate and acceleration scaled
     // down such that no individual axes maximum values are exceeded with respect to the line direction.
