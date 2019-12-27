@@ -1,6 +1,10 @@
 ## GrblHAL ##
 ---
 
+Added some [template code](./templates/README.md) to aid customizations such as driver support for M62 - M68 M-codes mentioned below.
+
+---
+
 Build 20191222: Added digital and analog output support to the core \(and HAL\) as per [linuxcnc specifications for M62 - M68](http://linuxcnc.org/docs/html/gcode/m-code.html#mcode:m62-m65), number of outputs available \(if any\) is driver dependent. Adding support for these M-commands makes it fairly easy to add driver code \(for up to 256 outputs\) as parsing and synchronization is taken care of by the core.
 
 ---
