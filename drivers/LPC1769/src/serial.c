@@ -4,7 +4,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2017-2019 Terje Io
+  Copyright (c) 2017-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -34,6 +34,12 @@ static stream_rx_buffer_t rxbuffer = {0};
 static stream_rx_buffer_t rxbackup;
 static stream_tx_buffer_t txbuffer = {0};
 
+/* Pin muxing configuration */
+static const PINMUX_GRP_T uart_pinmux[] = {
+	{0, 2, IOCON_MODE_INACT | IOCON_FUNC1},	/* TXD0 */
+	{0, 3, IOCON_MODE_INACT | IOCON_FUNC1}	/* RXD0 */
+};
+
 #ifdef RTS_PORT
   static volatile uint8_t rts_state = 0;
 #endif
@@ -44,6 +50,8 @@ static stream_tx_buffer_t txbuffer = {0};
 
 void serialInit (void)
 {
+	Chip_IOCON_SetPinMuxing(LPC_IOCON, uart_pinmux, sizeof(uart_pinmux) / sizeof(PINMUX_GRP_T));
+
 	/* Setup UART for 115.2K8N1 */
 	Chip_UART_Init(SERIAL_MODULE);
 	Chip_UART_SetBaud(SERIAL_MODULE, 115200);

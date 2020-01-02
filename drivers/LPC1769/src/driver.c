@@ -23,7 +23,7 @@
 
 #include <stdint.h>
 
-#include "GRBL\grbl.h"
+#include "grbl/grbl.h"
 
 #include "driver.h"
 #include "serial.h"
@@ -50,12 +50,6 @@
 #if EEPROM_ENABLE
 #include "eeprom.h"
 #endif
-
-/* Pin muxing configuration */
-STATIC const PINMUX_GRP_T pinmuxing[] = {
-	{0,  2,   IOCON_MODE_INACT | IOCON_FUNC1},	/* TXD0 */
-	{0,  3,   IOCON_MODE_INACT | IOCON_FUNC1}	/* RXD0 */
-};
 
 static bool pwmEnabled = false, IOInitDone = false;
 // Inverts the probe pin state depending on user settings and probing cycle mode.
@@ -118,7 +112,22 @@ static void driver_delay (uint32_t ms, void (*callback)(void))
 static void stepperEnable (axes_signals_t enable)
 {
     enable.mask ^= settings.steppers.enable_invert.mask;
+#if DISABLE_OUTMODE == GPIO_BITBAND
+    BITBAND_GPIO(X_DISABLE_PORT->PIN, X_DISABLE_PIN) = enable.x;
+    BITBAND_GPIO(Y_DISABLE_PORT->PIN, Y_DISABLE_PIN) = enable.y;
+    BITBAND_GPIO(Z_DISABLE_PORT->PIN, Z_DISABLE_PIN) = enable.z;
+  #ifdef A_AXIS
+    BITBAND_GPIO(A_DISABLE_PORT->PIN, A_DISABLE_PIN) = enable.a;
+  #endif
+  #ifdef B_AXIS
+    BITBAND_GPIO(B_DISABLE_PORT->PIN, B_DISABLE_PIN) = enable.b;
+  #endif
+#elif defined(DISABLE_MASK)
+    DISABLE_PORT->PIN = (DISABLE_PORT->PIN & ~DISABLE_MASK) | enable.mask;
+#else
     BITBAND_GPIO(STEPPERS_DISABLE_PORT->PIN, STEPPERS_DISABLE_PIN) = enable.x;
+#endif
+
 }
 
 // Starts stepper driver ISR timer and forces a stepper driver interrupt callback
@@ -152,14 +161,20 @@ static void stepperCyclesPerTick (uint32_t cycles_per_tick)
 inline static void stepperSetStepOutputs (axes_signals_t step_outbits)
 {
 #if STEP_OUTMODE == GPIO_BITBAND
-    step_outbits.value ^= settings.step_invert.value;
-    BITBAND_GPIO(STEP_PORT->PIN, X_STEP_PIN) = step_outbits.x;
-    BITBAND_GPIO(STEP_PORT->PIN, Y_STEP_PIN) = step_outbits.y;
-    BITBAND_GPIO(STEP_PORT->PIN, Z_STEP_PIN) = step_outbits.z;
+    step_outbits.value ^= settings.steppers.step_invert.value;
+    BITBAND_GPIO(X_STEP_PORT->PIN, X_STEP_PIN) = step_outbits.x;
+    BITBAND_GPIO(Y_STEP_PORT->PIN, Y_STEP_PIN) = step_outbits.y;
+    BITBAND_GPIO(Z_STEP_PORT->PIN, Z_STEP_PIN) = step_outbits.z;
+  #ifdef A_AXIS
+    BITBAND_GPIO(A_STEP_PORT->PIN, A_STEP_PIN) = step_outbits.a;
+  #endif
+  #ifdef B_AXIS
+    BITBAND_GPIO(B_STEP_PORT->PIN, B_STEP_PIN) = step_outbits.b;
+  #endif
 #elif STEP_OUTMODE == GPIO_MAP
     STEP_PORT->PIN = (STEP_PORT->PIN & ~STEP_MASK) | step_outmap[step_outbits.value];
 #else
-    STEP_PORT->PIN = (STEP_PORT->PIN & ~STEP_MASK) | ((step_outbits.value << STEP_OUTMODE) ^ settings.step_invert.value);
+    STEP_PORT->PIN = (STEP_PORT->PIN & ~STEP_MASK) | ((step_outbits.value << STEP_OUTMODE) ^ settings.steppers.step_invert.value);
 #endif
 }
 
@@ -169,13 +184,19 @@ inline static void stepperSetDirOutputs (axes_signals_t dir_outbits)
 {
 #if DIRECTION_OUTMODE == GPIO_BITBAND
     dir_outbits.value ^= settings.steppers.dir_invert.value;
-    BITBAND_GPIO(DIRECTION_PORT->PIN, X_DIRECTION_PIN) = dir_outbits.x;
-    BITBAND_GPIO(DIRECTION_PORT->PIN, Y_DIRECTION_PIN) = dir_outbits.y;
-    BITBAND_GPIO(DIRECTION_PORT->PIN, Z_DIRECTION_PIN) = dir_outbits.z;
+    BITBAND_GPIO(X_DIRECTION_PORT->PIN, X_DIRECTION_PIN) = dir_outbits.x;
+    BITBAND_GPIO(Y_DIRECTION_PORT->PIN, Y_DIRECTION_PIN) = dir_outbits.y;
+    BITBAND_GPIO(Z_DIRECTION_PORT->PIN, Z_DIRECTION_PIN) = dir_outbits.z;
+  #ifdef A_AXIS
+    BITBAND_GPIO(A_DIRECTION_PORT->PIN, A_DIRECTION_PIN) = dir_outbits.a;
+  #endif
+  #ifdef B_AXIS
+    BITBAND_GPIO(B_DIRECTION_PORT->PIN, B_DIRECTION_PIN) = dir_outbits.b;
+  #endif
 #elif DIRECTION_OUTMODE == GPIO_MAP
     DIRECTION_PORT->PIN = (DIRECTION_PORT->PIN & ~DIRECTION_MASK) | dir_outmap[dir_outbits.value];
 #else
-    DIRECTION_PORT->PIN = (DIRECTION_PORT->PIN & ~DIRECTION_MASK) | ((dir_outbits.value << DIRECTION_OUTMODE) ^ settings.dir_invert.value);
+    DIRECTION_PORT->PIN = (DIRECTION_PORT->PIN & ~DIRECTION_MASK) | ((dir_outbits.value << DIRECTION_OUTMODE) ^ settings.steppers.dir_invert.value);
 #endif
 }
 
@@ -213,15 +234,18 @@ static void limitsEnable (bool on, bool homing)
 {
     on = on && settings.limits.flags.hard_enabled;
 
-   // Chip_GPIOINT_ClearIntStatus(LIMIT_INT, LIMIT_INTPORT, LIMIT_MASK);
-   // Chip_GPIOINT_SetIntFalling(LIMIT_INT, LIMIT_INTPORT, LIMIT_MASK);
-    LIMIT_INTCLR;
-    BITBAND_PERI(LIMIT_INTCLR, X_LIMIT_PIN) = 0;
-    BITBAND_PERI(LIMIT_INTCLR, Y_LIMIT_PIN) = 0;
-    BITBAND_PERI(LIMIT_INTCLR, Z_LIMIT_PIN) = 0;
-    BITBAND_PERI(LIMIT_INTENR, X_LIMIT_PIN) = on;
-    BITBAND_PERI(LIMIT_INTENR, Y_LIMIT_PIN) = on;
-    BITBAND_PERI(LIMIT_INTENR, Z_LIMIT_PIN) = on;
+#ifdef X_LIMIT_INTENR
+    BITBAND_PERI(X_LIMIT_INTCLR, X_LIMIT_PIN) = 0;
+    BITBAND_PERI(X_LIMIT_INTENR, X_LIMIT_PIN) = On;
+#endif
+#ifdef Y_LIMIT_INTENR
+    BITBAND_PERI(Y_LIMIT_INTCLR, Y_LIMIT_PIN) = 0;
+    BITBAND_PERI(Y_LIMIT_INTENR, Y_LIMIT_PIN) = On;
+#endif
+#ifdef Z_LIMIT_INTENR
+    BITBAND_PERI(Z_LIMIT_INTCLR, Z_LIMIT_PIN) = 0;
+    BITBAND_PERI(Z_LIMIT_INTENR, Z_LIMIT_PIN) = On;
+#endif
 }
 
 // Returns limit state as an axes_signals_t variable.
@@ -231,18 +255,37 @@ inline static axes_signals_t limitsGetState()
     axes_signals_t signals;
 
 #if LIMIT_INMODE == LIMIT_SHIFT
-    signals.value = (uint8_t)(LIMIT_PORT->PIN & LIMIT_MASK) >> LIMIT_SHIFT;
+    signals.value = (uint32_t)(LIMIT_PORT->PIN & LIMIT_MASK) >> LIMIT_SHIFT;
 #elif LIMIT_INMODE == GPIO_BITBAND
-    signals.x = BITBAND_GPIO(LIMIT_PORT->PIN, X_LIMIT_PIN);
-    signals.y = BITBAND_GPIO(LIMIT_PORT->PIN, Y_LIMIT_PIN);
-    signals.z = BITBAND_GPIO(LIMIT_PORT->PIN, Z_LIMIT_PIN);
-#else
-    uint8_t bits = LIMIT_PORT->PIN;
-    signals.x = (bits & X_LIMIT_PIN) != 0;
-    signals.y = (bits & Y_LIMIT_PIN) != 0;
-    signals.z = (bits & Z_LIMIT_PIN) != 0;
+    signals.x = BITBAND_GPIO(X_LIMIT_PORT->PIN, X_LIMIT_PIN)
+  #ifdef X_LIMIT_PORT_MAX
+    | BITBAND_GPIO(X_LIMIT_PORT_MAX->PIN, X_LIMIT_PIN_MAX);
+  #else
+    ;
+  #endif
+    signals.y = BITBAND_GPIO(Y_LIMIT_PORT->PIN, Y_LIMIT_PIN)
+  #ifdef X_LIMIT_PORT_MAX
+    | BITBAND_GPIO(Y_LIMIT_PORT_MAX->PIN, Y_LIMIT_PIN_MAX);
+  #else
+    ;
+  #endif
+    signals.z = BITBAND_GPIO(Z_LIMIT_PORT->PIN, Z_LIMIT_PIN)
+  #ifdef X_LIMIT_PORT_MAX
+    | BITBAND_GPIO(Y_LIMIT_PORT_MAX->PIN, Y_LIMIT_PIN_MAX);
+  #else
+    ;
 #endif
-
+#else
+    uint32_t bits = LIMIT_PORT->PIN;
+    signals.x = (bits & X_LIMIT_BIT) != 0
+#ifdef X_LIMIT_PORT_MAX
+  | (bits & X_LIMIT_BIT_MAX) != 0;
+#else
+  ;
+#endif
+    signals.y = (bits & Y_LIMIT_BIT) != 0;
+    signals.z = (bits & Z_LIMIT_BIT) != 0;
+#endif
 
     if (settings.limits.invert.mask)
         signals.value ^= settings.limits.invert.mask;
@@ -255,11 +298,13 @@ inline static axes_signals_t limitsGetState()
 static control_signals_t systemGetState (void)
 {
     control_signals_t signals = {0};
-#if LIMIT_INMODE == GPIO_BITBAND
-    signals.reset = BITBAND_GPIO(CONTROL_PORT->PIN, RESET_PIN);
-    signals.safety_door_ajar = BITBAND_GPIO(CONTROL_PORT->PIN, SAFETY_DOOR_PIN);
-    signals.feed_hold = BITBAND_GPIO(CONTROL_PORT->PIN, FEED_HOLD_PIN);
-    signals.cycle_start = BITBAND_GPIO(CONTROL_PORT->PIN, CYCLE_START_PIN);
+#if CONTROL_INMODE == GPIO_BITBAND
+    signals.reset = BITBAND_GPIO(RESET_PORT->PIN, RESET_PIN);
+    signals.feed_hold = BITBAND_GPIO(FEED_HOLD_PORT->PIN, FEED_HOLD_PIN);
+    signals.cycle_start = BITBAND_GPIO(CYCLE_START_PORT->PIN, CYCLE_START_PIN);
+  #ifdef SAFETY_DOOR_PORT
+    signals.safety_door_ajar = BITBAND_GPIO(SAFETY_DOOR_PORT->PIN, SAFETY_DOOR_PIN);
+  #endif
 #else
     uint8_t bits = CONTROL_PORT->PIN;
     signals.reset = bits & RESET_BIT != 0;
@@ -269,6 +314,10 @@ static control_signals_t systemGetState (void)
 #endif
     if(settings.control_invert.mask)
         signals.value ^= settings.control_invert.mask;
+
+#ifndef SAFETY_DOOR_PORT
+    signals.safety_door_ajar = 0;
+#endif
 
     return signals;
 }
@@ -328,8 +377,13 @@ static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
         pwmEnabled = false;
         if(settings.spindle.disable_with_zero_speed)
             spindle_off();
-        pwm_set_width(&SPINDLE_PWM_CHANNEL, 0);
-//        pwm_disable(&SPINDLE_PWM_CHANNEL); // Set PWM output low
+        if(settings.spindle.pwm_off_value == 0.0f) {
+        	pwm_set_width(&SPINDLE_PWM_CHANNEL, 0);
+//          pwm_disable(&SPINDLE_PWM_CHANNEL); // Set PWM output low
+        } else {
+            pwm_set_width(&SPINDLE_PWM_CHANNEL, spindle_pwm.off_value);
+            pwm_enable(&SPINDLE_PWM_CHANNEL);
+        }
     } else {
         if(!pwmEnabled)
             spindle_on();
@@ -381,7 +435,9 @@ static void coolantSetState (coolant_state_t mode)
 {
     mode.value ^= settings.coolant_invert.mask;
     BITBAND_GPIO(COOLANT_FLOOD_PORT->PIN, COOLANT_FLOOD_PIN) = mode.flood;
+#ifdef COOLANT_MIST_PORT
     BITBAND_GPIO(COOLANT_MIST_PORT->PIN, COOLANT_MIST_PIN) = mode.mist;
+#endif
 }
 
 // Returns coolant state in a coolant_state_t variable
@@ -390,7 +446,9 @@ static coolant_state_t coolantGetState (void)
     coolant_state_t state = {0};
 
     state.flood = (COOLANT_FLOOD_PORT->PIN & COOLANT_FLOOD_BIT) != 0;
+#ifdef COOLANT_MIST_PORT
     state.mist  = (COOLANT_MIST_PORT->PIN & COOLANT_MIST_BIT) != 0;
+#endif
     state.value ^= settings.coolant_invert.mask;
 
     return state;
@@ -424,13 +482,21 @@ static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t 
 
 void gpio_pinmode (LPC_GPIO_T *port, uint8_t pin, uint8_t pinmode)
 {
-	port += LPC_IOCON_BASE - LPC_GPIO0_BASE + 0x40;
-	if(pin & 0x8) {
-		port++;
-		pin &= 0x7;
+	uint32_t pn = ((uint32_t)port - LPC_GPIO0_BASE) / sizeof(LPC_GPIO_T);
+
+	pn = LPC_IOCON_BASE + 0x40 + pn * 8;
+	if(pin > 15) {
+		pn += 4;
+		pin &= 0xF;
 	}
-	BITBAND_PERI(port, pin++) = pinmode & 0x1;
-    BITBAND_PERI(port, pin)   = (pinmode >> 1) & 0x1;
+	pin <<= 1;
+	port = (LPC_GPIO_T *)pn;
+//	BITBAND_PERI(port, pin++) = pinmode & 0x1;
+//    BITBAND_PERI(port, pin)   = (pinmode >> 1) & 0x1;
+
+    *(uint32_t*)port = pinmode << pin;
+
+    pn = *(uint32_t*)port;
 }
 
 // Configures peripherals when settings are initialized or changed
@@ -483,41 +549,47 @@ void settings_changed (settings_t *settings)
 
         control_ire.mask = ~(settings->control_disable_pullup.mask ^ settings->control_invert.mask);
 
-        BITBAND_PERI(CONTROL_INTENR, CYCLE_START_PIN) = 0;
-        BITBAND_PERI(CONTROL_INTENR, FEED_HOLD_PIN) = 0;
-        BITBAND_PERI(CONTROL_INTENR, SAFETY_DOOR_PIN) = 0;
-        BITBAND_PERI(CONTROL_INTENR, RESET_PIN) = 0;
-        BITBAND_PERI(CONTROL_INTENF, CYCLE_START_PIN) = 0;
-        BITBAND_PERI(CONTROL_INTENF, FEED_HOLD_PIN) = 0;
-        BITBAND_PERI(CONTROL_INTENF, SAFETY_DOOR_PIN) = 0;
-        BITBAND_PERI(CONTROL_INTENF, RESET_PIN) = 0;
+        BITBAND_PERI(CYCLE_START_INTENR, CYCLE_START_PIN) = 0;
+        BITBAND_PERI(CYCLE_START_INTENF, CYCLE_START_PIN) = 0;
+        BITBAND_PERI(FEED_HOLD_INTENR, FEED_HOLD_PIN) = 0;
+        BITBAND_PERI(FEED_HOLD_INTENF, FEED_HOLD_PIN) = 0;
+        BITBAND_PERI(RESET_INTENR, RESET_PIN) = 0;
+        BITBAND_PERI(RESET_INTENF, RESET_PIN) = 0;
 
-        gpio_pinmode(CONTROL_PORT, CYCLE_START_PIN, settings->control_disable_pullup.cycle_start ? PINMODE_PULLDOWN : PINMODE_PULLUP);
-        gpio_pinmode(CONTROL_PORT, FEED_HOLD_PIN, settings->control_disable_pullup.feed_hold ? PINMODE_PULLDOWN : PINMODE_PULLUP);
-        gpio_pinmode(CONTROL_PORT, SAFETY_DOOR_PIN, settings->control_disable_pullup.safety_door_ajar ? PINMODE_PULLDOWN : PINMODE_PULLUP);
-        gpio_pinmode(CONTROL_PORT, RESET_PIN, settings->control_disable_pullup.reset ? PINMODE_PULLDOWN : PINMODE_PULLUP);
-
-        CONTROL_INTCLR = CONTROL_MASK;
+        gpio_pinmode(CYCLE_START_PORT, CYCLE_START_PIN, settings->control_disable_pullup.cycle_start ? PINMODE_PULLDOWN : PINMODE_PULLUP);
+        gpio_pinmode(FEED_HOLD_PORT, FEED_HOLD_PIN, settings->control_disable_pullup.feed_hold ? PINMODE_PULLDOWN : PINMODE_PULLUP);
+        gpio_pinmode(RESET_PORT, RESET_PIN, settings->control_disable_pullup.reset ? PINMODE_PULLDOWN : PINMODE_PULLUP);
 
         if(control_ire.cycle_start)
-        	BITBAND_PERI(CONTROL_INTENR, CYCLE_START_PIN) = control_ire.cycle_start;
+        	BITBAND_PERI(CYCLE_START_INTENR, CYCLE_START_PIN) = control_ire.cycle_start;
         else
-        	BITBAND_PERI(CONTROL_INTENF, CYCLE_START_PIN) = !control_ire.cycle_start;
+        	BITBAND_PERI(CYCLE_START_INTENF, CYCLE_START_PIN) = !control_ire.cycle_start;
 
         if(control_ire.feed_hold)
-        	BITBAND_PERI(CONTROL_INTENR, FEED_HOLD_PIN) = control_ire.feed_hold;
+        	BITBAND_PERI(FEED_HOLD_INTENR, FEED_HOLD_PIN) = control_ire.feed_hold;
         else
-        	BITBAND_PERI(CONTROL_INTENF, FEED_HOLD_PIN) = !control_ire.feed_hold;
+        	BITBAND_PERI(FEED_HOLD_INTENF, FEED_HOLD_PIN) = !control_ire.feed_hold;
+
+        if(control_ire.reset)
+        	BITBAND_PERI(RESET_INTENR, RESET_PIN) = control_ire.reset;
+        else
+        	BITBAND_PERI(RESET_INTENF, RESET_PIN) = !control_ire.reset;
+
+        BITBAND_PERI(CYCLE_START_INTCLR, RESET_PIN) = 0;
+        BITBAND_PERI(FEED_HOLD_INTCLR, FEED_HOLD_PIN) = 0;
+        BITBAND_PERI(RESET_INTCLR, RESET_PIN) = 0;
+
+#ifdef SAFETY_DOOR_PORT
+        BITBAND_PERI(CONTROL_INTENR, SAFETY_DOOR_PIN) = 0;
+        BITBAND_PERI(CONTROL_INTENF, SAFETY_DOOR_PIN) = 0;
+        gpio_pinmode(SAFETY_DOOR_PORT, SAFETY_DOOR_PIN, settings->control_disable_pullup.safety_door_ajar ? PINMODE_PULLDOWN : PINMODE_PULLUP);
+        BITBAND_PERI(RESET_INTCLR, RESET_PIN) = 0;
 
         if(control_ire.safety_door_ajar)
         	BITBAND_PERI(CONTROL_INTENR, SAFETY_DOOR_PIN) = control_ire.safety_door_ajar;
         else
         	BITBAND_PERI(CONTROL_INTENF, SAFETY_DOOR_PIN) = !control_ire.safety_door_ajar;
-
-        if(control_ire.reset)
-        	BITBAND_PERI(CONTROL_INTENR, RESET_PIN) = control_ire.reset;
-        else
-        	BITBAND_PERI(CONTROL_INTENF, RESET_PIN) = !control_ire.reset;
+#endif
 
         /***********************
          *  Limit pins config  *
@@ -527,9 +599,18 @@ void settings_changed (settings_t *settings)
 
         limit_ire.mask = ~(settings->limits.disable_pullup.mask ^ settings->limits.invert.mask);
 
-        gpio_pinmode(LIMIT_PORT, X_LIMIT_PIN, settings->limits.disable_pullup.x ? PINMODE_PULLDOWN : PINMODE_PULLUP);
-        gpio_pinmode(LIMIT_PORT, X_LIMIT_PIN, settings->limits.disable_pullup.x ? PINMODE_PULLDOWN : PINMODE_PULLUP);
-        gpio_pinmode(LIMIT_PORT, X_LIMIT_PIN, settings->limits.disable_pullup.x ? PINMODE_PULLDOWN : PINMODE_PULLUP);
+        gpio_pinmode(X_LIMIT_PORT, X_LIMIT_PIN, settings->limits.disable_pullup.x ? PINMODE_PULLDOWN : PINMODE_PULLUP);
+#ifdef X_LIMIT_PORT_MAX
+        gpio_pinmode(X_LIMIT_PORT_MAX, X_LIMIT_PIN_MAX, settings->limits.disable_pullup.x ? PINMODE_PULLDOWN : PINMODE_PULLUP);
+#endif
+        gpio_pinmode(Y_LIMIT_PORT, Y_LIMIT_PIN, settings->limits.disable_pullup.y ? PINMODE_PULLDOWN : PINMODE_PULLUP);
+#ifdef Y_LIMIT_PORT_MAX
+        gpio_pinmode(Y_LIMIT_PORT_MAX, Y_LIMIT_PIN_MAX, settings->limits.disable_pullup.x ? PINMODE_PULLDOWN : PINMODE_PULLUP);
+#endif
+        gpio_pinmode(Z_LIMIT_PORT, Z_LIMIT_PIN, settings->limits.disable_pullup.z ? PINMODE_PULLDOWN : PINMODE_PULLUP);
+#ifdef Z_LIMIT_PORT_MAX
+        gpio_pinmode(Z_LIMIT_PORT_MAX, Z_LIMIT_PIN_MAX, settings->limits.disable_pullup.x ? PINMODE_PULLDOWN : PINMODE_PULLUP);
+#endif
 
         // ---
 
@@ -549,9 +630,41 @@ static bool driver_setup (settings_t *settings)
 {
  // Stepper init
 
-    STEP_PORT->DIR |= STEP_MASK;
-    DIRECTION_PORT->DIR |= DIRECTION_MASK;
-    STEPPERS_DISABLE_PORT->DIR |= STEPPERS_DISABLE_BIT;
+    BITBAND_GPIO(X_STEP_PORT->DIR, X_STEP_PIN) = 1;
+    BITBAND_GPIO(Y_STEP_PORT->DIR, Y_STEP_PIN) = 1;
+    BITBAND_GPIO(Z_STEP_PORT->DIR, Z_STEP_PIN) = 1;
+#ifdef A_AXIS
+    BITBAND_GPIO(A_STEP_PORT->DIR, B_STEP_PIN) = 1;
+#endif
+#ifdef B_AXIS
+    BITBAND_GPIO(B_STEP_PORT->DIR, B_STEP_PIN) = 1;
+#endif
+
+    BITBAND_GPIO(X_DIRECTION_PORT->DIR, X_DIRECTION_PIN) = 1;
+    BITBAND_GPIO(Y_DIRECTION_PORT->DIR, Y_DIRECTION_PIN) = 1;
+    BITBAND_GPIO(Z_DIRECTION_PORT->DIR, Z_DIRECTION_PIN) = 1;
+#ifdef A_AXIS
+    BITBAND_GPIO(A_DIRECTION_PORT->DIR, A_DIRECTION_PIN) = 1;
+#endif
+#ifdef B_AXIS
+    BITBAND_GPIO(B_DIRECTION_PORT->DIR, B_DIRECTION_PIN) = 1;
+#endif
+
+#if DISABLE_OUTMODE == GPIO_BITBAND
+    BITBAND_GPIO(X_DISABLE_PORT->DIR, X_DISABLE_PIN) = 1;
+    BITBAND_GPIO(Y_DISABLE_PORT->DIR, Y_DISABLE_PIN) = 1;
+    BITBAND_GPIO(Z_DISABLE_PORT->DIR, Z_DISABLE_PIN) = 1;
+  #ifdef A_AXIS
+    BITBAND_GPIO(A_DISABLE_PORT->DIR, A_DISABLE_PIN) = 1;
+  #endif
+  #ifdef B_AXIS
+    BITBAND_GPIO(B_DISABLE_PORT->DIR, B_DISABLE_PIN) = 1;
+  #endif
+#elif defined(DISABLE_MASK)
+    DISABLE_PORT->DIR |= DISABLE_MASK;
+#else
+    BITBAND_GPIO(STEPPERS_DISABLE_PORT->DIR, STEPPERS_DISABLE_PIN) = 1;
+#endif
 
     STEPPER_TIMER->TCR = 0;            // disable
     STEPPER_TIMER->CTCR = 0;           // timer mode
@@ -599,14 +712,15 @@ static bool driver_setup (settings_t *settings)
  // Coolant init
 
     COOLANT_FLOOD_PORT->DIR |= COOLANT_FLOOD_BIT;
+#ifdef COOLANT_MIST_PORT
     COOLANT_MIST_PORT->DIR |= COOLANT_MIST_BIT;
+#endif
 
 #if SDCARD_ENABLE
-    sdcard_init();
-
-	Chip_IOCON_PinMux(LPC_IOCON, SD_CS_PN, SD_CS_PIN, IOCON_MODE_PULLUP, IOCON_FUNC0);
-	Chip_GPIO_WriteDirBit(LPC_GPIO, SD_CS_PN, SD_CS_PIN, true);
+	BITBAND_GPIO(SD_CS_PORT->DIR, SD_CS_PIN) = 1;
 	BITBAND_GPIO(SD_CS_PORT->PIN, SD_CS_PIN) = 1;
+
+	sdcard_init();
 #endif
 
  // Set defaults
@@ -629,6 +743,8 @@ bool driver_init (void) {
 
     // Enable EEPROM and serial port here for Grbl to be able to configure itself and report any errors
 
+	SystemCoreClockUpdate();
+
 	Chip_SetupXtalClocking(); // Sets 96 MHz clock
 	Chip_SYSCTL_SetFLASHAccess(FLASHTIM_100MHZ_CPU);
 
@@ -636,7 +752,6 @@ bool driver_init (void) {
 
 	Chip_GPIO_Init(LPC_GPIO);
 	Chip_IOCON_Init(LPC_IOCON);
-	Chip_IOCON_SetPinMuxing(LPC_IOCON, pinmuxing, sizeof(pinmuxing) / sizeof(PINMUX_GRP_T));
 
 	// Enable and set SysTick IRQ to lowest priority
 	SysTick->LOAD = (SystemCoreClock / 1000) - 1;
@@ -728,7 +843,9 @@ bool driver_init (void) {
 
     hal.driver_cap.spindle_dir = On;
     hal.driver_cap.variable_spindle = On;
+#ifdef COOLANT_MIST_PORT
     hal.driver_cap.mist_control = On;
+#endif
     hal.driver_cap.software_debounce = On;
     hal.driver_cap.step_pulse_delay = On;
     hal.driver_cap.amass_level = 3;
@@ -792,29 +909,43 @@ void DEBOUNCE_IRQHandler (void)
         hal.limit_interrupt_callback(state);
 }
 
-
 void GPIO_IRQHandler (void)
 {
     uint32_t istat = LPC_GPIOINT->STATUS, iflags;
 
-    if(istat & P2Int) {
-    	iflags = LIMIT_INTSTR | LIMIT_INTSTF;
-    	if(iflags & LIMIT_MASK) {
-    		LIMIT_INTCLR = iflags;
+    if(istat & P0Int) {
+    	iflags = LPC_GPIOINT->IO0.STATR | LPC_GPIOINT->IO0.STATF;
+    	LPC_GPIOINT->IO0.CLR = iflags;
+#ifdef LIMIT_INTST0
+		if(iflags & LIMIT_INTST2) {
 			if(hal.driver_cap.software_debounce)
 				DEBOUNCE_TIMER->TCR = 1;
 			else
 				hal.limit_interrupt_callback(limitsGetState());
-    	}
-    }
-
-    if(istat & P0Int) {
-    	iflags = CONTROL_INTSTR | CONTROL_INTSTF;
-		CONTROL_INTCLR = iflags;
-    	if(iflags & CONTROL_MASK)
+		}
+#endif
+#ifdef CONTROL_INTST0
+    	if(iflags & CONTROL_INTST0)
     		hal.control_interrupt_callback(systemGetState());
+#endif
     }
 
+    if(istat & P2Int) {
+    	iflags = LPC_GPIOINT->IO2.STATR | LPC_GPIOINT->IO2.STATF;
+    	LPC_GPIOINT->IO2.CLR = iflags;
+#ifdef LIMIT_INTST2
+		if(iflags & LIMIT_INTST2) {
+			if(hal.driver_cap.software_debounce)
+				DEBOUNCE_TIMER->TCR = 1;
+			else
+				hal.limit_interrupt_callback(limitsGetState());
+		}
+#endif
+#ifdef CONTROL_INTST2
+		if(iflags & CONTROL_INTST2)
+			hal.control_interrupt_callback(systemGetState());
+#endif
+    }
 }
 
 // Interrupt handler for 1 ms interval timer

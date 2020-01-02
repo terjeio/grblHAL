@@ -1,10 +1,10 @@
 /*
 
-  serial.c - low level functions for transmitting bytes via the USB virtual serial port
+  usb_serial.c - low level functions for transmitting bytes via the USB virtual serial port
 
   Part of GrblHAL
 
-  Copyright (c) 2017-2019 Terje Io
+  Copyright (c) 2017-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -31,12 +31,9 @@
 #include "app_usbd_cfg.h"
 #include "cdc_vcom.h"
 
-static USBD_HANDLE_T g_hUsb;
-
 extern const  USBD_HW_API_T hw_api;
 extern const  USBD_CORE_API_T core_api;
 extern const  USBD_CDC_API_T cdc_api;
-/* Since this example only uses CDC class link functions for that clas only */
 static const  USBD_API_T g_usbApi = {
 	&hw_api,
 	&core_api,
@@ -48,7 +45,9 @@ static const  USBD_API_T g_usbApi = {
 	0x02221101,
 };
 
-const  USBD_API_T *g_pUsbApi = &g_usbApi;
+const USBD_API_T *g_pUsbApi = &g_usbApi;
+
+static USBD_HANDLE_T g_hUsb;
 
 /* Initialize pin and clocks for USB0/USB1 port */
 static void usb_pin_clk_init(void)
@@ -57,6 +56,11 @@ static void usb_pin_clk_init(void)
 	Chip_USB_Init();
 	/* enable USB 1 port on the board */
 //	Board_USBD_Init(1);
+	Chip_IOCON_PinMux(LPC_IOCON, 0, 29, IOCON_MODE_INACT, IOCON_FUNC1);	/* P0.29 D1+, P0.30 D1- */
+	Chip_IOCON_PinMux(LPC_IOCON, 0, 30, IOCON_MODE_INACT, IOCON_FUNC1);
+
+	LPC_USB->USBClkCtrl = 0x12;                /* Dev, AHB clock enable */
+	while ((LPC_USB->USBClkSt & 0x12) != 0x12);
 }
 
 /**
@@ -98,11 +102,7 @@ USB_INTERFACE_DESCRIPTOR *find_IntfDesc(const uint8_t *pDesc, uint32_t intfClass
 
 #if USB_ENABLE
 
-#include "serial.h"
 #include "grbl/grbl.h"
-//#include "VCOM_lib/usbSerial.h"
-
-static stream_rx_buffer_t rxbuf = {0};
 
 #define USB_TXLEN 128
 
@@ -112,45 +112,14 @@ typedef struct {
 	char data[USB_TXLEN];
 } usb_tx_buf;
 
-usb_tx_buf txbuf = {0};
-
-void USB_StateCallback(bool dtr, bool rts)
-{
-
-}
-
-// Receives serial data. Called by an interrupt.
-void USB_ReadCallback(const char* data, unsigned len)
-{
-    uint16_t bptr;
-    char rxdata;
-
-	while (len--) {
-
-		bptr = (rxbuf.head + 1) & (RX_BUFFER_SIZE - 1);    // Get next head pointer
-
-        if(bptr == rxbuf.tail) {   // If buffer full
-        	rxbuf.overflow = 1;    // flag overflow
-        } else {
-            rxdata = *data++;
-            if(!hal.stream.enqueue_realtime_command(rxdata)) {
-            	rxbuf.data[rxbuf.head] = rxdata;    // Add data to buffer
-            	rxbuf.head = bptr;             // and update pointer
-            }
-        }
-	}
-}
+static usb_tx_buf txbuf = {0};
+static stream_rx_buffer_t rxbuf = {0};
 
 void usbInit (void)
 {
-
 	USBD_API_INIT_PARAM_T usb_param;
 	USB_CORE_DESCS_T desc;
-	ErrorCode_t ret = LPC_OK;
-
-	/* Initialize board and chip */
-	SystemCoreClockUpdate();
-//	Board_Init();
+//	ErrorCode_t ret = LPC_OK;
 
 	/* enable clocks and pinmux */
 	usb_pin_clk_init();
@@ -173,12 +142,9 @@ void usbInit (void)
 	desc.device_qualifier = 0;
 
 	/* USB Initialization */
-	ret = USBD_API->hw->Init(&g_hUsb, &desc, &usb_param);
-	if (ret == LPC_OK) {
-
+	if (USBD_API->hw->Init(&g_hUsb, &desc, &usb_param) == LPC_OK) {
 		/* Init VCOM interface */
-		ret = vcom_init(g_hUsb, &desc, &usb_param);
-		if (ret == LPC_OK) {
+		if (vcom_init(g_hUsb, &desc, &usb_param) == LPC_OK) {
 			/*  enable USB interrupts */
 			NVIC_EnableIRQ(USB_IRQn);
 			/* now connect */
@@ -188,14 +154,7 @@ void usbInit (void)
 
 	txbuf.s = txbuf.data;
 }
-/*
-void usbInit (void)
-{
-	usbSerialInit(USB_StateCallback, USB_ReadCallback);
 
-	txbuf.s = txbuf.data;
-}
-*/
 //
 // Returns number of free characters in the input buffer
 //
@@ -229,25 +188,24 @@ void usbRxCancel (void)
 //
 void usbWriteS (const char *s)
 {
-	//while(VCOM_putchar(c) == EOF);
-
 	size_t length = strlen(s);
 
 	if(vcom_connected() && length + txbuf.length < USB_TXLEN) {
 		memcpy(txbuf.s, s, length);
 		txbuf.length += length;
 		txbuf.s += length;
-		if(s[length - 1] == '\n') {
+		if(s[length - 1] == '\n' || txbuf.length > 40) {
 			length = txbuf.length;
 			txbuf.length = 0;
 			txbuf.s = txbuf.data;
-			while(!vcom_write((uint8_t *)txbuf.data, length)) {
+			while((txbuf.length = vcom_write((uint8_t *)txbuf.data, length)) != length) {
+				length -= txbuf.length;
 	            if(!hal.stream_blocking_callback())
 	                return;
 			}
+			txbuf.length = 0;
 		}
 	}
-//	while(CDC_Transmit_FS((uint8_t*)s, strlen(s)) == USBD_BUSY);
 }
 
 //

@@ -18,6 +18,26 @@
 #include "diskio.h"
 #include "driver.h"
 
+#define LPC_SD_PORT LPC_SSP1
+
+#if SD_SPI_PORT == 0
+	#define LPC_SD_PORT LPC_SSP0
+	static const PINMUX_GRP_T sd_pinmux[] = {
+		{0, 15,  IOCON_MODE_PULLDOWN | IOCON_FUNC2}, 			/* SCK */
+		{0, 17,  IOCON_MODE_INACT | IOCON_FUNC2}, 				/* MISO */
+		{0, 18, IOCON_MODE_INACT | IOCON_FUNC2}, 				/* SOMI */
+		{SD_CS_PN, SD_CS_PIN, IOCON_MODE_PULLUP | IOCON_FUNC0}	/* SDCS */
+	};
+#elif SD_SPI_PORT == 1
+	#define LPC_SD_PORT LPC_SSP1
+	static const PINMUX_GRP_T sd_pinmux[] = {
+		{0, 7,  IOCON_MODE_PULLDOWN | IOCON_FUNC2}, 			/* SCK */
+		{0, 8,  IOCON_MODE_INACT | IOCON_FUNC2}, 				/* MISO */
+		{0, 9, IOCON_MODE_INACT | IOCON_FUNC2}, 				/* SOMI */
+		{SD_CS_PN, SD_CS_PIN, IOCON_MODE_PULLUP | IOCON_FUNC0}	/* SDCS */
+	};
+#endif
+
 /* Definitions for MMC/SDC command */
 #define CMD0    (0x40+0)    /* GO_IDLE_STATE */
 #define CMD1    (0x40+1)    /* SEND_OP_COND */
@@ -78,11 +98,13 @@ BYTE PowerFlag = 0;     /* indicates if "power" is on */
 static
 void xmit_spi(BYTE dat)
 {
-	Chip_SPI_SendFrame(LPC_SPI, dat);
+	while(Chip_SSP_GetStatus(LPC_SD_PORT, SSP_STAT_BSY));
 
-	while(!(Chip_SPI_GetStatus(LPC_SPI) & SPI_SR_SPIF));
+	Chip_SSP_SendFrame(LPC_SD_PORT, dat);
 
-	Chip_SPI_ReceiveFrame(LPC_SPI);
+	while(Chip_SSP_GetStatus(LPC_SD_PORT, SSP_STAT_BSY));
+
+	Chip_SSP_ReceiveFrame(LPC_SD_PORT);
 }
 
 
@@ -93,11 +115,11 @@ void xmit_spi(BYTE dat)
 static
 BYTE rcvr_spi (void)
 {
-	Chip_SPI_SendFrame(LPC_SPI, 0xFF);
+	Chip_SSP_SendFrame(LPC_SD_PORT, 0xFF);
 
-	while(!(Chip_SPI_GetStatus(LPC_SPI) & SPI_SR_SPIF));
+	while(Chip_SSP_GetStatus(LPC_SD_PORT, SSP_STAT_BSY));
 
-    return Chip_SPI_ReceiveFrame(LPC_SPI);
+    return Chip_SSP_ReceiveFrame(LPC_SD_PORT);
 }
 
 
@@ -153,7 +175,6 @@ void send_initial_clock_train(void)
 void power_on (void)
 {
 	static bool init = false;
-	static SPI_CONFIG_FORMAT_T spi_format;
 
     /*
      * This doesn't really turn the power on, but initializes the
@@ -163,19 +184,16 @@ void power_on (void)
 	// SPI0
 
 	if(!init) {
-		Chip_IOCON_PinMux(LPC_IOCON, 0, 15, IOCON_MODE_PULLDOWN, IOCON_FUNC3);	// SCK
-		Chip_IOCON_PinMux(LPC_IOCON, 0, 17, IOCON_MODE_INACT, IOCON_FUNC3); 	// MISO
-		Chip_IOCON_PinMux(LPC_IOCON, 0, 18, IOCON_MODE_INACT, IOCON_FUNC3); 	// MOSI
 
-		Chip_SPI_Init(LPC_SPI);
-		spi_format.bits = SPI_BITS_8;
-		spi_format.clockMode = SPI_CLOCK_MODE0;
-		spi_format.dataOrder = SPI_DATA_MSB_FIRST;
-		Chip_SPI_SetFormat(LPC_SPI, &spi_format);
-		Chip_SPI_SetMode(LPC_SPI, SPI_MODE_MASTER);
+		Chip_IOCON_SetPinMuxing(LPC_IOCON, sd_pinmux, sizeof(sd_pinmux) / sizeof(PINMUX_GRP_T));
+
+		Chip_SSP_Init(LPC_SD_PORT);
+		Chip_SSP_SetFormat(LPC_SD_PORT, SSP_BITS_8, SSP_FRAMEFORMAT_SPI, SSP_CLOCK_CPHA0_CPOL0);
+		Chip_SSP_Set_Mode(LPC_SD_PORT, SSP_MODE_MASTER);
+		Chip_SSP_Enable(LPC_SD_PORT);
 	}
 
-	Chip_SPI_SetBitRate(LPC_SPI, 400000);
+	Chip_SSP_SetBitRate(LPC_SD_PORT, 400000);
 
 	init = true;
     PowerFlag = 1;
@@ -185,7 +203,7 @@ void power_on (void)
 static
 void set_max_speed(void)
 {
-	Chip_SPI_SetBitRate(LPC_SPI, 12000000); // 12 MHz
+	Chip_SSP_SetBitRate(LPC_SD_PORT, 12000000); // 12 MHz
 }
 
 static
