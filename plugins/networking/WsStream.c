@@ -51,7 +51,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "utils.h"
 #include "strutils.h"
 
-#include "GRBL/grbl.h"
+#include "grbl/grbl.h"
 
 //#define WSDEBUG
 
@@ -172,7 +172,7 @@ static const ws_sessiondata_t defaultSettings =
 {
     .port = 80,
     .state = WsState_Listen,
-	.fragment_opcode = WsOpcode_Continuation,
+    .fragment_opcode = WsOpcode_Continuation,
     .start.token = FRAME_NONE,
     .timeout = 0,
     .timeoutMax = SOCKET_TIMEOUT,
@@ -188,10 +188,10 @@ static const ws_sessiondata_t defaultSettings =
     .connectCount = 0,
     .reconnectCount = 0,
     .errorCount = 0,
-	.pingCount = 0,
+    .pingCount = 0,
     .lastErr = ERR_OK,
     .http_request = NULL,
-	.hdrsize = MAX_HTTP_HEADER_SIZE,
+    .hdrsize = MAX_HTTP_HEADER_SIZE,
     .traffic_handler = WsConnectionHandler
 };
 
@@ -355,7 +355,7 @@ static void streamFreeBuffers (ws_sessiondata_t *session)
     }
 
     if(session->header.frame)
-    	free(session->header.frame);
+        free(session->header.frame);
 
     SYS_ARCH_UNPROTECT(lev);
 }
@@ -476,7 +476,7 @@ static err_t WsStreamAccept (void *arg, struct tcp_pcb *pcb, err_t err)
     session->state = WsState_Connected;
     session->fragment_opcode = WsOpcode_Continuation;
     session->start.token = FRAME_NONE;
-	memset(&session->header, 0, sizeof(frame_header_t));
+    memset(&session->header, 0, sizeof(frame_header_t));
 
     session->traffic_handler = WsConnectionHandler;
     session->pingCount = 0;
@@ -622,16 +622,16 @@ static void WsConnectionHandler (ws_sessiondata_t *session)
     // 1. Process input
     while(true) {
 
-    	if(ptr == hdrsize) {
-    		session->hdrsize += 128;
-    		if((session->http_request = realloc(session->http_request, session->hdrsize)) == NULL) {
+        if(ptr == hdrsize) {
+            session->hdrsize += 128;
+            if((session->http_request = realloc(session->http_request, session->hdrsize)) == NULL) {
                 http_write_error(session, HTTP_500);
                 return;
-    		}
+            }
             hdrsize = session->hdrsize - 1;
-    	}
+        }
 
-    	// Get next pbuf chain to process
+        // Get next pbuf chain to process
         if(session->pbufHead == NULL && session->rcvTail != session->rcvHead) {
             SYS_ARCH_PROTECT(lev);
             session->pbufCurrent = session->pbufHead = session->rcvTail->pbuf;
@@ -742,13 +742,13 @@ static void WsConnectionHandler (ws_sessiondata_t *session)
 
                 // Switch to binary frames if protocol is: arduino
                 if(!strcmp(keyp, "arduino"))
-					session->ftype = wshdr_bin;
+                    session->ftype = wshdr_bin;
             }
         }
 
         free(session->http_request);
         session->http_request = NULL;
-    	session->hdrsize = MAX_HTTP_HEADER_SIZE;
+        session->hdrsize = MAX_HTTP_HEADER_SIZE;
     }
 
     // Bad request?
@@ -757,7 +757,7 @@ static void WsConnectionHandler (ws_sessiondata_t *session)
         if(session->http_request) {
             free(session->http_request);
             session->http_request = NULL;
-        	session->hdrsize = MAX_HTTP_HEADER_SIZE;
+            session->hdrsize = MAX_HTTP_HEADER_SIZE;
         }
     }
 }
@@ -768,46 +768,46 @@ static void WsConnectionHandler (ws_sessiondata_t *session)
 
 static bool WsCollectFrame (frame_header_t *header, uint8_t *payload, uint32_t len)
 {
-	if(header->payload_rem > len && header->payload_rem == header->payload_len) {
-		if((header->frame = malloc(header->payload_len + header->idx)))
-			memcpy(header->frame, &header->data, header->idx);
-	}
+    if(header->payload_rem > len && header->payload_rem == header->payload_len) {
+        if((header->frame = malloc(header->payload_len + header->idx)))
+            memcpy(header->frame, &header->data, header->idx);
+    }
 
-	header->payload_rem -= len;
+    header->payload_rem -= len;
 
-	if(header->frame)
-		memcpy(header->frame + header->idx + header->payload_len - header->payload_rem - 1, payload, len);
+    if(header->frame)
+        memcpy(header->frame + header->idx + header->payload_len - header->payload_rem - 1, payload, len);
 
-	return header->frame != NULL;
+    return header->frame != NULL;
 }
 
 static uint32_t WsParse (ws_sessiondata_t *session, uint8_t *payload, uint32_t len)
 {
-	bool frame_done = false;
-	uint32_t plen = len;
+    bool frame_done = false;
+    uint32_t plen = len;
 
-	// Collect frame header
+    // Collect frame header
     while(!session->header.complete && plen) {
 
-    	session->header.data[session->header.idx++] = *payload++;
+        session->header.data[session->header.idx++] = *payload++;
 
-    	if(session->header.idx == 2) {
-    		session->header.masked      = session->header.data[1] & 0x80; // always true from client
-    		session->header.payload_len = session->header.data[1] & 0x7F;
-    	}
+        if(session->header.idx == 2) {
+            session->header.masked      = session->header.data[1] & 0x80; // always true from client
+            session->header.payload_len = session->header.data[1] & 0x7F;
+        }
 
-    	if(session->header.idx >= 6) {
-    		if((session->header.complete = (session->header.idx == (session->header.payload_len == 126 ? 8 : 6)))) {
-				if(session->header.payload_len == 126) {
-					session->header.payload_len = (session->header.data[2] << 8) | session->header.data[3];
-					memcpy(&session->header.mask, &session->header.data[4], sizeof(uint32_t));
-				} else
-					memcpy(&session->header.mask, &session->header.data[2], sizeof(uint32_t));
-				session->header.payload_rem = session->header.payload_len;
-			}
-    	}
+        if(session->header.idx >= 6) {
+            if((session->header.complete = (session->header.idx == (session->header.payload_len == 126 ? 8 : 6)))) {
+                if(session->header.payload_len == 126) {
+                    session->header.payload_len = (session->header.data[2] << 8) | session->header.data[3];
+                    memcpy(&session->header.mask, &session->header.data[4], sizeof(uint32_t));
+                } else
+                    memcpy(&session->header.mask, &session->header.data[2], sizeof(uint32_t));
+                session->header.payload_rem = session->header.payload_len;
+            }
+        }
 
-    	plen--;
+        plen--;
     }
 
 //    if(session->start.token != FRAME_NONE)
@@ -819,30 +819,30 @@ static uint32_t WsParse (ws_sessiondata_t *session, uint8_t *payload, uint32_t l
         ws_frame_start_t fs = (ws_frame_start_t)session->header.data[0];
 
         if (!fs.fin && (websocket_opcode_t)fs.opcode != WsOpcode_Continuation)
-        	session->fragment_opcode = (websocket_opcode_t)fs.opcode;
+            session->fragment_opcode = (websocket_opcode_t)fs.opcode;
 
         if((websocket_opcode_t)fs.opcode == WsOpcode_Continuation)
-        	fs.opcode = session->fragment_opcode;
+            fs.opcode = session->fragment_opcode;
 
         switch ((websocket_opcode_t)fs.opcode) {
 
-        	case WsOpcode_Continuation:
-        		// Something went wrong, exit fragment handling mode
-        		session->fragment_opcode = WsOpcode_Continuation;
-        		break;
+            case WsOpcode_Continuation:
+                // Something went wrong, exit fragment handling mode
+                session->fragment_opcode = WsOpcode_Continuation;
+                break;
 
-			case WsOpcode_Binary:
-//				session->ftype = wshdr_bin; // Switch to binary responses if client talks binary to us
+            case WsOpcode_Binary:
+//              session->ftype = wshdr_bin; // Switch to binary responses if client talks binary to us
                 //  No break
             case WsOpcode_Text:
 
                 if (fs.fin)
-                	session->fragment_opcode = WsOpcode_Continuation;
+                    session->fragment_opcode = WsOpcode_Continuation;
 
                 if (session->header.payload_rem) {
 
-                	uint8_t *mask = (uint8_t *)&session->header.mask;
-                	uint_fast16_t payload_len = session->header.payload_rem > plen ? plen : session->header.payload_rem;
+                    uint8_t *mask = (uint8_t *)&session->header.mask;
+                    uint_fast16_t payload_len = session->header.payload_rem > plen ? plen : session->header.payload_rem;
 
                     session->start.token = session->header.payload_rem > plen ? fs.token : FRAME_NONE;
 /*
@@ -873,61 +873,61 @@ static uint32_t WsParse (ws_sessiondata_t *session, uint8_t *payload, uint32_t l
                 break;
 
             case WsOpcode_Close:
-            	if((frame_done = plen >= session->header.payload_rem)) {
-            		plen -= session->header.payload_rem;
-					if(WsCollectFrame(&session->header, payload, session->header.payload_rem))
-						payload = session->header.frame;
-					tcp_write(session->pcbConnect, payload, session->header.payload_len, 1);
-					tcp_output(session->pcbConnect);
-					session->state = WsStateClosing;
-            	} else {
-            		WsCollectFrame(&session->header, payload, plen);
-            		plen = 0;
-            	}
-				break;
+                if((frame_done = plen >= session->header.payload_rem)) {
+                    plen -= session->header.payload_rem;
+                    if(WsCollectFrame(&session->header, payload, session->header.payload_rem))
+                        payload = session->header.frame;
+                    tcp_write(session->pcbConnect, payload, session->header.payload_len, 1);
+                    tcp_output(session->pcbConnect);
+                    session->state = WsStateClosing;
+                } else {
+                    WsCollectFrame(&session->header, payload, plen);
+                    plen = 0;
+                }
+                break;
 
             case WsOpcode_Ping:
-            	if((frame_done = plen >= session->header.payload_rem)) {
-					if(streamSession.state != WsStateClosing) {
-	            		plen -= session->header.payload_rem;
-						if(WsCollectFrame(&session->header, payload, session->header.payload_rem))
-							payload = session->header.frame;
-						fs.opcode = WsOpcode_Pong;
-						payload[0] = fs.token;
-						tcp_write(session->pcbConnect, payload, session->header.payload_len, 1);
-						tcp_output(session->pcbConnect);
-					}
-            	} else {
-            		WsCollectFrame(&session->header, payload, plen);
-            		plen = 0;
-            	}
+                if((frame_done = plen >= session->header.payload_rem)) {
+                    if(streamSession.state != WsStateClosing) {
+                        plen -= session->header.payload_rem;
+                        if(WsCollectFrame(&session->header, payload, session->header.payload_rem))
+                            payload = session->header.frame;
+                        fs.opcode = WsOpcode_Pong;
+                        payload[0] = fs.token;
+                        tcp_write(session->pcbConnect, payload, session->header.payload_len, 1);
+                        tcp_output(session->pcbConnect);
+                    }
+                } else {
+                    WsCollectFrame(&session->header, payload, plen);
+                    plen = 0;
+                }
                 break;
 
             case WsOpcode_Pong:
-            	if((frame_done = plen >= session->header.payload_rem)) {
-					session->pingCount = 0;
-            		plen -= session->header.payload_rem;
-            	} else {
-            		session->header.payload_rem -= plen;
-            		plen = 0;
-            	}
+                if((frame_done = plen >= session->header.payload_rem)) {
+                    session->pingCount = 0;
+                    plen -= session->header.payload_rem;
+                } else {
+                    session->header.payload_rem -= plen;
+                    plen = 0;
+                }
                 break;
 
             default:
-            	// Unsupported/undefined opcode - ditch any payload(?)
-            	if((frame_done = plen >= session->header.payload_rem))
-            		plen -= session->header.payload_rem;
-            	else {
-            		session->header.payload_rem -= plen;
-            		plen = 0;
-            	}
-            	break;
+                // Unsupported/undefined opcode - ditch any payload(?)
+                if((frame_done = plen >= session->header.payload_rem))
+                    plen -= session->header.payload_rem;
+                else {
+                    session->header.payload_rem -= plen;
+                    plen = 0;
+                }
+                break;
         }
 
         if(frame_done) {
-    		if(session->header.frame)
-    			free(session->header.frame);
-        	memset(&session->header, 0, sizeof(frame_header_t));
+            if(session->header.frame)
+                free(session->header.frame);
+            memset(&session->header, 0, sizeof(frame_header_t));
         }
     }
 
@@ -1033,17 +1033,17 @@ static void WsStreamHandler (ws_sessiondata_t *session)
     // Send ping every 3 seconds if no outgoing traffic.
     // Disconnect session after 3 failed pings (9 seconds).
     if(session->pingCount > 3)
-    	streamSession.state = WsStateClosing;
+        streamSession.state = WsStateClosing;
     else if(streamSession.state != WsStateClosing && (xTaskGetTickCount() - session->lastSendTime) > (3 * configTICK_RATE_HZ)) {
-    	if(tcp_sndbuf(session->pcbConnect) > 4) {
-			tempBuffer[0] = wshdr_ping.token;
-			tempBuffer[1] = 2;
-			strcpy((char *)&tempBuffer[2], "Hi");
-			tcp_write(session->pcbConnect, tempBuffer, 4, 1);
-			tcp_output(session->pcbConnect);
-			session->lastSendTime = xTaskGetTickCount();
-			session->pingCount++;
-		}
+        if(tcp_sndbuf(session->pcbConnect) > 4) {
+            tempBuffer[0] = wshdr_ping.token;
+            tempBuffer[1] = 2;
+            strcpy((char *)&tempBuffer[2], "Hi");
+            tcp_write(session->pcbConnect, tempBuffer, 4, 1);
+            tcp_output(session->pcbConnect);
+            session->lastSendTime = xTaskGetTickCount();
+            session->pingCount++;
+        }
     }
 }
 

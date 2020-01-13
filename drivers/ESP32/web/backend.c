@@ -103,7 +103,7 @@ static esp_err_t favicon_get_handler(httpd_req_t *req)
 static esp_err_t index_html_get_handler(httpd_req_t *req)
 {
 #if WEBUI_ENABLE
-	return webui_index_html_get_handler(req);
+    return webui_index_html_get_handler(req);
 #else
     extern const unsigned char index_html_start[] asm("_binary_index_html_start");
     extern const unsigned char index_html_end[]   asm("_binary_index_html_end");
@@ -125,18 +125,18 @@ static esp_err_t ap_login_html_get_handler(httpd_req_t *req)
 /* Set HTTP response content type according to file extension */
 esp_err_t set_content_type_from_file(httpd_req_t *req, const char *filename)
 {
-	if(filename && strlen(filename) > 3) {
-		if (IS_FILE_EXT(filename, ".pdf"))
-			return httpd_resp_set_type(req, "application/pdf");
-		else if (IS_FILE_EXT(filename, ".html"))
-			return httpd_resp_set_type(req, "text/html");
-		else if (IS_FILE_EXT(filename, ".jpeg") || IS_FILE_EXT(filename, ".jpg"))
-			return httpd_resp_set_type(req, "image/jpeg");
-		else if (IS_FILE_EXT(filename, ".ico"))
-			return httpd_resp_set_type(req, "image/x-icon");
-		else if (IS_FILE_EXT(filename, ".gz"))
-			return httpd_resp_set_type(req, "application/x-gzip");
-	}
+    if(filename && strlen(filename) > 3) {
+        if (IS_FILE_EXT(filename, ".pdf"))
+            return httpd_resp_set_type(req, "application/pdf");
+        else if (IS_FILE_EXT(filename, ".html"))
+            return httpd_resp_set_type(req, "text/html");
+        else if (IS_FILE_EXT(filename, ".jpeg") || IS_FILE_EXT(filename, ".jpg"))
+            return httpd_resp_set_type(req, "image/jpeg");
+        else if (IS_FILE_EXT(filename, ".ico"))
+            return httpd_resp_set_type(req, "image/x-icon");
+        else if (IS_FILE_EXT(filename, ".gz"))
+            return httpd_resp_set_type(req, "application/x-gzip");
+    }
     /* This is a limited set only */
     /* For any other type always set as plain text */
     return httpd_resp_set_type(req, "text/plain");
@@ -145,31 +145,31 @@ esp_err_t set_content_type_from_file(httpd_req_t *req, const char *filename)
 // Fetch and decode value for query key
 char *http_get_key_value (char *qstring, char *key, char *val, size_t val_size)
 {
-	if(httpd_query_key_value(qstring, key, val, val_size) == ESP_OK)
-		urldecode(val, val);
-	else {
-		*val = '\0';
-		val = NULL;
-	}
+    if(httpd_query_key_value(qstring, key, val, val_size) == ESP_OK)
+        urldecode(val, val);
+    else {
+        *val = '\0';
+        val = NULL;
+    }
 
-	return val;
+    return val;
 }
 
 /* Copies the full path into destination buffer and returns
  * pointer to path (skipping the preceding base path) */
 static const char *get_path_from_uri (char *dest, httpd_req_t *req, size_t destsize)
 {
-	*dest = '\0';
-	if(req->user_ctx)
-		strcpy(dest, ((file_server_data_t *)req->user_ctx)->base_path);
+    *dest = '\0';
+    if(req->user_ctx)
+        strcpy(dest, ((file_server_data_t *)req->user_ctx)->base_path);
 
-	char *uri = (char *)req->uri, *p;
+    char *uri = (char *)req->uri, *p;
     const size_t base_pathlen = strlen(dest);
-	size_t pathlen = strlen(uri);
-	if(pathlen >= base_pathlen && !strncmp(dest, uri, base_pathlen)) {
-		uri += base_pathlen;
-		pathlen -= base_pathlen;
-	}
+    size_t pathlen = strlen(uri);
+    if(pathlen >= base_pathlen && !strncmp(dest, uri, base_pathlen)) {
+        uri += base_pathlen;
+        pathlen -= base_pathlen;
+    }
 
     if ((p = strchr(uri, '?')))
         pathlen = MIN(pathlen, p - uri);
@@ -191,38 +191,38 @@ static const char *get_path_from_uri (char *dest, httpd_req_t *req, size_t dests
 
 static bool getPayload (httpd_req_t *req, char *buf)
 {
-	int ret;
-	size_t off = 0;
+    int ret;
+    size_t off = 0;
 
-	if (buf == NULL) {
-		// Failed to allocate memory for payload
-		httpd_resp_send_500(req);
-		return false;
-	}
+    if (buf == NULL) {
+        // Failed to allocate memory for payload
+        httpd_resp_send_500(req);
+        return false;
+    }
 
-	 // Process received data
-	while (off < req->content_len) {
+     // Process received data
+    while (off < req->content_len) {
 
-		if ((ret = httpd_req_recv(req, buf + off, req->content_len - off)) <= 0) {
-			if (ret == HTTPD_SOCK_ERR_TIMEOUT)
-				httpd_resp_send_408(req);
-			return false;
-		}
+        if ((ret = httpd_req_recv(req, buf + off, req->content_len - off)) <= 0) {
+            if (ret == HTTPD_SOCK_ERR_TIMEOUT)
+                httpd_resp_send_408(req);
+            return false;
+        }
 
-		off += ret;
-	}
+        off += ret;
+    }
 
-	buf[off] = '\0';
+    buf[off] = '\0';
 
-	return true;
+    return true;
 }
 
 esp_err_t spiffs_get_handler (httpd_req_t *req)
 {
-	fs_filepath_t filepath;
+    fs_filepath_t filepath;
     const char *filename = get_path_from_uri(filepath, req, sizeof(filepath));
 
-	if (!filename) {
+    if (!filename) {
         ESP_LOGE(TAG, "Filename is too long");
         /* Respond with 500 Internal Server Error */
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Filename too long");
@@ -230,7 +230,7 @@ esp_err_t spiffs_get_handler (httpd_req_t *req)
     }
 
     if (!strcmp(filename, "/favicon.ico"))
-    	return favicon_get_handler(req);
+        return favicon_get_handler(req);
 
     /* If name has trailing '/', respond with directory contents */
     if (filename[strlen(filename) - 1] == '/') {
@@ -263,10 +263,10 @@ esp_err_t spiffs_get_handler (httpd_req_t *req)
     char *chunk = ((file_server_data_t *)req->user_ctx)->scratch;
 
     do {
-    	chunksize = fread(chunk, sizeof(char), sizeof(fs_scratch_t), file);
+        chunksize = fread(chunk, sizeof(char), sizeof(fs_scratch_t), file);
 
         if (httpd_resp_send_chunk(req, chunk, chunksize) != ESP_OK) {
-        	fclose(file);
+            fclose(file);
             httpd_resp_sendstr_chunk(req, NULL);
             httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to send file");
             return ESP_FAIL;
@@ -284,18 +284,18 @@ esp_err_t spiffs_get_handler (httpd_req_t *req)
 
 static esp_err_t sdcard_get_handler (httpd_req_t *req)
 {
-	fs_filepath_t filepath;
+    fs_filepath_t filepath;
     const char *filename = get_path_from_uri(filepath, req, sizeof(filepath));
 
  //   sdcard_getfs(); // ensure card is mounted
 
-	if (!filename) {
+    if (!filename) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Filename too long");
         return ESP_FAIL;
     }
 
     if (!strcmp(filename, "/favicon.ico"))
-    	return favicon_get_handler(req);
+        return favicon_get_handler(req);
 
     /* If name has trailing '/', respond with directory contents */
     if (filename[strlen(filename) - 1] == '/') {
@@ -303,7 +303,7 @@ static esp_err_t sdcard_get_handler (httpd_req_t *req)
     }
 
     FIL file;
-	FILINFO st;
+    FILINFO st;
 
     if(f_stat(filename, &st) != FR_OK) {
         /* If file not present on SPIFFS check if URI
@@ -330,7 +330,7 @@ static esp_err_t sdcard_get_handler (httpd_req_t *req)
     do {
         f_read(&file, chunk, sizeof(fs_scratch_t), &chunksize);
         if (httpd_resp_send_chunk(req, chunk, chunksize) != ESP_OK) {
-        	f_close(&file);
+            f_close(&file);
             httpd_resp_sendstr_chunk(req, NULL);
             httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to send file");
             return ESP_FAIL;
@@ -347,53 +347,53 @@ static esp_err_t sdcard_get_handler (httpd_req_t *req)
 
 static esp_err_t sdcard_form_upload_handler (httpd_req_t *req)
 {
-	bool ok = false;
-	int ret;
+    bool ok = false;
+    int ret;
 
-	char *rqhdr = NULL, *boundary;
-	size_t len = httpd_req_get_hdr_value_len(req, "Content-Type");
+    char *rqhdr = NULL, *boundary;
+    size_t len = httpd_req_get_hdr_value_len(req, "Content-Type");
 
-	if(len) {
-		rqhdr = malloc(len + 1);
-		httpd_req_get_hdr_value_str(req, "Content-Type", rqhdr, len + 1);
+    if(len) {
+        rqhdr = malloc(len + 1);
+        httpd_req_get_hdr_value_str(req, "Content-Type", rqhdr, len + 1);
 
-		if((ok = (boundary = strstr(rqhdr, "boundary=")))) {
-			boundary += strlen("boundary=");
-			ok = upload_start(req, boundary, true);
-		}
-	}
+        if((ok = (boundary = strstr(rqhdr, "boundary=")))) {
+            boundary += strlen("boundary=");
+            ok = upload_start(req, boundary, true);
+        }
+    }
 
-	char *scratch = ((file_server_data_t *)req->user_ctx)->scratch;
-	file_upload_t *upload = (file_upload_t *)req->sess_ctx;
+    char *scratch = ((file_server_data_t *)req->user_ctx)->scratch;
+    file_upload_t *upload = (file_upload_t *)req->sess_ctx;
 
-	if (ok) do { // Process received data
+    if (ok) do { // Process received data
 
-		if ((ret = httpd_req_recv(req, scratch, sizeof(fs_scratch_t))) <= 0) {
-			ok = false;
-			if (ret == HTTPD_SOCK_ERR_TIMEOUT)
-				httpd_resp_send_408(req);
-			break;
-		}
+        if ((ret = httpd_req_recv(req, scratch, sizeof(fs_scratch_t))) <= 0) {
+            ok = false;
+            if (ret == HTTPD_SOCK_ERR_TIMEOUT)
+                httpd_resp_send_408(req);
+            break;
+        }
 
-		upload_chunk(req, scratch, (size_t)ret);
+        upload_chunk(req, scratch, (size_t)ret);
 
-	} while(upload->state != Upload_Complete);
+    } while(upload->state != Upload_Complete);
 
-	if(ok) {
-		httpd_resp_set_status(req, "202 Accepted");
-		httpd_resp_send(req, NULL, 0);
-	} else
-		httpd_resp_send_err(req, 400, "Upload failed");
+    if(ok) {
+        httpd_resp_set_status(req, "202 Accepted");
+        httpd_resp_send(req, NULL, 0);
+    } else
+        httpd_resp_send_err(req, 400, "Upload failed");
 
-	if(req->sess_ctx && req->free_ctx) {
-		req->free_ctx(req->sess_ctx);
-		req->sess_ctx = NULL;
-	}
+    if(req->sess_ctx && req->free_ctx) {
+        req->free_ctx(req->sess_ctx);
+        req->sess_ctx = NULL;
+    }
 
-	if(rqhdr)
-		free(rqhdr);
+    if(rqhdr)
+        free(rqhdr);
 
-	return ok ? ESP_OK : ESP_FAIL;
+    return ok ? ESP_OK : ESP_FAIL;
 }
 
 #endif // WEBUI_ENABLE
@@ -402,69 +402,69 @@ static esp_err_t sdcard_form_upload_handler (httpd_req_t *req)
 
 static esp_err_t get_handler(httpd_req_t *req)
 {
-	if(wifi_dns_running()) { // captive portal, redirect requests to ourself...
+    if(wifi_dns_running()) { // captive portal, redirect requests to ourself...
 
-	    if (!strcmp(req->uri, "/ap_login.html"))
-	    	return ap_login_html_get_handler(req);
+        if (!strcmp(req->uri, "/ap_login.html"))
+            return ap_login_html_get_handler(req);
 
-	    bool internal = false;
-		struct sockaddr_in6 addr;   // esp_http_server uses IPv6 addressing
-		socklen_t addr_size = sizeof(struct sockaddr_in6);
-		char ipstr[INET6_ADDRSTRLEN];
+        bool internal = false;
+        struct sockaddr_in6 addr;   // esp_http_server uses IPv6 addressing
+        socklen_t addr_size = sizeof(struct sockaddr_in6);
+        char ipstr[INET6_ADDRSTRLEN];
 
-		if (getpeername(httpd_req_to_sockfd(req), (struct sockaddr *)&addr, &addr_size) == 0) {
+        if (getpeername(httpd_req_to_sockfd(req), (struct sockaddr *)&addr, &addr_size) == 0) {
 
-			ap_list_t *ap_list = wifi_get_aplist();
+            ap_list_t *ap_list = wifi_get_aplist();
 
-			if(ap_list) { // Request is from local STA?
-				internal = ap_list->ap_selected && memcmp(&ap_list->ip_addr, &addr.sin6_addr.un.u32_addr[3], sizeof(ip4_addr_t)) == 0;
-				wifi_release_aplist();
-			}
+            if(ap_list) { // Request is from local STA?
+                internal = ap_list->ap_selected && memcmp(&ap_list->ip_addr, &addr.sin6_addr.un.u32_addr[3], sizeof(ip4_addr_t)) == 0;
+                wifi_release_aplist();
+            }
 
-			inet_ntop(AF_INET, &addr.sin6_addr.un.u32_addr[3], ipstr, sizeof(ipstr));
+            inet_ntop(AF_INET, &addr.sin6_addr.un.u32_addr[3], ipstr, sizeof(ipstr));
 
-			// From local AP?
-			if(!internal && memcmp(&driver_settings.wifi.ap.network.ip, &addr.sin6_addr.un.u32_addr[3], sizeof(ip4_addr_t))) {
+            // From local AP?
+            if(!internal && memcmp(&driver_settings.wifi.ap.network.ip, &addr.sin6_addr.un.u32_addr[3], sizeof(ip4_addr_t))) {
 
-				char loc[50];
+                char loc[50];
 
-				inet_ntop(AF_INET, &driver_settings.wifi.ap.network.ip, ipstr, sizeof(ipstr));
+                inet_ntop(AF_INET, &driver_settings.wifi.ap.network.ip, ipstr, sizeof(ipstr));
 
-				sprintf(loc, "http://%s/ap_login.html", ipstr);
+                sprintf(loc, "http://%s/ap_login.html", ipstr);
 
-				return redirect_html_get_handler(req, loc);
-			}
-		}
-	}
+                return redirect_html_get_handler(req, loc);
+            }
+        }
+    }
 
-	fs_filepath_t filepath;
+    fs_filepath_t filepath;
     const char *filename = get_path_from_uri(filepath, req, sizeof(filepath));
 
 #if SDCARD_ENABLE
-	// If file exists on SD card get it from there
-	FILINFO file;
-	if(f_stat(filename, &file) == FR_OK) {
+    // If file exists on SD card get it from there
+    FILINFO file;
+    if(f_stat(filename, &file) == FR_OK) {
 #if WEBUI_ENABLE
-    	req->user_ctx = &sd_fs_data;
+        req->user_ctx = &sd_fs_data;
 #endif
-		return sdcard_get_handler(req);
-	}
+        return sdcard_get_handler(req);
+    }
 #endif
 
-	// If file exists in spiffs get it from there
-	struct stat st;
+    // If file exists in spiffs get it from there
+    struct stat st;
     strcat(strcpy(spiff_fs_data.scratch, spiff_fs_data.base_path), filename);
 
     if (stat(spiff_fs_data.scratch, &st) == 0) {
-    	req->user_ctx = &spiff_fs_data;
-    	return spiffs_get_handler(req);
+        req->user_ctx = &spiff_fs_data;
+        return spiffs_get_handler(req);
     }
 
     if (!strcmp(req->uri, "/index.html") || !strcmp(req->uri, "/"))
-    	return index_html_get_handler(req);
+        return index_html_get_handler(req);
 
     if (!strcmp(req->uri, "/favicon.ico"))
-    	return favicon_get_handler(req);
+        return favicon_get_handler(req);
 
     httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "File does not exist");
 
@@ -474,252 +474,252 @@ static esp_err_t get_handler(httpd_req_t *req)
 // add setting to the JSON response array
 static bool add_setting (int id, char *value)
 {
-	bool ok = true;
+    bool ok = true;
 
-	cJSON *setting;
+    cJSON *setting;
 
-	if((ok = (setting = cJSON_CreateObject()) != NULL))
-	{
-		ok = cJSON_AddNumberToObject(setting, "id", (double)id) != NULL;
-		ok &= cJSON_AddStringToObject(setting, "value", value) != NULL;
-		if(ok)
-			cJSON_AddItemToArray(json_settings, setting);
-	}
+    if((ok = (setting = cJSON_CreateObject()) != NULL))
+    {
+        ok = cJSON_AddNumberToObject(setting, "id", (double)id) != NULL;
+        ok &= cJSON_AddStringToObject(setting, "value", value) != NULL;
+        if(ok)
+            cJSON_AddItemToArray(json_settings, setting);
+    }
 
-	return ok;
+    return ok;
 }
 
 // Used for trapping settings report and generating a JSON array
 static void backendWriteS (const char *data)
 {
-	strcat(sbuf, data);
+    strcat(sbuf, data);
 
-	uint32_t len = strlen(sbuf);
+    uint32_t len = strlen(sbuf);
 
-	if(sbuf[len - 2] == '\r')
-	{
-		sbuf[len - 2] = '\0';
-		char *eq = strchr(sbuf, '=');
-		if(eq) {
-			*eq = '\0';
-			uint_fast8_t counter = 1;
-			float parameter;
-			read_float(sbuf, &counter, &parameter);
-			if(setting == -1 || (int)parameter == setting)
-				add_setting((int)parameter, eq + 1);
-		}
-		sbuf[0] = '\0';
-	}
+    if(sbuf[len - 2] == '\r')
+    {
+        sbuf[len - 2] = '\0';
+        char *eq = strchr(sbuf, '=');
+        if(eq) {
+            *eq = '\0';
+            uint_fast8_t counter = 1;
+            float parameter;
+            read_float(sbuf, &counter, &parameter);
+            if(setting == -1 || (int)parameter == setting)
+                add_setting((int)parameter, eq + 1);
+        }
+        sbuf[0] = '\0';
+    }
 }
 
 static esp_err_t settings_get_handler(httpd_req_t *req)
 {
-	bool ok;
+    bool ok;
 
-//	size_t ql = httpd_req_get_url_query_len(req);
+//  size_t ql = httpd_req_get_url_query_len(req);
 
-	setting = strlen(req->uri) > 9 ? atoi(&req->uri[10]) : -1;
+    setting = strlen(req->uri) > 9 ? atoi(&req->uri[10]) : -1;
 
-	cJSON *root = cJSON_CreateObject();
+    cJSON *root = cJSON_CreateObject();
 
-	if((ok = (root && (json_settings = cJSON_AddArrayToObject(root, "settings"))))) {
+    if((ok = (root && (json_settings = cJSON_AddArrayToObject(root, "settings"))))) {
 
-		org_stream = hal.stream.write;
+        org_stream = hal.stream.write;
 
-		hal.stream.write = backendWriteS;
+        hal.stream.write = backendWriteS;
 
-		report_grbl_settings();
+        report_grbl_settings();
 
-		hal.stream.write = org_stream;
+        hal.stream.write = org_stream;
 
-		char *resp = cJSON_PrintUnformatted(root);
+        char *resp = cJSON_PrintUnformatted(root);
 
-		httpd_resp_set_type(req, HTTPD_TYPE_JSON);
-		httpd_resp_send(req, resp, strlen(resp));
+        httpd_resp_set_type(req, HTTPD_TYPE_JSON);
+        httpd_resp_send(req, resp, strlen(resp));
 
-		free(resp);
+        free(resp);
 
-	} else
+    } else
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to generate response");
 
-	if(root)
-		cJSON_Delete(root);
+    if(root)
+        cJSON_Delete(root);
 
     return ok ? ESP_OK : ESP_FAIL;
 }
 
 static esp_err_t settings_set_handler(httpd_req_t *req)
 {
-//	heap_caps_print_heap_info(MALLOC_CAP_DEFAULT);
+//  heap_caps_print_heap_info(MALLOC_CAP_DEFAULT);
 
-	bool ok;
+    bool ok;
     char *buf = malloc(req->content_len + 1);
 
     //httpd_req_get_hdr_value_str(httpd_req_t *r, const char *field, char *val, size_t val_size)
 
     // check content type?
 
-	if((ok = getPayload(req, buf))) {
+    if((ok = getPayload(req, buf))) {
 
-		cJSON *root, *settings, *setting;
-		status_code_t status = Status_InvalidStatement;
+        cJSON *root, *settings, *setting;
+        status_code_t status = Status_InvalidStatement;
 
-		if((ok = (root = cJSON_Parse(buf)))) {
-			settings = cJSON_GetObjectItemCaseSensitive(root, "settings");
-			cJSON_ArrayForEach(setting, settings)
-			{
-				cJSON *id = cJSON_GetObjectItemCaseSensitive(setting, "id");
-				cJSON *value = cJSON_GetObjectItemCaseSensitive(setting, "value");
+        if((ok = (root = cJSON_Parse(buf)))) {
+            settings = cJSON_GetObjectItemCaseSensitive(root, "settings");
+            cJSON_ArrayForEach(setting, settings)
+            {
+                cJSON *id = cJSON_GetObjectItemCaseSensitive(setting, "id");
+                cJSON *value = cJSON_GetObjectItemCaseSensitive(setting, "value");
 
-				if((status = settings_store_global_setting ((setting_type_t)((int)id->valuedouble), value->valuestring)) != Status_OK)
-					break;
-			}
-			cJSON_Delete(root);
-		}
+                if((status = settings_store_global_setting ((setting_type_t)((int)id->valuedouble), value->valuestring)) != Status_OK)
+                    break;
+            }
+            cJSON_Delete(root);
+        }
 
-		if(!ok)
-			ESP_LOGE(TAG, "Failed to parse %s!", buf);
+        if(!ok)
+            ESP_LOGE(TAG, "Failed to parse %s!", buf);
 
-		if(ok) {
-			httpd_resp_set_status(req, "202 Accepted");
-			httpd_resp_send(req, NULL, 0);
-		} else
-			httpd_resp_send_err(req, 400, "Invalid JSON data");
-	}
+        if(ok) {
+            httpd_resp_set_status(req, "202 Accepted");
+            httpd_resp_send(req, NULL, 0);
+        } else
+            httpd_resp_send_err(req, 400, "Invalid JSON data");
+    }
 
-	if(buf)
-		free(buf);
+    if(buf)
+        free(buf);
 
     return ok ? ESP_OK : ESP_FAIL;
 }
 
 static char *getAuthModeName(wifi_auth_mode_t authmode)
 {
-	static char mode[15];
+    static char mode[15];
 
-	sprintf(mode, "%s",
-			authmode == WIFI_AUTH_OPEN ? "open" :
-			authmode == WIFI_AUTH_WEP ? "wep" :
-			authmode == WIFI_AUTH_WPA_PSK ? "wpa-psk" :
-			authmode == WIFI_AUTH_WPA2_PSK ? "wpa-psk" :
-			authmode == WIFI_AUTH_WPA_WPA2_PSK ? "wpa-wpa2-psk" :
-			authmode == WIFI_AUTH_WPA2_ENTERPRISE ? "wpa-eap" :
-			"unknown");
+    sprintf(mode, "%s",
+            authmode == WIFI_AUTH_OPEN ? "open" :
+            authmode == WIFI_AUTH_WEP ? "wep" :
+            authmode == WIFI_AUTH_WPA_PSK ? "wpa-psk" :
+            authmode == WIFI_AUTH_WPA2_PSK ? "wpa-psk" :
+            authmode == WIFI_AUTH_WPA_WPA2_PSK ? "wpa-wpa2-psk" :
+            authmode == WIFI_AUTH_WPA2_ENTERPRISE ? "wpa-eap" :
+            "unknown");
 
-	return mode;
+    return mode;
 }
 
 static esp_err_t wifi_scan_handler (httpd_req_t *req)
 {
-	bool ok = false;
-	ap_list_t *ap_list = wifi_get_aplist();
+    bool ok = false;
+    ap_list_t *ap_list = wifi_get_aplist();
 
-	if(ap_list && ap_list->ap_records) {
+    if(ap_list && ap_list->ap_records) {
 
-		cJSON *root;
+        cJSON *root;
 
-		if((root = cJSON_CreateObject())) {
+        if((root = cJSON_CreateObject())) {
 
-			cJSON *ap, *aps;
+            cJSON *ap, *aps;
 
-			ok = cJSON_AddStringToObject(root, "ap", ap_list->ap_selected ? (char *)ap_list->ap_selected : "") != NULL;
-			ok &= cJSON_AddStringToObject(root, "status", ap_list->ap_status) != NULL;
+            ok = cJSON_AddStringToObject(root, "ap", ap_list->ap_selected ? (char *)ap_list->ap_selected : "") != NULL;
+            ok &= cJSON_AddStringToObject(root, "status", ap_list->ap_status) != NULL;
 
-			if(ap_list->ap_selected)
-				cJSON_AddStringToObject(root, "ip", ip4addr_ntoa(&ap_list->ip_addr));
+            if(ap_list->ap_selected)
+                cJSON_AddStringToObject(root, "ip", ip4addr_ntoa(&ap_list->ip_addr));
 
-			if((aps = cJSON_AddArrayToObject(root, "aplist"))) {
+            if((aps = cJSON_AddArrayToObject(root, "aplist"))) {
 
-				for(int i = 0; i < ap_list->ap_num; i++) {
-					if((ok = (ap = cJSON_CreateObject()) != NULL))
-					{
-						ok = cJSON_AddStringToObject(ap, "ssid", (char *)ap_list->ap_records[i].ssid) != NULL;
-						ok &= cJSON_AddStringToObject(ap, "security", getAuthModeName(ap_list->ap_records[i].authmode)) != NULL;
-						ok &= cJSON_AddNumberToObject(ap, "primary", (double)ap_list->ap_records[i].primary) != NULL;
-						ok &= cJSON_AddNumberToObject(ap, "rssi",  (double)ap_list->ap_records[i].rssi) != NULL;
-						if(ok)
-							cJSON_AddItemToArray(aps, ap);
-					}
-				}
-			}
+                for(int i = 0; i < ap_list->ap_num; i++) {
+                    if((ok = (ap = cJSON_CreateObject()) != NULL))
+                    {
+                        ok = cJSON_AddStringToObject(ap, "ssid", (char *)ap_list->ap_records[i].ssid) != NULL;
+                        ok &= cJSON_AddStringToObject(ap, "security", getAuthModeName(ap_list->ap_records[i].authmode)) != NULL;
+                        ok &= cJSON_AddNumberToObject(ap, "primary", (double)ap_list->ap_records[i].primary) != NULL;
+                        ok &= cJSON_AddNumberToObject(ap, "rssi",  (double)ap_list->ap_records[i].rssi) != NULL;
+                        if(ok)
+                            cJSON_AddItemToArray(aps, ap);
+                    }
+                }
+            }
 
-			if(ok) {
-				char *resp = cJSON_PrintUnformatted(root);
-#if	xCORS_ENABLE
-			    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-			    httpd_resp_set_hdr(req, "Access-Control-Allow-Methods", "POST,GET,OPTIONS");
+            if(ok) {
+                char *resp = cJSON_PrintUnformatted(root);
+#if xCORS_ENABLE
+                httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+                httpd_resp_set_hdr(req, "Access-Control-Allow-Methods", "POST,GET,OPTIONS");
 #endif
-				httpd_resp_set_type(req, HTTPD_TYPE_JSON);
-				httpd_resp_send(req, resp, strlen(resp));
+                httpd_resp_set_type(req, HTTPD_TYPE_JSON);
+                httpd_resp_send(req, resp, strlen(resp));
 
-				free(resp);
-			}
+                free(resp);
+            }
 
-			if(root)
-				cJSON_Delete(root);
-		}
+            if(root)
+                cJSON_Delete(root);
+        }
 
-		if(!ok)
-			httpd_resp_send_500(req);
-	}
+        if(!ok)
+            httpd_resp_send_500(req);
+    }
 
-	if(ap_list)
-		wifi_release_aplist();
+    if(ap_list)
+        wifi_release_aplist();
 
-	return ok ? ESP_OK : ESP_FAIL;
+    return ok ? ESP_OK : ESP_FAIL;
 }
 
 static esp_err_t wifi_connect_handler (httpd_req_t *req)
 {
-	bool ok;
+    bool ok;
     char *buf = malloc(req->content_len + 1);
 
-	if((ok = getPayload(req, buf))) {
+    if((ok = getPayload(req, buf))) {
 
-		cJSON *cred;
+        cJSON *cred;
 
-		if((ok = (cred = cJSON_Parse(buf)))) {
-			cJSON *ssid = cJSON_GetObjectItemCaseSensitive(cred, "ssid");
-			cJSON *password = cJSON_GetObjectItemCaseSensitive(cred, "password");
+        if((ok = (cred = cJSON_Parse(buf)))) {
+            cJSON *ssid = cJSON_GetObjectItemCaseSensitive(cred, "ssid");
+            cJSON *password = cJSON_GetObjectItemCaseSensitive(cred, "password");
 
-			ok = ssid && password && wifi_ap_connect(ssid->valuestring, password->valuestring);
-			cJSON_Delete(cred);
-		}
+            ok = ssid && password && wifi_ap_connect(ssid->valuestring, password->valuestring);
+            cJSON_Delete(cred);
+        }
 
-		if(ok) {
-			char resp[] = "Connecting...";
-			httpd_resp_set_status(req, "202 Accepted");
-			httpd_resp_send(req, resp, sizeof(resp));
-		} else
-			httpd_resp_send_err(req, 400, "Invalid connect information");
-	}
+        if(ok) {
+            char resp[] = "Connecting...";
+            httpd_resp_set_status(req, "202 Accepted");
+            httpd_resp_send(req, resp, sizeof(resp));
+        } else
+            httpd_resp_send_err(req, 400, "Invalid connect information");
+    }
 
-	if(buf)
-		free(buf);
+    if(buf)
+        free(buf);
 
     return ok ? ESP_OK : ESP_FAIL;
 }
 
 static esp_err_t wifi_disconnect_handler (httpd_req_t *req)
 {
-	bool disconnect = false;
+    bool disconnect = false;
 
-	ap_list_t *ap_list = wifi_get_aplist();
+    ap_list_t *ap_list = wifi_get_aplist();
 
-	if(ap_list) {
-		disconnect = ap_list->ap_selected;
-		wifi_release_aplist();
-	}
+    if(ap_list) {
+        disconnect = ap_list->ap_selected;
+        wifi_release_aplist();
+    }
 
-	if(disconnect)
-		wifi_ap_connect(NULL, NULL);
+    if(disconnect)
+        wifi_ap_connect(NULL, NULL);
 
-	httpd_resp_send(req, NULL, 0);
+    httpd_resp_send(req, NULL, 0);
 
     return ESP_OK;
 }
 
-#if	CORS_ENABLE
+#if CORS_ENABLE
 static esp_err_t wifi_options_handler (httpd_req_t *req)
 {
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
@@ -731,11 +731,11 @@ static esp_err_t wifi_options_handler (httpd_req_t *req)
 #endif
 
 static const httpd_uri_t basic_handlers[] = {
-	{ .uri       = "/*",
-	  .method    = HTTP_GET,
-	  .handler   = get_handler,
-	  .user_ctx  = &file_server_data,
-	},
+    { .uri       = "/*",
+      .method    = HTTP_GET,
+      .handler   = get_handler,
+      .user_ctx  = &file_server_data,
+    },
     { .uri      = "/spiffs/*",
       .method   = HTTP_GET,
       .handler  = spiffs_get_handler,
@@ -818,7 +818,7 @@ static const httpd_uri_t basic_handlers[] = {
       .user_ctx = NULL
     },
 #endif
-#if	CORS_ENABLE
+#if CORS_ENABLE
     { .uri      = "/wifi",
       .method   = HTTP_OPTIONS,
       .handler  = wifi_options_handler,
@@ -841,12 +841,12 @@ void register_basic_handlers(httpd_handle_t hd)
 {
     uint32_t i = sizeof(basic_handlers) / sizeof(httpd_uri_t);
 
-	wifi_mode_t currentMode;
+    wifi_mode_t currentMode;
 
-	esp_wifi_get_mode(&currentMode);
+    esp_wifi_get_mode(&currentMode);
 
-	if(currentMode != WIFI_MODE_APSTA)
-		i -= 2;
+    if(currentMode != WIFI_MODE_APSTA)
+        i -= 2;
 
     do {
         if (httpd_register_uri_handler(hd, &basic_handlers[--i]) != ESP_OK) {
@@ -859,7 +859,7 @@ void register_basic_handlers(httpd_handle_t hd)
 void httpdaemon_stop (void)
 {
     if(httpdaemon)
-		httpd_stop(httpdaemon);
+        httpd_stop(httpdaemon);
 
     httpdaemon = NULL;
 }
@@ -873,7 +873,7 @@ bool httpdaemon_start (network_settings_t *network)
     config.max_uri_handlers = max(config.max_uri_handlers, sizeof(basic_handlers) / sizeof(httpd_uri_t));
     config.server_port = network->http_port;
     config.uri_match_fn = httpd_uri_match_wildcard;
-	config.stack_size = 10240;
+    config.stack_size = 10240;
 
     httpdaemon_stop();
 
@@ -887,7 +887,7 @@ bool httpdaemon_start (network_settings_t *network)
 #endif
 
     if (httpd_start(&httpdaemon, &config) == ESP_OK)
-		register_basic_handlers(httpdaemon);
+        register_basic_handlers(httpdaemon);
 
     return httpdaemon != NULL;
 }

@@ -22,93 +22,93 @@
 */
 
  // Define step pulse output pins.
-#define X_STEP_PORT     	PIOA
-#define X_STEP_PIN      	15	// Due Digital Pin 24
-#define X_STEP_BIT      	(1<<X_STEP_PIN)
-#define Y_STEP_PORT     	PIOD
-#define Y_STEP_PIN      	0	// Due Digital Pin 25
-#define Y_STEP_BIT      	(1<<Y_STEP_PIN)
-#define Z_STEP_PORT     	PIOD
-#define Z_STEP_PIN      	1	// Due Digital Pin 26
-#define Z_STEP_BIT			(1<<Z_STEP_PIN)
+#define X_STEP_PORT         PIOA
+#define X_STEP_PIN          15  // Due Digital Pin 24
+#define X_STEP_BIT          (1<<X_STEP_PIN)
+#define Y_STEP_PORT         PIOD
+#define Y_STEP_PIN          0   // Due Digital Pin 25
+#define Y_STEP_BIT          (1<<Y_STEP_PIN)
+#define Z_STEP_PORT         PIOD
+#define Z_STEP_PIN          1   // Due Digital Pin 26
+#define Z_STEP_BIT          (1<<Z_STEP_PIN)
 
 // Define step direction output pins.
-#define X_DIRECTION_PORT	PIOD
-#define X_DIRECTION_PIN		9	// Due Digital Pin 30
-#define X_DIRECTION_BIT		(1<<X_DIRECTION_PIN)
-#define Y_DIRECTION_PORT	PIOA
-#define Y_DIRECTION_PIN		7	// Due Digital Pin 31
-#define Y_DIRECTION_BIT		(1<<Y_DIRECTION_PIN)
-#define Z_DIRECTION_PORT	PIOD
-#define Z_DIRECTION_PIN		10	// Due Digital Pin 32
-#define Z_DIRECTION_BIT  	(1<<Z_STEP_PIN)
+#define X_DIRECTION_PORT    PIOD
+#define X_DIRECTION_PIN     9   // Due Digital Pin 30
+#define X_DIRECTION_BIT     (1<<X_DIRECTION_PIN)
+#define Y_DIRECTION_PORT    PIOA
+#define Y_DIRECTION_PIN     7   // Due Digital Pin 31
+#define Y_DIRECTION_BIT     (1<<Y_DIRECTION_PIN)
+#define Z_DIRECTION_PORT    PIOD
+#define Z_DIRECTION_PIN     10  // Due Digital Pin 32
+#define Z_DIRECTION_BIT     (1<<Z_STEP_PIN)
 
 // Define stepper driver enable/disable output pin(s).
-#define X_DISABLE_PORT		PIOB
-#define X_DISABLE_PIN		27	// Due Digital Pin 13
-#define X_DISABLE_BIT		(1<<X_DISABLE_PIN)
+#define X_DISABLE_PORT      PIOB
+#define X_DISABLE_PIN       27  // Due Digital Pin 13
+#define X_DISABLE_BIT       (1<<X_DISABLE_PIN)
 /*
-#define Y_DISABLE_PORT		PIOA
-#define Y_DISABLE_PIN		23
-#define Y_DISABLE_BIT		(1<<Y_DISABLE_PIN)
-#define Z_DISABLE_PORT		PIOB
-#define Z_DISABLE_PIN		17
-#define Z_DISABLE_BIT		(1<<Z_DISABLE_PIN)
+#define Y_DISABLE_PORT      PIOA
+#define Y_DISABLE_PIN       23
+#define Y_DISABLE_BIT       (1<<Y_DISABLE_PIN)
+#define Z_DISABLE_PORT      PIOB
+#define Z_DISABLE_PIN       17
+#define Z_DISABLE_BIT       (1<<Z_DISABLE_PIN)
 */
 // Define homing/hard limit switch input pins.
-#define X_LIMIT_PORT		PIOC
-#define X_LIMIT_PIN			29	// Due Digital Pin 10
-#define X_LIMIT_BIT			(1<<X_LIMIT_PIN)
-#define Y_LIMIT_PORT		PIOD
-#define Y_LIMIT_PIN			7	// Due Digital Pin 11
-#define Y_LIMIT_BIT			(1<<Y_LIMIT_PIN)
-#define Z_LIMIT_PORT		PIOD
-#define Z_LIMIT_PIN			8	// Due Digital Pin 12
-#define Z_LIMIT_BIT			(1<<Z_LIMIT_PIN)
+#define X_LIMIT_PORT        PIOC
+#define X_LIMIT_PIN         29  // Due Digital Pin 10
+#define X_LIMIT_BIT         (1<<X_LIMIT_PIN)
+#define Y_LIMIT_PORT        PIOD
+#define Y_LIMIT_PIN         7   // Due Digital Pin 11
+#define Y_LIMIT_BIT         (1<<Y_LIMIT_PIN)
+#define Z_LIMIT_PORT        PIOD
+#define Z_LIMIT_PIN         8   // Due Digital Pin 12
+#define Z_LIMIT_BIT         (1<<Z_LIMIT_PIN)
 
 // Define spindle enable and spindle direction output pins.
 #define SPINDLE_ENABLE_PORT     PIOC
-#define SPINDLE_ENABLE_PIN      24	// Due Digital Pin 6
+#define SPINDLE_ENABLE_PIN      24  // Due Digital Pin 6
 #define SPINDLE_ENABLE_BIT      (1<<SPINDLE_ENABLE_PIN)
-#define SPINDLE_DIRECTION_PORT	PIOC
-#define SPINDLE_DIRECTION_PIN   25	// Due Digital Pin 5
+#define SPINDLE_DIRECTION_PORT  PIOC
+#define SPINDLE_DIRECTION_PIN   25  // Due Digital Pin 5
 #define SPINDLE_DIRECTION_BIT   (1<<SPINDLE_DIRECTION_PIN)
 
 // Start of PWM & Stepper Enabled Spindle
-#define SPINDLE_PWM_TIMER	(TC2->TC_CHANNEL[0])
-#define SPINDLE_PWM_CCREG	2
-#define SPINDLE_PWM_PORT	PIOC
-#define SPINDLE_PWM_PIN		25
-#define SPINDLE_PWM_BIT		(1<<SPINDLE_PWM_PIN)
+#define SPINDLE_PWM_TIMER   (TC2->TC_CHANNEL[0])
+#define SPINDLE_PWM_CCREG   2
+#define SPINDLE_PWM_PORT    PIOC
+#define SPINDLE_PWM_PIN     25
+#define SPINDLE_PWM_BIT     (1<<SPINDLE_PWM_PIN)
 
 // Define flood and mist coolant enable output pins.
 #define COOLANT_FLOOD_PORT  PIOC
-#define COOLANT_FLOOD_PIN   22	// Due Digital Pin 8
+#define COOLANT_FLOOD_PIN   22  // Due Digital Pin 8
 #define COOLANT_FLOOD_BIT   (1<<COOLANT_FLOOD_PIN)
-#define COOLANT_MIST_PORT  	PIOC
-#define COOLANT_MIST_PIN   	21	// Due Digital Pin 9
-#define COOLANT_MIST_BIT   	(1<<COOLANT_MIST_PIN)
+#define COOLANT_MIST_PORT   PIOC
+#define COOLANT_MIST_PIN    21  // Due Digital Pin 9
+#define COOLANT_MIST_BIT    (1<<COOLANT_MIST_PIN)
 
 // Define user-control CONTROLs (cycle start, reset, feed hold) input pins.
 #define RESET_PORT          PIOB
-#define RESET_PIN           17	// DUE Analog Pin 8
+#define RESET_PIN           17  // DUE Analog Pin 8
 #define RESET_BIT           (1<<RESET_PIN)
 
 #define FEED_HOLD_PORT      PIOB
-#define FEED_HOLD_PIN       18	// DUE Analog Pin 9
+#define FEED_HOLD_PIN       18  // DUE Analog Pin 9
 #define FEED_HOLD_BIT       (1<<FEED_HOLD_PIN)
 
 #define CYCLE_START_PORT    PIOB
-#define CYCLE_START_PIN     19	// DUE Analog Pin 10
+#define CYCLE_START_PIN     19  // DUE Analog Pin 10
 #define CYCLE_START_BIT     (1<<CYCLE_START_PIN)
 
 #define SAFETY_DOOR_PORT    PIOB
-#define SAFETY_DOOR_PIN     20	// DUE Analog Pin 11
+#define SAFETY_DOOR_PIN     20  // DUE Analog Pin 11
 #define SAFETY_DOOR_BIT     (1<<SAFETY_DOOR_PIN)
 
 // Define probe switch input pin.
-#define PROBE_PORT			PIOA
-#define PROBE_PIN			0	// DUE Analog Pin CANTX
-#define PROBE_BIT			(1<<PROBE_PIN)
+#define PROBE_PORT          PIOA
+#define PROBE_PIN           0   // DUE Analog Pin CANTX
+#define PROBE_BIT           (1<<PROBE_PIN)
 
 /**/

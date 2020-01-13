@@ -37,11 +37,11 @@ void serialInit (void)
 {
     __HAL_RCC_USART1_CLK_ENABLE();
 
-	GPIO_InitTypeDef GPIO_InitStructure;
+    GPIO_InitTypeDef GPIO_InitStructure;
 
-	GPIO_InitStructure.Pin = GPIO_PIN_9;
-	GPIO_InitStructure.Mode = GPIO_MODE_AF_PP;
-	GPIO_InitStructure.Speed = GPIO_SPEED_FREQ_HIGH;
+    GPIO_InitStructure.Pin = GPIO_PIN_9;
+    GPIO_InitStructure.Mode = GPIO_MODE_AF_PP;
+    GPIO_InitStructure.Speed = GPIO_SPEED_FREQ_HIGH;
     HAL_GPIO_Init(GPIOA, &GPIO_InitStructure);
 
     GPIO_InitStructure.Pin = GPIO_PIN_10;
@@ -49,9 +49,9 @@ void serialInit (void)
     GPIO_InitStructure.Pull = GPIO_NOPULL;
     HAL_GPIO_Init(GPIOA, &GPIO_InitStructure);
 
-	USART1->CR1 |= (USART_CR1_RE|USART_CR1_TE);
-	USART1->BRR = UART_BRR_SAMPLING16(HAL_RCC_GetPCLK2Freq(), 115200);
-	USART1->CR1 |= (USART_CR1_UE|USART_CR1_RXNEIE);
+    USART1->CR1 |= (USART_CR1_RE|USART_CR1_TE);
+    USART1->BRR = UART_BRR_SAMPLING16(HAL_RCC_GetPCLK2Freq(), 115200);
+    USART1->CR1 |= (USART_CR1_UE|USART_CR1_RXNEIE);
 
     HAL_NVIC_SetPriority(USART1_IRQn, 0, 0);
     HAL_NVIC_EnableIRQ(USART1_IRQn);
@@ -62,8 +62,8 @@ void serialInit (void)
 //
 uint16_t serialRxFree (void)
 {
-	uint16_t tail = rxbuf.tail, head = rxbuf.head;
-	return RX_BUFFER_SIZE - BUFCOUNT(head, tail, RX_BUFFER_SIZE);
+    uint16_t tail = rxbuf.tail, head = rxbuf.head;
+    return RX_BUFFER_SIZE - BUFCOUNT(head, tail, RX_BUFFER_SIZE);
 }
 
 //
@@ -71,7 +71,7 @@ uint16_t serialRxFree (void)
 //
 void serialRxFlush (void)
 {
-	rxbuf.head = rxbuf.tail = 0;
+    rxbuf.head = rxbuf.tail = 0;
 }
 
 //
@@ -92,7 +92,7 @@ inline static bool serialPutCNonBlocking (const char c)
     bool ok;
 
     if((ok = !(USART1->CR1 & USART_CR1_TXEIE) && !(USART1->SR & USART_SR_TXE)))
-    	USART1->DR = c;
+        USART1->DR = c;
 
     return ok;
 }
@@ -102,18 +102,18 @@ inline static bool serialPutCNonBlocking (const char c)
 //
 bool serialPutC (const char c)
 {
-//    if(txbuf.head != txbuf.tail || !serialPutCNonBlocking(c)) {   		// Try to send character without buffering...
+//    if(txbuf.head != txbuf.tail || !serialPutCNonBlocking(c)) {           // Try to send character without buffering...
 
-    	uint16_t next_head = (txbuf.head + 1) & (TX_BUFFER_SIZE - 1);	// .. if not, get pointer to next free slot in buffer
+        uint16_t next_head = (txbuf.head + 1) & (TX_BUFFER_SIZE - 1);   // .. if not, get pointer to next free slot in buffer
 
-        while(txbuf.tail == next_head) {                       			// While TX buffer full
-            if(!hal.stream_blocking_callback())             			// check if blocking for space,
-                return false;                               			// exit if not (leaves TX buffer in an inconsistent state)
+        while(txbuf.tail == next_head) {                                // While TX buffer full
+            if(!hal.stream_blocking_callback())                         // check if blocking for space,
+                return false;                                           // exit if not (leaves TX buffer in an inconsistent state)
         }
 
-        txbuf.data[txbuf.head] = c;                                 	// Add data to buffer,
-        txbuf.head = next_head;                                			// update head pointer and
-        USART1->CR1 |= USART_CR1_TXEIE;               					// enable TX interrupts
+        txbuf.data[txbuf.head] = c;                                     // Add data to buffer,
+        txbuf.head = next_head;                                         // update head pointer and
+        USART1->CR1 |= USART_CR1_TXEIE;                                 // enable TX interrupts
 //    }
 
     return true;
@@ -151,8 +151,8 @@ int16_t serialGetC (void)
     if(bptr == rxbuf.head)
         return -1; // no data available else EOF
 
-    char data = rxbuf.data[bptr++];           	// Get next character, increment tmp pointer
-    rxbuf.tail = bptr & (RX_BUFFER_SIZE - 1);	// and update pointer
+    char data = rxbuf.data[bptr++];             // Get next character, increment tmp pointer
+    rxbuf.tail = bptr & (RX_BUFFER_SIZE - 1);   // and update pointer
 
     return (int16_t)data;
 }
@@ -161,33 +161,33 @@ void USART1_IRQHandler (void)
 {
     if(USART1->SR & USART_SR_RXNE) {
 
-        uint16_t next_head = (rxbuf.head + 1) & (RX_BUFFER_SIZE - 1);	// Get and increment buffer pointer
+        uint16_t next_head = (rxbuf.head + 1) & (RX_BUFFER_SIZE - 1);   // Get and increment buffer pointer
 
-        if(rxbuf.tail == next_head) {									// If buffer full
-        	rxbuf.overflow = 1;											// flag overflow
-            next_head =  USART1->DR; 									// and do dummy read to clear interrupt
+        if(rxbuf.tail == next_head) {                                   // If buffer full
+            rxbuf.overflow = 1;                                         // flag overflow
+            next_head =  USART1->DR;                                    // and do dummy read to clear interrupt
         } else {
             char data = USART1->DR;
-            if(!hal.stream.enqueue_realtime_command(data)) {			// Check and strip realtime commands,
-                rxbuf.data[rxbuf.head] = data;       					// if not add data to buffer
-                rxbuf.head = next_head;              					// and update pointer
+            if(!hal.stream.enqueue_realtime_command(data)) {            // Check and strip realtime commands,
+                rxbuf.data[rxbuf.head] = data;                          // if not add data to buffer
+                rxbuf.head = next_head;                                 // and update pointer
             }
         }
     }
 
     if((USART1->SR & USART_SR_TXE) && (USART1->CR1 & USART_CR1_TXEIE)) {
 
-        uint16_t tail = txbuf.tail;			   	// Get buffer pointer
+        uint16_t tail = txbuf.tail;             // Get buffer pointer
 
-        USART1->DR = txbuf.data[tail++]; 		// Send next character and increment pointer
+        USART1->DR = txbuf.data[tail++];        // Send next character and increment pointer
 
-		if(tail == TX_BUFFER_SIZE) 				// If at end
-			tail = 0;							// wrap pointer around
+        if(tail == TX_BUFFER_SIZE)              // If at end
+            tail = 0;                           // wrap pointer around
 
-		txbuf.tail = tail;						// Update global pointer
+        txbuf.tail = tail;                      // Update global pointer
 
-		if(tail == txbuf.head)					// If buffer empty then
-			USART1->CR1 &= ~USART_CR1_TXEIE;	// disable UART TX interrupt
+        if(tail == txbuf.head)                  // If buffer empty then
+            USART1->CR1 &= ~USART_CR1_TXEIE;    // disable UART TX interrupt
    }
 }
 

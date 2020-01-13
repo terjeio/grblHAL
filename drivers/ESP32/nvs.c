@@ -3,7 +3,7 @@
 
   Peristent storage of settings in flash
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2018 Terje Io
 
@@ -25,7 +25,7 @@
 #include "esp_log.h"
 
 #include "nvs.h"
-#include "GRBL/grbl.h"
+#include "grbl/grbl.h"
 
 #ifndef EMULATE_EEPROM
 #error EMULATE_EPROM must be enabled to use flash for settings storage
@@ -35,24 +35,24 @@ static const esp_partition_t *grblNVS = NULL;
 
 bool nvsRead (uint8_t *dest)
 {
-	bool ok;
+    bool ok;
 
-	if(!(ok = grblNVS && esp_partition_read(grblNVS, 0, (void *)dest, hal.eeprom.size) == ESP_OK))
-		grblNVS = NULL;
+    if(!(ok = grblNVS && esp_partition_read(grblNVS, 0, (void *)dest, hal.eeprom.size) == ESP_OK))
+        grblNVS = NULL;
 
-	return ok;
+    return ok;
 }
 
 bool nvsWrite (uint8_t *source)
 {
-	return grblNVS &&
-			esp_partition_erase_range(grblNVS, 0, SPI_FLASH_SEC_SIZE) == ESP_OK &&
-			 esp_partition_write(grblNVS, 0, (void *)source, hal.eeprom.size) == ESP_OK;
+    return grblNVS &&
+            esp_partition_erase_range(grblNVS, 0, SPI_FLASH_SEC_SIZE) == ESP_OK &&
+             esp_partition_write(grblNVS, 0, (void *)source, hal.eeprom.size) == ESP_OK;
 }
 
 bool nvsInit (void)
 {
-	grblNVS = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "grbl");
+    grblNVS = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "grbl");
 
-	return grblNVS != NULL;
+    return grblNVS != NULL;
 }

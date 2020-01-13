@@ -33,22 +33,22 @@
 #define COOKIEPREFIX "ESPSESSIONID="
 
 typedef enum {
-	WebUIAuth_None = 0,
-	WebUIAuth_Guest,
-	WebUIAuth_User,
-	WebUIAuth_Admin
+    WebUIAuth_None = 0,
+    WebUIAuth_Guest,
+    WebUIAuth_User,
+    WebUIAuth_Admin
 } webui_auth_level_t;
 
 typedef char session_id_t[21];
 typedef char user_id_t[17];
 
 typedef struct webui_auth {
-	webui_auth_level_t level;
-	struct sockaddr_in6 ip;
-	user_id_t user_id;
-	session_id_t session_id;
-	TickType_t last_access;
-	struct webui_auth *next;
+    webui_auth_level_t level;
+    struct sockaddr_in6 ip;
+    user_id_t user_id;
+    session_id_t session_id;
+    TickType_t last_access;
+    struct webui_auth *next;
 } webui_auth_t;
 
 esp_err_t webui_http_command_handler (httpd_req_t *req);

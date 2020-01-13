@@ -48,11 +48,11 @@ static void systick_isr (void);
 static void driver_delay_ms (uint32_t ms, void (*callback)(void))
 {
     if((delay.ms = ms) > 0) {
-		DelayTimer_Start();
-		if(!(delay.callback = callback))
-		    while(delay.ms);
-	} else if(callback)
-		callback();
+        DelayTimer_Start();
+        if(!(delay.callback = callback))
+            while(delay.ms);
+    } else if(callback)
+        callback();
 }
 
 // Non-variable spindle
@@ -197,12 +197,12 @@ static void limitsEnable (bool on, bool homing)
 // number in bit position, i.e. Z_AXIS is (1<<2) or bit 2, and Y_AXIS is (1<<1) or bit 1.
 inline static axes_signals_t limitsGetState()
 {
-	return (axes_signals_t)HomingSignals_Read();
+    return (axes_signals_t)HomingSignals_Read();
 }
 
 static control_signals_t systemGetState (void)
 {
-	return (control_signals_t)ControlSignals_Read();
+    return (control_signals_t)ControlSignals_Read();
 }
 
 // Called by probe_init() and the mc_probe() routines. Sets up the probe pin invert mask to
@@ -261,26 +261,26 @@ bool eepromReadBlockWithChecksum (uint8_t *destination, uint32_t source, uint32_
 // Helper functions for setting/clearing/inverting individual bits atomically (uninterruptable)
 static void bitsSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t bits)
 {
-	CyGlobalIntDisable;
-	*ptr |= bits;
-	CyGlobalIntEnable;
+    CyGlobalIntDisable;
+    *ptr |= bits;
+    CyGlobalIntEnable;
 }
 
 static uint_fast16_t bitsClearAtomic (volatile uint_fast16_t *ptr, uint_fast16_t bits)
 {
-	CyGlobalIntDisable;
+    CyGlobalIntDisable;
     uint_fast16_t prev = *ptr;
-	*ptr &= ~bits;
-	CyGlobalIntEnable;
-	return prev;
+    *ptr &= ~bits;
+    CyGlobalIntEnable;
+    return prev;
 }
 
 static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t value)
 {
-	CyGlobalIntDisable;
+    CyGlobalIntDisable;
     uint_fast16_t prev = *ptr;
     *ptr = value;
-	CyGlobalIntEnable;
+    CyGlobalIntEnable;
     return prev;
 }
 
@@ -343,9 +343,9 @@ static bool driver_setup (settings_t *settings)
     Stepper_Interrupt_Enable();
 
     if(hal.driver_cap.step_pulse_delay) {
-	//    TimerIntRegister(TIMER2_BASE, TIMER_A, stepper_pulse_isr_delayed);
-	//    TimerIntEnable(TIMER2_BASE, TIMER_TIMA_TIMEOUT|TIMER_TIMA_MATCH);
-	    hal.stepper_pulse_start = &stepperPulseStartDelayed;
+    //    TimerIntRegister(TIMER2_BASE, TIMER_A, stepper_pulse_isr_delayed);
+    //    TimerIntEnable(TIMER2_BASE, TIMER_TIMA_TIMEOUT|TIMER_TIMA_MATCH);
+        hal.stepper_pulse_start = &stepperPulseStartDelayed;
     }
     
     Control_Interrupt_StartEx(control_isr);
@@ -377,9 +377,9 @@ static bool driver_setup (settings_t *settings)
 
    /*********************
     *  I2C KeyPad init  *
-	*********************/
+    *********************/
 
-	I2C_keypad_setup();
+    I2C_keypad_setup();
 
 #endif
 
@@ -394,32 +394,32 @@ bool driver_init (void)
     EEPROM_Start();
     
     hal.info = "PSoC 5";
-	hal.driver_setup = driver_setup;
-	hal.f_step_timer = 24000000UL;
-	hal.rx_buffer_size = RX_BUFFER_SIZE;
-	hal.delay_ms = driver_delay_ms;
+    hal.driver_setup = driver_setup;
+    hal.f_step_timer = 24000000UL;
+    hal.rx_buffer_size = RX_BUFFER_SIZE;
+    hal.delay_ms = driver_delay_ms;
     hal.settings_changed = settings_changed;
 
-	hal.stepper_wake_up = stepperWakeUp;
-	hal.stepper_go_idle = stepperGoIdle;
-	hal.stepper_enable = stepperEnable;
-	hal.stepper_cycles_per_tick = stepperCyclesPerTick;
-	hal.stepper_pulse_start = stepperPulseStart;
+    hal.stepper_wake_up = stepperWakeUp;
+    hal.stepper_go_idle = stepperGoIdle;
+    hal.stepper_enable = stepperEnable;
+    hal.stepper_cycles_per_tick = stepperCyclesPerTick;
+    hal.stepper_pulse_start = stepperPulseStart;
 
-	hal.limits_enable = limitsEnable;
-	hal.limits_get_state = limitsGetState;
+    hal.limits_enable = limitsEnable;
+    hal.limits_get_state = limitsGetState;
 
-	hal.coolant_set_state = coolantSetState;
-	hal.coolant_get_state = coolantGetState;
+    hal.coolant_set_state = coolantSetState;
+    hal.coolant_get_state = coolantGetState;
 
-	hal.probe_get_state = probeGetState;
-	hal.probe_configure_invert_mask = probeConfigureInvertMask;
+    hal.probe_get_state = probeGetState;
+    hal.probe_configure_invert_mask = probeConfigureInvertMask;
 
-	hal.spindle_set_state = spindleSetStateVariable;
-	hal.spindle_get_state = spindleGetState;
+    hal.spindle_set_state = spindleSetStateVariable;
+    hal.spindle_get_state = spindleGetState;
     hal.spindle_update_rpm = spindleUpdateRPM;
 
-	hal.system_control_get_state = systemGetState;
+    hal.system_control_get_state = systemGetState;
 
     hal.stream.read = serialGetC;
     hal.stream.write = serialWriteS;
@@ -429,14 +429,14 @@ bool driver_init (void)
     hal.stream.cancel_read_buffer = serialRxCancel;
 
     hal.eeprom.type = EEPROM_Physical;
-	hal.eeprom.get_byte = (uint8_t (*)(uint32_t))&EEPROM_ReadByte;
-	hal.eeprom.put_byte = eepromPutByte;
-	hal.eeprom.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
-	hal.eeprom.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
+    hal.eeprom.get_byte = (uint8_t (*)(uint32_t))&EEPROM_ReadByte;
+    hal.eeprom.put_byte = eepromPutByte;
+    hal.eeprom.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
+    hal.eeprom.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
 
-	hal.set_bits_atomic = bitsSetAtomic;
-	hal.clear_bits_atomic = bitsClearAtomic;
-	hal.set_value_atomic = valueSetAtomic;
+    hal.set_bits_atomic = bitsSetAtomic;
+    hal.clear_bits_atomic = bitsClearAtomic;
+    hal.set_value_atomic = valueSetAtomic;
 
 #ifdef HAS_KEYPAD
     hal.execute_realtime = process_keypress;
@@ -469,7 +469,7 @@ static void stepper_driver_isr (void)
 {
     StepperTimer_ReadStatusRegister(); // Clear interrupt
 
-	hal.stepper_interrupt_callback();
+    hal.stepper_interrupt_callback();
 }
 
 // This interrupt is enabled when Grbl sets the motor port bits to execute
@@ -497,11 +497,11 @@ static void control_isr (void)
 static void systick_isr (void)
 {
     DelayTimer_ReadStatusRegister();
-	if(!(--delay.ms)) {
-		DelayTimer_Stop();
-		if(delay.callback) {
-			delay.callback();
+    if(!(--delay.ms)) {
+        DelayTimer_Stop();
+        if(delay.callback) {
+            delay.callback();
             delay.callback = NULL;
         }
-	}
+    }
 }

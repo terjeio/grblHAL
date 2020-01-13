@@ -40,7 +40,7 @@ typedef char fs_filepath_t[ESP_VFS_PATH_MAX + CONFIG_SPIFFS_OBJ_NAME_LEN + 1];
 typedef char fs_queryarg_t[100];
 
 typedef struct {
-	fs_path_t base_path;
+    fs_path_t base_path;
     fs_scratch_t scratch;
 } file_server_data_t;
 

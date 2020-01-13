@@ -33,9 +33,9 @@
 #define KEYPAD_I2CADDR 0x49
 
 typedef enum {
-	JogMode_Fast = 0,
-	JogMode_Slow,
-	JogMode_Step
+    JogMode_Fast = 0,
+    JogMode_Slow,
+    JogMode_Step
 } jogmode_t;
 
 void I2C_keypad_setup (void);

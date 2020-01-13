@@ -38,8 +38,8 @@
 
 typedef enum
 {
-	I2C_SLAVE_OPERATION = 0x4u,
-	I2C_MASTER_OPERATION = 0x5u
+    I2C_SLAVE_OPERATION = 0x4u,
+    I2C_MASTER_OPERATION = 0x5u
 } SercomI2CMode;
 
 static Sercom *i2c_port = SERCOM0; // Alt mode C
@@ -75,47 +75,47 @@ static void I2C_interrupt_handler (void);
 #define WIRE_RISE_TIME_NANOSECONDS 125
 void I2CInit (void)
 {
-	static bool init_ok = false;
+    static bool init_ok = false;
 
-	if(!init_ok) {
+    if(!init_ok) {
 
-		init_ok = true;
+        init_ok = true;
 
-		pinPeripheral(I2C_SDA_PIN, g_APinDescription[I2C_SDA_PIN].ulPinType); // PIO_SERCOM
-		pinPeripheral(I2C_SCL_PIN, g_APinDescription[I2C_SCL_PIN].ulPinType);
+        pinPeripheral(I2C_SDA_PIN, g_APinDescription[I2C_SDA_PIN].ulPinType); // PIO_SERCOM
+        pinPeripheral(I2C_SCL_PIN, g_APinDescription[I2C_SCL_PIN].ulPinType);
 
-		initSerClockNVIC(i2c_port);
+        initSerClockNVIC(i2c_port);
 
-		NVIC_SetPriority(SERCOM0_IRQn, 0);
-		IRQRegister(SERCOM0_IRQn, I2C_interrupt_handler);
+        NVIC_SetPriority(SERCOM0_IRQn, 0);
+        IRQRegister(SERCOM0_IRQn, I2C_interrupt_handler);
 
-		/* Enable the peripherals used to drive the SDC on SSI */
+        /* Enable the peripherals used to drive the SDC on SSI */
 
-		i2c_port->I2CM.CTRLA.bit.ENABLE = 0;
-		while(i2c_port->I2CM.SYNCBUSY.bit.ENABLE);
+        i2c_port->I2CM.CTRLA.bit.ENABLE = 0;
+        while(i2c_port->I2CM.SYNCBUSY.bit.ENABLE);
 
-		i2c_port->I2CM.CTRLA.bit.SWRST = 1;
-		//Wait both bits Software Reset from CTRLA and SYNCBUSY are equal to 0
-		while(i2c_port->I2CM.CTRLA.bit.SWRST || i2c_port->I2CM.SYNCBUSY.bit.SWRST);
+        i2c_port->I2CM.CTRLA.bit.SWRST = 1;
+        //Wait both bits Software Reset from CTRLA and SYNCBUSY are equal to 0
+        while(i2c_port->I2CM.CTRLA.bit.SWRST || i2c_port->I2CM.SYNCBUSY.bit.SWRST);
 
-		i2c_port->I2CM.CTRLA.reg = SERCOM_I2CM_CTRLA_MODE(I2C_MASTER_OPERATION) /*| SERCOM_I2CM_CTRLA_SCLSM*/ ;
+        i2c_port->I2CM.CTRLA.reg = SERCOM_I2CM_CTRLA_MODE(I2C_MASTER_OPERATION) /*| SERCOM_I2CM_CTRLA_SCLSM*/ ;
 
-		// Enable Smart mode and Quick Command
-		//i2c_port->I2CM.CTRLB.reg =  SERCOM_I2CM_CTRLB_SMEN /*| SERCOM_I2CM_CTRLB_QCEN*/ ;
+        // Enable Smart mode and Quick Command
+        //i2c_port->I2CM.CTRLB.reg =  SERCOM_I2CM_CTRLB_SMEN /*| SERCOM_I2CM_CTRLB_QCEN*/ ;
 
-		// Enable all interrupts
-		i2c_port->I2CM.INTENSET.reg = SERCOM_I2CM_INTENSET_MB | SERCOM_I2CM_INTENSET_SB | SERCOM_I2CM_INTENSET_ERROR ;
+        // Enable all interrupts
+        i2c_port->I2CM.INTENSET.reg = SERCOM_I2CM_INTENSET_MB | SERCOM_I2CM_INTENSET_SB | SERCOM_I2CM_INTENSET_ERROR ;
 
-		// Synchronous arithmetic baudrate
-		i2c_port->I2CM.BAUD.bit.BAUD = SystemCoreClock / (2 * I2C_CLOCK) - 5 - (((SystemCoreClock / 1000000) * WIRE_RISE_TIME_NANOSECONDS) / (2 * 1000));
+        // Synchronous arithmetic baudrate
+        i2c_port->I2CM.BAUD.bit.BAUD = SystemCoreClock / (2 * I2C_CLOCK) - 5 - (((SystemCoreClock / 1000000) * WIRE_RISE_TIME_NANOSECONDS) / (2 * 1000));
 
-		i2c_port->I2CM.CTRLA.bit.ENABLE = 1;
-		while(i2c_port->I2CM.SYNCBUSY.bit.ENABLE);
+        i2c_port->I2CM.CTRLA.bit.ENABLE = 1;
+        while(i2c_port->I2CM.SYNCBUSY.bit.ENABLE);
 
-		// Setting bus idle mode
-		i2c_port->I2CM.STATUS.bit.BUSSTATE = 1;
-		while(i2c_port->I2CM.SYNCBUSY.bit.SYSOP);
-	}
+        // Setting bus idle mode
+        i2c_port->I2CM.STATUS.bit.BUSSTATE = 1;
+        while(i2c_port->I2CM.SYNCBUSY.bit.SYSOP);
+    }
 }
 
 // get bytes (max 8), waits for result
@@ -125,9 +125,9 @@ uint8_t *I2C_Receive (uint32_t i2cAddr, uint8_t *buf, uint32_t bytes, bool block
     i2c.count = bytes;
     i2c.state = bytes == 1 ? I2CState_ReceiveLast : (bytes == 2 ? I2CState_ReceiveNextToLast : I2CState_ReceiveNext);
 
-	// Send start and address
-	i2c_port->I2CM.ADDR.bit.ADDR = (i2cAddr << 1) | 0x01;
-	while(i2c_port->I2CM.SYNCBUSY.bit.SYSOP);
+    // Send start and address
+    i2c_port->I2CM.ADDR.bit.ADDR = (i2cAddr << 1) | 0x01;
+    while(i2c_port->I2CM.SYNCBUSY.bit.SYSOP);
 
     if(block)
         while(i2cIsBusy);
@@ -141,8 +141,8 @@ void I2C_Send (uint32_t i2cAddr, uint8_t *buf, uint8_t bytes, bool block)
     i2c.data  = buf ? buf : i2c.buffer;
     i2c.state = bytes == 0 ? I2CState_AwaitCompletion : (bytes == 1 ? I2CState_SendLast : I2CState_SendNext);
 
-	i2c_port->I2CM.ADDR.bit.ADDR = i2cAddr << 1;
-	while(i2c_port->I2CM.SYNCBUSY.bit.SYSOP);
+    i2c_port->I2CM.ADDR.bit.ADDR = i2cAddr << 1;
+    while(i2c_port->I2CM.SYNCBUSY.bit.SYSOP);
 
     if(block)
         while(i2cIsBusy);
@@ -156,8 +156,8 @@ uint8_t *I2C_ReadRegister (uint32_t i2cAddr, uint8_t *buf, uint8_t bytes, bool b
     i2c.data  = buf ? buf : i2c.buffer;
     i2c.state = I2CState_SendRegisterAddress;
 
-	i2c_port->I2CM.ADDR.bit.ADDR = i2cAddr << 1;
-	while(i2c_port->I2CM.SYNCBUSY.bit.SYSOP);
+    i2c_port->I2CM.ADDR.bit.ADDR = i2cAddr << 1;
+    while(i2c_port->I2CM.SYNCBUSY.bit.SYSOP);
 
     if(block)
         while(i2cIsBusy);
@@ -169,17 +169,17 @@ uint8_t *I2C_ReadRegister (uint32_t i2cAddr, uint8_t *buf, uint8_t bytes, bool b
 
 void I2C_EEPROM (i2c_eeprom_t *eeprom, bool read)
 {
-	static uint8_t txbuf[34];
+    static uint8_t txbuf[34];
 
     while(i2cIsBusy);
 
     if(read) {
-		eeprom->data[0] = eeprom->word_addr; // !!
-		I2C_ReadRegister(eeprom->addr, eeprom->data, eeprom->count, true);
+        eeprom->data[0] = eeprom->word_addr; // !!
+        I2C_ReadRegister(eeprom->addr, eeprom->data, eeprom->count, true);
     } else {
-		memcpy(&txbuf[1], eeprom->data, eeprom->count);
-		txbuf[0] = eeprom->word_addr;
-    	I2C_Send(eeprom->addr, txbuf, eeprom->count + 1, true);
+        memcpy(&txbuf[1], eeprom->data, eeprom->count);
+        txbuf[0] = eeprom->word_addr;
+        I2C_Send(eeprom->addr, txbuf, eeprom->count + 1, true);
         hal.delay_ms(5, NULL);
     }
 }
@@ -262,14 +262,14 @@ I2CInit();
 
 static void I2C_interrupt_handler (void)
 {
-	uint8_t ifg = i2c_port->I2CM.INTFLAG.reg;
+    uint8_t ifg = i2c_port->I2CM.INTFLAG.reg;
 
-	i2c_port->I2CM.INTFLAG.reg = ifg;
+    i2c_port->I2CM.INTFLAG.reg = ifg;
 
-	if(i2c_port->I2CM.INTFLAG.bit.SB && i2c_port->I2CM.INTFLAG.bit.MB) {
-		i2c_port->I2CM.CTRLB.bit.CMD = 3; // Stop condition
-		while(i2c_port->I2CM.SYNCBUSY.bit.SYSOP);
-		i2c.state = I2CState_Error;
+    if(i2c_port->I2CM.INTFLAG.bit.SB && i2c_port->I2CM.INTFLAG.bit.MB) {
+        i2c_port->I2CM.CTRLB.bit.CMD = 3; // Stop condition
+        while(i2c_port->I2CM.SYNCBUSY.bit.SYSOP);
+        i2c.state = I2CState_Error;
     }
 
   //ACK received (0: ACK, 1: NACK)
@@ -282,62 +282,62 @@ static void I2C_interrupt_handler (void)
             break;
 
         case I2CState_SendNext:
-			i2c_port->I2CM.DATA.reg = *i2c.data++;
-			while(i2c_port->I2CM.SYNCBUSY.bit.SYSOP);
+            i2c_port->I2CM.DATA.reg = *i2c.data++;
+            while(i2c_port->I2CM.SYNCBUSY.bit.SYSOP);
             if(--i2c.count == 1)
                 i2c.state = I2CState_SendLast;
             break;
 
         case I2CState_SendLast:
-			i2c_port->I2CM.DATA.reg = *i2c.data;
-			while(i2c_port->I2CM.SYNCBUSY.bit.SYSOP);
+            i2c_port->I2CM.DATA.reg = *i2c.data;
+            while(i2c_port->I2CM.SYNCBUSY.bit.SYSOP);
             i2c.state = I2CState_AwaitCompletion;
             break;
 
         case I2CState_AwaitCompletion:
-			//i2c_port->I2CM.CTRLB.bit.ACKACT = 1;
-			i2c_port->I2CM.CTRLB.bit.CMD = 3; // Stop condition
-			while(i2c_port->I2CM.SYNCBUSY.bit.SYSOP);
+            //i2c_port->I2CM.CTRLB.bit.ACKACT = 1;
+            i2c_port->I2CM.CTRLB.bit.CMD = 3; // Stop condition
+            while(i2c_port->I2CM.SYNCBUSY.bit.SYSOP);
             i2c.count = 0;
             i2c.state = I2CState_Idle;
             break;
 
         case I2CState_SendRegisterAddress:
-			i2c_port->I2CM.DATA.reg = *i2c.data;
-			while(i2c_port->I2CM.SYNCBUSY.bit.SYSOP);
+            i2c_port->I2CM.DATA.reg = *i2c.data;
+            while(i2c_port->I2CM.SYNCBUSY.bit.SYSOP);
             i2c.state = I2CState_Restart;
             break;
 
         case I2CState_Restart:
-			i2c_port->I2CM.ADDR.reg |= 0x01;
-			i2c_port->I2CM.CTRLB.bit.CMD = 0x1;
-			while(i2c_port->I2CM.SYNCBUSY.bit.SYSOP);
+            i2c_port->I2CM.ADDR.reg |= 0x01;
+            i2c_port->I2CM.CTRLB.bit.CMD = 0x1;
+            while(i2c_port->I2CM.SYNCBUSY.bit.SYSOP);
             i2c.state = i2c.count == 1 ? I2CState_ReceiveLast : (i2c.count == 2 ? I2CState_ReceiveNextToLast : I2CState_ReceiveNext);
             break;
 
         case I2CState_ReceiveNext:
             *i2c.data++ = i2c_port->I2CM.DATA.reg;
-			i2c_port->I2CM.CTRLB.bit.ACKACT = 0;
-			i2c_port->I2CM.CTRLB.bit.CMD = 0x2;
-			while(i2c_port->I2CM.SYNCBUSY.bit.SYSOP);
+            i2c_port->I2CM.CTRLB.bit.ACKACT = 0;
+            i2c_port->I2CM.CTRLB.bit.CMD = 0x2;
+            while(i2c_port->I2CM.SYNCBUSY.bit.SYSOP);
             if(--i2c.count == 2)
                 i2c.state = I2CState_ReceiveNextToLast;
             break;
 
         case I2CState_ReceiveNextToLast:
             *i2c.data++ = i2c_port->I2CM.DATA.reg;
-			i2c_port->I2CM.CTRLB.bit.ACKACT = 0;
-			i2c_port->I2CM.CTRLB.bit.CMD = 0x2;
-			while(i2c_port->I2CM.SYNCBUSY.bit.SYSOP);
+            i2c_port->I2CM.CTRLB.bit.ACKACT = 0;
+            i2c_port->I2CM.CTRLB.bit.CMD = 0x2;
+            while(i2c_port->I2CM.SYNCBUSY.bit.SYSOP);
             i2c.count--;
             i2c.state = I2CState_ReceiveLast;
             break;
 
         case I2CState_ReceiveLast:
             *i2c.data = i2c_port->I2CM.DATA.reg;
-			i2c_port->I2CM.CTRLB.bit.ACKACT = 1;
-			i2c_port->I2CM.CTRLB.bit.CMD = 3; // Stop condition
-			while(i2c_port->I2CM.SYNCBUSY.bit.SYSOP);
+            i2c_port->I2CM.CTRLB.bit.ACKACT = 1;
+            i2c_port->I2CM.CTRLB.bit.CMD = 3; // Stop condition
+            while(i2c_port->I2CM.SYNCBUSY.bit.SYSOP);
             i2c.count = 0;
             i2c.state = I2CState_Idle;
           #if KEYPAD_ENABLE

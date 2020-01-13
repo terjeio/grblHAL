@@ -1,7 +1,7 @@
 /*
   flashfs.h - An embedded CNC Controller with rs274/ngc (g-code) support
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2019 Terje Io
 

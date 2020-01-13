@@ -21,6 +21,8 @@
 
 */
 
+#include <stdio.h>
+
 #include "driver.h"
 #include "serial.h"
 #include "i2c.h"
@@ -589,17 +591,23 @@ static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
     while(spindleLock); // wait for PID
 
     if (pwm_value == spindle_pwm.off_value) {
-        pwmEnabled = false;
         if(settings.spindle.disable_with_zero_speed)
             spindle_off();
-        SPINDLE_PWM_TIMER->CCTL[2] = settings.spindle.invert.pwm ? TIMER_A_CCTLN_OUT : 0; // Set PWM output according to invert setting
+        if(settings.spindle.pwm_off_value == 0.0f) {
+            pwmEnabled = false;
+            SPINDLE_PWM_TIMER->CCTL[2] = settings.spindle.invert.pwm ? TIMER_A_CCTLN_OUT : 0; // Set PWM output according to invert setting
+        } else {
+            pwmEnabled = true;
+            SPINDLE_PWM_TIMER->CCR[2] = spindle_pwm.off_value;
+            SPINDLE_PWM_TIMER->CCTL[2] = settings.spindle.invert.pwm ? TIMER_A_CCTLN_OUTMOD_6 : TIMER_A_CCTLN_OUTMOD_2;
+        }
         spindle_encoder.pid.error = 0.0f;
     } else {
         if(!pwmEnabled)
             spindle_on();
         pwmEnabled = true;
         SPINDLE_PWM_TIMER->CCR[2] = pwm_value;
-        SPINDLE_PWM_TIMER->CCTL[2] = TIMER_A_CCTLN_OUTMOD_2;
+        SPINDLE_PWM_TIMER->CCTL[2] = settings.spindle.invert.pwm ? TIMER_A_CCTLN_OUTMOD_6 : TIMER_A_CCTLN_OUTMOD_2;
     }
 
     return pwm_value;
@@ -881,7 +889,7 @@ void settings_changed (settings_t *settings)
         else
             SPINDLE_PWM_TIMER->CTL |= TIMER_A_CTL_ID__8;
 
-        spindle_precompute_pwm_values(&spindle_pwm, 12000000UL / (settings->spindle.pwm_freq > 200.0f ? 2 : 8));
+        spindle_precompute_pwm_values(&spindle_pwm, 12000000UL / (settings->spindle.pwm_freq > 200.0f ? 2 : 16));
     }
 
     hal.driver_cap.spindle_at_speed = hal.driver_cap.variable_spindle && settings->spindle.ppr > 0;
@@ -939,8 +947,8 @@ void settings_changed (settings_t *settings)
 
         if(hal.driver_cap.variable_spindle) {
             SPINDLE_PWM_TIMER->CCR[0] = spindle_pwm.period;
-            SPINDLE_PWM_TIMER->CCTL[2] = 0;           // Set PWM output low and
-            SPINDLE_PWM_TIMER->CTL |= TIMER_A_CTL_CLR|TIMER_A_CTL_MC0|TIMER_A_CTL_MC1;  // start PWM timer (with no pulse output)
+            SPINDLE_PWM_TIMER->CCTL[2] = settings->spindle.invert.pwm ? TIMER_A_CCTLN_OUT : 0;  // Set PWM output according to invert setting and
+            SPINDLE_PWM_TIMER->CTL |= TIMER_A_CTL_CLR|TIMER_A_CTL_MC0|TIMER_A_CTL_MC1;          // start PWM timer (with no pulse output)
         }
 
         if(hal.driver_cap.step_pulse_delay && settings->steppers.pulse_delay_microseconds) {
@@ -1233,6 +1241,10 @@ static bool driver_setup (settings_t *settings)
 
 #endif
 
+#if ATC_ENABLE
+    atc_init();
+#endif
+
     IOInitDone = settings->version == 15;
 
     settings_changed(settings);
@@ -1258,8 +1270,12 @@ static status_code_t driver_setting (setting_type_t setting, float value, char *
 #endif
 
 #if TRINAMIC_ENABLE
-    if(status == Status_Unhandled)
+    if(status == Status_Unhandled) {
+  #if CNC_BOOSTERPACK
+        if(setting != Setting_TrinamicDriver)
+  #endif
         status = trinamic_setting(setting, value, svalue);
+    }
 #endif
 
     if(status == Status_OK)
@@ -1275,6 +1291,9 @@ static void driver_settings_report (setting_type_t setting)
 #endif
 
 #if TRINAMIC_ENABLE
+  #if CNC_BOOSTERPACK
+    if(setting != Setting_TrinamicDriver)
+  #endif
     trinamic_settings_report(setting);
 #endif
 }
@@ -1416,12 +1435,6 @@ bool driver_init (void)
     hal.driver_setting = driver_setting;
     hal.driver_settings_restore = driver_settings_restore;
     hal.driver_settings_report = driver_settings_report;
-#endif
-
-#if ATC_ENABLE
-    hal.driver_reset = atc_reset;
-    hal.tool_select = atc_tool_select;
-    hal.tool_change = atc_tool_change;
 #endif
 
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality

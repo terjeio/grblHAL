@@ -30,11 +30,11 @@
 #define STREAM_POLL_INTERVAL 20 // Poll interval in milliseconds
 
 typedef struct {
-	uint16_t ap_num;
-	wifi_ap_record_t *ap_records;
-	uint8_t *ap_selected;
-	ip4_addr_t ip_addr;
-	char ap_status[20];
+    uint16_t ap_num;
+    wifi_ap_record_t *ap_records;
+    uint8_t *ap_selected;
+    ip4_addr_t ip_addr;
+    char ap_status[20];
 } ap_list_t;
 
 bool wifi_init (wifi_settings_t *settings);

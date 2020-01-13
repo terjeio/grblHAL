@@ -28,11 +28,11 @@
 
 #define IAP_CMD_SUCCESS 0
 
-static const uint32_t flash_sector = 29;		// Last 32k sector number
+static const uint32_t flash_sector = 29;        // Last 32k sector number
 static const uint32_t flash_target = 0x1000UL * 16 + 0x8000UL * (flash_sector - 16);
 
-//static const uint32_t flash_sector = 15;		// Last 4k sector number
-//static const uint32_t flash_target = 0xF000UL;	// Last 4k sector start adress
+//static const uint32_t flash_sector = 15;      // Last 4k sector number
+//static const uint32_t flash_target = 0xF000UL;    // Last 4k sector start adress
 
 bool memcpy_from_flash (uint8_t *dest)
 {
@@ -47,14 +47,14 @@ bool memcpy_to_flash (uint8_t *source)
 
     uint8_t ret;
 
-	__disable_irq();
+    __disable_irq();
 
     ret = Chip_IAP_PreSectorForReadWrite(flash_sector, flash_sector);
     ret = Chip_IAP_EraseSector(flash_sector, flash_sector);
     ret = Chip_IAP_PreSectorForReadWrite(flash_sector, flash_sector);
     ret = Chip_IAP_CopyRamToFlash(flash_target, (uint32_t *)source, (uint32_t)hal.eeprom.size);
 
-	__enable_irq();
+    __enable_irq();
 
     return ret == IAP_CMD_SUCCESS;
 }

@@ -28,7 +28,7 @@
 #include "main.h"
 #include "stm32f1xx_hal_flash_ex.h"
 
-static const uint8_t *flash_target = (uint8_t *)(FLASH_BANK1_END - FLASH_PAGE_SIZE + 1);	// Last page start adress
+static const uint8_t *flash_target = (uint8_t *)(FLASH_BANK1_END - FLASH_PAGE_SIZE + 1);    // Last page start adress
 
 bool memcpy_from_flash (uint8_t *dest)
 {
@@ -44,10 +44,10 @@ bool memcpy_to_flash (uint8_t *source)
     HAL_FLASH_Unlock();
 
     FLASH_EraseInitTypeDef erase = {
-		.Banks = FLASH_BANK_1,
-		.TypeErase = FLASH_TYPEERASE_PAGES,
-		.NbPages = 1,
-		.PageAddress = (uint32_t)flash_target
+        .Banks = FLASH_BANK_1,
+        .TypeErase = FLASH_TYPEERASE_PAGES,
+        .NbPages = 1,
+        .PageAddress = (uint32_t)flash_target
     };
 
     uint32_t error;
@@ -58,10 +58,10 @@ bool memcpy_to_flash (uint8_t *source)
     uint32_t address = (uint32_t)flash_target, remaining = (uint32_t)hal.eeprom.size;
 
     while(remaining && status == HAL_OK) {
-    	status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, address, *data++);
-    	status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, address + 2, *data++);
-    	address += 4;
-    	remaining -= 4;
+        status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, address, *data++);
+        status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, address + 2, *data++);
+        address += 4;
+        remaining -= 4;
     }
 
     HAL_FLASH_Lock();

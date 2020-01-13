@@ -37,7 +37,7 @@
 // Set value to 1 to enable, 0 to disable
 
 #define SDCARD_ENABLE 1 // Run jobs from SD card.
-#define USB_ENABLE	  0
+#define USB_ENABLE    0
 #define EEPROM_ENABLE 0 // I2C EEPROM (24LC64) support. - Do not enable, NOT yet implemented
 
 #if EEPROM_ENABLE == 0
@@ -60,11 +60,11 @@
 #define GPIO_BITBAND 9
 
 #ifdef SMOOTHIEBOARD
-	#include "smoothieboard_map.h"
+    #include "smoothieboard_map.h"
 #elif defined(BOARD_RAMPS_16)
-	#include "ramps_1.6_map.h"
+    #include "ramps_1.6_map.h"
 #elif defined(BOARD_CMCGRATH)
-	#include "cmcgrath_rev3_map.h"
+    #include "cmcgrath_rev3_map.h"
 #else // default board - NOTE: NOT FINAL VERSION!
 
 // Define step pulse output pins. NOTE: All step bit pins must be on the same port.
@@ -98,12 +98,12 @@
 
 // Define stepper driver enable/disable output pin.
 
-#define STEPPERS_DISABLE_PN		0
-#define STEPPERS_DISABLE_PORT	port(STEPPERS_DISABLE_PN)
-#define STEPPERS_DISABLE_PIN	10
+#define STEPPERS_DISABLE_PN     0
+#define STEPPERS_DISABLE_PORT   port(STEPPERS_DISABLE_PN)
+#define STEPPERS_DISABLE_PIN    10
 // 19 + 21
-#define STEPPERS_DISABLE_BIT	(1<<STEPPERS_DISABLE_PIN)
-#define STEPPERS_DISABLE_MASK	(STEPPERS_DISABLE_BIT)
+#define STEPPERS_DISABLE_BIT    (1<<STEPPERS_DISABLE_PIN)
+#define STEPPERS_DISABLE_MASK   (STEPPERS_DISABLE_BIT)
 
 // Define homing/hard limit switch input pins
 // NOTE: All limit bit pins must be on the same port
@@ -128,7 +128,7 @@
 // Define flood and mist coolant output pins.
 
 #define COOLANT_FLOOD_PN    2
-#define COOLANT_FLOOD_PORT	port(COOLANT_FLOOD_PN)
+#define COOLANT_FLOOD_PORT  port(COOLANT_FLOOD_PN)
 #define COOLANT_FLOOD_PIN   4
 #define COOLANT_FLOOD_BIT   (1<<COOLANT_FLOOD_PIN)
 
@@ -174,7 +174,7 @@
 #define SPINDLE_ENABLE_PIN    18
 #define SPINDLE_ENABLE_BIT    (1<<SPINDLE_ENABLE_PIN)
 
-#define SPINDLE_DIRECTION_PN  	1
+#define SPINDLE_DIRECTION_PN    1
 #define SPINDLE_DIRECTION_PORT  port(SPINDLE_DIRECTION_PN)
 #define SPINDLE_DIRECTION_PIN   19
 #define SPINDLE_DIRECTION_BIT   (1<<SPINDLE_DIRECTION_PIN)
@@ -188,7 +188,7 @@
 #define SPINDLE_PWM_USE_SECONDARY_PIN true
 
 #define SD_SPI_PORT 0
-#define SD_CS_PN  	0
+#define SD_CS_PN    0
 #define SD_CS_PORT  port(SD_CS_PN)
 #define SD_CS_PIN   16
 
@@ -217,21 +217,21 @@
 #ifndef X_LIMIT_PORT
 #define X_LIMIT_PORT   LIMIT_PORT
   #if LIMIT_PORTN != 0
-	#define X_LIMIT_INTCLR LIMIT_INTCLR
-	#define X_LIMIT_INTENR LIMIT_INTENR
+    #define X_LIMIT_INTCLR LIMIT_INTCLR
+    #define X_LIMIT_INTENR LIMIT_INTENR
   #endif
 #endif
 #ifndef Y_LIMIT_PORT
 #define Y_LIMIT_PORT   LIMIT_PORT
   #if LIMIT_PORTN != 0
-	#define Y_LIMIT_INTCLR LIMIT_INTCLR
+    #define Y_LIMIT_INTCLR LIMIT_INTCLR
     #define Y_LIMIT_INTENR LIMIT_INTENR
   #endif
 #ifndef Z_LIMIT_PORT
 #define Z_LIMIT_PORT   LIMIT_PORT
   #if LIMIT_PORTN != 0
-	#define Z_LIMIT_INTCLR LIMIT_INTCLR
-	#define Z_LIMIT_INTENR LIMIT_INTENR
+    #define Z_LIMIT_INTCLR LIMIT_INTCLR
+    #define Z_LIMIT_INTENR LIMIT_INTENR
   #endif
 #endif
 #endif

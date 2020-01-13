@@ -47,42 +47,42 @@ static volatile uint32_t keybuf_head = 0, keybuf_tail = 0;
 
 status_code_t keypad_setting (setting_type_t setting, float value, char *svalue)
 {
-	status_code_t status = Status_Unhandled;
+    status_code_t status = Status_Unhandled;
 
     switch(setting) {
 
         case Setting_JogStepSpeed:
             driver_settings.jog.step_speed = value;
-			status = Status_OK;
+            status = Status_OK;
             break;
 
         case Setting_JogSlowSpeed:
             driver_settings.jog.slow_speed = value;
-			status = Status_OK;
+            status = Status_OK;
             break;
 
         case Setting_JogFastSpeed:
             driver_settings.jog.fast_speed = value;
-			status = Status_OK;
+            status = Status_OK;
             break;
 
         case Setting_JogStepDistance:
             driver_settings.jog.step_distance = value;
-			status = Status_OK;
+            status = Status_OK;
             break;
 
         case Setting_JogSlowDistance:
             driver_settings.jog.slow_distance = value;
-			status = Status_OK;
+            status = Status_OK;
            break;
 
         case Setting_JogFastDistance:
             driver_settings.jog.fast_distance = value;
-			status = Status_OK;
+            status = Status_OK;
             break;
 
         default:
-        	break;
+            break;
     }
 
     return status;
@@ -127,7 +127,7 @@ void keypad_settings_report (setting_type_t setting)
             break;
 
         default:
-        	break;
+            break;
     }
 }
 

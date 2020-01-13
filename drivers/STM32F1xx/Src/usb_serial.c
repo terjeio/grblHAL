@@ -11,18 +11,18 @@ static stream_rx_buffer_t rxbuf = {0};
 #define USB_TXLEN 128
 
 typedef struct {
-	size_t length;
-	char *s;
-	char data[USB_TXLEN];
+    size_t length;
+    char *s;
+    char data[USB_TXLEN];
 } usb_tx_buf;
 
 usb_tx_buf txbuf = {0};
 
 void usbInit (void)
 {
-	MX_USB_DEVICE_Init();
+    MX_USB_DEVICE_Init();
 
-	txbuf.s = txbuf.data;
+    txbuf.s = txbuf.data;
 }
 
 //
@@ -30,8 +30,8 @@ void usbInit (void)
 //
 uint16_t usbRxFree (void)
 {
-	uint16_t tail = rxbuf.tail, head = rxbuf.head;
-	return RX_BUFFER_SIZE - BUFCOUNT(head, tail, RX_BUFFER_SIZE);
+    uint16_t tail = rxbuf.tail, head = rxbuf.head;
+    return RX_BUFFER_SIZE - BUFCOUNT(head, tail, RX_BUFFER_SIZE);
 }
 
 //
@@ -39,7 +39,7 @@ uint16_t usbRxFree (void)
 //
 void usbRxFlush (void)
 {
-	rxbuf.head = rxbuf.tail = 0;
+    rxbuf.head = rxbuf.tail = 0;
 }
 
 //
@@ -58,23 +58,23 @@ void usbRxCancel (void)
 //
 void usbWriteS (const char *s)
 {
-	size_t length = strlen(s);
+    size_t length = strlen(s);
 
-	if(length + txbuf.length < USB_TXLEN) {
-		memcpy(txbuf.s, s, length);
-		txbuf.length += length;
-		txbuf.s += length;
-		if(s[length - 1] == '\n') {
-			length = txbuf.length;
-			txbuf.length = 0;
-			txbuf.s = txbuf.data;
-			while(CDC_Transmit_FS((uint8_t *)txbuf.data, length) == USBD_BUSY) {
-	            if(!hal.stream_blocking_callback())
-	                return;
-			}
-		}
-	}
-//	while(CDC_Transmit_FS((uint8_t*)s, strlen(s)) == USBD_BUSY);
+    if(length + txbuf.length < USB_TXLEN) {
+        memcpy(txbuf.s, s, length);
+        txbuf.length += length;
+        txbuf.s += length;
+        if(s[length - 1] == '\n') {
+            length = txbuf.length;
+            txbuf.length = 0;
+            txbuf.s = txbuf.data;
+            while(CDC_Transmit_FS((uint8_t *)txbuf.data, length) == USBD_BUSY) {
+                if(!hal.stream_blocking_callback())
+                    return;
+            }
+        }
+    }
+//  while(CDC_Transmit_FS((uint8_t*)s, strlen(s)) == USBD_BUSY);
 }
 
 //
@@ -87,26 +87,26 @@ int16_t usbGetC (void)
     if(bptr == rxbuf.head)
         return -1; // no data available else EOF
 
-    char data = rxbuf.data[bptr++];           	// Get next character, increment tmp pointer
-    rxbuf.tail = bptr & (RX_BUFFER_SIZE - 1);	// and update pointer
+    char data = rxbuf.data[bptr++];             // Get next character, increment tmp pointer
+    rxbuf.tail = bptr & (RX_BUFFER_SIZE - 1);   // and update pointer
 
     return (int16_t)data;
 }
 
 void usbBufferInput (uint8_t *data, uint32_t length)
 {
-	while(length--) {
+    while(length--) {
 
-		uint_fast16_t next_head = (rxbuf.head + 1)  & (RX_BUFFER_SIZE - 1);	// Get and increment buffer pointer
+        uint_fast16_t next_head = (rxbuf.head + 1)  & (RX_BUFFER_SIZE - 1); // Get and increment buffer pointer
 
-		if(rxbuf.tail == next_head) {										// If buffer full
-			rxbuf.overflow = 1;												// flag overflow
-		} else {
-			if(!hal.stream.enqueue_realtime_command(*data)) {				// Check and strip realtime commands,
-				rxbuf.data[rxbuf.head] = *data;                  			// if not add data to buffer
-				rxbuf.head = next_head;                    					// and update pointer
-			}
-		}
-		data++;																// next
-	}
+        if(rxbuf.tail == next_head) {                                       // If buffer full
+            rxbuf.overflow = 1;                                             // flag overflow
+        } else {
+            if(!hal.stream.enqueue_realtime_command(*data)) {               // Check and strip realtime commands,
+                rxbuf.data[rxbuf.head] = *data;                             // if not add data to buffer
+                rxbuf.head = next_head;                                     // and update pointer
+            }
+        }
+        data++;                                                             // next
+    }
 }

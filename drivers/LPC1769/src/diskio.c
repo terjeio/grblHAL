@@ -21,21 +21,21 @@
 #define LPC_SD_PORT LPC_SSP1
 
 #if SD_SPI_PORT == 0
-	#define LPC_SD_PORT LPC_SSP0
-	static const PINMUX_GRP_T sd_pinmux[] = {
-		{0, 15,  IOCON_MODE_PULLDOWN | IOCON_FUNC2}, 			/* SCK */
-		{0, 17,  IOCON_MODE_INACT | IOCON_FUNC2}, 				/* MISO */
-		{0, 18, IOCON_MODE_INACT | IOCON_FUNC2}, 				/* SOMI */
-		{SD_CS_PN, SD_CS_PIN, IOCON_MODE_PULLUP | IOCON_FUNC0}	/* SDCS */
-	};
+    #define LPC_SD_PORT LPC_SSP0
+    static const PINMUX_GRP_T sd_pinmux[] = {
+        {0, 15,  IOCON_MODE_PULLDOWN | IOCON_FUNC2},            /* SCK */
+        {0, 17,  IOCON_MODE_INACT | IOCON_FUNC2},               /* MISO */
+        {0, 18, IOCON_MODE_INACT | IOCON_FUNC2},                /* SOMI */
+        {SD_CS_PN, SD_CS_PIN, IOCON_MODE_PULLUP | IOCON_FUNC0}  /* SDCS */
+    };
 #elif SD_SPI_PORT == 1
-	#define LPC_SD_PORT LPC_SSP1
-	static const PINMUX_GRP_T sd_pinmux[] = {
-		{0, 7,  IOCON_MODE_PULLDOWN | IOCON_FUNC2}, 			/* SCK */
-		{0, 8,  IOCON_MODE_INACT | IOCON_FUNC2}, 				/* MISO */
-		{0, 9, IOCON_MODE_INACT | IOCON_FUNC2}, 				/* SOMI */
-		{SD_CS_PN, SD_CS_PIN, IOCON_MODE_PULLUP | IOCON_FUNC0}	/* SDCS */
-	};
+    #define LPC_SD_PORT LPC_SSP1
+    static const PINMUX_GRP_T sd_pinmux[] = {
+        {0, 7,  IOCON_MODE_PULLDOWN | IOCON_FUNC2},             /* SCK */
+        {0, 8,  IOCON_MODE_INACT | IOCON_FUNC2},                /* MISO */
+        {0, 9, IOCON_MODE_INACT | IOCON_FUNC2},                 /* SOMI */
+        {SD_CS_PN, SD_CS_PIN, IOCON_MODE_PULLUP | IOCON_FUNC0}  /* SDCS */
+    };
 #endif
 
 /* Definitions for MMC/SDC command */
@@ -70,7 +70,7 @@ void SELECT (void)
 static inline
 void DESELECT (void)
 {
-	BITBAND_GPIO(SD_CS_PORT->PIN, SD_CS_PIN) = 1;
+    BITBAND_GPIO(SD_CS_PORT->PIN, SD_CS_PIN) = 1;
 }
 
 /*--------------------------------------------------------------------------
@@ -98,13 +98,13 @@ BYTE PowerFlag = 0;     /* indicates if "power" is on */
 static
 void xmit_spi(BYTE dat)
 {
-	while(Chip_SSP_GetStatus(LPC_SD_PORT, SSP_STAT_BSY));
+    while(Chip_SSP_GetStatus(LPC_SD_PORT, SSP_STAT_BSY));
 
-	Chip_SSP_SendFrame(LPC_SD_PORT, dat);
+    Chip_SSP_SendFrame(LPC_SD_PORT, dat);
 
-	while(Chip_SSP_GetStatus(LPC_SD_PORT, SSP_STAT_BSY));
+    while(Chip_SSP_GetStatus(LPC_SD_PORT, SSP_STAT_BSY));
 
-	Chip_SSP_ReceiveFrame(LPC_SD_PORT);
+    Chip_SSP_ReceiveFrame(LPC_SD_PORT);
 }
 
 
@@ -115,9 +115,9 @@ void xmit_spi(BYTE dat)
 static
 BYTE rcvr_spi (void)
 {
-	Chip_SSP_SendFrame(LPC_SD_PORT, 0xFF);
+    Chip_SSP_SendFrame(LPC_SD_PORT, 0xFF);
 
-	while(Chip_SSP_GetStatus(LPC_SD_PORT, SSP_STAT_BSY));
+    while(Chip_SSP_GetStatus(LPC_SD_PORT, SSP_STAT_BSY));
 
     return Chip_SSP_ReceiveFrame(LPC_SD_PORT);
 }
@@ -160,7 +160,7 @@ void send_initial_clock_train(void)
     DESELECT();
 
     while(i--)
-		xmit_spi(0xFF);
+        xmit_spi(0xFF);
 
     i = 0xFF;
 }
@@ -174,28 +174,28 @@ void send_initial_clock_train(void)
 //static
 void power_on (void)
 {
-	static bool init = false;
+    static bool init = false;
 
     /*
      * This doesn't really turn the power on, but initializes the
      * SSI port and pins needed to talk to the card.
      */
 
-	// SPI0
+    // SPI0
 
-	if(!init) {
+    if(!init) {
 
-		Chip_IOCON_SetPinMuxing(LPC_IOCON, sd_pinmux, sizeof(sd_pinmux) / sizeof(PINMUX_GRP_T));
+        Chip_IOCON_SetPinMuxing(LPC_IOCON, sd_pinmux, sizeof(sd_pinmux) / sizeof(PINMUX_GRP_T));
 
-		Chip_SSP_Init(LPC_SD_PORT);
-		Chip_SSP_SetFormat(LPC_SD_PORT, SSP_BITS_8, SSP_FRAMEFORMAT_SPI, SSP_CLOCK_CPHA0_CPOL0);
-		Chip_SSP_Set_Mode(LPC_SD_PORT, SSP_MODE_MASTER);
-		Chip_SSP_Enable(LPC_SD_PORT);
-	}
+        Chip_SSP_Init(LPC_SD_PORT);
+        Chip_SSP_SetFormat(LPC_SD_PORT, SSP_BITS_8, SSP_FRAMEFORMAT_SPI, SSP_CLOCK_CPHA0_CPOL0);
+        Chip_SSP_Set_Mode(LPC_SD_PORT, SSP_MODE_MASTER);
+        Chip_SSP_Enable(LPC_SD_PORT);
+    }
 
-	Chip_SSP_SetBitRate(LPC_SD_PORT, 400000);
+    Chip_SSP_SetBitRate(LPC_SD_PORT, 400000);
 
-	init = true;
+    init = true;
     PowerFlag = 1;
 }
 
@@ -203,7 +203,7 @@ void power_on (void)
 static
 void set_max_speed(void)
 {
-	Chip_SSP_SetBitRate(LPC_SD_PORT, 12000000); // 12 MHz
+    Chip_SSP_SetBitRate(LPC_SD_PORT, 12000000); // 12 MHz
 }
 
 static
@@ -384,7 +384,7 @@ DSTATUS disk_initialize (
     BYTE n, ty, ocr[4];
 
 
-//	pinOut(7, 1);
+//  pinOut(7, 1);
     if (drv) return STA_NOINIT;            /* Supports only single drive */
     if (Stat & STA_NODISK) return Stat;    /* No card in the socket */
 

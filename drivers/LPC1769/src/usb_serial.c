@@ -35,14 +35,14 @@ extern const  USBD_HW_API_T hw_api;
 extern const  USBD_CORE_API_T core_api;
 extern const  USBD_CDC_API_T cdc_api;
 static const  USBD_API_T g_usbApi = {
-	&hw_api,
-	&core_api,
-	0,
-	0,
-	0,
-	&cdc_api,
-	0,
-	0x02221101,
+    &hw_api,
+    &core_api,
+    0,
+    0,
+    0,
+    &cdc_api,
+    0,
+    0x02221101,
 };
 
 const USBD_API_T *g_pUsbApi = &g_usbApi;
@@ -52,52 +52,52 @@ static USBD_HANDLE_T g_hUsb;
 /* Initialize pin and clocks for USB0/USB1 port */
 static void usb_pin_clk_init(void)
 {
-	/* enable USB PLL and clocks */
-	Chip_USB_Init();
-	/* enable USB 1 port on the board */
-//	Board_USBD_Init(1);
-	Chip_IOCON_PinMux(LPC_IOCON, 0, 29, IOCON_MODE_INACT, IOCON_FUNC1);	/* P0.29 D1+, P0.30 D1- */
-	Chip_IOCON_PinMux(LPC_IOCON, 0, 30, IOCON_MODE_INACT, IOCON_FUNC1);
+    /* enable USB PLL and clocks */
+    Chip_USB_Init();
+    /* enable USB 1 port on the board */
+//  Board_USBD_Init(1);
+    Chip_IOCON_PinMux(LPC_IOCON, 0, 29, IOCON_MODE_INACT, IOCON_FUNC1); /* P0.29 D1+, P0.30 D1- */
+    Chip_IOCON_PinMux(LPC_IOCON, 0, 30, IOCON_MODE_INACT, IOCON_FUNC1);
 
-	LPC_USB->USBClkCtrl = 0x12;                /* Dev, AHB clock enable */
-	while ((LPC_USB->USBClkSt & 0x12) != 0x12);
+    LPC_USB->USBClkCtrl = 0x12;                /* Dev, AHB clock enable */
+    while ((LPC_USB->USBClkSt & 0x12) != 0x12);
 }
 
 /**
- * @brief	Handle interrupt from USB0
- * @return	Nothing
+ * @brief   Handle interrupt from USB0
+ * @return  Nothing
  */
 void USB_IRQHandler(void)
 {
-	USBD_API->hw->ISR(g_hUsb);
+    USBD_API->hw->ISR(g_hUsb);
 }
 
 /* Find the address of interface descriptor for given class type. */
 USB_INTERFACE_DESCRIPTOR *find_IntfDesc(const uint8_t *pDesc, uint32_t intfClass)
 {
-	USB_COMMON_DESCRIPTOR *pD;
-	USB_INTERFACE_DESCRIPTOR *pIntfDesc = 0;
-	uint32_t next_desc_adr;
+    USB_COMMON_DESCRIPTOR *pD;
+    USB_INTERFACE_DESCRIPTOR *pIntfDesc = 0;
+    uint32_t next_desc_adr;
 
-	pD = (USB_COMMON_DESCRIPTOR *) pDesc;
-	next_desc_adr = (uint32_t) pDesc;
+    pD = (USB_COMMON_DESCRIPTOR *) pDesc;
+    next_desc_adr = (uint32_t) pDesc;
 
-	while (pD->bLength) {
-		/* is it interface descriptor */
-		if (pD->bDescriptorType == USB_INTERFACE_DESCRIPTOR_TYPE) {
+    while (pD->bLength) {
+        /* is it interface descriptor */
+        if (pD->bDescriptorType == USB_INTERFACE_DESCRIPTOR_TYPE) {
 
-			pIntfDesc = (USB_INTERFACE_DESCRIPTOR *) pD;
-			/* did we find the right interface descriptor */
-			if (pIntfDesc->bInterfaceClass == intfClass) {
-				break;
-			}
-		}
-		pIntfDesc = 0;
-		next_desc_adr = (uint32_t) pD + pD->bLength;
-		pD = (USB_COMMON_DESCRIPTOR *) next_desc_adr;
-	}
+            pIntfDesc = (USB_INTERFACE_DESCRIPTOR *) pD;
+            /* did we find the right interface descriptor */
+            if (pIntfDesc->bInterfaceClass == intfClass) {
+                break;
+            }
+        }
+        pIntfDesc = 0;
+        next_desc_adr = (uint32_t) pD + pD->bLength;
+        pD = (USB_COMMON_DESCRIPTOR *) next_desc_adr;
+    }
 
-	return pIntfDesc;
+    return pIntfDesc;
 }
 
 #if USB_ENABLE
@@ -107,9 +107,9 @@ USB_INTERFACE_DESCRIPTOR *find_IntfDesc(const uint8_t *pDesc, uint32_t intfClass
 #define USB_TXLEN 128
 
 typedef struct {
-	size_t length;
-	char *s;
-	char data[USB_TXLEN];
+    size_t length;
+    char *s;
+    char data[USB_TXLEN];
 } usb_tx_buf;
 
 static usb_tx_buf txbuf = {0};
@@ -117,42 +117,42 @@ static stream_rx_buffer_t rxbuf = {0};
 
 void usbInit (void)
 {
-	USBD_API_INIT_PARAM_T usb_param;
-	USB_CORE_DESCS_T desc;
-//	ErrorCode_t ret = LPC_OK;
+    USBD_API_INIT_PARAM_T usb_param;
+    USB_CORE_DESCS_T desc;
+//  ErrorCode_t ret = LPC_OK;
 
-	/* enable clocks and pinmux */
-	usb_pin_clk_init();
+    /* enable clocks and pinmux */
+    usb_pin_clk_init();
 
-	/* initialize call back structures */
-	memset((void *) &usb_param, 0, sizeof(USBD_API_INIT_PARAM_T));
-	usb_param.usb_reg_base = LPC_USB_BASE + 0x200;
-	usb_param.max_num_ep = 3;
-	usb_param.mem_base = USB_STACK_MEM_BASE;
-	usb_param.mem_size = USB_STACK_MEM_SIZE;
+    /* initialize call back structures */
+    memset((void *) &usb_param, 0, sizeof(USBD_API_INIT_PARAM_T));
+    usb_param.usb_reg_base = LPC_USB_BASE + 0x200;
+    usb_param.max_num_ep = 3;
+    usb_param.mem_base = USB_STACK_MEM_BASE;
+    usb_param.mem_size = USB_STACK_MEM_SIZE;
 
-	/* Set the USB descriptors */
-	desc.device_desc = (uint8_t *) &USB_DeviceDescriptor[0];
-	desc.string_desc = (uint8_t *) &USB_StringDescriptor[0];
-	/* Note, to pass USBCV test full-speed only devices should have both
-	   descriptor arrays point to same location and device_qualifier set to 0.
-	 */
-	desc.high_speed_desc = (uint8_t *) &USB_FsConfigDescriptor[0];
-	desc.full_speed_desc = (uint8_t *) &USB_FsConfigDescriptor[0];
-	desc.device_qualifier = 0;
+    /* Set the USB descriptors */
+    desc.device_desc = (uint8_t *) &USB_DeviceDescriptor[0];
+    desc.string_desc = (uint8_t *) &USB_StringDescriptor[0];
+    /* Note, to pass USBCV test full-speed only devices should have both
+       descriptor arrays point to same location and device_qualifier set to 0.
+     */
+    desc.high_speed_desc = (uint8_t *) &USB_FsConfigDescriptor[0];
+    desc.full_speed_desc = (uint8_t *) &USB_FsConfigDescriptor[0];
+    desc.device_qualifier = 0;
 
-	/* USB Initialization */
-	if (USBD_API->hw->Init(&g_hUsb, &desc, &usb_param) == LPC_OK) {
-		/* Init VCOM interface */
-		if (vcom_init(g_hUsb, &desc, &usb_param) == LPC_OK) {
-			/*  enable USB interrupts */
-			NVIC_EnableIRQ(USB_IRQn);
-			/* now connect */
-			USBD_API->hw->Connect(g_hUsb, 1);
-		}
-	}
+    /* USB Initialization */
+    if (USBD_API->hw->Init(&g_hUsb, &desc, &usb_param) == LPC_OK) {
+        /* Init VCOM interface */
+        if (vcom_init(g_hUsb, &desc, &usb_param) == LPC_OK) {
+            /*  enable USB interrupts */
+            NVIC_EnableIRQ(USB_IRQn);
+            /* now connect */
+            USBD_API->hw->Connect(g_hUsb, 1);
+        }
+    }
 
-	txbuf.s = txbuf.data;
+    txbuf.s = txbuf.data;
 }
 
 //
@@ -160,8 +160,8 @@ void usbInit (void)
 //
 uint16_t usbRxFree (void)
 {
-	uint16_t tail = rxbuf.tail, head = rxbuf.head;
-	return RX_BUFFER_SIZE - BUFCOUNT(head, tail, RX_BUFFER_SIZE);
+    uint16_t tail = rxbuf.tail, head = rxbuf.head;
+    return RX_BUFFER_SIZE - BUFCOUNT(head, tail, RX_BUFFER_SIZE);
 }
 
 //
@@ -169,7 +169,7 @@ uint16_t usbRxFree (void)
 //
 void usbRxFlush (void)
 {
-	rxbuf.head = rxbuf.tail = 0;
+    rxbuf.head = rxbuf.tail = 0;
 }
 
 //
@@ -188,24 +188,24 @@ void usbRxCancel (void)
 //
 void usbWriteS (const char *s)
 {
-	size_t length = strlen(s);
+    size_t length = strlen(s);
 
-	if(vcom_connected() && length + txbuf.length < USB_TXLEN) {
-		memcpy(txbuf.s, s, length);
-		txbuf.length += length;
-		txbuf.s += length;
-		if(s[length - 1] == '\n' || txbuf.length > 40) {
-			length = txbuf.length;
-			txbuf.length = 0;
-			txbuf.s = txbuf.data;
-			while((txbuf.length = vcom_write((uint8_t *)txbuf.data, length)) != length) {
-				length -= txbuf.length;
-	            if(!hal.stream_blocking_callback())
-	                return;
-			}
-			txbuf.length = 0;
-		}
-	}
+    if(vcom_connected() && length + txbuf.length < USB_TXLEN) {
+        memcpy(txbuf.s, s, length);
+        txbuf.length += length;
+        txbuf.s += length;
+        if(s[length - 1] == '\n' || txbuf.length > 40) {
+            length = txbuf.length;
+            txbuf.length = 0;
+            txbuf.s = txbuf.data;
+            while((txbuf.length = vcom_write((uint8_t *)txbuf.data, length)) != length) {
+                length -= txbuf.length;
+                if(!hal.stream_blocking_callback())
+                    return;
+            }
+            txbuf.length = 0;
+        }
+    }
 }
 
 //
@@ -218,28 +218,28 @@ int16_t usbGetC (void)
     if(bptr == rxbuf.head)
         return -1; // no data available else EOF
 
-    char data = rxbuf.data[bptr++];           	// Get next character, increment tmp pointer
-    rxbuf.tail = bptr & (RX_BUFFER_SIZE - 1);	// and update pointer
+    char data = rxbuf.data[bptr++];             // Get next character, increment tmp pointer
+    rxbuf.tail = bptr & (RX_BUFFER_SIZE - 1);   // and update pointer
 
     return (int16_t)data;
 }
 
 void usbBufferInput (uint8_t *data, uint32_t length)
 {
-	while(length--) {
+    while(length--) {
 
-		uint_fast16_t next_head = (rxbuf.head + 1)  & (RX_BUFFER_SIZE - 1);	// Get and increment buffer pointer
+        uint_fast16_t next_head = (rxbuf.head + 1)  & (RX_BUFFER_SIZE - 1); // Get and increment buffer pointer
 
-		if(rxbuf.tail == next_head) {										// If buffer full
-			rxbuf.overflow = 1;												// flag overflow
-		} else {
-			if(!hal.stream.enqueue_realtime_command(*data)) {				// Check and strip realtime commands,
-				rxbuf.data[rxbuf.head] = *data;                  			// if not add data to buffer
-				rxbuf.head = next_head;                    					// and update pointer
-			}
-		}
-		data++;																// next
-	}
+        if(rxbuf.tail == next_head) {                                       // If buffer full
+            rxbuf.overflow = 1;                                             // flag overflow
+        } else {
+            if(!hal.stream.enqueue_realtime_command(*data)) {               // Check and strip realtime commands,
+                rxbuf.data[rxbuf.head] = *data;                             // if not add data to buffer
+                rxbuf.head = next_head;                                     // and update pointer
+            }
+        }
+        data++;                                                             // next
+    }
 }
 
 #endif

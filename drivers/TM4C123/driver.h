@@ -120,18 +120,18 @@ extern driver_settings_t driver_settings;
 #define LASER_PPI_TIMER_INT timerINT(LASER_PPI_TIM, A)
 
 // Define step pulse output pins.
-#define STEP_PORT	GPIO_PORTD_BASE
-#define X_STEP_PIN	GPIO_PIN_1
-#define Y_STEP_PIN	GPIO_PIN_2
-#define Z_STEP_PIN	GPIO_PIN_3
+#define STEP_PORT   GPIO_PORTD_BASE
+#define X_STEP_PIN  GPIO_PIN_1
+#define Y_STEP_PIN  GPIO_PIN_2
+#define Z_STEP_PIN  GPIO_PIN_3
 #define HWSTEP_MASK (X_STEP_PIN|Y_STEP_PIN|Z_STEP_PIN) // All step bits
 #define STEP_OUTMODE GPIO_SHIFT1
 
 // Define step direction output pins. NOTE: All direction pins must be on the same port.
-#define DIRECTION_PORT		GPIO_PORTB_BASE
-#define X_DIRECTION_PIN		GPIO_PIN_7
-#define Y_DIRECTION_PIN		GPIO_PIN_6
-#define Z_DIRECTION_PIN		GPIO_PIN_4
+#define DIRECTION_PORT      GPIO_PORTB_BASE
+#define X_DIRECTION_PIN     GPIO_PIN_7
+#define Y_DIRECTION_PIN     GPIO_PIN_6
+#define Z_DIRECTION_PIN     GPIO_PIN_4
 #define HWDIRECTION_MASK    (X_DIRECTION_PIN|Y_DIRECTION_PIN|Z_DIRECTION_PIN) // All direction bits
 #define DIRECTION_OUTMODE   GPIO_MAP
 
@@ -175,28 +175,28 @@ extern driver_settings_t driver_settings;
 #endif
 
 // Define spindle enable and spindle direction output pins.
-#define SPINDLE_ENABLE_PORT		GPIO_PORTE_BASE
-#define SPINDLE_ENABLE_PIN		GPIO_PIN_2
+#define SPINDLE_ENABLE_PORT     GPIO_PORTE_BASE
+#define SPINDLE_ENABLE_PIN      GPIO_PIN_2
 
-#define SPINDLE_DIRECTION_PORT		GPIO_PORTE_BASE
-#define SPINDLE_DIRECTION_PIN		GPIO_PIN_3
+#define SPINDLE_DIRECTION_PORT      GPIO_PORTE_BASE
+#define SPINDLE_DIRECTION_PIN       GPIO_PIN_3
 
 // Define flood and mist coolant enable output pins.
-#define COOLANT_FLOOD_PORT		GPIO_PORTD_BASE
-#define COOLANT_FLOOD_PIN		GPIO_PIN_6
+#define COOLANT_FLOOD_PORT      GPIO_PORTD_BASE
+#define COOLANT_FLOOD_PIN       GPIO_PIN_6
 
-#define COOLANT_MIST_PORT	GPIO_PORTD_BASE
-#define COOLANT_MIST_PIN	GPIO_PIN_7
+#define COOLANT_MIST_PORT   GPIO_PORTD_BASE
+#define COOLANT_MIST_PIN    GPIO_PIN_7
 
 // Define user-control CONTROLs (cycle start, reset, feed hold) input pins.
 #if CNC_BOOSTERPACK
   #if CNC_BOOSTERPACK_SHORTS
-    #define CONTROL_PORT		GPIO_PORTC_BASE
-    #define RESET_PIN			GPIO_PIN_7
-    #define FEED_HOLD_PIN		GPIO_PIN_5
-    #define CYCLE_START_PIN		GPIO_PIN_6
-    #define SAFETY_DOOR_PIN		GPIO_PIN_4
-    #define HWCONTROL_MASK		(RESET_PIN|FEED_HOLD_PIN|CYCLE_START_PIN|SAFETY_DOOR_PIN)
+    #define CONTROL_PORT        GPIO_PORTC_BASE
+    #define RESET_PIN           GPIO_PIN_7
+    #define FEED_HOLD_PIN       GPIO_PIN_5
+    #define CYCLE_START_PIN     GPIO_PIN_6
+    #define SAFETY_DOOR_PIN     GPIO_PIN_4
+    #define HWCONTROL_MASK      (RESET_PIN|FEED_HOLD_PIN|CYCLE_START_PIN|SAFETY_DOOR_PIN)
   #endif
 #else
 #define CONTROL_PORT        GPIO_PORTC_BASE
@@ -208,14 +208,14 @@ extern driver_settings_t driver_settings;
 #endif
 
 // Define probe switch input pin.
-#define PROBE_PORT		GPIO_PORTA_BASE
-#define PROBE_PIN		GPIO_PIN_5
+#define PROBE_PORT      GPIO_PORTA_BASE
+#define PROBE_PIN       GPIO_PIN_5
 
 // Start of PWM & Stepper Enabled Spindle
-#define SPINDLEPPERIPH		SYSCTL_PERIPH_GPIOB
-#define SPINDLEPPORT		GPIO_PORTB_BASE
-#define SPINDLEPPIN			GPIO_PIN_2
-#define SPINDLEPWM_MAP		GPIO_PB2_T3CCP0
+#define SPINDLEPPERIPH      SYSCTL_PERIPH_GPIOB
+#define SPINDLEPPORT        GPIO_PORTB_BASE
+#define SPINDLEPPIN         GPIO_PIN_2
+#define SPINDLEPWM_MAP      GPIO_PB2_T3CCP0
 
 #if KEYPAD_ENABLE
 #define KEYINTR_PIN   GPIO_PIN_4

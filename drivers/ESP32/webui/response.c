@@ -31,7 +31,7 @@
 #include "esp_spiffs.h"
 
 #include "webui.h"
-#include "GRBL/grbl.h"
+#include "grbl/grbl.h"
 
 static const char *TAG = "webui";
 
@@ -40,32 +40,32 @@ static httpd_req_t *http_request = NULL;
 
 static status_code_t webui_parse_command (char *cmd)
 {
-	status_code_t status = Status_GcodeUnsupportedCommand;
+    status_code_t status = Status_GcodeUnsupportedCommand;
 
-	http_request = NULL;
+    http_request = NULL;
 
-	if(!strncmp(cmd, "[ESP", 4)) {
+    if(!strncmp(cmd, "[ESP", 4)) {
 
-		char *args = NULL;
+        char *args = NULL;
 
-		if((args = strchr(&cmd[4], ']'))) {
-			*args++ = '\0';
-			status = webui_command_handler(atol(&cmd[4]), args);
-		}
-	}
+        if((args = strchr(&cmd[4], ']'))) {
+            *args++ = '\0';
+            status = webui_command_handler(atol(&cmd[4]), args);
+        }
+    }
 
-	if(status != Status_OK) {
-		char msg[100];
-		sprintf(msg, "[MSG: Unknow Command...%s]\r\n", cmd); // sic
-		hal.stream.write(msg);
-	}
+    if(status != Status_OK) {
+        char msg[100];
+        sprintf(msg, "[MSG: Unknow Command...%s]\r\n", cmd); // sic
+        hal.stream.write(msg);
+    }
 
-	return status;
+    return status;
 }
 
 void webui_init (void)
 {
-	hal.user_command_execute = webui_parse_command;
+    hal.user_command_execute = webui_parse_command;
 
     esp_vfs_spiffs_conf_t conf = {
       .base_path = "/spiffs",
@@ -91,56 +91,56 @@ void webui_init (void)
 
 void webui_set_http_request (httpd_req_t *req)
 {
-	chunked = false;
-	http_request = req;
+    chunked = false;
+    http_request = req;
     httpd_resp_set_hdr(http_request, "Cache-Control", "no-cache");
 }
 
 void webui_print (const char *s)
 {
-	if(http_request)
-		httpd_resp_sendstr(http_request, s);
-	else {
-		size_t len = strlen(s);
-		if(len) {
-			if(s[--len] == '\n') {
-				char *t = malloc(len + 3);
-				if(t) {
-					memcpy(t, s, len);
-					t[len++] = '\r';
-					t[len++] = '\n';
-					t[len] = '\0';
-					hal.stream.write(t);
-					free(t);
-				}
-			} else {
-				hal.stream.write(s);
-				hal.stream.write(ASCII_EOL);
-			}
-		} else
-			hal.stream.write(ASCII_EOL);
-	}
+    if(http_request)
+        httpd_resp_sendstr(http_request, s);
+    else {
+        size_t len = strlen(s);
+        if(len) {
+            if(s[--len] == '\n') {
+                char *t = malloc(len + 3);
+                if(t) {
+                    memcpy(t, s, len);
+                    t[len++] = '\r';
+                    t[len++] = '\n';
+                    t[len] = '\0';
+                    hal.stream.write(t);
+                    free(t);
+                }
+            } else {
+                hal.stream.write(s);
+                hal.stream.write(ASCII_EOL);
+            }
+        } else
+            hal.stream.write(ASCII_EOL);
+    }
 }
 
 void webui_print_chunk (const char *s)
 {
-	chunked = true;
-	if(http_request)
-		httpd_resp_sendstr_chunk(http_request, s);
-	else
-		webui_print(s);
+    chunked = true;
+    if(http_request)
+        httpd_resp_sendstr_chunk(http_request, s);
+    else
+        webui_print(s);
 }
 
 void webui_print_is_json (void)
 {
-	if(http_request)
-		httpd_resp_set_type(http_request, HTTPD_TYPE_JSON);
+    if(http_request)
+        httpd_resp_set_type(http_request, HTTPD_TYPE_JSON);
 }
 
 void webui_print_flush (void)
 {
-	if(http_request) {
-		if(chunked)
-			httpd_resp_sendstr_chunk(http_request, NULL);
-	}
+    if(http_request) {
+        if(chunked)
+            httpd_resp_sendstr_chunk(http_request, NULL);
+    }
 }

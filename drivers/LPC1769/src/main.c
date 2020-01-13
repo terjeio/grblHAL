@@ -25,7 +25,7 @@
 
 int main(void)
 {
-	grbl_enter();
+    grbl_enter();
 
-	return 0;
+    return 0;
 }

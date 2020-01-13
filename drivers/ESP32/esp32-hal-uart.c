@@ -29,7 +29,7 @@
 
 #include "serial.h"
 #include "esp32-hal-uart.h"
-#include "GRBL/grbl.h"
+#include "grbl/grbl.h"
 
 #define CONFIG_DISABLE_HAL_LOCKS 1
 
@@ -68,10 +68,10 @@ static uart_t _uart_bus_array[3] = {
 #endif
 
 static stream_rx_buffer_t rxbuffer = {
-	.head = 0,
-	.tail = 0,
-	.backup = false,
-	.overflow = false
+    .head = 0,
+    .tail = 0,
+    .backup = false,
+    .overflow = false
 };
 
 static stream_rx_buffer_t rxbackup;
@@ -81,33 +81,33 @@ static void IRAM_ATTR _uart_isr (void *arg)
 {
     uint8_t c;
 
-	rx_uart->dev->int_clr.rxfifo_full = 1;
-	rx_uart->dev->int_clr.frm_err = 1;
-	rx_uart->dev->int_clr.rxfifo_tout = 1;
+    rx_uart->dev->int_clr.rxfifo_full = 1;
+    rx_uart->dev->int_clr.frm_err = 1;
+    rx_uart->dev->int_clr.rxfifo_tout = 1;
 
-	while(rx_uart->dev->status.rxfifo_cnt || (rx_uart->dev->mem_rx_status.wr_addr != rx_uart->dev->mem_rx_status.rd_addr)) {
+    while(rx_uart->dev->status.rxfifo_cnt || (rx_uart->dev->mem_rx_status.wr_addr != rx_uart->dev->mem_rx_status.rd_addr)) {
 
-		c = rx_uart->dev->fifo.rw_byte;
+        c = rx_uart->dev->fifo.rw_byte;
 
-		if(c == CMD_TOOL_ACK && !rxbuffer.backup) {
+        if(c == CMD_TOOL_ACK && !rxbuffer.backup) {
 
-			memcpy(&rxbackup, &rxbuffer, sizeof(stream_rx_buffer_t));
-			rxbuffer.backup = true;
-			rxbuffer.tail = rxbuffer.head;
-			hal.stream.read = uartRead; // restore normal input
+            memcpy(&rxbackup, &rxbuffer, sizeof(stream_rx_buffer_t));
+            rxbuffer.backup = true;
+            rxbuffer.tail = rxbuffer.head;
+            hal.stream.read = uartRead; // restore normal input
 
-		} else if(!hal.stream.enqueue_realtime_command(c)) {
+        } else if(!hal.stream.enqueue_realtime_command(c)) {
 
-			uint32_t bptr = (rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1);  // Get next head pointer
+            uint32_t bptr = (rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1);  // Get next head pointer
 
-			if(bptr == rxbuffer.tail)                	// If buffer full
-				rxbuffer.overflow = 1;                 	// flag overflow,
-			else {
-				rxbuffer.data[rxbuffer.head] = (char)c;	// else add data to buffer
-				rxbuffer.head = bptr;                	// and update pointer
-			}
-		}
-	}
+            if(bptr == rxbuffer.tail)                   // If buffer full
+                rxbuffer.overflow = 1;                  // flag overflow,
+            else {
+                rxbuffer.data[rxbuffer.head] = (char)c; // else add data to buffer
+                rxbuffer.head = bptr;                   // and update pointer
+            }
+        }
+    }
 
 /*
     if (xHigherPriorityTaskWoken) {
@@ -160,7 +160,7 @@ static void uartConfig (uart_t *uart)
 {
 #if !CONFIG_DISABLE_HAL_LOCKS
     if(uart->lock == NULL) {
-    	uart->lock = xSemaphoreCreateMutex();
+        uart->lock = xSemaphoreCreateMutex();
         if(uart->lock == NULL)
             return;
     }
@@ -168,20 +168,20 @@ static void uartConfig (uart_t *uart)
 
     switch(uart->num) {
 
-		case 0:
-			DPORT_SET_PERI_REG_MASK(DPORT_PERIP_CLK_EN_REG, DPORT_UART_CLK_EN);
-			DPORT_CLEAR_PERI_REG_MASK(DPORT_PERIP_RST_EN_REG, DPORT_UART_RST);
-			break;
+        case 0:
+            DPORT_SET_PERI_REG_MASK(DPORT_PERIP_CLK_EN_REG, DPORT_UART_CLK_EN);
+            DPORT_CLEAR_PERI_REG_MASK(DPORT_PERIP_RST_EN_REG, DPORT_UART_RST);
+            break;
 
-		case 1:
-			DPORT_SET_PERI_REG_MASK(DPORT_PERIP_CLK_EN_REG, DPORT_UART1_CLK_EN);
-			DPORT_CLEAR_PERI_REG_MASK(DPORT_PERIP_RST_EN_REG, DPORT_UART1_RST);
-			break;
+        case 1:
+            DPORT_SET_PERI_REG_MASK(DPORT_PERIP_CLK_EN_REG, DPORT_UART1_CLK_EN);
+            DPORT_CLEAR_PERI_REG_MASK(DPORT_PERIP_RST_EN_REG, DPORT_UART1_RST);
+            break;
 
-		case 2:
-			DPORT_SET_PERI_REG_MASK(DPORT_PERIP_CLK_EN_REG, DPORT_UART2_CLK_EN);
-			DPORT_CLEAR_PERI_REG_MASK(DPORT_PERIP_RST_EN_REG, DPORT_UART2_RST);
-			break;
+        case 2:
+            DPORT_SET_PERI_REG_MASK(DPORT_PERIP_CLK_EN_REG, DPORT_UART2_CLK_EN);
+            DPORT_CLEAR_PERI_REG_MASK(DPORT_PERIP_RST_EN_REG, DPORT_UART2_RST);
+            break;
     }
 
     uartSetBaudRate(uart, BAUD_RATE);
@@ -192,8 +192,8 @@ static void uartConfig (uart_t *uart)
     #define ONE_STOP_BITS_CONF 0x1
 
     if(uart->dev->conf0.stop_bit_num == TWO_STOP_BITS_CONF) {
-    	uart->dev->conf0.stop_bit_num = ONE_STOP_BITS_CONF;
-    	uart->dev->rs485_conf.dl1_en = 1;
+        uart->dev->conf0.stop_bit_num = ONE_STOP_BITS_CONF;
+        uart->dev->rs485_conf.dl1_en = 1;
     }
     UART_MUTEX_UNLOCK();
 
@@ -218,7 +218,7 @@ void uartInit (void)
     uartConfig(rx_uart);
 
     uartFlush();
-	uartEnableInterrupt(rx_uart);
+    uartEnableInterrupt(rx_uart);
 }
 
 uint32_t uartAvailable (void)
@@ -267,8 +267,8 @@ bool uartPutC (const char c)
     UART_MUTEX_LOCK();
 
     while(tx_uart->dev->status.txfifo_cnt == 0x7F) {
-    	if(!hal.stream_blocking_callback())
-    		return false;
+        if(!hal.stream_blocking_callback())
+            return false;
     }
 
     tx_uart->dev->fifo.rw_byte = c;
@@ -282,7 +282,7 @@ void uartWriteS (const char *data)
     char c, *ptr = (char *)data;
 
     while((c = *ptr++) != '\0')
-    	uartPutC(c);
+        uartPutC(c);
 }
 
 void uartFlush (void)

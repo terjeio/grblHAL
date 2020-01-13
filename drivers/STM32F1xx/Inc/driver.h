@@ -39,7 +39,7 @@
 
 #define USB_ENABLE      0
 #define KEYPAD_ENABLE   0 // I2C keypad for jogging etc.
-#define TRINAMIC_ENABLE	0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
+#define TRINAMIC_ENABLE 0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
 #define TRINAMIC_I2C    0 // Trinamic I2C - SPI bridge interface.
 #define TRINAMIC_DEV    0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
 #define CNC_BOOSTERPACK 1
@@ -131,21 +131,21 @@ extern driver_settings_t driver_settings;
 #define STEP_OUTMODE GPIO_SHIFT0
 
 // Define step direction output pins.
-#define DIRECTION_PORT		GPIOA
-#define X_DIRECTION_PIN   	4
-#define Y_DIRECTION_PIN   	5
-#define Z_DIRECTION_PIN   	6
-#define X_DIRECTION_BIT   	(1<<X_DIRECTION_PIN)
-#define Y_DIRECTION_BIT   	(1<<Y_DIRECTION_PIN)
-#define Z_DIRECTION_BIT   	(1<<Z_DIRECTION_PIN)
+#define DIRECTION_PORT      GPIOA
+#define X_DIRECTION_PIN     4
+#define Y_DIRECTION_PIN     5
+#define Z_DIRECTION_PIN     6
+#define X_DIRECTION_BIT     (1<<X_DIRECTION_PIN)
+#define Y_DIRECTION_BIT     (1<<Y_DIRECTION_PIN)
+#define Z_DIRECTION_BIT     (1<<Z_DIRECTION_PIN)
 #if N_AXIS > 3
-#define A_DIRECTION_PIN   	7
-#define A_DIRECTION_BIT   	(1<<A_DIRECTION_PIN)
-#define DIRECTION_MASK    	(X_DIRECTION_BIT|Y_DIRECTION_BIT|Z_DIRECTION_BIT|A_DIRECTION_BIT) // All direction bits
+#define A_DIRECTION_PIN     7
+#define A_DIRECTION_BIT     (1<<A_DIRECTION_PIN)
+#define DIRECTION_MASK      (X_DIRECTION_BIT|Y_DIRECTION_BIT|Z_DIRECTION_BIT|A_DIRECTION_BIT) // All direction bits
 #else
-#define DIRECTION_MASK    	(X_DIRECTION_BIT|Y_DIRECTION_BIT|Z_DIRECTION_BIT) // All direction bits
+#define DIRECTION_MASK      (X_DIRECTION_BIT|Y_DIRECTION_BIT|Z_DIRECTION_BIT) // All direction bits
 #endif
-#define DIRECTION_OUTMODE 	GPIO_SHIFT4
+#define DIRECTION_OUTMODE   GPIO_SHIFT4
 
 // Define stepper driver enable/disable output pin.
 #define STEPPERS_DISABLE_PORT   GPIOA
@@ -171,80 +171,80 @@ extern driver_settings_t driver_settings;
 #define LIMIT_INMODE GPIO_SHIFT12
 
   // Define spindle enable and spindle direction output pins.
-#define SPINDLE_ENABLE_PORT   		GPIOB
-#define SPINDLE_ENABLE_PIN    		1
-#define SPINDLE_ENABLE_BIT    		(1<<SPINDLE_ENABLE_PIN)
-#define SPINDLE_DIRECTION_PORT   	GPIOB
-#define SPINDLE_DIRECTION_PIN 		0
-#define SPINDLE_DIRECTION_BIT		(1<<SPINDLE_DIRECTION_PIN)
+#define SPINDLE_ENABLE_PORT         GPIOB
+#define SPINDLE_ENABLE_PIN          1
+#define SPINDLE_ENABLE_BIT          (1<<SPINDLE_ENABLE_PIN)
+#define SPINDLE_DIRECTION_PORT      GPIOB
+#define SPINDLE_DIRECTION_PIN       0
+#define SPINDLE_DIRECTION_BIT       (1<<SPINDLE_DIRECTION_PIN)
 
 // Define spindle PWM output pin.
 #define SPINDLE_PWM_PORT            GPIOA
-#define SPINDLE_PWM_PIN	            8
-#define SPINDLE_PWM_BIT	            (1<<SPINDLE_PWM_PIN)
+#define SPINDLE_PWM_PIN             8
+#define SPINDLE_PWM_BIT             (1<<SPINDLE_PWM_PIN)
 
 // Define flood and mist coolant enable output pins.
 #if CNC_BOOSTERPACK
-#define COOLANT_FLOOD_PORT         	GPIOC
-#define COOLANT_FLOOD_PIN          	15
-#define COOLANT_FLOOD_BIT          	(1<<COOLANT_FLOOD_PIN)
-#define COOLANT_MIST_PORT         	GPIOC
-#define COOLANT_MIST_PIN           	14
-#define COOLANT_MIST_BIT           	(1<<COOLANT_MIST_PIN)
+#define COOLANT_FLOOD_PORT          GPIOC
+#define COOLANT_FLOOD_PIN           15
+#define COOLANT_FLOOD_BIT           (1<<COOLANT_FLOOD_PIN)
+#define COOLANT_MIST_PORT           GPIOC
+#define COOLANT_MIST_PIN            14
+#define COOLANT_MIST_BIT            (1<<COOLANT_MIST_PIN)
 #else
-#define COOLANT_FLOOD_PORT         	GPIOB
-#define COOLANT_FLOOD_PIN          	4
-#define COOLANT_FLOOD_BIT          	(1<<COOLANT_FLOOD_PIN)
-#define COOLANT_MIST_PORT         	GPIOB
-#define COOLANT_MIST_PIN           	3
-#define COOLANT_MIST_BIT           	(1<<COOLANT_MIST_PIN)
+#define COOLANT_FLOOD_PORT          GPIOB
+#define COOLANT_FLOOD_PIN           4
+#define COOLANT_FLOOD_BIT           (1<<COOLANT_FLOOD_PIN)
+#define COOLANT_MIST_PORT           GPIOB
+#define COOLANT_MIST_PIN            3
+#define COOLANT_MIST_BIT            (1<<COOLANT_MIST_PIN)
 #endif
 
 // Define user-control controls (cycle start, reset, feed hold) input pins.
-#define CONTROL_PORT               	GPIOB
+#define CONTROL_PORT                GPIOB
 #if CNC_BOOSTERPACK
-#define CONTROL_RESET_PIN        	6
-#define CONTROL_FEED_HOLD_PIN     	7
-#define CONTROL_CYCLE_START_PIN    	8
-#define CONTROL_SAFETY_DOOR_PIN  	9
+#define CONTROL_RESET_PIN           6
+#define CONTROL_FEED_HOLD_PIN       7
+#define CONTROL_CYCLE_START_PIN     8
+#define CONTROL_SAFETY_DOOR_PIN     9
 #define CONTROL_INMODE GPIO_SHIFT6
 #else
-#define CONTROL_RESET_PIN        	5
-#define CONTROL_FEED_HOLD_PIN     	6
-#define CONTROL_CYCLE_START_PIN    	7
-#define CONTROL_SAFETY_DOOR_PIN  	8
+#define CONTROL_RESET_PIN           5
+#define CONTROL_FEED_HOLD_PIN       6
+#define CONTROL_CYCLE_START_PIN     7
+#define CONTROL_SAFETY_DOOR_PIN     8
 #define CONTROL_INMODE GPIO_SHIFT5
 #endif
-#define CONTROL_RESET_BIT        	(1<<CONTROL_RESET_PIN)
-#define CONTROL_FEED_HOLD_BIT     	(1<<CONTROL_FEED_HOLD_PIN)
-#define CONTROL_CYCLE_START_BIT   	(1<<CONTROL_CYCLE_START_PIN)
-#define CONTROL_SAFETY_DOOR_BIT  	(1<<CONTROL_SAFETY_DOOR_PIN)
-#define CONTROL_MASK            	(CONTROL_RESET_BIT|CONTROL_FEED_HOLD_BIT|CONTROL_CYCLE_START_BIT|CONTROL_SAFETY_DOOR_BIT)
+#define CONTROL_RESET_BIT           (1<<CONTROL_RESET_PIN)
+#define CONTROL_FEED_HOLD_BIT       (1<<CONTROL_FEED_HOLD_PIN)
+#define CONTROL_CYCLE_START_BIT     (1<<CONTROL_CYCLE_START_PIN)
+#define CONTROL_SAFETY_DOOR_BIT     (1<<CONTROL_SAFETY_DOOR_PIN)
+#define CONTROL_MASK                (CONTROL_RESET_BIT|CONTROL_FEED_HOLD_BIT|CONTROL_CYCLE_START_BIT|CONTROL_SAFETY_DOOR_BIT)
 
 // Define probe switch input pin.
-#define PROBE_PORT                 	GPIOA
-#define PROBE_PIN                	7
-#define PROBE_BIT                 	(1<<PROBE_PIN)
+#define PROBE_PORT                  GPIOA
+#define PROBE_PIN                   7
+#define PROBE_BIT                   (1<<PROBE_PIN)
 
 #if KEYPAD_ENABLE
-#define KEYPAD_PORT               	GPIOB
-#define KEYPAD_STROBE_PIN        	15
-#define KEYPAD_STROBE_BIT        	(1<<KEYPAD_STROBE_PIN)
+#define KEYPAD_PORT                 GPIOB
+#define KEYPAD_STROBE_PIN           15
+#define KEYPAD_STROBE_BIT           (1<<KEYPAD_STROBE_PIN)
 #endif
 
 #if SDCARD_ENABLE
-#define SD_CS_PORT	GPIOA
-#define SD_CS_PIN	3
-#define SD_CS_BIT	(1<<SD_CS_PIN)
+#define SD_CS_PORT  GPIOA
+#define SD_CS_PIN   3
+#define SD_CS_BIT   (1<<SD_CS_PIN)
 // The following defines are not used but defined for reference
 // Port init and remap is done by HAL_SPI_MspInit() in stm32f1xx_hal_msp.c
-#define SD_IO_PORT	GPIOB
+#define SD_IO_PORT  GPIOB
 #define SD_SCK_PIN  3
 #define SD_SCK_BIT  (1<<SD_SCK_PIN)
-#define SD_MISO_PIN	4
-#define SD_MISO_BIT	(1<<SD_MISO_PIN)
-#define SD_MOSI_PIN	5
-#define SD_MOSI_BIT	(1<<SD_MOSI_PIN)
+#define SD_MISO_PIN 4
+#define SD_MISO_BIT (1<<SD_MISO_PIN)
+#define SD_MOSI_PIN 5
+#define SD_MOSI_BIT (1<<SD_MOSI_PIN)
 #endif
 
 bool driver_init (void);

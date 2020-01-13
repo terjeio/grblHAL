@@ -33,7 +33,7 @@ static stream_rx_buffer_t usb_rxbuffer, usb_rxbackup;
 
 void usb_serialInit(void)
 {
-	Serial.begin(BAUD_RATE);
+    Serial.begin(BAUD_RATE);
 }
 //
 // Returns number of characters in serial input buffer
@@ -58,7 +58,7 @@ uint16_t usb_serialRxFree (void)
 //
 void usb_serialRxFlush (void)
 {
-	Serial.flush();
+    Serial.flush();
     usb_rxbuffer.head = usb_rxbuffer.tail = 0;
 }
 
@@ -67,7 +67,7 @@ void usb_serialRxFlush (void)
 //
 void usb_serialRxCancel (void)
 {
-	Serial.flush();
+    Serial.flush();
     usb_rxbuffer.data[usb_rxbuffer.head] = CMD_RESET;
     usb_rxbuffer.tail = usb_rxbuffer.head;
     usb_rxbuffer.head = (usb_rxbuffer.tail + 1) & (RX_BUFFER_SIZE - 1);
@@ -78,7 +78,7 @@ void usb_serialRxCancel (void)
 //
 bool usb_serialPutC (const char c)
 {
-	Serial.write(c);
+    Serial.write(c);
 
     return true;
 }
@@ -154,21 +154,21 @@ bool usb_serialSuspendInput (bool suspend)
 //
 void usb_execute_realtime (uint_fast16_t state)
 {
-	int data;
+    int data;
 
-	while((data = Serial.peek()) != -1 ) {
-		Serial.read();
-		if(data == CMD_TOOL_ACK && !usb_rxbuffer.backup) {
-			memcpy(&usb_rxbackup, &usb_rxbuffer, sizeof(stream_rx_buffer_t));
-			usb_rxbuffer.backup = true;
-			usb_rxbuffer.tail = usb_rxbuffer.head;
-			hal.stream.read = usb_serialGetC; // restore normal input
-		} else if(!hal.stream.enqueue_realtime_command(data) && usb_serialRxFree()) {;
-			uint32_t bptr = (usb_rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1);	// Get next head pointer,
-			usb_rxbuffer.data[usb_rxbuffer.head] = data;      				// add data to buffer
-			usb_rxbuffer.head = bptr;                           			// and update pointer
-		}
-	}
+    while((data = Serial.peek()) != -1 ) {
+        Serial.read();
+        if(data == CMD_TOOL_ACK && !usb_rxbuffer.backup) {
+            memcpy(&usb_rxbackup, &usb_rxbuffer, sizeof(stream_rx_buffer_t));
+            usb_rxbuffer.backup = true;
+            usb_rxbuffer.tail = usb_rxbuffer.head;
+            hal.stream.read = usb_serialGetC; // restore normal input
+        } else if(!hal.stream.enqueue_realtime_command(data) && usb_serialRxFree()) {;
+            uint32_t bptr = (usb_rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1); // Get next head pointer,
+            usb_rxbuffer.data[usb_rxbuffer.head] = data;                    // add data to buffer
+            usb_rxbuffer.head = bptr;                                       // and update pointer
+        }
+    }
 }
 
 #ifdef __cplusplus

@@ -6,6 +6,7 @@
 
   Copyright (c) 2018-2019 Terje Io
 
+
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
@@ -33,7 +34,7 @@ static stream_rx_buffer_t usb_rxbuffer, usb_rxbackup;
 
 void usb_serialInit(void)
 {
-	SerialUSB.begin(BAUD_RATE);
+    SerialUSB.begin(BAUD_RATE);
 
     while(!SerialUSB); // Wait for connection
 }
@@ -60,7 +61,7 @@ uint16_t usb_serialRxFree (void)
 //
 void usb_serialRxFlush (void)
 {
-	SerialUSB.flush();
+    SerialUSB.flush();
     usb_rxbuffer.head = usb_rxbuffer.tail = 0;
 }
 
@@ -69,7 +70,7 @@ void usb_serialRxFlush (void)
 //
 void usb_serialRxCancel (void)
 {
-	SerialUSB.flush();
+    SerialUSB.flush();
     usb_rxbuffer.data[usb_rxbuffer.head] = CMD_RESET;
     usb_rxbuffer.tail = usb_rxbuffer.head;
     usb_rxbuffer.head = (usb_rxbuffer.tail + 1) & (RX_BUFFER_SIZE - 1);
@@ -80,7 +81,7 @@ void usb_serialRxCancel (void)
 //
 bool usb_serialPutC (const char c)
 {
-	SerialUSB.write(c);
+    SerialUSB.write(c);
 
     return true;
 }
@@ -156,21 +157,21 @@ bool usb_serialSuspendInput (bool suspend)
 //
 void usb_execute_realtime (uint_fast16_t state)
 {
-	int data;
+    int data;
 
-	while((data = SerialUSB.peek()) != -1 ) {
-		SerialUSB.read();
-		if(data == CMD_TOOL_ACK && !usb_rxbuffer.backup) {
-			memcpy(&usb_rxbackup, &usb_rxbuffer, sizeof(stream_rx_buffer_t));
-			usb_rxbuffer.backup = true;
-			usb_rxbuffer.tail = usb_rxbuffer.head;
-			hal.stream.read = usb_serialGetC; // restore normal input
-		} else if(!hal.stream.enqueue_realtime_command(data) && usb_serialRxFree()) {;
-			uint32_t bptr = (usb_rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1);	// Get next head pointer,
-			usb_rxbuffer.data[usb_rxbuffer.head] = data;      				// add data to buffer
-			usb_rxbuffer.head = bptr;                           			// and update pointer
-		}
-	}
+    while((data = SerialUSB.peek()) != -1 ) {
+        SerialUSB.read();
+        if(data == CMD_TOOL_ACK && !usb_rxbuffer.backup) {
+            memcpy(&usb_rxbackup, &usb_rxbuffer, sizeof(stream_rx_buffer_t));
+            usb_rxbuffer.backup = true;
+            usb_rxbuffer.tail = usb_rxbuffer.head;
+            hal.stream.read = usb_serialGetC; // restore normal input
+        } else if(!hal.stream.enqueue_realtime_command(data) && usb_serialRxFree()) {;
+            uint32_t bptr = (usb_rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1); // Get next head pointer,
+            usb_rxbuffer.data[usb_rxbuffer.head] = data;                    // add data to buffer
+            usb_rxbuffer.head = bptr;                                       // and update pointer
+        }
+    }
 }
 
 #ifdef __cplusplus

@@ -3,9 +3,9 @@
 
   Driver code for Cypress PSoC 5 (CY8CKIT-059)
 
-  Part of Grbl
+  Part of GrblHAL
 
-  Copyright (c) 2017-2018 Terje Io
+  Copyright (c) 2017-2019 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -26,30 +26,28 @@
 
 #define KEYBUF_SIZE 16
 
-typedef struct {
-    float fast_speed;
-    float slow_speed;
-    float step_speed;
-    float fast_distance;
-    float slow_distance;
-    float step_distance;
-} jog_config_t;
+#ifdef EEPROM_ADDR_TOOL_TABLE
+    #define EEPROM_SETTINGS EEPROM_ADDR_TOOL_TABLE
+#else
+    #define EEPROM_SETTINGS EEPROM_ADDR_PARAMETERS
+#endif
 
 static bool jogging = false, keyreleased = true;
 static uint8 keycode;
 static char keybuf_buf[16];
 static jogmode_t jogMode = JogMode_Fast;
-static jog_config_t jog_config;
+static jog_settings_t jog_config;
 static volatile uint32_t keybuf_head = 0, keybuf_tail = 0;
 
 static void keyclick_int_handler (void);
+
 static void claim_eeprom (void)
 {
     if(hal.eeprom.driver_area.size == 0) {
-        assert(EEPROM_ADDR_TOOL_TABLE - (sizeof(jog_config_t) + 2) > EEPROM_ADDR_GLOBAL + sizeof(settings_t) + 1);
+        assert(EEPROM_SETTINGS - (sizeof(jog_settings_t) + 2) > EEPROM_ADDR_GLOBAL + sizeof(settings_t) + 1);
 
-        hal.eeprom.driver_area.address = EEPROM_ADDR_TOOL_TABLE - (sizeof(jog_config_t) + 2);
-        hal.eeprom.driver_area.size = sizeof(jog_config_t);
+        hal.eeprom.driver_area.address = EEPROM_SETTINGS - (sizeof(jog_settings_t) + 2);
+        hal.eeprom.driver_area.size = sizeof(jog_settings_t);
     }
 }
 
@@ -212,135 +210,135 @@ static char keypad_get_keycode (void) {
 // BE WARNED: this function may be dangerous to use...
 static char *strrepl (char *str, int c, char *str3) {
 
-	char tmp[30];
-	char *s = strrchr(str, c);
+    char tmp[30];
+    char *s = strrchr(str, c);
 
-	while(s) {
-		strcpy(tmp, str3);
-		strcat(tmp, s + 1);
-		strcpy(s, tmp);
-		s = strrchr(str, c);
-	}
+    while(s) {
+        strcpy(tmp, str3);
+        strcat(tmp, s + 1);
+        strcpy(s, tmp);
+        s = strrchr(str, c);
+    }
 
-	return str;
+    return str;
 }
 
 void process_keypress (uint_fast16_t state) {
 
-	bool addedGcode, jogCommand = false;
-	char command[30] = "", keycode = keypad_get_keycode();
+    bool addedGcode, jogCommand = false;
+    char command[30] = "", keycode = keypad_get_keycode();
 
     state = state;
 
-	if(keycode)
-	  switch(keycode) {
+    if(keycode)
+      switch(keycode) {
 
-		case 'A':									// Mist override
-			enqueue_accessory_override(CMD_OVERRIDE_COOLANT_MIST_TOGGLE);
-			break;
+        case 'A':                                   // Mist override
+            enqueue_accessory_override(CMD_OVERRIDE_COOLANT_MIST_TOGGLE);
+            break;
 
-		case 'E':									// Coolant override
-			enqueue_accessory_override(CMD_OVERRIDE_COOLANT_FLOOD_TOGGLE);
-			break;
+        case 'E':                                   // Coolant override
+            enqueue_accessory_override(CMD_OVERRIDE_COOLANT_FLOOD_TOGGLE);
+            break;
 
-		case 'h':									// "toggle" jog mode
-			jogMode	= jogMode == JogMode_Step ? JogMode_Fast : (jogMode == JogMode_Fast ? JogMode_Slow : JogMode_Step);
-			break;
+        case 'h':                                   // "toggle" jog mode
+            jogMode = jogMode == JogMode_Step ? JogMode_Fast : (jogMode == JogMode_Fast ? JogMode_Slow : JogMode_Step);
+            break;
 
-		case 'H':									// Home axes
-			strcpy(command, "$H");
-			break;
+        case 'H':                                   // Home axes
+            strcpy(command, "$H");
+            break;
 
-		case 'R':									// Jog X-axis right
-			strcpy(command, "$J=G91X?F");
-			break;
+        case 'R':                                   // Jog X-axis right
+            strcpy(command, "$J=G91X?F");
+            break;
 
-		case 'L':									// Jog X-axis left
-			strcpy(command, "$J=G91X-?F");
-			break;
+        case 'L':                                   // Jog X-axis left
+            strcpy(command, "$J=G91X-?F");
+            break;
 
-		case 'F':									// Jog Y-axis forward
-			strcpy(command, "$J=G91Y?F");
-			break;
+        case 'F':                                   // Jog Y-axis forward
+            strcpy(command, "$J=G91Y?F");
+            break;
 
-		case 'B':									// Jog Y-axis back
-			strcpy(command, "$J=G91Y-?F");
-			break;
+        case 'B':                                   // Jog Y-axis back
+            strcpy(command, "$J=G91Y-?F");
+            break;
 
-		case 'q':									// Jog XY-axes SE
-			strcpy(command, "$J=G91X?Y-?F");
-			break;
+        case 'q':                                   // Jog XY-axes SE
+            strcpy(command, "$J=G91X?Y-?F");
+            break;
 
-		case 'r':									// Jog XY-axes NE
-			strcpy(command, "$J=G91X?Y?F");
-			break;
+        case 'r':                                   // Jog XY-axes NE
+            strcpy(command, "$J=G91X?Y?F");
+            break;
 
-		case 's':									// Jog XY-axes NW
-			strcpy(command, "$J=G91X-?Y?F");
-			break;
+        case 's':                                   // Jog XY-axes NW
+            strcpy(command, "$J=G91X-?Y?F");
+            break;
 
-		case 't':									// Jog XY-axes SW
-			strcpy(command, "$J=G91X-?Y-?F");
-			break;
+        case 't':                                   // Jog XY-axes SW
+            strcpy(command, "$J=G91X-?Y-?F");
+            break;
 
-		case 'U':									// Jog Z-axis up
-			strcpy(command, "$J=G91Z?F");
-			break;
+        case 'U':                                   // Jog Z-axis up
+            strcpy(command, "$J=G91Z?F");
+            break;
 
-		case 'D':									// Jog Z-axis down
-			strcpy(command, "$J=G91Z-?F");
-			break;
+        case 'D':                                   // Jog Z-axis down
+            strcpy(command, "$J=G91Z-?F");
+            break;
 
-	}
+    }
 
-	if(command[0] != '\0') {
+    if(command[0] != '\0') {
 
-		// add distance and speed to jog commands
-		if((jogCommand = (command[0] == '$' && command[1] == 'J')))
-			switch(jogMode) {
+        // add distance and speed to jog commands
+        if((jogCommand = (command[0] == '$' && command[1] == 'J')))
+            switch(jogMode) {
 
-			case JogMode_Slow:
-				strrepl(command, '?', ftoa(jog_config.slow_distance, 0));
-				strcat(command, ftoa(jog_config.slow_speed, 0));
-				break;
+            case JogMode_Slow:
+                strrepl(command, '?', ftoa(jog_config.slow_distance, 0));
+                strcat(command, ftoa(jog_config.slow_speed, 0));
+                break;
 
-			case JogMode_Step:
-				strrepl(command, '?', ftoa(jog_config.step_distance, 3));
-				strcat(command, ftoa(jog_config.step_speed, 0));
-				break;
+            case JogMode_Step:
+                strrepl(command, '?', ftoa(jog_config.step_distance, 3));
+                strcat(command, ftoa(jog_config.step_speed, 0));
+                break;
 
-			default:
-				strrepl(command, '?', ftoa(jog_config.fast_distance, 0));
-				strcat(command, ftoa(jog_config.fast_speed, 0));
-				break;
-		}
+            default:
+                strrepl(command, '?', ftoa(jog_config.fast_distance, 0));
+                strcat(command, ftoa(jog_config.fast_speed, 0));
+                break;
+        }
 
-		if(!(jogCommand && keyreleased)) { // key still pressed? - do not execute jog command if released!
-			addedGcode = hal.protocol_enqueue_gcode(command);
-			jogging = jogging || (jogCommand && addedGcode);
-		}
-	}
+        if(!(jogCommand && keyreleased)) { // key still pressed? - do not execute jog command if released!
+            addedGcode = hal.protocol_enqueue_gcode(command);
+            jogging = jogging || (jogCommand && addedGcode);
+        }
+    }
 }
 
 static void driver_keyclick_handler (bool keydown) {
 
-	keyreleased = !keydown;
+    keyreleased = !keydown;
 
-	if(keydown)
-		I2C_GetKeycode();
+    if(keydown)
+        I2C_GetKeycode();
 
-	else if(jogging) {
-		jogging = false;
-		hal.stream.enqueue_realtime_command(CMD_JOG_CANCEL);
-		keybuf_tail = keybuf_head = 0; // flush keycode buffer
-	}
+    else if(jogging) {
+        jogging = false;
+        hal.stream.enqueue_realtime_command(CMD_JOG_CANCEL);
+        keybuf_tail = keybuf_head = 0; // flush keycode buffer
+    }
 }
 
 void I2C_ISR_ExitCallback(void)
 {    
     if(I2C_mstrStatus & I2C_MSTAT_RD_CMPLT) {
-    	if(KeyPad_Read() == 0) // only add keycode when key is still pressed
-    		enqueue_keycode(keycode);
+        if(KeyPad_Read() == 0) // only add keycode when key is still pressed
+            enqueue_keycode(keycode);
     }
 }
 
@@ -348,5 +346,5 @@ static void keyclick_int_handler (void) {
 
     KeyPad_ClearInterrupt();
 
-	driver_keyclick_handler(KeyPad_Read() == 0);
+    driver_keyclick_handler(KeyPad_Read() == 0);
 }

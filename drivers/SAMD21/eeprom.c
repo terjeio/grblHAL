@@ -41,7 +41,7 @@ static i2c_eeprom_t i2c;
 
 void eeprom_init (void)
 {
-	I2CInit();
+    I2CInit();
 }
 
 uint8_t eepromGetByte (uint32_t addr)
@@ -82,7 +82,7 @@ void eepromWriteBlockWithChecksum (uint32_t destination, uint8_t *source, uint32
         bytes -= i2c.count;
         destination += i2c.count;
 
-		I2C_EEPROM(&i2c, false);
+        I2C_EEPROM(&i2c, false);
 
         i2c.data += i2c.count;
         i2c.word_addr = destination & 0xFF;
@@ -99,7 +99,7 @@ bool eepromReadBlockWithChecksum (uint8_t *destination, uint32_t source, uint32_
     i2c.count = size;
     i2c.data = destination;
 
-	I2C_EEPROM(&i2c, true);
+    I2C_EEPROM(&i2c, true);
 
     return calc_checksum(destination, size) == eepromGetByte(source + size);
 }

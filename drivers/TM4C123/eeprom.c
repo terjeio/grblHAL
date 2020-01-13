@@ -3,7 +3,7 @@
 
   Driver code for Texas Instruments Tiva C (TM4C123GH6PM) ARM processor
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2017 Terje Io
 
@@ -28,14 +28,17 @@
 
 #define EEPROMOFFSET 0
 
-static inline uint32_t putByte (uint32_t target, uint32_t source, uint32_t byte) {
+static inline uint32_t putByte (uint32_t target, uint32_t source, uint32_t byte)
+{
     uint32_t mask = 0xFF;
     byte <<= 3;
     mask = ~(mask << byte);
+
     return (target & mask) | (source << byte);
 }
 
-static inline uint8_t getByte (uint32_t data, uint32_t byte) {
+static inline uint8_t getByte (uint32_t data, uint32_t byte)
+{
     return (data >> (byte << 3)) & 0xFF;
 }
 
@@ -43,18 +46,17 @@ static inline uint8_t getByte (uint32_t data, uint32_t byte) {
 // Used by code in settingcs.c
 // NOTE: This implementation need some heap memory to work correctly, at least as much as the largest EEPROM block used + 4 bytes.
 //       It is due to Tiva C having word-aligned EEPROM access, the heap is used for temporary storage when word aligning the structs read/written.
-uint8_t eepromGetByte (uint32_t addr) {
-
+uint8_t eepromGetByte (uint32_t addr)
+{
     uint32_t data;
 
     EEPROMRead(&data, (addr + EEPROMOFFSET) & 0xFFFFFFFC, 4);
 
     return getByte(data, addr & 0x00000003);
-
 }
 
-void eepromPutByte (uint32_t addr, uint8_t new_value) {
-
+void eepromPutByte (uint32_t addr, uint8_t new_value)
+{
     uint32_t data;
 
     EEPROMRead(&data, (addr + EEPROMOFFSET) & 0xFFFFFFFC, 4);
@@ -64,8 +66,8 @@ void eepromPutByte (uint32_t addr, uint8_t new_value) {
     EEPROMProgram(&data, (addr + EEPROMOFFSET) & 0xFFFFFFFC, 4);
 }
 
-void eepromWriteBlockWithChecksum (uint32_t destination, uint8_t *source, uint32_t size) {
-
+void eepromWriteBlockWithChecksum (uint32_t destination, uint8_t *source, uint32_t size)
+{
     uint8_t *data;
     uint32_t alignstart = (destination & 0x03), alignend = 4 - ((alignstart + size) & 0x03), alignsize = size + alignstart + alignend;
 
@@ -89,8 +91,8 @@ void eepromWriteBlockWithChecksum (uint32_t destination, uint8_t *source, uint32
     eepromPutByte(destination + size, calc_checksum(source, size));
 }
 
-bool eepromReadBlockWithChecksum (uint8_t *destination, uint32_t source, uint32_t size) {
-
+bool eepromReadBlockWithChecksum (uint8_t *destination, uint32_t source, uint32_t size)
+{
     uint8_t *data;
     uint32_t alignstart = (source & 0x03), alignend = 4 - ((alignstart + size) & 0x03), alignsize = size + alignstart + alignend;
 

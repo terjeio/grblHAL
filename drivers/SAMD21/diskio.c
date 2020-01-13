@@ -39,18 +39,18 @@
 
 typedef enum
 {
-	SERCOM_SPI_MODE_0 = 0,	// CPOL : 0  | CPHA : 0
-	SERCOM_SPI_MODE_1,		// CPOL : 0  | CPHA : 1
-	SERCOM_SPI_MODE_2,		// CPOL : 1  | CPHA : 0
-	SERCOM_SPI_MODE_3		// CPOL : 1  | CPHA : 1
+    SERCOM_SPI_MODE_0 = 0,  // CPOL : 0  | CPHA : 0
+    SERCOM_SPI_MODE_1,      // CPOL : 0  | CPHA : 1
+    SERCOM_SPI_MODE_2,      // CPOL : 1  | CPHA : 0
+    SERCOM_SPI_MODE_3       // CPOL : 1  | CPHA : 1
 } SercomSpiClockMode;
 
 typedef enum
 {
-	SPI_PAD_0_SCK_1 = 0,
-	SPI_PAD_2_SCK_3,
-	SPI_PAD_3_SCK_1,
-	SPI_PAD_0_SCK_3
+    SPI_PAD_0_SCK_1 = 0,
+    SPI_PAD_2_SCK_3,
+    SPI_PAD_3_SCK_1,
+    SPI_PAD_0_SCK_3
 } SercomSpiTXPad;
 
 #define pinIn(p) ((PORT->Group[g_APinDescription[p].ulPort].IN.reg & (1 << g_APinDescription[p].ulPin)) != 0)
@@ -81,14 +81,14 @@ static Sercom *sd_spi = SERCOM1; // Alt mode C
 static inline
 void SELECT (void)
 {
-	pinOut(SD_CS_PIN, 0);
+    pinOut(SD_CS_PIN, 0);
 }
 
 /* de-asserts the CS pin to the card */
 static inline
 void DESELECT (void)
 {
-	pinOut(SD_CS_PIN, 1);
+    pinOut(SD_CS_PIN, 1);
 }
 
 /*--------------------------------------------------------------------------
@@ -116,11 +116,11 @@ BYTE PowerFlag = 0;     /* indicates if "power" is on */
 static
 void xmit_spi(BYTE dat)
 {
-	sd_spi->SPI.DATA.bit.DATA = dat; // Writing data into Data register
+    sd_spi->SPI.DATA.bit.DATA = dat; // Writing data into Data register
 
-	while(sd_spi->SPI.INTFLAG.bit.RXC == 0);
+    while(sd_spi->SPI.INTFLAG.bit.RXC == 0);
 
-	dat = sd_spi->SPI.DATA.bit.DATA;
+    dat = sd_spi->SPI.DATA.bit.DATA;
 }
 
 
@@ -131,9 +131,9 @@ void xmit_spi(BYTE dat)
 static
 BYTE rcvr_spi (void)
 {
-	sd_spi->SPI.DATA.bit.DATA = 0xFF; // Writing dummy data into Data register
+    sd_spi->SPI.DATA.bit.DATA = 0xFF; // Writing dummy data into Data register
 
-	while(sd_spi->SPI.INTFLAG.bit.RXC == 0);
+    while(sd_spi->SPI.INTFLAG.bit.RXC == 0);
 
     return (BYTE)sd_spi->SPI.DATA.bit.DATA;
 }
@@ -177,7 +177,7 @@ void send_initial_clock_train(void)
     DESELECT();
 
     while(i--)
-		xmit_spi(0xFF);
+        xmit_spi(0xFF);
 }
 
 /*-----------------------------------------------------------------------*/
@@ -189,68 +189,68 @@ void send_initial_clock_train(void)
 //static
 void power_on (void)
 {
-	static bool init = false;
+    static bool init = false;
 
     /*
      * This doesn't really turn the power on, but initializes the
      * SSI port and pins needed to talk to the card.
      */
 
-	if(!init) {
+    if(!init) {
 
-	// Assign clock
-		GCLK->CLKCTRL.reg = GCLK_CLKCTRL_ID(SD_CLOCK_ID)|GCLK_CLKCTRL_GEN_GCLK0|GCLK_CLKCTRL_CLKEN;
-		while(GCLK->STATUS.reg & GCLK_STATUS_SYNCBUSY);
+    // Assign clock
+        GCLK->CLKCTRL.reg = GCLK_CLKCTRL_ID(SD_CLOCK_ID)|GCLK_CLKCTRL_GEN_GCLK0|GCLK_CLKCTRL_CLKEN;
+        while(GCLK->STATUS.reg & GCLK_STATUS_SYNCBUSY);
 
-		/* Enable the peripherals used to drive the SDC on SSI */
+        /* Enable the peripherals used to drive the SDC on SSI */
 
-		pinMode(SD_CS_PIN, OUTPUT);
-		pinPeripheral(SD_MISO_PIN, g_APinDescription[SD_MISO_PIN].ulPinType); // PIO_SERCOM
-		pinPeripheral(SD_SCK_PIN, g_APinDescription[SD_SCK_PIN].ulPinType);
-		pinPeripheral(SD_MOSI_PIN, g_APinDescription[SD_MOSI_PIN].ulPinType);
-	}
+        pinMode(SD_CS_PIN, OUTPUT);
+        pinPeripheral(SD_MISO_PIN, g_APinDescription[SD_MISO_PIN].ulPinType); // PIO_SERCOM
+        pinPeripheral(SD_SCK_PIN, g_APinDescription[SD_SCK_PIN].ulPinType);
+        pinPeripheral(SD_MOSI_PIN, g_APinDescription[SD_MOSI_PIN].ulPinType);
+    }
 
-	// Disable and reset peripheral
-	sd_spi->SPI.CTRLA.bit.ENABLE = 0;
-	while(sd_spi->SPI.SYNCBUSY.bit.ENABLE)
+    // Disable and reset peripheral
+    sd_spi->SPI.CTRLA.bit.ENABLE = 0;
+    while(sd_spi->SPI.SYNCBUSY.bit.ENABLE)
 
-	if(!init) {
+    if(!init) {
 
-		sd_spi->SPI.CTRLA.bit.SWRST = 1;	
-		while(sd_spi->SPI.CTRLA.bit.SWRST || sd_spi->SPI.SYNCBUSY.bit.SWRST);
-		
-		// Init
-		sd_spi->SPI.CTRLA.reg =	SERCOM_SPI_CTRLA_MODE_SPI_MASTER |
-							  SERCOM_SPI_CTRLA_DOPO(0) |
-							  SERCOM_SPI_CTRLA_DIPO(3) |
-							  0 << SERCOM_SPI_CTRLA_DORD_Pos;
+        sd_spi->SPI.CTRLA.bit.SWRST = 1;    
+        while(sd_spi->SPI.CTRLA.bit.SWRST || sd_spi->SPI.SYNCBUSY.bit.SWRST);
+        
+        // Init
+        sd_spi->SPI.CTRLA.reg = SERCOM_SPI_CTRLA_MODE_SPI_MASTER |
+                              SERCOM_SPI_CTRLA_DOPO(0) |
+                              SERCOM_SPI_CTRLA_DIPO(3) |
+                              0 << SERCOM_SPI_CTRLA_DORD_Pos;
 
-		//Setting the CTRLB register	//Active the SPI receiver.
-		sd_spi->SPI.CTRLB.reg = SERCOM_SPI_CTRLB_CHSIZE(8)|SERCOM_SPI_CTRLB_RXEN;
+        //Setting the CTRLB register    //Active the SPI receiver.
+        sd_spi->SPI.CTRLB.reg = SERCOM_SPI_CTRLB_CHSIZE(8)|SERCOM_SPI_CTRLB_RXEN;
 
-		int cpha, cpol;
+        int cpha, cpol;
 
-		if((SD_CLOCKMODE & (0x1ul)) == 0 )
-		cpha = 0;
-		else
-		cpha = 1;
+        if((SD_CLOCKMODE & (0x1ul)) == 0 )
+        cpha = 0;
+        else
+        cpha = 1;
 
-		if((SD_CLOCKMODE & (0x2ul)) == 0)
-		cpol = 0;
-		else
-		cpol = 1;
+        if((SD_CLOCKMODE & (0x2ul)) == 0)
+        cpol = 0;
+        else
+        cpol = 1;
 
-		//Setting the CTRLA register
-		sd_spi->SPI.CTRLA.reg |= ( cpha << SERCOM_SPI_CTRLA_CPHA_Pos )|( cpol << SERCOM_SPI_CTRLA_CPOL_Pos );
-	}
+        //Setting the CTRLA register
+        sd_spi->SPI.CTRLA.reg |= ( cpha << SERCOM_SPI_CTRLA_CPHA_Pos )|( cpol << SERCOM_SPI_CTRLA_CPOL_Pos );
+    }
 
-	//Synchronous arithmetic
-	sd_spi->SPI.BAUD.reg = SystemCoreClock / (2 * 400000) - 1;
+    //Synchronous arithmetic
+    sd_spi->SPI.BAUD.reg = SystemCoreClock / (2 * 400000) - 1;
 
-	sd_spi->SPI.CTRLA.bit.ENABLE = 1;
-	while(sd_spi->SPI.SYNCBUSY.bit.ENABLE)
+    sd_spi->SPI.CTRLA.bit.ENABLE = 1;
+    while(sd_spi->SPI.SYNCBUSY.bit.ENABLE)
 
-	init = true;
+    init = true;
     PowerFlag = 1;
 }
 
@@ -265,13 +265,13 @@ void set_max_speed(void)
     if(i > 12000000)
         i = 12000000;
 
-	sd_spi->SPI.CTRLA.bit.ENABLE = 0;
-	while(sd_spi->SPI.SYNCBUSY.bit.ENABLE);
+    sd_spi->SPI.CTRLA.bit.ENABLE = 0;
+    while(sd_spi->SPI.SYNCBUSY.bit.ENABLE);
 
-	sd_spi->SPI.BAUD.reg = SystemCoreClock / (2 * i) - 1;
+    sd_spi->SPI.BAUD.reg = SystemCoreClock / (2 * i) - 1;
 
-	sd_spi->SPI.CTRLA.bit.ENABLE = 1;
-	while(sd_spi->SPI.SYNCBUSY.bit.ENABLE);
+    sd_spi->SPI.CTRLA.bit.ENABLE = 1;
+    while(sd_spi->SPI.SYNCBUSY.bit.ENABLE);
 }
 
 static
@@ -453,7 +453,7 @@ DSTATUS disk_initialize (
     BYTE n, ty, ocr[4];
 
 
-	pinOut(7, 1);
+    pinOut(7, 1);
     if (drv) return STA_NOINIT;            /* Supports only single drive */
     if (Stat & STA_NODISK) return Stat;    /* No card in the socket */
 

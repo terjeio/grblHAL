@@ -2,7 +2,7 @@
   stepper.c - stepper motor driver: executes motion plans using stepper motors
   Part of Grbl
 
-  Copyright (c) 2016-2019 Terje Io
+  Copyright (c) 2016-2020 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -330,9 +330,13 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
            #endif
          #endif
 
-            if(st.exec_segment->update_rpm)
+            if(st.exec_segment->update_rpm) {
+			  #ifdef SPINDLE_PWM_DIRECT
+                hal.spindle_update_pwm(st.exec_segment->spindle_pwm);
+			  #else
                 hal.spindle_update_rpm(st.exec_segment->spindle_rpm);
-
+			  #endif
+            }
         } else {
             // Segment buffer empty. Shutdown.
             st_go_idle();
@@ -479,6 +483,13 @@ void st_reset ()
 #endif
 
     cycles_per_min = (float)hal.f_step_timer * 60.0f;
+}
+
+// Called by spindle_set_state() to inform about RPM changes.
+// Used by st_prep_buffer() to determine if spindle needs update when dynamic RPM is called for.
+void st_rpm_changed (float rpm)
+{
+	prep.current_spindle_rpm = rpm;
 }
 
 // Called by planner_recalculate() when the executing block is updated by the new plan.
@@ -838,29 +849,33 @@ void st_prep_buffer()
         */
 
         if (sys.step_control.update_spindle_rpm || st_prep_block->dynamic_rpm) {
+        	float rpm;
             if (pl_block->condition.spindle.on) {
                 // NOTE: Feed and rapid overrides are independent of PWM value and do not alter laser power/rate.
                 // If current_speed is zero, then may need to be rpm_min*(100/MAX_SPINDLE_RPM_OVERRIDE)
                 // but this would be instantaneous only and during a motion. May not matter at all.
-                prep.current_spindle_rpm = spindle_set_rpm(pl_block->condition.is_rpm_rate_adjusted && !pl_block->condition.is_laser_ppi_mode
-                                                            ? pl_block->spindle.rpm * prep.current_speed * prep.inv_feedrate
-                                                            : pl_block->spindle.rpm, sys.override.spindle_rpm);
+                rpm = spindle_set_rpm(pl_block->condition.is_rpm_rate_adjusted && !pl_block->condition.is_laser_ppi_mode
+                                       ? pl_block->spindle.rpm * prep.current_speed * prep.inv_feedrate
+                                       : pl_block->spindle.rpm, sys.override.spindle_rpm);
 
                 if(pl_block->condition.is_rpm_pos_adjusted) {
                     float npos = (float)(pl_block->step_event_count - prep.steps_remaining) / (float)pl_block->step_event_count;
-                    prep.current_spindle_rpm += (spindle_set_rpm(pl_block->spindle.css.target_rpm, sys.override.spindle_rpm) -
-                                                    prep.current_spindle_rpm) * npos;
+                    rpm += (spindle_set_rpm(pl_block->spindle.css.target_rpm, sys.override.spindle_rpm) - prep.current_spindle_rpm) * npos;
                 }
-            } else {
-                sys.spindle_rpm = 0.0f;
-                prep.current_spindle_rpm = 0.0f;
-            }
-// TODO: Fix so that RPM updates only is done on changes
-            prep_segment->update_rpm = true;
-            sys.step_control.update_spindle_rpm = Off;
-        }
+            } else
+                sys.spindle_rpm = rpm = 0.0f;
 
-        prep_segment->spindle_rpm = prep.current_spindle_rpm; // Reload segment RPM   ?? Use sys.spindle_rpm
+            if(rpm != prep.current_spindle_rpm) {
+			  #ifdef SPINDLE_PWM_DIRECT
+				prep.current_spindle_rpm = rpm;
+				prep_segment->spindle_pwm = hal.spindle_get_pwm(rpm);
+			  #else
+				prep.current_spindle_rpm = prep_segment->spindle_rpm = rpm;
+			  #endif
+				prep_segment->update_rpm = true;
+				sys.step_control.update_spindle_rpm = Off;
+            }
+        }
 
         /* -----------------------------------------------------------------------------------
            Compute segment step rate, steps to execute, and apply necessary rate corrections.

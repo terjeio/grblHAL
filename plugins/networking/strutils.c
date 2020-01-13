@@ -91,65 +91,65 @@ char *strappend (char *buf, int argc, ...)
 
 uint32_t strnumentries (const char *s, const char delimiter)
 {
-	char *p = (char *)s;
-	uint32_t entries = *s ? 1 : 0;
+    char *p = (char *)s;
+    uint32_t entries = *s ? 1 : 0;
 
-	while(entries && (p = strchr(p, delimiter))) {
-		p++;
-		entries++;
-	}
+    while(entries && (p = strchr(p, delimiter))) {
+        p++;
+        entries++;
+    }
 
-	return entries;
+    return entries;
 }
 
 char *strgetentry (char *res, const char *s, uint32_t entry, const char delimiter)
 {
-	char *e, *p = (char *)s;
+    char *e, *p = (char *)s;
 
-	*res = '\0';
-	e = strchr(p, delimiter);
+    *res = '\0';
+    e = strchr(p, delimiter);
 
-	if(entry == 0 && e == NULL)
-		strcpy(res, s);
-	else do {
-		if(entry) {
-			p = e;
-			e = strchr(++p, delimiter);
-			entry--;
-		} else {
-			if(e) {
-				strncpy(res, p,  e - p);
-				res[e - p] = '\0';
-			} else
-				strcpy(res, p);
-			break;
-		}
-	} while(true);
+    if(entry == 0 && e == NULL)
+        strcpy(res, s);
+    else do {
+        if(entry) {
+            p = e;
+            e = strchr(++p, delimiter);
+            entry--;
+        } else {
+            if(e) {
+                strncpy(res, p,  e - p);
+                res[e - p] = '\0';
+            } else
+                strcpy(res, p);
+            break;
+        }
+    } while(true);
 
-	return res;
+    return res;
 }
 
 int32_t strlookup (const char *s1, const char *s2, const char delimiter)
 {
-	bool found = false;
-	char *e, *p = (char *)s2;
-	uint32_t idx = strnumentries(s2, delimiter), len = strlen(s1);
-	int32_t entry = 0;
+    bool found = false;
+    char *e, *p = (char *)s2;
+    uint32_t idx = strnumentries(s2, delimiter), len = strlen(s1);
+    int32_t entry = 0;
 
-	while(idx--) {
+    while(idx--) {
 
-		if((e = strchr(p, delimiter)))
-			found = (e - p) == len && !strncmp(p, s1, e - p);
-		else
-			found = strlen(p) == len && !strcmp(p, s1);
+        if((e = strchr(p, delimiter)))
+            found = (e - p) == len && !strncmp(p, s1, e - p);
+        else
+            found = strlen(p) == len && !strcmp(p, s1);
 
-		if(found || e == NULL)
-			break;
-		else {
-			p = e + 1;
-			entry++;
-		}
-	}
+        if(found || e == NULL)
+            break;
+        else {
+            p = e + 1;
+            entry++;
+        }
+    }
 
-	return found ? entry : -1;
+    return found ? entry : -1;
 }

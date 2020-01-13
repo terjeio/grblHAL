@@ -1,6 +1,6 @@
-#define TARGET_IS_BLIZZARD_RB1	//Rom.h definition
-//#define	PREF(x)	x	//Use for debugging purposes to trace problems in driver.lib
-#define	PREF(x)	MAP_ ## x	//Use to reduce code size
+#define TARGET_IS_BLIZZARD_RB1 //Rom.h definition
+//#define   PREF(x) x   //Use for debugging purposes to trace problems in driver.lib
+#define PREF(x) MAP_ ## x   //Use to reduce code size
 
 #include <stdint.h>
 #include <stdbool.h>

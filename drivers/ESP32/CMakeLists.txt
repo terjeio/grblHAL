@@ -1,5 +1,5 @@
 # CMake for GrblHAL driver for ESP32
-# 2019-11-26
+# 2020-01-07
 
 cmake_minimum_required(VERSION 3.5)
 
@@ -11,6 +11,7 @@ OPTION(SDcard "SD Card Streaming" OFF)
 OPTION(Trinamic "Trinamic driver support over I2C" OFF)
 OPTION(WebUI "WebUI services" OFF)
 OPTION(WebAuth "WebUI authentication" OFF)
+OPTION(BoosterPack "Compile for CNC BoosterPack" OFF)
 
 set(SDCARD_SOURCE sdcard/sdcard.c)
 set(KEYPAD_SOURCE keypad/keypad.c)
@@ -22,23 +23,23 @@ set(MAIN_SRCS main.c driver.c nvs.c esp32-hal-uart.c bluetooth.c
  i2c.c
  ioexpand.c
  eeprom.c
- GRBL/grbllib.c
- GRBL/coolant_control.c
- GRBL/eeprom_emulate.c
- GRBL/gcode.c
- GRBL/limits.c
- GRBL/motion_control.c
- GRBL/nuts_bolts.c
- GRBL/override.c
- GRBL/planner.c
- GRBL/protocol.c
- GRBL/report.c
- GRBL/settings.c
- GRBL/sleep.c
- GRBL/spindle_control.c
- GRBL/state_machine.c
- GRBL/stepper.c
- GRBL/system.c
+ grbl/grbllib.c
+ grbl/coolant_control.c
+ grbl/eeprom_emulate.c
+ grbl/gcode.c
+ grbl/limits.c
+ grbl/motion_control.c
+ grbl/nuts_bolts.c
+ grbl/override.c
+ grbl/planner.c
+ grbl/protocol.c
+ grbl/report.c
+ grbl/settings.c
+ grbl/sleep.c
+ grbl/spindle_control.c
+ grbl/state_machine.c
+ grbl/stepper.c
+ grbl/system.c
 )
 
 if(Networking)
@@ -63,7 +64,7 @@ endif()
 
 set(INCLUDE_DIRS ".")
 
-#file(GLOB GRBL_SOURCE "GRBL/*.c")
+#file(GLOB GRBL_SOURCE "grbl/*.c")
 #list (APPEND GRBL_SOURCE MAIN_SRCS)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
@@ -94,6 +95,10 @@ if(Keypad)
 target_compile_definitions(grbl.elf PUBLIC KEYPAD_ENABLE)
 endif()
 
+if(BoosterPack)
+target_compile_definitions(grbl.elf PUBLIC CNC_BOOSTERPACK)
+endif()
+
 target_add_binary_data(grbl.elf "favicon.ico" BINARY)
 target_add_binary_data(grbl.elf "index.html" BINARY)
 target_add_binary_data(grbl.elf "ap_login.html" BINARY)
@@ -104,6 +109,7 @@ unset(SDcard CACHE)
 unset(Trinamic CACHE)
 unset(WebUI CACHE)
 unset(WebAuth CACHE)
+unset(BoosterPack CACHE)
 
 include_directories(BEFORE ".")
 

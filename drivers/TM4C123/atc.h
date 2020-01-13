@@ -1,11 +1,11 @@
 /*
-  mainc.c - An embedded CNC Controller with rs274/ngc (g-code) support
+  atc.c - An embedded CNC Controller with rs274/ngc (g-code) support
 
-  Startup entry point for TM4C123GH6PM (Texas Instruments Tiva C LaunchPad)
+  Driver code for my ATC
 
   Part of Grbl
 
-  Copyright (c) 2017 Terje Io
+  Copyright (c) 2018 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -21,20 +21,13 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <stdbool.h>
+#ifndef _ATC_H_
+#define _ATC_H_
 
-#include "GRBL/grbllib.h"
-#include "driver.h"
+#include "GRBL/grbl.h"
 
-#include "driverlib/fpu.h"
-#include "driverlib/sysctl.h"
+void atc_tool_select (uint8_t tool);
+void atc_tool_selected (tool_data_t *tool);
+void atc_tool_change (parser_state_t *gc_block);
 
-int main(void)
-{
-    FPUEnable();
-    FPULazyStackingEnable();
-
-    SysCtlClockSet(SYSCTL_SYSDIV_2_5 | SYSCTL_USE_PLL | SYSCTL_OSC_MAIN | SYSCTL_XTAL_16MHZ);
-
-    grbl_enter();
-}
+#endif

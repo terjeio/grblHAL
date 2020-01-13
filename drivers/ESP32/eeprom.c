@@ -46,35 +46,35 @@ static i2c_trans_t i2c;
 
 static void StartI2C (bool read)
 {
-	if(i2cBusy != NULL && xSemaphoreTake(i2cBusy, 5 / portTICK_PERIOD_MS) == pdTRUE) {
+    if(i2cBusy != NULL && xSemaphoreTake(i2cBusy, 5 / portTICK_PERIOD_MS) == pdTRUE) {
 
-		i2c.addr <<= 1;
-		i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-		i2c_master_start(cmd);
-		i2c_master_write_byte(cmd, i2c.addr|I2C_MASTER_WRITE, true);
-		i2c_master_write_byte(cmd, i2c.word_addr, true);
+        i2c.addr <<= 1;
+        i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+        i2c_master_start(cmd);
+        i2c_master_write_byte(cmd, i2c.addr|I2C_MASTER_WRITE, true);
+        i2c_master_write_byte(cmd, i2c.word_addr, true);
 
-		if(read) {
-			i2c_master_start(cmd);
-			i2c_master_write_byte(cmd, i2c.addr|I2C_MASTER_READ, true);
-			if (i2c.count > 1)
-				i2c_master_read(cmd, i2c.data, i2c.count - 1, I2C_MASTER_ACK);
-			i2c_master_read_byte(cmd, i2c.data + i2c.count - 1, I2C_MASTER_NACK);
-			i2c_master_stop(cmd);
-		} else {
-			i2c_master_write(cmd, i2c.data, i2c.count, true);
-			i2c_master_stop(cmd);
-		}
+        if(read) {
+            i2c_master_start(cmd);
+            i2c_master_write_byte(cmd, i2c.addr|I2C_MASTER_READ, true);
+            if (i2c.count > 1)
+                i2c_master_read(cmd, i2c.data, i2c.count - 1, I2C_MASTER_ACK);
+            i2c_master_read_byte(cmd, i2c.data + i2c.count - 1, I2C_MASTER_NACK);
+            i2c_master_stop(cmd);
+        } else {
+            i2c_master_write(cmd, i2c.data, i2c.count, true);
+            i2c_master_stop(cmd);
+        }
 
-		i2c_master_cmd_begin(I2C_PORT, cmd, 1000 / portTICK_PERIOD_MS);
-//		printf("EE %d %d %d\n", read, i2c.count, ret);
-		i2c_cmd_link_delete(cmd);
+        i2c_master_cmd_begin(I2C_PORT, cmd, 1000 / portTICK_PERIOD_MS);
+//      printf("EE %d %d %d\n", read, i2c.count, ret);
+        i2c_cmd_link_delete(cmd);
 
-		xSemaphoreGive(i2cBusy);
+        xSemaphoreGive(i2cBusy);
 
-		if(!read) // Delay 5ms for write to complete
-			vTaskDelay(10 / portTICK_PERIOD_MS);
-	}
+        if(!read) // Delay 5ms for write to complete
+            vTaskDelay(10 / portTICK_PERIOD_MS);
+    }
 }
 
 uint8_t eepromGetByte (uint32_t addr)

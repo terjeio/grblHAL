@@ -3,7 +3,7 @@
 
   Bluetooth comms
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2018 Terje Io
 
@@ -24,7 +24,7 @@
 #ifndef _grbl_bluetooth_h_
 #define _grbl_bluetooth_h_
 
-#include "GRBL/grbl.h"
+#include "grbl/grbl.h"
 
 bool bluetooth_init (bluetooth_settings_t *settings);
 status_code_t bluetooth_setting (uint_fast16_t param, float value, char *svalue);

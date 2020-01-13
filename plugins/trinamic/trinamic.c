@@ -202,7 +202,7 @@ status_code_t trinamic_setting (setting_type_t setting, float value, char *svalu
                 break;
 
             default:
-            	break;
+                break;
         }
     } else switch((setting_type_t)setting) {
 
@@ -217,7 +217,7 @@ status_code_t trinamic_setting (setting_type_t setting, float value, char *svalu
             break;
 
         default:
-        	break;
+            break;
     }
 
     return status;
@@ -263,38 +263,38 @@ void trinamic_settings_restore (void)
 
 void trinamic_settings_report (setting_type_t setting)
 {
-	switch(setting) {
+    switch(setting) {
 
-		case Setting_TrinamicDriver:
-	        report_uint_setting(setting, driver_settings.trinamic.driver_enable.mask);
-			break;
+        case Setting_TrinamicDriver:
+            report_uint_setting(setting, driver_settings.trinamic.driver_enable.mask);
+            break;
 
-		case AxisSetting_MicroSteps:
-	        report_uint_setting(setting, driver_settings.trinamic.homing_enable.mask);
-			break;
+        case Setting_TrinamicHoming:
+            report_uint_setting(setting, driver_settings.trinamic.homing_enable.mask);
+            break;
 
-		default:
-			break;
-	}
+        default:
+            break;
+    }
 }
 
 void trinamic_axis_settings_report (axis_setting_type_t setting, uint8_t axis_idx)
 {
-	setting_type_t basetype = (setting_type_t)(Setting_AxisSettingsBase + setting * AXIS_SETTINGS_INCREMENT);
+    setting_type_t basetype = (setting_type_t)(Setting_AxisSettingsBase + setting * AXIS_SETTINGS_INCREMENT);
 
-	switch(setting) {
+    switch(setting) {
 
-		case AxisSetting_StepperCurrent:
-			report_uint_setting((setting_type_t)(basetype + axis_idx), driver_settings.trinamic.driver[axis_idx].current);
-			break;
+        case AxisSetting_StepperCurrent:
+            report_uint_setting((setting_type_t)(basetype + axis_idx), driver_settings.trinamic.driver[axis_idx].current);
+            break;
 
-		case AxisSetting_MicroSteps:
-			report_uint_setting((setting_type_t)(basetype + axis_idx), driver_settings.trinamic.driver[axis_idx].microsteps);
-			break;
+        case AxisSetting_MicroSteps:
+            report_uint_setting((setting_type_t)(basetype + axis_idx), driver_settings.trinamic.driver[axis_idx].microsteps);
+            break;
 
-		default:
-			break;
-	}
+        default:
+            break;
+    }
 }
 
 // Add warning info to next realtime report when warning flag set by drivers
@@ -416,7 +416,7 @@ user_mcode_t trinamic_MCodeCheck (user_mcode_t mcode)
 
     return driver_settings.trinamic.driver_enable.mask &&
             (mcode == Trinamic_DebugReport || mcode == Trinamic_StepperCurrent || mcode == Trinamic_ReportPrewarnFlags ||
-		      mcode == Trinamic_ClearPrewarnFlags || mcode == Trinamic_HybridThreshold || mcode == Trinamic_HomingSensivity) ? mcode : UserMCode_Ignore;
+              mcode == Trinamic_ClearPrewarnFlags || mcode == Trinamic_HybridThreshold || mcode == Trinamic_HomingSensivity) ? mcode : UserMCode_Ignore;
 }
 
 // Validate driver specific M-code parameters
@@ -515,7 +515,7 @@ status_code_t trinamic_MCodeValidate (parser_block_t *gc_block, uint32_t *value_
             break;
 
         default:
-        	break;
+            break;
     }
 
     return state;
@@ -614,7 +614,7 @@ void trinamic_MCodeExecute (uint_fast16_t state, parser_block_t *gc_block)
             break;
 
         default:
-        	break;
+            break;
     }
 }
 

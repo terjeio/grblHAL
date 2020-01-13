@@ -953,18 +953,31 @@ static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
     if (pwm_value == spindle_pwm.off_value) {
         if(settings.spindle.disable_with_zero_speed)
             spindle_off();
-        TimerLoadSet(SPINDLE_PWM_TIMER_BASE, TIMER_B, spindle_pwm.period + 20000);
-        TimerDisable(SPINDLE_PWM_TIMER_BASE, TIMER_B); // Disable PWM. Output voltage is zero.
-        if(pwmEnabled)
-            TimerControlLevel(SPINDLE_PWM_TIMER_BASE, TIMER_B, true);
-        pwmEnabled = false;
+        if(settings.spindle.pwm_off_value == 0.0f) {
+            uint_fast16_t pwm = spindle_pwm.period + 20000;
+            TimerPrescaleSet(SPINDLE_PWM_TIMER_BASE, TIMER_B, pwm >> 16);
+            TimerLoadSet(SPINDLE_PWM_TIMER_BASE, TIMER_B, pwm & 0xFFFF);
+            if(!pwmEnabled)
+                TimerEnable(SPINDLE_PWM_TIMER_BASE, TIMER_B);                                   // Ensure PWM output is enabled to
+            TimerControlLevel(SPINDLE_PWM_TIMER_BASE, TIMER_B, !settings.spindle.invert.pwm);   // ensure correct output level.
+            TimerDisable(SPINDLE_PWM_TIMER_BASE, TIMER_B);                                      // Disab?le PWM.
+            pwmEnabled = false;
+        } else {
+            pwmEnabled = true;
+            TimerPrescaleMatchSet(SPINDLE_PWM_TIMER_BASE, TIMER_B, spindle_pwm.off_value >> 16);
+            TimerMatchSet(SPINDLE_PWM_TIMER_BASE, TIMER_B, spindle_pwm.off_value & 0xFFFF);
+            TimerControlLevel(SPINDLE_PWM_TIMER_BASE, TIMER_B, !settings.spindle.invert.pwm);
+            TimerEnable(SPINDLE_PWM_TIMER_BASE, TIMER_B); // Ensure PWM output is enabled.
+        }
      } else {
-        TimerMatchSet(SPINDLE_PWM_TIMER_BASE, TIMER_B, spindle_pwm.period - pwm_value);
+        TimerPrescaleMatchSet(SPINDLE_PWM_TIMER_BASE, TIMER_B, pwm_value >> 16);
+        TimerMatchSet(SPINDLE_PWM_TIMER_BASE, TIMER_B, pwm_value & 0xFFFF);
         if(!pwmEnabled) {
             spindle_on();
             pwmEnabled = true;
-            TimerLoadSet(SPINDLE_PWM_TIMER_BASE, TIMER_B, spindle_pwm.period);
-            TimerControlLevel(SPINDLE_PWM_TIMER_BASE, TIMER_B, false);
+            TimerPrescaleSet(SPINDLE_PWM_TIMER_BASE, TIMER_B, spindle_pwm.period >> 16);
+            TimerLoadSet(SPINDLE_PWM_TIMER_BASE, TIMER_B, spindle_pwm.period & 0xFFFF);
+            TimerControlLevel(SPINDLE_PWM_TIMER_BASE, TIMER_B, !settings.spindle.invert.pwm);
             TimerEnable(SPINDLE_PWM_TIMER_BASE, TIMER_B); // Ensure PWM output is enabled.
         }
     }
@@ -1133,7 +1146,7 @@ static void modechange (void)
 // Configures perhipherals when settings are initialized or changed
 static void settings_changed (settings_t *settings)
 {
-    hal.driver_cap.variable_spindle = spindle_precompute_pwm_values(&spindle_pwm, 120000000UL);
+    hal.driver_cap.variable_spindle = spindle_precompute_pwm_values(&spindle_pwm, configCPU_CLOCK_HZ);
 
 #if (STEP_OUTMODE == GPIO_MAP) || (DIRECTION_OUTMODE == GPIO_MAP)
     uint8_t i;
@@ -1170,7 +1183,8 @@ static void settings_changed (settings_t *settings)
         stepperEnable(settings->steppers.deenergize);
 
         if(hal.driver_cap.variable_spindle) {
-            TimerLoadSet(SPINDLE_PWM_TIMER_BASE, TIMER_A, spindle_pwm.period);
+            TimerPrescaleSet(SPINDLE_PWM_TIMER_BASE, TIMER_B, spindle_pwm.period >> 16);
+            TimerLoadSet(SPINDLE_PWM_TIMER_BASE, TIMER_B, spindle_pwm.period & 0xFFFF);
             hal.spindle_set_state = spindleSetStateVariable;
         } else
             hal.spindle_set_state = spindleSetState;
@@ -1524,9 +1538,6 @@ static bool driver_setup (settings_t *settings)
     SysCtlDelay(26); // wait a bit for peripherals to wake up
     TimerClockSourceSet(SPINDLE_PWM_TIMER_BASE, TIMER_CLOCK_SYSTEM);
     TimerConfigure(SPINDLE_PWM_TIMER_BASE, TIMER_CFG_SPLIT_PAIR|TIMER_CFG_B_PWM);
-//      TimerControlStall(SPINDLE_PWM_TIMER_BASE, TIMER_B, false); //timer1 will stall in debug mode
-//      TimerPrescaleSet(SPINDLE_PWM_TIMER_BASE, TIMER_B, STEPPER_DRIVER_PRESCALER); // 20 MHz clock
-//      TimerPrescaleMatchSet(SPINDLE_PWM_TIMER_BASE, TIMER_B, STEPPER_DRIVER_PRESCALER);
     TimerControlLevel(SPINDLE_PWM_TIMER_BASE, TIMER_B, false);
     GPIOPinConfigure(SPINDLEPWM_MAP);
     GPIOPinTypeTimer(SPINDLEPPORT, SPINDLEPPIN);
@@ -1816,6 +1827,7 @@ bool driver_init (void)
 
     hal.driver_cap.spindle_dir = On;
     hal.driver_cap.variable_spindle = On;
+    hal.driver_cap.spindle_pwm_invert = On;
 #if PWM_RAMPED
     hal.driver_cap.spindle_at_speed = On;
 #endif

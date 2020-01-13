@@ -47,10 +47,11 @@ typedef struct {
 // Precalculated values that may be set/used by HAL driver to speed up RPM to PWM conversions if variable spindle is supported
 typedef struct {
     uint_fast16_t period;
-    uint_fast16_t off_value;
+    uint_fast16_t off_value; // NOTE: this value holds the inverted version if software PWM inversion is enabled by the driver.
     uint_fast16_t min_value;
     uint_fast16_t max_value;
     float pwm_gradient;
+    bool invert_pwm;
     uint_fast16_t n_pieces;
     pwm_piece_t piece[SPINDLE_NPWM_PIECES];
 } spindle_pwm_t;

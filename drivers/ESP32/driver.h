@@ -3,9 +3,9 @@
 
   Driver code for ESP32
 
-  Part of Grbl
+  Part of GrblHAL
 
-  Copyright (c) 2018-2019 Terje Io
+  Copyright (c) 2018-2020 Terje Io
   Copyright (c) 2011-2015 Sungeun K. Jeon
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -36,7 +36,7 @@
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 
-#include "GRBL/grbl.h"
+#include "grbl/grbl.h"
 
 //
 // Set config from compile definitions in CMakeLists.txt
@@ -60,7 +60,7 @@
 #ifdef NETWORKING_ENABLE
 #define WIFI_ENABLE      1
 #define HTTP_ENABLE      1
-#define TELNET_ENABLE	 1
+#define TELNET_ENABLE    1
 #define WEBSOCKET_ENABLE 1
 #endif
 
@@ -90,33 +90,39 @@
 #ifndef NETWORKING_ENABLE
 #define WIFI_ENABLE      1 // Streaming over WiFi.
 #define HTTP_ENABLE      1 // Enable http daemon - requires WiFi enabled
-#define TELNET_ENABLE	 1 // Enable telnet daemon - requires WiFi enabled
+#define TELNET_ENABLE    1 // Enable telnet daemon - requires WiFi enabled
 #define WEBSOCKET_ENABLE 1 // Enable websocket daemon - requires WiFi enabled
 #endif
 
 #ifndef AUTH_ENABLE
-#define AUTH_ENABLE		 1 // Enable WebUI security
+#define AUTH_ENABLE      1 // Enable WebUI security
 #endif
 #ifndef SDCARD_ENABLE
 #define SDCARD_ENABLE    1 // Run jobs from SD card.
 #endif
 #ifndef WEBUI_ENABLE
-#define WEBUI_ENABLE	 1 // Enables WebUi - requires WiFi enabled. Note: experimental - only partly implemented!
+#define WEBUI_ENABLE     1 // Enables WebUi - requires WiFi enabled. Note: experimental - only partly implemented!
 #endif
 #ifndef TRINAMIC_ENABLE
 #define TRINAMIC_ENABLE  0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
 #define TRINAMIC_I2C     0 // Trinamic I2C - SPI bridge interface.
 #endif
 
-#define CNC_BOOSTERPACK  1 // do not change!
+#ifdef CNC_BOOSTERPACK
+#undef CNC_BOOSTERPACK
+#define CNC_BOOSTERPACK  1
+#define EEPROM_ENABLE    1 // I2C EEPROM (24LC16) support.
+#define IOEXPAND_ENABLE  1 // I2C IO expander for some output signals.
+#else
+#define EEPROM_ENABLE    0 // I2C EEPROM (24LC16) support.
+#define IOEXPAND_ENABLE  0 // I2C IO expander for some output signals.
+#endif
 #define PWM_RAMPED       0 // Ramped spindle PWM.
 #define PROBE_ENABLE     1 // Probe input
 #define PROBE_ISR        0 // Catch probe state change by interrupt TODO: needs verification!
 #define WIFI_SOFTAP      0 // Use Soft AP mode for WiFi.
 #define BLUETOOTH_ENABLE 0 // Streaming over Bluetooth.
 #define TRINAMIC_DEV     0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
-#define EEPROM_ENABLE    1 // I2C EEPROM (24LC16) support.
-#define IOEXPAND_ENABLE  1 // I2C IO expander for some output signals.
 
 // end configuration
 
@@ -134,17 +140,17 @@
 
 #if WIFI_ENABLE
 
-#define NETWORK_TELNET_PORT		23
-#define NETWORK_HTTP_PORT		80
-#define NETWORK_WEBSOCKET_PORT	81
+#define NETWORK_TELNET_PORT     23
+#define NETWORK_HTTP_PORT       80
+#define NETWORK_WEBSOCKET_PORT  81
 
 // WiFi Station (STA) settings
-#define NETWORK_HOSTNAME		"Grbl"
-#define NETWORK_IPMODE_STATIC 	0
+#define NETWORK_HOSTNAME        "Grbl"
+#define NETWORK_IPMODE_STATIC   0
 #if NETWORK_IPMODE_STATIC
-#define NETWORK_IP				"192.168.5.1"
-#define NETWORK_GATEWAY			"192.168.5.1"
-#define NETWORK_MASK     		"255.255.255.0"
+#define NETWORK_IP              "192.168.5.1"
+#define NETWORK_GATEWAY         "192.168.5.1"
+#define NETWORK_MASK            "255.255.255.0"
 #endif
 
 #if NETWORK_IPMODE_STATIC && WIFI_SOFTAP
@@ -153,12 +159,12 @@
 
 // WiFi Access Point (AP) settings
 #if WIFI_SOFTAP
-#define NETWORK_AP_HOSTNAME	"GrblAP"
-#define NETWORK_AP_IP		"192.168.5.1"
-#define NETWORK_AP_GATEWAY	"192.168.5.1"
+#define NETWORK_AP_HOSTNAME "GrblAP"
+#define NETWORK_AP_IP       "192.168.5.1"
+#define NETWORK_AP_GATEWAY  "192.168.5.1"
 #define NETWORK_AP_MASK     "255.255.255.0"
-#define WIFI_AP_SSID		"GRBL"
-#define WIFI_AP_PASSWORD	"GrblPassword" // Minimum 8 characters, or blank for open
+#define WIFI_AP_SSID        "GRBL"
+#define WIFI_AP_PASSWORD    "GrblPassword" // Minimum 8 characters, or blank for open
 #define WIFI_MODE WiFiMode_AP; // OPTION: WiFiMode_APSTA
 #else
 #define WIFI_MODE WiFiMode_STA; // Do not change!
@@ -176,17 +182,17 @@
 
 typedef struct
 {
-	grbl_wifi_mode_t mode;
-	wifi_sta_settings_t sta;
-	wifi_ap_settings_t ap;
-//	network_settings_t network;
-	password_t admin_password;
-	password_t user_password;
+    grbl_wifi_mode_t mode;
+    wifi_sta_settings_t sta;
+    wifi_ap_settings_t ap;
+//  network_settings_t network;
+    password_t admin_password;
+    password_t user_password;
 } wifi_settings_t;
 
 typedef struct {
-	uint8_t action;
-	void *params;
+    uint8_t action;
+    void *params;
 } i2c_task_t;
 
 
@@ -195,8 +201,8 @@ typedef struct {
 #define DRIVER_SETTINGS
 
 typedef struct {
-	wifi_settings_t wifi;
-	bluetooth_settings_t bluetooth;
+    wifi_settings_t wifi;
+    bluetooth_settings_t bluetooth;
 #if TRINAMIC_ENABLE
     trinamic_settings_t trinamic;
 #endif
@@ -233,48 +239,48 @@ extern driver_settings_t driver_settings;
 #define X_STEP_PIN      GPIO_NUM_26
 #define Y_STEP_PIN      GPIO_NUM_27
 #define Z_STEP_PIN      GPIO_NUM_14
-#define STEP_MASK     	(1ULL << X_STEP_PIN|1ULL << Y_STEP_PIN|1ULL << Z_STEP_PIN) // All step bits
+#define STEP_MASK       (1ULL << X_STEP_PIN|1ULL << Y_STEP_PIN|1ULL << Z_STEP_PIN) // All step bits
 
 // Define step direction output pins. NOTE: All direction pins must be on the same port.
 #define X_DIRECTION_PIN     GPIO_NUM_2
 #define Y_DIRECTION_PIN     GPIO_NUM_15
 #define Z_DIRECTION_PIN     GPIO_NUM_12
-#define DIRECTION_MASK    	(1ULL << X_DIRECTION_PIN|1ULL << Y_DIRECTION_PIN|1ULL << Z_DIRECTION_PIN) // All direction bits
+#define DIRECTION_MASK      (1ULL << X_DIRECTION_PIN|1ULL << Y_DIRECTION_PIN|1ULL << Z_DIRECTION_PIN) // All direction bits
 
 // Define stepper driver enable/disable output pin(s).
 #define STEPPERS_DISABLE_PIN    IOEXPAND
-#define STEPPERS_DISABLE_MASK	(1ULL << STEPPERS_DISABLE_PIN)
+#define STEPPERS_DISABLE_MASK   (1ULL << STEPPERS_DISABLE_PIN)
 
 // Define homing/hard limit switch input pins and limit interrupt vectors.
 #define X_LIMIT_PIN     GPIO_NUM_4
 #define Y_LIMIT_PIN     GPIO_NUM_16
 #define Z_LIMIT_PIN     GPIO_NUM_32
-#define LIMIT_MASK    	(1ULL << X_LIMIT_PIN|1ULL << Y_LIMIT_PIN|1ULL << Z_LIMIT_PIN) // All limit bits
+#define LIMIT_MASK      (1ULL << X_LIMIT_PIN|1ULL << Y_LIMIT_PIN|1ULL << Z_LIMIT_PIN) // All limit bits
 
 // Define spindle enable and spindle direction output pins.
 #define SPINDLE_ENABLE_PIN      IOEXPAND
 #define SPINDLE_DIRECTION_PIN   IOEXPAND
-#define SPINDLE_MASK 			(1ULL << SPINDLE_ENABLE_PIN|1ULL << SPINDLE_DIRECTION_PIN)
-#define SPINDLEPWMPIN     		GPIO_NUM_17
+#define SPINDLE_MASK            (1ULL << SPINDLE_ENABLE_PIN|1ULL << SPINDLE_DIRECTION_PIN)
+#define SPINDLEPWMPIN           GPIO_NUM_17
 
 // Define flood and mist coolant enable output pins.
 
 #define COOLANT_FLOOD_PIN   IOEXPAND
 #define COOLANT_MIST_PIN    IOEXPAND
-#define COOLANT_MASK 		(1UL << COOLANT_FLOOD_PIN|1ULL << COOLANT_MIST_PIN)
+#define COOLANT_MASK        (1UL << COOLANT_FLOOD_PIN|1ULL << COOLANT_MIST_PIN)
 
 // Define user-control CONTROLs (cycle start, reset, feed hold) input pins.
 #define RESET_PIN           GPIO_NUM_35
 #define FEED_HOLD_PIN       GPIO_NUM_39
 #define CYCLE_START_PIN     GPIO_NUM_36
 #define SAFETY_DOOR_PIN     GPIO_NUM_34
-#define CONTROL_MASK      	(1UL << RESET_PIN|1UL << FEED_HOLD_PIN|1UL << CYCLE_START_PIN|1UL << SAFETY_DOOR_PIN)
+#define CONTROL_MASK        (1UL << RESET_PIN|1UL << FEED_HOLD_PIN|1UL << CYCLE_START_PIN|1UL << SAFETY_DOOR_PIN)
 
 // Define probe switch input pin.
 #define PROBE_PIN       GPIO_NUM_13
 
 #if KEYPAD_ENABLE
-#define KEYPAD_STROBE_PIN	GPIO_NUM_33
+#define KEYPAD_STROBE_PIN   GPIO_NUM_33
 #endif
 
 #if IOEXPAND_ENABLE || KEYPAD_ENABLE || EEPROM_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
@@ -287,17 +293,17 @@ extern driver_settings_t driver_settings;
 
 #if IOEXPAND_ENABLE
 typedef union {
-	uint8_t mask;
-	struct {
-		uint8_t stepper_enable_z :1,
-				stepper_enable_y :1,
-				mist_on          :1,
-				flood_on         :1,
-				reserved         :1,
-			    spindle_dir      :1,
-				stepper_enable_x :1,
-				spindle_on		 :1;
-	};
+    uint8_t mask;
+    struct {
+        uint8_t stepper_enable_z :1,
+                stepper_enable_y :1,
+                mist_on          :1,
+                flood_on         :1,
+                reserved         :1,
+                spindle_dir      :1,
+                stepper_enable_x :1,
+                spindle_on       :1;
+    };
 } ioexpand_t;
 #endif
 
@@ -323,42 +329,42 @@ typedef union {
 #define X_STEP_PIN      GPIO_NUM_12
 #define Y_STEP_PIN      GPIO_NUM_14
 #define Z_STEP_PIN      GPIO_NUM_27
-#define STEP_MASK     	(1ULL << X_STEP_PIN|1ULL << Y_STEP_PIN|1ULL << Z_STEP_PIN) // All step bits
+#define STEP_MASK       (1ULL << X_STEP_PIN|1ULL << Y_STEP_PIN|1ULL << Z_STEP_PIN) // All step bits
 
 // Define step direction output pins. NOTE: All direction pins must be on the same port.
 #define X_DIRECTION_PIN     GPIO_NUM_26
 #define Y_DIRECTION_PIN     GPIO_NUM_25
 #define Z_DIRECTION_PIN     GPIO_NUM_33
-#define DIRECTION_MASK    	(1ULL << X_DIRECTION_PIN|1ULL << Y_DIRECTION_PIN|1ULL << Z_DIRECTION_PIN) // All direction bits
+#define DIRECTION_MASK      (1ULL << X_DIRECTION_PIN|1ULL << Y_DIRECTION_PIN|1ULL << Z_DIRECTION_PIN) // All direction bits
 
 // Define stepper driver enable/disable output pin(s).
 #define STEPPERS_DISABLE_PIN    GPIO_NUM_13
-#define STEPPERS_DISABLE_MASK	(1ULL << STEPPERS_DISABLE_PIN)
+#define STEPPERS_DISABLE_MASK   (1ULL << STEPPERS_DISABLE_PIN)
 
 // Define homing/hard limit switch input pins and limit interrupt vectors.
 #define X_LIMIT_PIN     GPIO_NUM_2
 #define Y_LIMIT_PIN     GPIO_NUM_4
 #define Z_LIMIT_PIN     GPIO_NUM_15
-#define LIMIT_MASK    	(1ULL << X_LIMIT_PIN|1ULL << Y_LIMIT_PIN|1ULL << Z_LIMIT_PIN) // All limit bits
+#define LIMIT_MASK      (1ULL << X_LIMIT_PIN|1ULL << Y_LIMIT_PIN|1ULL << Z_LIMIT_PIN) // All limit bits
 
 // Define spindle enable and spindle direction output pins.
 #define SPINDLE_ENABLE_PIN      GPIO_NUM_18
 #define SPINDLE_DIRECTION_PIN   GPIO_NUM_5
-#define SPINDLE_MASK 			(1ULL << SPINDLE_ENABLE_PIN|1ULL << SPINDLE_DIRECTION_PIN)
-#define SPINDLEPWMPIN     		GPIO_NUM_17
+#define SPINDLE_MASK            (1ULL << SPINDLE_ENABLE_PIN|1ULL << SPINDLE_DIRECTION_PIN)
+#define SPINDLEPWMPIN           GPIO_NUM_17
 
 // Define flood and mist coolant enable output pins.
 
 #define COOLANT_FLOOD_PIN   GPIO_NUM_16
 #define COOLANT_MIST_PIN    GPIO_NUM_21
-#define COOLANT_MASK 		(1UL << COOLANT_FLOOD_PIN|1ULL << COOLANT_MIST_PIN)
+#define COOLANT_MASK        (1UL << COOLANT_FLOOD_PIN|1ULL << COOLANT_MIST_PIN)
 
 // Define user-control CONTROLs (cycle start, reset, feed hold) input pins.
 #define RESET_PIN           GPIO_NUM_34
 #define FEED_HOLD_PIN       GPIO_NUM_36
 #define CYCLE_START_PIN     GPIO_NUM_39
 #define SAFETY_DOOR_PIN     GPIO_NUM_35
-#define CONTROL_MASK      	(1UL << RESET_PIN|1UL << FEED_HOLD_PIN|1UL << CYCLE_START_PIN|1UL << SAFETY_DOOR_PIN)
+#define CONTROL_MASK        (1UL << RESET_PIN|1UL << FEED_HOLD_PIN|1UL << CYCLE_START_PIN|1UL << SAFETY_DOOR_PIN)
 
 // Define probe switch input pin.
 #if PROBE_ENABLE
@@ -381,17 +387,17 @@ typedef union {
 
 #if IOEXPAND_ENABLE
 typedef union {
-	uint8_t mask;
-	struct {
-		uint8_t spindle_on       :1,
-				spindle_dir      :1,
-				mist_on          :1,
-				flood_on         :1,
-				stepper_enable_z :1,
-				stepper_enable_x :1,
-				stepper_enable_y :1,
-				reserved		 :1;
-	};
+    uint8_t mask;
+    struct {
+        uint8_t spindle_on       :1,
+                spindle_dir      :1,
+                mist_on          :1,
+                flood_on         :1,
+                stepper_enable_z :1,
+                stepper_enable_x :1,
+                stepper_enable_y :1,
+                reserved         :1;
+    };
 } ioexpand_t;
 #endif
 

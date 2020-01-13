@@ -3,9 +3,9 @@
 
   Startup entry point for ESP32
 
-  Part of Grbl
+  Part of GrblHAL
 
-  Copyright (c) 2018 Terje Io
+  Copyright (c) 2018-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -24,11 +24,11 @@
 /*
  * IMPORTANT:
  *
- * GRBL/config.h changes needed for this driver
+ * grbl/config.h changes needed for this driver
  *
  * Add: #include "esp_attr.h"
  * Change: #define ISR_CODE to #define ISR_CODE IRAM_ATTR
- *
+ * Uncomment: #define SPINDLE_PWM_DIRECT
  */
 
 // idf.py app-flash -p COM23
@@ -36,7 +36,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "GRBL/grbllib.h"
+#include "grbl/grbllib.h"
 
 /* Scheduler includes. */
 #include "freertos/FreeRTOS.h"
@@ -50,5 +50,5 @@ static void vGrblTask (void *pvParameters)
 
 void app_main(void)
 {
-	xTaskCreatePinnedToCore(vGrblTask, "Grbl", 4096, NULL, 0, NULL, 1);
+    xTaskCreatePinnedToCore(vGrblTask, "Grbl", 4096, NULL, 0, NULL, 1);
 }

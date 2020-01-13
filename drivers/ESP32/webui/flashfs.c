@@ -58,7 +58,7 @@ static void file_close (void)
 
 static bool file_open (char *filename)
 {
-	struct stat st;
+    struct stat st;
 
     if(file.handle)
         file_close();
@@ -211,28 +211,28 @@ status_code_t flashfs_stream_file (char *filename)
 {
     status_code_t retval = Status_Unhandled;
 
-	if (sys.state != STATE_IDLE)
-		retval = Status_SystemGClock;
-	else {
-		if(file_open(filename)) {
-			gc_state.last_error = Status_OK;                      		// Start with no errors
-			hal.report.status_message(Status_OK);                       // and confirm command to originator
-			memcpy(&active_stream, &hal.stream, sizeof(io_stream_t));   // Save current stream pointers
-			hal.stream.type = StreamType_FlashFs;                       // then redirect to read from SD card instead
-			hal.stream.read = flashfs_read;                             // ...
-			hal.stream.enqueue_realtime_command = drop_input_stream;    // Drop input from current stream except realtime commands
+    if (sys.state != STATE_IDLE)
+        retval = Status_SystemGClock;
+    else {
+        if(file_open(filename)) {
+            gc_state.last_error = Status_OK;                            // Start with no errors
+            hal.report.status_message(Status_OK);                       // and confirm command to originator
+            memcpy(&active_stream, &hal.stream, sizeof(io_stream_t));   // Save current stream pointers
+            hal.stream.type = StreamType_FlashFs;                       // then redirect to read from SD card instead
+            hal.stream.read = flashfs_read;                             // ...
+            hal.stream.enqueue_realtime_command = drop_input_stream;    // Drop input from current stream except realtime commands
 #if M6_ENABLE
-			hal.stream.suspend_read = flashfs_suspend;                  // ...
+            hal.stream.suspend_read = flashfs_suspend;                  // ...
 #else
-			hal.stream.suspend_read = NULL;                             // ...
+            hal.stream.suspend_read = NULL;                             // ...
 #endif
-			hal.driver_rt_report = flashfs_report;                      // Add percent complete to real time report
-			hal.report.status_message = trap_status_report;             // Redirect status message and feedback message
-			hal.report.feedback_message = trap_feedback_message;        // reports here
-			retval = Status_OK;
-		} else
-			retval = Status_SDReadError;
-	}
+            hal.driver_rt_report = flashfs_report;                      // Add percent complete to real time report
+            hal.report.status_message = trap_status_report;             // Redirect status message and feedback message
+            hal.report.feedback_message = trap_feedback_message;        // reports here
+            retval = Status_OK;
+        } else
+            retval = Status_SDReadError;
+    }
 
     return retval;
 }

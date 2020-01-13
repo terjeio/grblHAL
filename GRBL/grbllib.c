@@ -2,7 +2,7 @@
   grbllib.c - An embedded CNC Controller with rs274/ngc (g-code) support
   Part of Grbl
 
-  Copyright (c) 2017-2019 Terje Io
+  Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2011-2015 Sungeun K. Jeon
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -159,6 +159,10 @@ int grbl_enter (void)
 
 #ifdef ENABLE_SPINDLE_LINEARIZATION
     driver_ok = driver_ok && hal.driver_cap.spindle_pwm_linearization;
+#endif
+
+#ifdef SPINDLE_PWM_DIRECT
+    driver_ok = driver_ok && hal.spindle_get_pwm != NULL && hal.spindle_update_pwm != NULL;
 #endif
 
     if(!driver_ok) {

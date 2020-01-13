@@ -64,11 +64,11 @@ static void I2C_interrupt_handler (void);
 
 void I2CInit (void)
 {
-	static bool init_ok = false;
+    static bool init_ok = false;
 
-	if(!init_ok) {
+    if(!init_ok) {
 
-		init_ok = true;
+        init_ok = true;
 
         pmc_enable_periph_clk(I2C_ID);
         pmc_enable_periph_clk(I2C_PERIPH == TWI0 ? ID_PIOA : ID_PIOB);
@@ -88,11 +88,11 @@ void I2CInit (void)
 
         TWI_SetClock(I2C_PERIPH, I2C_CLOCK, SystemCoreClock);
 
-		IRQRegister(I2C_IRQ, I2C_interrupt_handler);
+        IRQRegister(I2C_IRQ, I2C_interrupt_handler);
 
-		NVIC_SetPriority(I2C_IRQ, 0);
+        NVIC_SetPriority(I2C_IRQ, 0);
         NVIC_EnableIRQ(I2C_IRQ);
-	}
+    }
 }
 
 // get bytes (max 8), waits for result
@@ -102,8 +102,8 @@ uint8_t *I2C_Receive (uint32_t i2cAddr, uint8_t *buf, uint32_t bytes, bool block
     i2c.count = bytes;
     i2c.state = bytes == 1 ? I2CState_ReceiveLast : (bytes == 2 ? I2CState_ReceiveNextToLast : I2CState_ReceiveNext);
 
-	// Send start and address
-	I2C_PERIPH->TWI_MMR = TWI_MMR_DADR(i2cAddr)|TWI_MMR_MREAD;
+    // Send start and address
+    I2C_PERIPH->TWI_MMR = TWI_MMR_DADR(i2cAddr)|TWI_MMR_MREAD;
     I2C_PERIPH->TWI_CR = bytes == 1 ? TWI_CR_START : TWI_CR_START|TWI_CR_STOP; // Start condition +  stop condition if reading one byte
     I2C_PERIPH->TWI_IER = TWI_IER_TXRDY|TWI_IER_RXRDY;
 
@@ -119,7 +119,7 @@ void I2C_Send (uint32_t i2cAddr, uint8_t *buf, uint8_t bytes, bool block)
     i2c.data  = buf ? buf : i2c.buffer;
     i2c.state = bytes == 0 ? I2CState_AwaitCompletion : (bytes == 1 ? I2CState_SendLast : I2CState_SendNext);
 
-	I2C_PERIPH->TWI_MMR = TWI_MMR_DADR(i2cAddr);
+    I2C_PERIPH->TWI_MMR = TWI_MMR_DADR(i2cAddr);
     I2C_PERIPH->TWI_THR = *i2c.data++;
     I2C_PERIPH->TWI_IER = TWI_IER_TXRDY|TWI_IER_NACK;
 
@@ -135,7 +135,7 @@ uint8_t *I2C_ReadRegister (uint32_t i2cAddr, uint8_t *buf, uint8_t bytes, bool b
     i2c.data  = buf ? buf : i2c.buffer;
     i2c.state = bytes == 1 ? I2CState_ReceiveLast : (bytes == 2 ? I2CState_ReceiveNextToLast : I2CState_ReceiveNext);
 
-	I2C_PERIPH->TWI_MMR = TWI_MMR_DADR(i2cAddr)|TWI_MMR_MREAD|TWI_MMR_IADRSZ_1_BYTE;
+    I2C_PERIPH->TWI_MMR = TWI_MMR_DADR(i2cAddr)|TWI_MMR_MREAD|TWI_MMR_IADRSZ_1_BYTE;
     I2C_PERIPH->TWI_IADR = *i2c.data;
     I2C_PERIPH->TWI_CR = bytes == 1 ? TWI_CR_START|TWI_CR_STOP : TWI_CR_START; // Start condition + stop condition if reading one byte
     I2C_PERIPH->TWI_IER = TWI_IER_RXRDY;
@@ -150,17 +150,17 @@ uint8_t *I2C_ReadRegister (uint32_t i2cAddr, uint8_t *buf, uint8_t bytes, bool b
 
 void I2C_EEPROM (i2c_eeprom_t *eeprom, bool read)
 {
-	static uint8_t txbuf[34];
+    static uint8_t txbuf[34];
 
     while(i2cIsBusy);
 
     if(read) {
-		eeprom->data[0] = eeprom->word_addr; // !!
-		I2C_ReadRegister(eeprom->addr, eeprom->data, eeprom->count, true);
+        eeprom->data[0] = eeprom->word_addr; // !!
+        I2C_ReadRegister(eeprom->addr, eeprom->data, eeprom->count, true);
     } else {
-		memcpy(&txbuf[1], eeprom->data, eeprom->count);
-		txbuf[0] = eeprom->word_addr;
-    	I2C_Send(eeprom->addr, txbuf, eeprom->count, true);
+        memcpy(&txbuf[1], eeprom->data, eeprom->count);
+        txbuf[0] = eeprom->word_addr;
+        I2C_Send(eeprom->addr, txbuf, eeprom->count, true);
         hal.delay_ms(5, NULL);
     }
 }
@@ -243,15 +243,15 @@ void I2C_DriverInit (TMC_io_driver_t *driver)
 
 static void I2C_interrupt_handler (void)
 {
-	uint8_t ifg = I2C_PERIPH->TWI_SR;
+    uint8_t ifg = I2C_PERIPH->TWI_SR;
 
-	if(ifg & TWI_SR_ARBLST) {
+    if(ifg & TWI_SR_ARBLST) {
         I2C_PERIPH->TWI_CR = TWI_CR_STOP; // Stop condition
-		i2c.state = I2CState_Error;
+        i2c.state = I2CState_Error;
     }
 
-	if(ifg & TWI_SR_NACK)
-		i2c.state = I2CState_Error;
+    if(ifg & TWI_SR_NACK)
+        i2c.state = I2CState_Error;
 
     switch(i2c.state) {
 
@@ -261,14 +261,14 @@ static void I2C_interrupt_handler (void)
             break;
 
         case I2CState_SendNext:
-			I2C_PERIPH->TWI_THR = *i2c.data++;
+            I2C_PERIPH->TWI_THR = *i2c.data++;
             if(--i2c.count == 1)
                 i2c.state = I2CState_SendLast;
             break;
 
         case I2CState_SendLast:
-			I2C_PERIPH->TWI_THR = *i2c.data;
-			I2C_PERIPH->TWI_CR = TWI_CR_STOP; // Stop condition
+            I2C_PERIPH->TWI_THR = *i2c.data;
+            I2C_PERIPH->TWI_CR = TWI_CR_STOP; // Stop condition
             i2c.state = I2CState_AwaitCompletion;
             break;
 

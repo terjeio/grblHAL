@@ -570,10 +570,10 @@ bool driver_init (void)
 
     // end EEPROM available
 
-	// Settings may also be stored in flash.
-	// Quite a few drivers has code for that: SAMD21, SAM3X8E, ESP32, STM32F1xx and LPC1769
-	// Check out the source for these for howto examples.
-	// Note: many drivers has code examples for using external EEPROM, typically via I2C interface.
+    // Settings may also be stored in flash.
+    // Quite a few drivers has code for that: SAMD21, SAM3X8E, ESP32, STM32F1xx and LPC1769
+    // Check out the source for these for howto examples.
+    // Note: many drivers has code examples for using external EEPROM, typically via I2C interface.
 
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;

@@ -38,51 +38,51 @@
 
 void ioexpand_init (void)
 {
-	I2CInit();
+    I2CInit();
 
-	uint8_t cmd[2];
+    uint8_t cmd[2];
 
-	// 0 = output, 1 = input
-	// TODO: move to driver.h?
-	const ioexpand_t cfg = {
-		.spindle_on = 0,
-		.spindle_dir = 0,
-		.mist_on = 0,
-		.flood_on = 0,
-		.stepper_enable_z = 0,
-		.stepper_enable_xy = 0
-//			.stepper_enable_y = 0,
-	};
+    // 0 = output, 1 = input
+    // TODO: move to driver.h?
+    const ioexpand_t cfg = {
+        .spindle_on = 0,
+        .spindle_dir = 0,
+        .mist_on = 0,
+        .flood_on = 0,
+        .stepper_enable_z = 0,
+        .stepper_enable_xy = 0
+//          .stepper_enable_y = 0,
+    };
 
-	cmd[0] = RW_CONFIG;
-	cmd[1] = cfg.mask;
-	I2C_Send(IOEX_ADDRESS, cmd, 2, true);
+    cmd[0] = RW_CONFIG;
+    cmd[1] = cfg.mask;
+    I2C_Send(IOEX_ADDRESS, cmd, 2, true);
 
-	cmd[0] = RW_INVERSION;
-	cmd[1] = 0;
-	I2C_Send(IOEX_ADDRESS, cmd, 2, true);
+    cmd[0] = RW_INVERSION;
+    cmd[1] = 0;
+    I2C_Send(IOEX_ADDRESS, cmd, 2, true);
 }
 
 void ioexpand_out (ioexpand_t pins)
 {
-	uint8_t cmd[2];
+    uint8_t cmd[2];
 
-	cmd[0] = RW_OUTPUT;
-	cmd[1] = pins.mask;
+    cmd[0] = RW_OUTPUT;
+    cmd[1] = pins.mask;
 
-	I2C_Send(IOEX_ADDRESS, cmd, 2, true);
+    I2C_Send(IOEX_ADDRESS, cmd, 2, true);
 }
 
 ioexpand_t ioexpand_in (void)
 {
-	ioexpand_t pins = {0};
-	uint8_t cmd[2];
+    ioexpand_t pins = {0};
+    uint8_t cmd[2];
 
-	cmd[0] = READ_INPUT;
-	cmd[1] = 0;
-	I2C_ReadRegister(IOEX_ADDRESS, cmd, 1, true);
+    cmd[0] = READ_INPUT;
+    cmd[1] = 0;
+    I2C_ReadRegister(IOEX_ADDRESS, cmd, 1, true);
 
-	return (ioexpand_t)cmd[0];
+    return (ioexpand_t)cmd[0];
 }
 
 #endif

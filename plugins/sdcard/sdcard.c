@@ -3,7 +3,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2018-2019 Terje Io
+  Copyright (c) 2018-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -76,6 +76,7 @@ static file_t file = {
 
 static bool frewind = false;
 static io_stream_t active_stream;
+static driver_reset_ptr driver_reset = NULL;
 //static report_t active_reports;
 
 #ifdef __MSP432E401Y__
@@ -167,19 +168,19 @@ static FRESULT scan_dir (char *path, uint_fast8_t depth, char *buf)
     // Pass 1: Scan files
     while(true) {
 
-		if((res = f_readdir(&dir, &fno)) != FR_OK || fno.fname[0] == '\0')
-			break;
+        if((res = f_readdir(&dir, &fno)) != FR_OK || fno.fname[0] == '\0')
+            break;
 
-		subdirs |= fno.fattrib & AM_DIR;
+        subdirs |= fno.fattrib & AM_DIR;
 
-		if(!(fno.fattrib & AM_DIR) && (status = allowed(get_name(&fno), true)) != Filename_Filtered) {
-			sprintf(buf, "[FILE:%s/%s|SIZE:%ul%s]\r\n", path, get_name(&fno), (uint32_t)fno.fsize, status == Filename_Invalid ? "|UNUSABLE" : "");
-			hal.stream.write(buf);
-		}
+        if(!(fno.fattrib & AM_DIR) && (status = allowed(get_name(&fno), true)) != Filename_Filtered) {
+            sprintf(buf, "[FILE:%s/%s|SIZE:%u%s]\r\n", path, get_name(&fno), (uint32_t)fno.fsize, status == Filename_Invalid ? "|UNUSABLE" : "");
+            hal.stream.write(buf);
+        }
     }
 
     if((subdirs = (subdirs && --depth)))
-    	f_readdir(&dir, NULL); // Rewind
+        f_readdir(&dir, NULL); // Rewind
 
     // Pass 2: Scan directories
     while(subdirs) {
@@ -189,12 +190,12 @@ static FRESULT scan_dir (char *path, uint_fast8_t depth, char *buf)
 
         if(fno.fattrib & AM_DIR) { // It is a directory
             size_t pathlen = strlen(path);
-			if(pathlen + strlen(get_name(&fno)) > (MAX_PATHLEN - 1))
-				break;
-			sprintf(&path[pathlen], "/%s", get_name(&fno));
-			if((res = scan_dir(path, depth, buf)) != FR_OK)
-				break;
-			path[pathlen] = '\0';
+            if(pathlen + strlen(get_name(&fno)) > (MAX_PATHLEN - 1))
+                break;
+            sprintf(&path[pathlen], "/%s", get_name(&fno));
+            if((res = scan_dir(path, depth, buf)) != FR_OK)
+                break;
+            path[pathlen] = '\0';
         }
     }
 
@@ -369,8 +370,13 @@ static message_code_t trap_feedback_message (message_code_t message_code)
 
 static void sdcard_report (stream_write_ptr stream_write, report_tracking_flags_t report)
 {
+    char *pct_done = ftoa((float)file.pos / (float)file.size * 100.0f, 1);
+
+    if(sys.state != STATE_IDLE && !strncmp(pct_done, "100.0", 5))
+        strcpy(pct_done, "99.9");
+
     stream_write("|SD:");
-    stream_write(ftoa((float)file.pos / (float)file.size * 100.0f, 1));
+    stream_write(pct_done);
     stream_write(",");
     stream_write(file.name);
 }
@@ -453,25 +459,29 @@ void sdcard_reset (void)
     if(hal.stream.type == StreamType_SDCard) {
         if(file.line > 0) {
             char buf[70];
-            sprintf(buf, "[MSG:Reset during streaming of SD file at line: %ul]\r\n", file.line);
+            sprintf(buf, "[MSG:Reset during streaming of SD file at line: %u]\r\n", file.line);
             hal.stream.write(buf);
         }
         sdcard_end_job();
     }
+
+    if(driver_reset)
+        driver_reset();
 }
 
 void sdcard_init (void)
 {
+    driver_reset = hal.driver_reset;
     hal.driver_reset = sdcard_reset;
     hal.driver_sys_command_execute = sdcard_parse;
 }
 
 FATFS *sdcard_getfs(void)
 {
-	if(file.fs == NULL)
-		sdcard_mount();
+    if(file.fs == NULL)
+        sdcard_mount();
 
-	return file.fs;
+    return file.fs;
 }
 
 #endif

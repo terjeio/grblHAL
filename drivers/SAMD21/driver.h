@@ -75,14 +75,14 @@ extern driver_settings_t driver_settings;
 
 // timer definitions
 
-#define STEP_TIMER			TC3
-#define STEP_TIMER_IRQn		TC3_IRQn
+#define STEP_TIMER          TC3
+#define STEP_TIMER_IRQn     TC3_IRQn
 
-#define STEPPER_TIMER  		TC4 // 32bit - TC4 & TC5 combined!
-#define STEPPER_TIMER_IRQn 	TC4_IRQn
+#define STEPPER_TIMER       TC4 // 32bit - TC4 & TC5 combined!
+#define STEPPER_TIMER_IRQn  TC4_IRQn
 
-#define DEBOUNCE_TIMER    	TCC1
-#define DEBOUNCE_TIMER_IRQn	TCC1_IRQn
+#define DEBOUNCE_TIMER      TCC1
+#define DEBOUNCE_TIMER_IRQn TCC1_IRQn
 
 #if CNC_BOOSTERPACK == 0
 
@@ -92,9 +92,9 @@ extern driver_settings_t driver_settings;
 #define Z_STEP_PIN      (21u)
 
 // Define step direction output pins.
-#define X_DIRECTION_PIN	(2u)
-#define Y_DIRECTION_PIN	(3u)
-#define Z_DIRECTION_PIN	(4u)
+#define X_DIRECTION_PIN (2u)
+#define Y_DIRECTION_PIN (3u)
+#define Z_DIRECTION_PIN (4u)
 
 // Define stepper driver enable/disable output pin(s).
 #define STEPPERS_DISABLE_PIN    (10u)
@@ -109,9 +109,9 @@ extern driver_settings_t driver_settings;
 #define SPINDLE_DIRECTION_PIN   (15u)
 
 // Start of PWM & Stepper Enabled Spindle
-#define SPINDLE_PWM_TIMER	TCC0
-#define SPINDLE_PWM_CCREG	2
-#define SPINDLEPWMPIN		(6u)
+#define SPINDLE_PWM_TIMER   TCC0
+#define SPINDLE_PWM_CCREG   2
+#define SPINDLEPWMPIN       (6u)
 
 // Define flood and mist coolant enable output pins.
 #define COOLANT_FLOOD_PIN   (12u)
@@ -144,31 +144,31 @@ extern driver_settings_t driver_settings;
 #define Z_LIMIT_PIN     (0u)
 
 // Define user-control CONTROLs (cycle start, reset, feed hold) input pins.
-#define RESET_PIN		(17u)
-#define FEED_HOLD_PIN	(9u)
-#define CYCLE_START_PIN	(8u)
-#define SAFETY_DOOR_PIN	(16u)
+#define RESET_PIN       (17u)
+#define FEED_HOLD_PIN   (9u)
+#define CYCLE_START_PIN (8u)
+#define SAFETY_DOOR_PIN (16u)
 
 // Start of PWM & Stepper Enabled Spindle
-#define SPINDLE_PWM_TIMER	TCC0
-#define SPINDLE_PWM_CCREG	2
-#define SPINDLEPWMPIN		(6u)
+#define SPINDLE_PWM_TIMER   TCC0
+#define SPINDLE_PWM_CCREG   2
+#define SPINDLEPWMPIN       (6u)
 
 
 #if IOEXPAND_ENABLE
 
 typedef union {
-	uint8_t mask;
-	struct {
-		uint8_t stepper_enable_z  :1,
-				reserved0		  :1,
-				flood_on          :1,
-				mist_on           :1,
-				reserved1         :1,
-			    spindle_dir       :1,
-				stepper_enable_xy :1,
-				spindle_on		  :1;
-	};
+    uint8_t mask;
+    struct {
+        uint8_t stepper_enable_z  :1,
+                reserved0         :1,
+                flood_on          :1,
+                mist_on           :1,
+                reserved1         :1,
+                spindle_dir       :1,
+                stepper_enable_xy :1,
+                spindle_on        :1;
+    };
 } ioexpand_t;
 
 #else

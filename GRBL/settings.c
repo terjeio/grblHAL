@@ -661,11 +661,6 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 }
                 break;
 
-/* disabled for now - no clear use case for this value, and original code handling this is badly implemented (IMO)
-            case Setting_PWMOffValue:
-                settings.spindle.pwm_off_value = value;
-                break;
-*/
 #if COMPATIBILITY_LEVEL <= 1
 
             case Setting_ParkingEnable:
@@ -691,6 +686,10 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
 
             case Setting_ParkingFastRate:
                 settings.parking.rate = value;
+                break;
+
+            case Setting_PWMOffValue:
+                settings.spindle.pwm_off_value = value;
                 break;
 
             case Setting_PWMMinValue:

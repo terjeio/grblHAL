@@ -31,29 +31,29 @@
 
 typedef enum
 {
-	Upload_Parsing = 0,
-	Upload_GetPath,
-	Upload_GetSize,
-	Upload_Write,
-	Upload_Failed,
-	Upload_Complete
+    Upload_Parsing = 0,
+    Upload_GetPath,
+    Upload_GetSize,
+    Upload_Write,
+    Upload_Failed,
+    Upload_Complete
 } upload_state_t;
 
 typedef union {
-	FILE *handle;
+    FILE *handle;
     FIL *fatfs_handle;
 } file_handle_t;
 
 typedef struct {
-	upload_state_t state;
-	bool to_fatfs;
-	char header_name[100];
-	char header_value[100];
-	char filename[100];
-	char path[100];
-	char size_str[15];
-	file_handle_t file;
-	httpd_req_t *req;
+    upload_state_t state;
+    bool to_fatfs;
+    char header_name[100];
+    char header_value[100];
+    char filename[100];
+    char path[100];
+    char size_str[15];
+    file_handle_t file;
+    httpd_req_t *req;
     FIL fatfs_fd;
     size_t size;
     size_t uploaded;

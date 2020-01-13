@@ -206,6 +206,9 @@
 #define MIN_SPINDLE_RPM_OVERRIDE           10 // Percent of programmed spindle speed (1-100). Usually 10%.
 #define SPINDLE_OVERRIDE_COARSE_INCREMENT  10 // (1-99). Usually 10%.
 #define SPINDLE_OVERRIDE_FINE_INCREMENT     1 // (1-99). Usually 1%.
+// If MCU has a FPU (Floating Point Unit/Coprocessor) that cannot be used in interrupt handlers
+// remove comment from the linebelow and implement the required HAL handlers in the driver (see hal.h).
+//#define SPINDLE_PWM_DIRECT
 
 // Some status report data isn't necessary for realtime, only intermittently, because the values don't
 // change often. The following macros configures how many times a status report needs to be called before
@@ -390,7 +393,7 @@
 
 #if COMPATIBILITY_LEVEL == 0
 // Number of tools in ATC tool table, comment out to disable
-//#define N_TOOLS 8
+#define N_TOOLS 8
 #endif
 
 // Enable EEPROM emulation/buffering in RAM (allocated from heap)

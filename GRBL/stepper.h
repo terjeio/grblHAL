@@ -2,7 +2,7 @@
   stepper.h - stepper motor driver: executes motion plans of planner.c using the stepper motors
   Part of Grbl
 
-  Copyright (c) 2019 Terje Io
+  Copyright (c) 2019-2020 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -61,8 +61,12 @@ typedef struct {
     uint32_t cycles_per_tick;       // Step distance traveled per ISR tick, aka step rate.
     float target_position;          // Target position of segment relative to block start, used by spindle sync code
     uint_fast16_t n_step;           // Number of step events to be executed for this segment
-    float spindle_rpm;              //
-    bool update_rpm;                // Tracks motions that require dynamic RPM adjustment
+#ifdef SPINDLE_PWM_DIRECT
+    uint_fast16_t spindle_pwm;		// Spindle PWM to be set at the start of segment execution
+#else
+    float spindle_rpm;              // Spindle RPM to be set at the start of the segment execution
+#endif
+    bool update_rpm;                // True if set spindle speed at the start of the segment execution
     bool spindle_sync;              // True if block is spindle synchronized
     bool cruising;                  // True when in cruising part of profile, only set for spindle synced moves
     uint_fast8_t amass_level;       // Indicates AMASS level for the ISR to execute this segment
@@ -107,6 +111,9 @@ void st_go_idle();
 
 // Reset the stepper subsystem variables
 void st_reset();
+
+// Called by spindle_set_state() to inform about RPM changes.
+void st_rpm_changed(float rpm);
 
 // Changes the run state of the step segment buffer to execute the special parking motion.
 void st_parking_setup_buffer();

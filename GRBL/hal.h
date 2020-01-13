@@ -3,7 +3,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2016-2019 Terje Io
+  Copyright (c) 2016-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -70,6 +70,7 @@ typedef union {
 
 typedef void (*stream_write_ptr)(const char *s);
 typedef axes_signals_t (*limits_get_state_ptr)(void);
+typedef void (*driver_reset_ptr)(void);
 
 /* TODO: add to HAL so that a different formatting (xml, json etc) of reports may be implemented by driver? */
 typedef struct {
@@ -130,7 +131,12 @@ typedef struct HAL {
 
     void (*spindle_set_state)(spindle_state_t state, float rpm);
     spindle_state_t (*spindle_get_state)(void);
+#ifdef SPINDLE_PWM_DIRECT
+    uint_fast16_t (*spindle_get_pwm)(float rpm);
+    void (*spindle_update_pwm)(uint_fast16_t pwm);
+#else
     void (*spindle_update_rpm)(float rpm);
+#endif
     control_signals_t (*system_control_get_state)(void);
 
     void (*stepper_wake_up)(void);
@@ -166,7 +172,7 @@ typedef struct HAL {
     status_code_t (*tool_change)(parser_state_t *gc_state);
     void (*show_message)(const char *msg);
     void (*report_options)(void);
-    void (*driver_reset)(void);
+    driver_reset_ptr driver_reset;
     status_code_t (*driver_setting)(setting_type_t setting, float value, char *svalue);
     void (*driver_settings_restore)(void);
     void (*driver_settings_report)(setting_type_t setting_type);

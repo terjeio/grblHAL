@@ -3,9 +3,9 @@
 
   Driver code for ESP32
 
-  Part of Grbl
+  Part of GrblHAL
 
-  Copyright (c) 2018-2019 Terje Io
+  Copyright (c) 2018-2020 Terje Io
 
   Some parts
    Copyright (c) 2011-2015 Sungeun K. Jeon
@@ -27,9 +27,6 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-
-#include "GRBL/grbl.h"
-#include "GRBL/report.h"
 
 #include "driver.h"
 #include "esp32-hal-uart.h"
@@ -134,14 +131,14 @@ static network_services_t services = {0};
 void tcpStreamWriteS (const char *data)
 {
 #if TELNET_ENABLE
-	if(services.telnet)
-		TCPStreamWriteS(data);
+    if(services.telnet)
+        TCPStreamWriteS(data);
 #endif
 #if WEBSOCKET_ENABLE
-	if(services.websocket)
-		WsStreamWriteS(data);
+    if(services.websocket)
+        WsStreamWriteS(data);
 #endif
-	uartWriteS(data);
+    uartWriteS(data);
 }
 
 #if TELNET_ENABLE
@@ -181,8 +178,8 @@ const io_stream_t websocket_stream = {
 #if BLUETOOTH_ENABLE
 void btStreamWriteS (const char *data)
 {
-	BTStreamWriteS(data);
-	uartWriteS(data);
+    BTStreamWriteS(data);
+    uartWriteS(data);
 }
 
 const io_stream_t bluetooth_stream = {
@@ -213,7 +210,7 @@ const io_stream_t bluetooth_stream = {
 #define INPUT_LIMIT_X       5
 #define INPUT_LIMIT_Y       6
 #define INPUT_LIMIT_Z       7
-#define INPUT_KEYPAD  		8
+#define INPUT_KEYPAD        8
 
 state_signal_t inputpin[] = {
     { .pin = RESET_PIN, .group = INPUT_GROUP_CONTROL },
@@ -230,6 +227,7 @@ state_signal_t inputpin[] = {
 };
 
 static volatile uint32_t ms_count = 1; // NOTE: initial value 1 is for "resetting" systick timer
+static uint32_t pwm_max_value;
 static bool pwmEnabled = false, IOInitDone = false;
 static spindle_pwm_t spindle_pwm;
 
@@ -240,19 +238,19 @@ static uint8_t probe_invert;
 static ioexpand_t iopins = {0};
 #endif
 
-static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value);
+static void spindle_set_speed (uint_fast16_t pwm_value);
 
 static portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 
 static ledc_timer_config_t ledTimerConfig = {
-	.speed_mode = LEDC_HIGH_SPEED_MODE,
-	.duty_resolution = LEDC_TIMER_10_BIT,
-	.timer_num = LEDC_TIMER_0,
-	.freq_hz = (uint32_t)DEFAULT_SPINDLE_PWM_FREQ
+    .speed_mode = LEDC_HIGH_SPEED_MODE,
+    .duty_resolution = LEDC_TIMER_10_BIT,
+    .timer_num = LEDC_TIMER_0,
+    .freq_hz = (uint32_t)DEFAULT_SPINDLE_PWM_FREQ
 };
 
 static ledc_channel_config_t ledConfig = {
-	.gpio_num = SPINDLEPWMPIN,
+    .gpio_num = SPINDLEPWMPIN,
     .speed_mode = LEDC_HIGH_SPEED_MODE,
     .channel = LEDC_CHANNEL_0,
     .intr_type = LEDC_INTR_DISABLE,
@@ -269,7 +267,7 @@ static TaskHandle_t xStepperTask = NULL;
 
 void selectStream (stream_type_t stream)
 {
-	static stream_type_t active_stream = StreamType_Serial;
+    static stream_type_t active_stream = StreamType_Serial;
 
     switch(stream) {
 
@@ -284,7 +282,7 @@ void selectStream (stream_type_t stream)
         case StreamType_Telnet:
             memcpy(&hal.stream, &telnet_stream, sizeof(io_stream_t));
             services.telnet = On;
-        	hal.stream.write_all("[MSG:TELNET STREAM ACTIVE]\r\n");
+            hal.stream.write_all("[MSG:TELNET STREAM ACTIVE]\r\n");
             break;
 #endif
 
@@ -292,7 +290,7 @@ void selectStream (stream_type_t stream)
         case StreamType_WebSocket:
             memcpy(&hal.stream, &websocket_stream, sizeof(io_stream_t));
             services.websocket = On;
-        	hal.stream.write_all("[MSG:WEBSOCKET STREAM ACTIVE]\r\n");
+            hal.stream.write_all("[MSG:WEBSOCKET STREAM ACTIVE]\r\n");
             break;
 #endif
 
@@ -302,11 +300,11 @@ void selectStream (stream_type_t stream)
             services.mask = 0;
 #endif
             if(active_stream != StreamType_Serial)
-            	hal.stream.write_all("[MSG:SERIAL STREAM ACTIVE]\r\n");
+                hal.stream.write_all("[MSG:SERIAL STREAM ACTIVE]\r\n");
             break;
 
         default:
-        	break;
+            break;
     }
 
     active_stream = stream;
@@ -314,18 +312,18 @@ void selectStream (stream_type_t stream)
 
 void initRMT (settings_t *settings)
 {
-	rmt_item32_t rmtItem[2];
+    rmt_item32_t rmtItem[2];
 
     rmt_config_t rmtConfig = {
         .rmt_mode = RMT_MODE_TX,
         .clk_div = 20,
         .mem_block_num = 2,
         .tx_config.loop_en = false,
-		.tx_config.carrier_en = false,
-		.tx_config.carrier_freq_hz = 0,
-		.tx_config.carrier_duty_percent = 50,
-		.tx_config.carrier_level = 0,
-		.tx_config.idle_output_en = true
+        .tx_config.carrier_en = false,
+        .tx_config.carrier_freq_hz = 0,
+        .tx_config.carrier_duty_percent = 50,
+        .tx_config.carrier_level = 0,
+        .tx_config.idle_output_en = true
     };
 
     rmtItem[0].duration0 = settings->steppers.pulse_delay_microseconds ? 4 * settings->steppers.pulse_delay_microseconds : 1;
@@ -336,24 +334,24 @@ void initRMT (settings_t *settings)
     uint32_t channel;
     for(channel = 0; channel < N_AXIS; channel++) {
 
-    	rmtConfig.channel = channel;
+        rmtConfig.channel = channel;
 
-    	switch(channel) {
-			case 0:
-				rmtConfig.tx_config.idle_level = settings->steppers.step_invert.x;
-				rmtConfig.gpio_num = X_STEP_PIN;
-				break;
-			case 1:
-				rmtConfig.tx_config.idle_level = settings->steppers.step_invert.y;
-				rmtConfig.gpio_num = Y_STEP_PIN;
-				break;
-			case 2:
-				rmtConfig.tx_config.idle_level = settings->steppers.step_invert.z;
-				rmtConfig.gpio_num = Z_STEP_PIN;
-				break;
-    	}
-    	rmtItem[0].level0 = rmtConfig.tx_config.idle_level;
-    	rmtItem[0].level1 = !rmtConfig.tx_config.idle_level;
+        switch(channel) {
+            case 0:
+                rmtConfig.tx_config.idle_level = settings->steppers.step_invert.x;
+                rmtConfig.gpio_num = X_STEP_PIN;
+                break;
+            case 1:
+                rmtConfig.tx_config.idle_level = settings->steppers.step_invert.y;
+                rmtConfig.gpio_num = Y_STEP_PIN;
+                break;
+            case 2:
+                rmtConfig.tx_config.idle_level = settings->steppers.step_invert.z;
+                rmtConfig.gpio_num = Z_STEP_PIN;
+                break;
+        }
+        rmtItem[0].level0 = rmtConfig.tx_config.idle_level;
+        rmtItem[0].level1 = !rmtConfig.tx_config.idle_level;
         rmt_config(&rmtConfig);
         rmt_fill_tx_items(rmtConfig.channel, &rmtItem[0], rmtConfig.mem_block_num, 0);
     }
@@ -403,8 +401,8 @@ static void debug_out (bool enable)
 inline IRAM_ATTR static void set_step_outputs (axes_signals_t step_outbits)
 {
 #ifdef xDEBUGOUT
-	if(step_outbits.value)
-		hal.debug_out(true);
+    if(step_outbits.value)
+        hal.debug_out(true);
 #endif
     if(step_outbits.x) {
         RMT.conf_ch[0].conf1.mem_rd_rst = 1;
@@ -446,12 +444,12 @@ static void stepperEnable (axes_signals_t enable)
     axes_signals_t tmc_enable = trinamic_stepper_enable(enable);
  #if !CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
   #if IOEXPAND_ENABLE
-	if(!tmc_enable.x)
-		iopins.stepper_enable_x = enable.x;
+    if(!tmc_enable.x)
+        iopins.stepper_enable_x = enable.x;
     if(!tmc_enable.y)
         iopins.stepper_enable_y = enable.y;
-	if(!tmc_enable.z)
-		iopins.stepper_enable_z = enable.z;
+    if(!tmc_enable.z)
+        iopins.stepper_enable_z = enable.z;
   #endif
  #endif
 #elif IOEXPAND_ENABLE // TODO: read from expander?
@@ -474,18 +472,18 @@ static void stepperWakeUp (void)
     stepperEnable((axes_signals_t){AXES_BITMASK});
 
     timer_set_counter_value(STEP_TIMER_GROUP, STEP_TIMER_INDEX, 0x00000000ULL);
-//	timer_set_alarm_value(STEP_TIMER_GROUP, STEP_TIMER_INDEX, 5000ULL);
+//  timer_set_alarm_value(STEP_TIMER_GROUP, STEP_TIMER_INDEX, 5000ULL);
     TIMERG0.hw_timer[STEP_TIMER_INDEX].alarm_high = 0;
     TIMERG0.hw_timer[STEP_TIMER_INDEX].alarm_low = 5000UL;
 
-  	timer_start(STEP_TIMER_GROUP, STEP_TIMER_INDEX);
-  	TIMERG0.hw_timer[STEP_TIMER_INDEX].config.alarm_en = TIMER_ALARM_EN;
+    timer_start(STEP_TIMER_GROUP, STEP_TIMER_INDEX);
+    TIMERG0.hw_timer[STEP_TIMER_INDEX].config.alarm_en = TIMER_ALARM_EN;
 }
 
 // Disables stepper driver interrupts
 IRAM_ATTR static void stepperGoIdle (bool clear_signals)
 {
-	timer_pause(STEP_TIMER_GROUP, STEP_TIMER_INDEX);
+    timer_pause(STEP_TIMER_GROUP, STEP_TIMER_INDEX);
     if(clear_signals) {
         set_step_outputs((axes_signals_t){0});
         set_dir_outputs((axes_signals_t){0});
@@ -496,14 +494,14 @@ IRAM_ATTR static void stepperGoIdle (bool clear_signals)
 IRAM_ATTR static void stepperCyclesPerTick (uint32_t cycles_per_tick)
 {
 #ifdef xDEBUGOUT
-	if(cycles_per_tick > 1500000UL)
-	    hal.debug_out(true);
+    if(cycles_per_tick > 1500000UL)
+        hal.debug_out(true);
 #endif
 // Limit min steps/s to about 2 (hal.f_step_timer @ 20MHz)
 #ifdef ADAPTIVE_MULTI_AXIS_STEP_SMOOTHING
-	TIMERG0.hw_timer[STEP_TIMER_INDEX].alarm_low = cycles_per_tick < (1UL << 18) ? cycles_per_tick : (1UL << 18) - 1UL;
+    TIMERG0.hw_timer[STEP_TIMER_INDEX].alarm_low = cycles_per_tick < (1UL << 18) ? cycles_per_tick : (1UL << 18) - 1UL;
 #else
-	TIMERG0.hw_timer[STEP_TIMER_INDEX].alarm_low = cycles_per_tick < (1UL << 23) ? cycles_per_tick : (1UL << 23) - 1UL;
+    TIMERG0.hw_timer[STEP_TIMER_INDEX].alarm_low = cycles_per_tick < (1UL << 23) ? cycles_per_tick : (1UL << 23) - 1UL;
 #endif
 }
 
@@ -516,9 +514,9 @@ IRAM_ATTR static void stepperPulseStart (stepper_t *stepper)
     }
 
     if(stepper->step_outbits.value) {
-		set_step_outputs(stepper->step_outbits);
+        set_step_outputs(stepper->step_outbits);
 #ifdef DEBUGOUT
-		hal.debug_out(false);
+        hal.debug_out(false);
 #endif
     }
 }
@@ -578,8 +576,8 @@ static void probeConfigure(bool is_probe_away)
   if(is_probe_away)
       probe_invert ^= 1;
 #if PROBE_ISR
-	gpio_set_intr_type(inputpin[INPUT_PROBE].pin, probe_invert ? GPIO_INTR_NEGEDGE : GPIO_INTR_POSEDGE);
-	inputpin[INPUT_PROBE].active = false;
+    gpio_set_intr_type(inputpin[INPUT_PROBE].pin, probe_invert ? GPIO_INTR_NEGEDGE : GPIO_INTR_POSEDGE);
+    inputpin[INPUT_PROBE].active = false;
 #endif
 }
 
@@ -587,8 +585,8 @@ static void probeConfigure(bool is_probe_away)
 bool probeGetState (void)
 {
 #if PROBE_ISR
-	// TODO: verify!
-	inputpin[INPUT_PROBE].active = inputpin[INPUT_PROBE].active || ((uint8_t)gpio_get_level(PROBE_PIN) ^ probe_invert);
+    // TODO: verify!
+    inputpin[INPUT_PROBE].active = inputpin[INPUT_PROBE].active || ((uint8_t)gpio_get_level(PROBE_PIN) ^ probe_invert);
     return inputpin[INPUT_PROBE].active;
 #else
     return (uint8_t)gpio_get_level(PROBE_PIN) ^ probe_invert;
@@ -599,8 +597,8 @@ bool probeGetState (void)
 inline static void spindle_off ()
 {
 #if IOEXPAND_ENABLE
-	iopins.spindle_on = settings.spindle.invert.on ? On : Off;
-	ioexpand_out(iopins);
+    iopins.spindle_on = settings.spindle.invert.on ? On : Off;
+    ioexpand_out(iopins);
 #else
     gpio_set_level(SPINDLE_ENABLE_PIN, settings.spindle.invert.on ? 1 : 0);
 #endif
@@ -609,8 +607,8 @@ inline static void spindle_off ()
 inline static void spindle_on ()
 {
 #if IOEXPAND_ENABLE
-	iopins.spindle_on = settings.spindle.invert.on ? Off : On;
-	ioexpand_out(iopins);
+    iopins.spindle_on = settings.spindle.invert.on ? Off : On;
+    ioexpand_out(iopins);
 #else
    gpio_set_level(SPINDLE_ENABLE_PIN, settings.spindle.invert.on ? 0 : 1);
 #endif
@@ -618,14 +616,14 @@ inline static void spindle_on ()
 
 inline static void spindle_dir (bool ccw)
 {
-	if(hal.driver_cap.spindle_dir) {
+    if(hal.driver_cap.spindle_dir) {
 #if IOEXPAND_ENABLE
-		iopins.spindle_dir = (ccw ^ settings.spindle.invert.ccw) ? On : Off;
-		ioexpand_out(iopins);
+        iopins.spindle_dir = (ccw ^ settings.spindle.invert.ccw) ? On : Off;
+        ioexpand_out(iopins);
 #else
-		gpio_set_level(SPINDLE_DIRECTION_PIN, (ccw ^ settings.spindle.invert.ccw) ? 1 : 0);
+        gpio_set_level(SPINDLE_DIRECTION_PIN, (ccw ^ settings.spindle.invert.ccw) ? 1 : 0);
 #endif
-	}
+    }
 }
 
 // Start or stop spindle
@@ -642,7 +640,7 @@ static void spindleSetState (spindle_state_t state, float rpm)
 // Variable spindle control functions
 
 // Sets spindle speed
-static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
+IRAM_ATTR static void spindle_set_speed (uint_fast16_t pwm_value)
 {
     if (pwm_value == spindle_pwm.off_value) {
         if(settings.spindle.disable_with_zero_speed)
@@ -651,30 +649,44 @@ static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
         pwm_ramp.pwm_target = pwm_value;
         ledc_set_fade_step_and_start(ledConfig.speed_mode, ledConfig.channel, pwm_ramp.pwm_target, 1, 4, LEDC_FADE_NO_WAIT);
 #else
-        ledc_stop(ledConfig.speed_mode, ledConfig.channel, 0);
+        if(spindle_pwm.off_value == settings.spindle.invert.pwm ? pwm_max_value : 0)
+            ledc_stop(ledConfig.speed_mode, ledConfig.channel, settings.spindle.invert.pwm ? 1 : 0);
+        else {
+            ledc_set_duty(ledConfig.speed_mode, ledConfig.channel, spindle_pwm.off_value);
+            ledc_update_duty(ledConfig.speed_mode, ledConfig.channel);
+        }
 #endif
         pwmEnabled = false;
      } else {
 #if PWM_RAMPED
-    	 pwm_ramp.pwm_target = pwm_value;
-    	 ledc_set_fade_step_and_start(ledConfig.speed_mode, ledConfig.channel, pwm_ramp.pwm_target, 1, 4, LEDC_FADE_NO_WAIT);
+         pwm_ramp.pwm_target = pwm_value;
+         ledc_set_fade_step_and_start(ledConfig.speed_mode, ledConfig.channel, pwm_ramp.pwm_target, 1, 4, LEDC_FADE_NO_WAIT);
 #else
-    	 ledc_set_duty(ledConfig.speed_mode, ledConfig.channel, pwm_value);
-    	 ledc_update_duty(ledConfig.speed_mode, ledConfig.channel);
+         ledc_set_duty(ledConfig.speed_mode, ledConfig.channel, settings.spindle.invert.pwm ? pwm_max_value - pwm_value : pwm_value);
+         ledc_update_duty(ledConfig.speed_mode, ledConfig.channel);
 #endif
         if(!pwmEnabled) {
             spindle_on();
             pwmEnabled = true;
         }
     }
-
-    return pwm_value;
 }
 
-static void spindleUpdateRPM (float rpm)
+#ifdef SPINDLE_PWM_DIRECT
+
+static uint_fast16_t spindleGetPWM (float rpm)
+{
+    return spindle_compute_pwm_value(&spindle_pwm, rpm, false);
+}
+
+#else // Only enable if (when?) ESP IDF supports FPU access in ISR !!
+
+IRAM_ATTR static void spindleUpdateRPM (float rpm)
 {
     spindle_set_speed(spindle_compute_pwm_value(&spindle_pwm, rpm, false));
 }
+
+#endif
 
 // Start or stop spindle, variable version
 static void spindleSetStateVariable (spindle_state_t state, float rpm)
@@ -694,8 +706,8 @@ static spindle_state_t spindleGetState (void)
     spindle_state_t state = {0};
 
 #if IOEXPAND_ENABLE // TODO: read from expander?
-	state.on = iopins.spindle_on;
-	state.ccw = hal.driver_cap.spindle_dir && iopins.spindle_dir;
+    state.on = iopins.spindle_on;
+    state.ccw = hal.driver_cap.spindle_dir && iopins.spindle_dir;
 #else
     state.on = gpio_get_level(SPINDLE_ENABLE_PIN) != 0;
     state.ccw = hal.driver_cap.spindle_dir && gpio_get_level(SPINDLE_DIRECTION_PIN) != 0;
@@ -716,9 +728,9 @@ static void coolantSetState (coolant_state_t mode)
 {
     mode.value ^= settings.coolant_invert.mask;
 #if IOEXPAND_ENABLE
-	iopins.flood_on = mode.flood;
-	iopins.mist_on = mode.mist;
-	ioexpand_out(iopins);
+    iopins.flood_on = mode.flood;
+    iopins.mist_on = mode.mist;
+    ioexpand_out(iopins);
 #else
     gpio_set_level(COOLANT_FLOOD_PIN, mode.flood ? 1 : 0);
     gpio_set_level(COOLANT_MIST_PIN, mode.mist ? 1 : 0);
@@ -731,8 +743,8 @@ static coolant_state_t coolantGetState (void)
     coolant_state_t state = {0};
 
 #if IOEXPAND_ENABLE // TODO: read from expander?
-	state.flood = iopins.flood_on;
-	state.mist = iopins.mist_on;
+    state.flood = iopins.flood_on;
+    state.mist = iopins.mist_on;
 #else
     state.flood = gpio_get_level(COOLANT_FLOOD_PIN);
     state.mist  = gpio_get_level(COOLANT_MIST_PIN);
@@ -753,14 +765,14 @@ static void showMessage (const char *msg)
 // Helper functions for setting/clearing/inverting individual bits atomically (uninterruptable)
 IRAM_ATTR static void bitsSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t bits)
 {
-	portENTER_CRITICAL(&mux);
+    portENTER_CRITICAL(&mux);
     *ptr |= bits;
     portEXIT_CRITICAL(&mux);
 }
 
 IRAM_ATTR static uint_fast16_t bitsClearAtomic (volatile uint_fast16_t *ptr, uint_fast16_t bits)
 {
-	portENTER_CRITICAL(&mux);
+    portENTER_CRITICAL(&mux);
     uint_fast16_t prev = *ptr;
     *ptr &= ~bits;
     portEXIT_CRITICAL(&mux);
@@ -769,7 +781,7 @@ IRAM_ATTR static uint_fast16_t bitsClearAtomic (volatile uint_fast16_t *ptr, uin
 
 IRAM_ATTR static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t value)
 {
-	portENTER_CRITICAL(&mux);
+    portENTER_CRITICAL(&mux);
     uint_fast16_t prev = *ptr;
     *ptr = value;
     portEXIT_CRITICAL(&mux);
@@ -778,66 +790,85 @@ IRAM_ATTR static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint
 
 void debounceTimerCallback (TimerHandle_t xTimer)
 {
-	  uint8_t grp = 0;
+      uint8_t grp = 0;
 
-	  uint32_t i = sizeof(inputpin) / sizeof(state_signal_t);
-	  do {
-	      i--;
-	      if(inputpin[i].debounce && inputpin[i].active) {
-	    	  inputpin[i].active = false; //gpio_get_level(inputpin[i].pin) == (inputpin[i].invert ? 0 : 1);
-	    	  grp |= inputpin[i].group;
-	      }
-	  } while(i);
+      uint32_t i = sizeof(inputpin) / sizeof(state_signal_t);
+      do {
+          i--;
+          if(inputpin[i].debounce && inputpin[i].active) {
+              inputpin[i].active = false; //gpio_get_level(inputpin[i].pin) == (inputpin[i].invert ? 0 : 1);
+              grp |= inputpin[i].group;
+          }
+      } while(i);
 
-//	  printf("Debounce %d %d\n", grp, systemGetState().value);
+//    printf("Debounce %d %d\n", grp, systemGetState().value);
 
-	  if(grp & INPUT_GROUP_LIMIT)
-		    hal.limit_interrupt_callback(limitsGetState());
+      if(grp & INPUT_GROUP_LIMIT)
+            hal.limit_interrupt_callback(limitsGetState());
 
-	  if(grp & INPUT_GROUP_CONTROL)
-		  hal.control_interrupt_callback(systemGetState());
+      if(grp & INPUT_GROUP_CONTROL)
+          hal.control_interrupt_callback(systemGetState());
 }
-
 
 
 // Configures perhipherals when settings are initialized or changed
 static void settings_changed (settings_t *settings)
 {
     if((hal.driver_cap.variable_spindle = settings->spindle.rpm_max > settings->spindle.rpm_min)) {
-		uint32_t pwm_max_value = (1UL << ledTimerConfig.duty_resolution) - 1;
 
-		spindle_pwm.period = (uint32_t)(80000000UL / settings->spindle.pwm_freq);
-		spindle_pwm.off_value = settings->spindle.invert.pwm ? spindle_pwm.period : 0;
-		spindle_pwm.min_value = (uint32_t)(pwm_max_value * settings->spindle.pwm_min_value / 100.0f);
-		spindle_pwm.max_value = (uint32_t)(pwm_max_value * settings->spindle.pwm_max_value / 100.0f);
-		spindle_pwm.pwm_gradient = (float)(spindle_pwm.max_value - spindle_pwm.min_value) / (settings->spindle.rpm_max - settings->spindle.rpm_min);
+        if(ledTimerConfig.freq_hz != (uint32_t)settings->spindle.pwm_freq) {
+            ledTimerConfig.freq_hz = (uint32_t)settings->spindle.pwm_freq;
+            if(ledTimerConfig.freq_hz <= 100) {
+                if(ledTimerConfig.duty_resolution != LEDC_TIMER_16_BIT) {
+                    ledTimerConfig.duty_resolution = LEDC_TIMER_16_BIT;
+                    ledc_timer_config(&ledTimerConfig);
+                }
+            } else if(ledTimerConfig.duty_resolution != LEDC_TIMER_10_BIT) {
+                ledTimerConfig.duty_resolution = LEDC_TIMER_10_BIT;
+                ledc_timer_config(&ledTimerConfig);
+            }
+        }
 
-		ledc_set_freq(ledTimerConfig.speed_mode, ledTimerConfig.timer_num, (uint32_t)settings->spindle.pwm_freq);
+        pwm_max_value = (1UL << ledTimerConfig.duty_resolution) - 1;
+
+        spindle_pwm.period = (uint32_t)(80000000UL / settings->spindle.pwm_freq);
+        if(settings->spindle.pwm_off_value == 0.0f)
+            spindle_pwm.off_value = settings->spindle.invert.pwm ? pwm_max_value : 0;
+        else {
+            spindle_pwm.off_value = (uint32_t)(pwm_max_value * settings->spindle.pwm_off_value / 100.0f);
+            if(settings->spindle.invert.pwm)
+                spindle_pwm.off_value = pwm_max_value - spindle_pwm.off_value;
+        }
+        spindle_pwm.min_value = (uint32_t)(pwm_max_value * settings->spindle.pwm_min_value / 100.0f);
+        spindle_pwm.max_value = (uint32_t)(pwm_max_value * settings->spindle.pwm_max_value / 100.0f);
+        spindle_pwm.pwm_gradient = (float)(spindle_pwm.max_value - spindle_pwm.min_value) / (settings->spindle.rpm_max - settings->spindle.rpm_min);
+
+        ledc_set_freq(ledTimerConfig.speed_mode, ledTimerConfig.timer_num, ledTimerConfig.freq_hz);
     }
 
     if(IOInitDone) {
 
-	  #if TRINAMIC_ENABLE
-	    trinamic_configure();
-	  #endif
+      #if TRINAMIC_ENABLE
+        trinamic_configure();
+      #endif
 
-	    hal.spindle_set_state = hal.driver_cap.variable_spindle ? spindleSetStateVariable : spindleSetState;
+        hal.spindle_set_state = hal.driver_cap.variable_spindle ? spindleSetStateVariable : spindleSetState;
 
 #if WIFI_ENABLE
 
-		static bool wifi_ok = false;
+        static bool wifi_ok = false;
 
-		if(!wifi_ok)
-			wifi_ok = wifi_init(&driver_settings.wifi);
+        if(!wifi_ok)
+            wifi_ok = wifi_init(&driver_settings.wifi);
 
-		// TODO: start/stop services...
+        // TODO: start/stop services...
 #endif
 
 #if BLUETOOTH_ENABLE
-		static bool bluetooth_ok = false;
-		if(!bluetooth_ok && driver_settings.bluetooth.device_name[0] != '\0')
-			bluetooth_ok = bluetooth_init(&driver_settings.bluetooth);
-		// else report error?
+        static bool bluetooth_ok = false;
+        if(!bluetooth_ok && driver_settings.bluetooth.device_name[0] != '\0')
+            bluetooth_ok = bluetooth_init(&driver_settings.bluetooth);
+        // else report error?
 #endif
 
         stepperEnable(settings->steppers.deenergize);
@@ -867,7 +898,7 @@ static void settings_changed (settings_t *settings)
 
             config.intr_type = GPIO_INTR_DISABLE;
 
-        	switch(--i) {
+            switch(--i) {
 
                 case INPUT_RESET:
                     pullup = !settings->control_disable_pullup.reset;
@@ -922,36 +953,36 @@ static void settings_changed (settings_t *settings)
 #endif
             }
 
-        	if(inputpin[i].pin != 0xFF) {
-				pullup = pullup && inputpin[i].pin < 34;
+            if(inputpin[i].pin != 0xFF) {
+                pullup = pullup && inputpin[i].pin < 34;
 
-				gpio_intr_disable(inputpin[i].pin);
+                gpio_intr_disable(inputpin[i].pin);
 
-				config.pin_bit_mask = 1ULL << inputpin[i].pin;
-				config.mode = GPIO_MODE_INPUT;
-				config.pull_up_en = pullup ? GPIO_PULLUP_ENABLE : GPIO_PULLUP_DISABLE;
-				config.pull_down_en = pullup ? GPIO_PULLDOWN_DISABLE : GPIO_PULLDOWN_ENABLE;
+                config.pin_bit_mask = 1ULL << inputpin[i].pin;
+                config.mode = GPIO_MODE_INPUT;
+                config.pull_up_en = pullup ? GPIO_PULLUP_ENABLE : GPIO_PULLUP_DISABLE;
+                config.pull_down_en = pullup ? GPIO_PULLDOWN_DISABLE : GPIO_PULLDOWN_ENABLE;
 
-				inputpin[i].offset = config.pin_bit_mask > (1ULL << 31) ? 1 : 0;
-				inputpin[i].mask = inputpin[i].offset == 0 ? (uint32_t)config.pin_bit_mask : (uint32_t)(config.pin_bit_mask >> 32);
+                inputpin[i].offset = config.pin_bit_mask > (1ULL << 31) ? 1 : 0;
+                inputpin[i].mask = inputpin[i].offset == 0 ? (uint32_t)config.pin_bit_mask : (uint32_t)(config.pin_bit_mask >> 32);
 
-	//            printf("IN %d - %d - %d : %x\n", inputpin[i].pin,  inputpin[i].offset, inputpin[i].mask, inputpin[i].invert);
+    //            printf("IN %d - %d - %d : %x\n", inputpin[i].pin,  inputpin[i].offset, inputpin[i].mask, inputpin[i].invert);
 
-				gpio_config(&config);
+                gpio_config(&config);
 
-				inputpin[i].active   = gpio_get_level(inputpin[i].pin) == (inputpin[i].invert ? 0 : 1);
-				inputpin[i].debounce = hal.driver_cap.software_debounce && !(inputpin[i].group == INPUT_GROUP_PROBE || inputpin[i].group == INPUT_GROUP_KEYPAD);
-        	}
+                inputpin[i].active   = gpio_get_level(inputpin[i].pin) == (inputpin[i].invert ? 0 : 1);
+                inputpin[i].debounce = hal.driver_cap.software_debounce && !(inputpin[i].group == INPUT_GROUP_PROBE || inputpin[i].group == INPUT_GROUP_KEYPAD);
+            }
         } while(i);
     }
 }
 
 void vStepperTask (void *pvParameters)
 {
-	while(true) {
-		vTaskSuspend(NULL);
-		hal.stepper_interrupt_callback();
-	}
+    while(true) {
+        vTaskSuspend(NULL);
+        hal.stepper_interrupt_callback();
+    }
 }
 
 #if WIFI_ENABLE
@@ -966,39 +997,39 @@ static void reportIP (void)
 // Initializes MCU peripherals for Grbl use
 static bool driver_setup (settings_t *settings)
 {
-	/********************************************************
-	 * Read driver specific setting from persistent storage *
-	 ********************************************************/
-	 
+    /********************************************************
+     * Read driver specific setting from persistent storage *
+     ********************************************************/
+     
 #ifdef DRIVER_SETTINGS
-	if(hal.eeprom.type != EEPROM_None) {
-		if(!hal.eeprom.memcpy_from_with_checksum((uint8_t *)&driver_settings, hal.eeprom.driver_area.address, sizeof(driver_settings)))
-			hal.driver_settings_restore();
-		#if TRINAMIC_ENABLE && CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
-		  driver_settings.trinamic.driver_enable.mask = AXES_BITMASK;
-		#endif
-	}
+    if(hal.eeprom.type != EEPROM_None) {
+        if(!hal.eeprom.memcpy_from_with_checksum((uint8_t *)&driver_settings, hal.eeprom.driver_area.address, sizeof(driver_settings)))
+            hal.driver_settings_restore();
+        #if TRINAMIC_ENABLE && CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
+          driver_settings.trinamic.driver_enable.mask = AXES_BITMASK;
+        #endif
+    }
 #endif
 
     /******************
      *  Stepper init  *
      ******************/
 
-	timer_config_t timerConfig = {
-		.divider     = STEPPER_DRIVER_PRESCALER,
-		.counter_dir = TIMER_COUNT_UP,
-		.counter_en  = TIMER_PAUSE,
-		.alarm_en    = TIMER_ALARM_EN,
-		.intr_type   = TIMER_INTR_LEVEL,
-		.auto_reload = true
-	};
+    timer_config_t timerConfig = {
+        .divider     = STEPPER_DRIVER_PRESCALER,
+        .counter_dir = TIMER_COUNT_UP,
+        .counter_en  = TIMER_PAUSE,
+        .alarm_en    = TIMER_ALARM_EN,
+        .intr_type   = TIMER_INTR_LEVEL,
+        .auto_reload = true
+    };
 
-	timer_init(STEP_TIMER_GROUP, STEP_TIMER_INDEX, &timerConfig);
-	timer_set_counter_value(STEP_TIMER_GROUP, STEP_TIMER_INDEX, 0ULL);
-	timer_isr_register(STEP_TIMER_GROUP, STEP_TIMER_INDEX, stepper_driver_isr, 0, ESP_INTR_FLAG_IRAM, NULL);
-	timer_enable_intr(STEP_TIMER_GROUP, STEP_TIMER_INDEX);
+    timer_init(STEP_TIMER_GROUP, STEP_TIMER_INDEX, &timerConfig);
+    timer_set_counter_value(STEP_TIMER_GROUP, STEP_TIMER_INDEX, 0ULL);
+    timer_isr_register(STEP_TIMER_GROUP, STEP_TIMER_INDEX, stepper_driver_isr, 0, ESP_INTR_FLAG_IRAM, NULL);
+    timer_enable_intr(STEP_TIMER_GROUP, STEP_TIMER_INDEX);
 
-	xTaskCreatePinnedToCore(vStepperTask, "Stepper", configMINIMAL_STACK_SIZE, NULL, configMAX_PRIORITIES, &xStepperTask, 1);
+    xTaskCreatePinnedToCore(vStepperTask, "Stepper", configMINIMAL_STACK_SIZE, NULL, configMAX_PRIORITIES, &xStepperTask, 1);
 
     /********************
      *  Output signals  *
@@ -1010,14 +1041,14 @@ static bool driver_setup (settings_t *settings)
 
     gpio_config_t gpioConfig = {
 #if IOEXPAND_ENABLE
-		.pin_bit_mask = DIRECTION_MASK,
+        .pin_bit_mask = DIRECTION_MASK,
 #else
-		.pin_bit_mask = DIRECTION_MASK|STEPPERS_DISABLE_MASK|SPINDLE_MASK|COOLANT_MASK,
+        .pin_bit_mask = DIRECTION_MASK|STEPPERS_DISABLE_MASK|SPINDLE_MASK|COOLANT_MASK,
 #endif
-		.mode = GPIO_MODE_OUTPUT,
-		.pull_up_en = GPIO_PULLUP_DISABLE,
-		.pull_down_en = GPIO_PULLDOWN_DISABLE,
-		.intr_type = GPIO_INTR_DISABLE
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE
     };
 
     gpio_config(&gpioConfig);
@@ -1042,11 +1073,11 @@ static bool driver_setup (settings_t *settings)
 #if PWM_RAMPED
     ledc_fade_func_install(ESP_INTR_FLAG_IRAM);
 #endif
-	ledConfig.speed_mode = ledTimerConfig.speed_mode;
-	ledc_timer_config(&ledTimerConfig);
-	ledc_channel_config(&ledConfig);
+    ledConfig.speed_mode = ledTimerConfig.speed_mode;
+    ledc_timer_config(&ledTimerConfig);
+    ledc_channel_config(&ledConfig);
 
-	/**/
+    /**/
 
 #if SDCARD_ENABLE
 
@@ -1104,45 +1135,45 @@ static bool driver_setup (settings_t *settings)
 
 static status_code_t driver_setting (uint_fast16_t param, float value, char *svalue)
 {
-	status_code_t status = Status_Unhandled;
+    status_code_t status = Status_Unhandled;
 
 #if BLUETOOTH_ENABLE
-	status = bluetooth_setting(param, value, svalue);
+    status = bluetooth_setting(param, value, svalue);
 #endif
 
 #if WIFI_ENABLE
-	if(status == Status_Unhandled)
-		status = wifi_setting(param, value, svalue);
+    if(status == Status_Unhandled)
+        status = wifi_setting(param, value, svalue);
 #endif
 
 #if KEYPAD_ENABLE
-	if(status == Status_Unhandled)
-		status = keypad_setting(param, value, svalue);
+    if(status == Status_Unhandled)
+        status = keypad_setting(param, value, svalue);
 #endif
 
 #if TRINAMIC_ENABLE
     if(status == Status_Unhandled)
-    	status = trinamic_setting(param, value, svalue);
+        status = trinamic_setting(param, value, svalue);
 #endif
 
-	if(status == Status_OK)
-		hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
+    if(status == Status_OK)
+        hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
 
-	return status;
+    return status;
 }
 
 static void driver_settings_report (setting_type_t setting)
 {
 #if KEYPAD_ENABLE
-	keypad_settings_report(setting);
+    keypad_settings_report(setting);
 #endif
 
 #if BLUETOOTH_ENABLE
-	bluetooth_settings_report();
+    bluetooth_settings_report();
 #endif
 
 #if WIFI_ENABLE
-	wifi_settings_report(setting);
+    wifi_settings_report(setting);
 #endif
 
 #if TRINAMIC_ENABLE
@@ -1152,25 +1183,25 @@ static void driver_settings_report (setting_type_t setting)
 
 static void driver_settings_restore (void)
 {
-	memset(&driver_settings, 0, sizeof(driver_settings_t));
+    memset(&driver_settings, 0, sizeof(driver_settings_t));
 
 #if WIFI_ENABLE
-	wifi_settings_restore();
+    wifi_settings_restore();
 #endif
 
 #if BLUETOOTH_ENABLE
-	bluetooth_settings_restore();
+    bluetooth_settings_restore();
 #endif
 
 #if KEYPAD_ENABLE
-	keypad_settings_restore();
+    keypad_settings_restore();
 #endif
 
 #if TRINAMIC_ENABLE
         trinamic_settings_restore();
 #endif
 
-	hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
+    hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
 }
 
 #endif
@@ -1184,7 +1215,7 @@ bool driver_init (void)
     uartInit();
 
 #ifdef I2C_PORT
-	I2CInit();
+    I2CInit();
 #endif
 
     hal.info = "ESP32";
@@ -1213,7 +1244,12 @@ bool driver_init (void)
 
     hal.spindle_set_state = spindleSetState;
     hal.spindle_get_state = spindleGetState;
-    hal.spindle_update_rpm = spindleUpdateRPM;
+#ifdef SPINDLE_PWM_DIRECT
+    hal.spindle_get_pwm = spindleGetPWM;
+    hal.spindle_update_pwm = spindle_set_speed;
+#else
+    hal.spindle_update_rpm = spindleUpdateRPM; // NOTE: fails in laser mode as ESP32 does not handle FPU access in ISRs!
+#endif
 
     hal.system_control_get_state = systemGetState;
 
@@ -1230,22 +1266,22 @@ bool driver_init (void)
         hal.eeprom.type = EEPROM_Emulated;
         hal.eeprom.memcpy_from_flash = nvsRead;
         hal.eeprom.memcpy_to_flash = nvsWrite;
-	} else
-	    hal.eeprom.type = EEPROM_None;
+    } else
+        hal.eeprom.type = EEPROM_None;
 #endif
 
 #ifdef DRIVER_SETTINGS
 
     if(hal.eeprom.type != EEPROM_None) {
-		hal.eeprom.driver_area.address = GRBL_EEPROM_SIZE;
-		hal.eeprom.driver_area.size = sizeof(driver_settings); // Add assert?
-		hal.eeprom.size = GRBL_EEPROM_SIZE + sizeof(driver_settings) + 1;
+        hal.eeprom.driver_area.address = GRBL_EEPROM_SIZE;
+        hal.eeprom.driver_area.size = sizeof(driver_settings); // Add assert?
+        hal.eeprom.size = GRBL_EEPROM_SIZE + sizeof(driver_settings) + 1;
 
-		hal.driver_setting = driver_setting;
-		hal.driver_settings_restore = driver_settings_restore;
-		hal.driver_settings_report = driver_settings_report;
+        hal.driver_setting = driver_setting;
+        hal.driver_settings_restore = driver_settings_restore;
+        hal.driver_settings_report = driver_settings_report;
   #if TRINAMIC_ENABLE
-		hal.driver_axis_settings_report = trinamic_axis_settings_report;
+        hal.driver_axis_settings_report = trinamic_axis_settings_report;
   #endif
     }
 #endif
@@ -1283,6 +1319,7 @@ bool driver_init (void)
 
     hal.driver_cap.spindle_dir = On;
     hal.driver_cap.variable_spindle = On;
+    hal.driver_cap.spindle_pwm_invert = On;
 #if PWM_RAMPED
     hal.driver_cap.spindle_at_speed = On;
 #endif
@@ -1312,10 +1349,10 @@ bool driver_init (void)
 // Main stepper driver
 IRAM_ATTR static void stepper_driver_isr (void *arg)
 {
-//	const int timer_idx = (int)arg;  // get the timer index
+//  const int timer_idx = (int)arg;  // get the timer index
 
-	TIMERG0.int_clr_timers.t0 = 1;
-  	TIMERG0.hw_timer[STEP_TIMER_INDEX].config.alarm_en = TIMER_ALARM_EN;
+    TIMERG0.int_clr_timers.t0 = 1;
+    TIMERG0.hw_timer[STEP_TIMER_INDEX].config.alarm_en = TIMER_ALARM_EN;
 
     /* Resume the suspended task. */
 
@@ -1329,7 +1366,7 @@ IRAM_ATTR static void stepper_driver_isr (void *arg)
     single call to portYIELD_FROM_ISR() [or portEND_SWITCHING_ISR()]
     using xYieldRequired as the macro parameter: portYIELD_FROM_ISR( xYieldRequired );*/
 
-	hal.stepper_interrupt_callback();
+    hal.stepper_interrupt_callback();
 
 //    if(xTaskResumeFromISR(xStepperTask) == pdTRUE)
 //         portYIELD_FROM_ISR();
@@ -1341,20 +1378,20 @@ IRAM_ATTR static void gpio_isr (void *arg)
   bool debounce = false;
   uint8_t grp = 0;
   uint32_t intr_status[2];
-  intr_status[0] = READ_PERI_REG(GPIO_STATUS_REG);			// get interrupt status for GPIO0-31
-  intr_status[1] = READ_PERI_REG(GPIO_STATUS1_REG);			// get interrupt status for GPIO32-39
+  intr_status[0] = READ_PERI_REG(GPIO_STATUS_REG);          // get interrupt status for GPIO0-31
+  intr_status[1] = READ_PERI_REG(GPIO_STATUS1_REG);         // get interrupt status for GPIO32-39
   SET_PERI_REG_MASK(GPIO_STATUS_W1TC_REG, intr_status[0]);  // clear intr for gpio0-gpio31
-  SET_PERI_REG_MASK(GPIO_STATUS1_W1TC_REG, intr_status[1]);	// clear intr for gpio32-39
+  SET_PERI_REG_MASK(GPIO_STATUS1_W1TC_REG, intr_status[1]); // clear intr for gpio32-39
 
   uint32_t i = sizeof(inputpin) / sizeof(state_signal_t);
   do {
       i--;
-	  if(intr_status[inputpin[i].offset] & inputpin[i].mask) {
-		  inputpin[i].active = true;
-		  if(inputpin[i].debounce)
-			  debounce = true;
-		  else
-			  grp |= inputpin[i].group;
+      if(intr_status[inputpin[i].offset] & inputpin[i].mask) {
+          inputpin[i].active = true;
+          if(inputpin[i].debounce)
+              debounce = true;
+          else
+              grp |= inputpin[i].group;
       }
   } while(i);
 
@@ -1364,13 +1401,13 @@ IRAM_ATTR static void gpio_isr (void *arg)
   }
 
   if(grp & INPUT_GROUP_LIMIT)
-	  hal.limit_interrupt_callback(limitsGetState());
+      hal.limit_interrupt_callback(limitsGetState());
 
   if(grp & INPUT_GROUP_CONTROL)
-	  hal.control_interrupt_callback(systemGetState());
+      hal.control_interrupt_callback(systemGetState());
 
 #if KEYPAD_ENABLE
   if(grp & INPUT_GROUP_KEYPAD)
-	  keypad_keyclick_handler(gpio_get_level(inputpin[INPUT_KEYPAD].pin));
+      keypad_keyclick_handler(gpio_get_level(inputpin[INPUT_KEYPAD].pin));
 #endif
 }

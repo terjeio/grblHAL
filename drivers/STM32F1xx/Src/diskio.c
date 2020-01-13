@@ -42,18 +42,18 @@
 #define FALSE false
 
 static SPI_HandleTypeDef hspi1 = {
-	.Instance = SPI1,
-	.Init.Mode = SPI_MODE_MASTER,
-	.Init.Direction = SPI_DIRECTION_2LINES,
-	.Init.DataSize = SPI_DATASIZE_8BIT,
-	.Init.CLKPolarity = SPI_POLARITY_LOW,
-	.Init.CLKPhase = SPI_PHASE_1EDGE,
-	.Init.NSS = SPI_NSS_SOFT,
-	.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_256,
-	.Init.FirstBit = SPI_FIRSTBIT_MSB,
-	.Init.TIMode = SPI_TIMODE_DISABLE,
-	.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE,
-	.Init.CRCPolynomial = 10
+    .Instance = SPI1,
+    .Init.Mode = SPI_MODE_MASTER,
+    .Init.Direction = SPI_DIRECTION_2LINES,
+    .Init.DataSize = SPI_DATASIZE_8BIT,
+    .Init.CLKPolarity = SPI_POLARITY_LOW,
+    .Init.CLKPhase = SPI_PHASE_1EDGE,
+    .Init.NSS = SPI_NSS_SOFT,
+    .Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_256,
+    .Init.FirstBit = SPI_FIRSTBIT_MSB,
+    .Init.TIMode = SPI_TIMODE_DISABLE,
+    .Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE,
+    .Init.CRCPolynomial = 10
 };
 
 /* asserts the CS pin to the card */
@@ -95,9 +95,9 @@ BYTE PowerFlag = 0;     /* indicates if "power" is on */
 static
 void xmit_spi(BYTE dat)
 {
-	hspi1.Instance->DR = dat;
+    hspi1.Instance->DR = dat;
 
-	while(!__HAL_SPI_GET_FLAG(&hspi1, SPI_FLAG_TXE));
+    while(!__HAL_SPI_GET_FLAG(&hspi1, SPI_FLAG_TXE));
 
     __HAL_SPI_CLEAR_OVRFLAG(&hspi1);
 }
@@ -110,9 +110,9 @@ void xmit_spi(BYTE dat)
 static
 BYTE rcvr_spi (void)
 {
-	hspi1.Instance->DR = 0xFF; // Writing dummy data into Data register
+    hspi1.Instance->DR = 0xFF; // Writing dummy data into Data register
 
-	while(!__HAL_SPI_GET_FLAG(&hspi1, SPI_FLAG_RXNE));
+    while(!__HAL_SPI_GET_FLAG(&hspi1, SPI_FLAG_RXNE));
 
     return (BYTE)hspi1.Instance->DR;
 }
@@ -156,7 +156,7 @@ void send_initial_clock_train(void)
     DESELECT();
 
     while(i--)
-		xmit_spi(0xFF);
+        xmit_spi(0xFF);
 
     i = 0xFF;
 }
@@ -170,25 +170,25 @@ void send_initial_clock_train(void)
 //static
 void power_on (void)
 {
-	static bool init = false;
+    static bool init = false;
 
     /*
      * This doesn't really turn the power on, but initializes the
      * SSI port and pins needed to talk to the card.
      */
 
-	if(!init) {
-		// Disable JTAG. NOTE: a power cycle is required after programming
-		__HAL_AFIO_REMAP_SWJ_DISABLE();
+    if(!init) {
+        // Disable JTAG. NOTE: a power cycle is required after programming
+        __HAL_AFIO_REMAP_SWJ_DISABLE();
 
-		hal.delay_ms(10, NULL);
+        hal.delay_ms(10, NULL);
 
-		HAL_SPI_Init(&hspi1);
-	}
+        HAL_SPI_Init(&hspi1);
+    }
 
-	__HAL_SPI_ENABLE(&hspi1);
+    __HAL_SPI_ENABLE(&hspi1);
 
-	init = true;
+    init = true;
     PowerFlag = 1;
 }
 
@@ -196,15 +196,15 @@ void power_on (void)
 static
 void set_max_speed(void)
 {
-	hspi1.Instance->CR1 &= ~SPI_BAUDRATEPRESCALER_256;
-	hspi1.Instance->CR1 |= SPI_BAUDRATEPRESCALER_32; // should be able to go to 12Mhz...
+    hspi1.Instance->CR1 &= ~SPI_BAUDRATEPRESCALER_256;
+    hspi1.Instance->CR1 |= SPI_BAUDRATEPRESCALER_32; // should be able to go to 12Mhz...
 }
 
 static
 void power_off (void)
 {
     PowerFlag = 0;
-	__HAL_SPI_DISABLE(&hspi1);
+    __HAL_SPI_DISABLE(&hspi1);
 }
 
 static
@@ -379,7 +379,7 @@ DSTATUS disk_initialize (
     BYTE n, ty, ocr[4];
 
 
-//	pinOut(7, 1);
+//  pinOut(7, 1);
     if (drv) return STA_NOINIT;            /* Supports only single drive */
     if (Stat & STA_NODISK) return Stat;    /* No card in the socket */
 
@@ -464,7 +464,7 @@ DRESULT disk_read (
     if (!(CardType & 4)) sector *= 512;    /* Convert to byte address if needed */
 
     SELECT();            /* CS = L */
-//	__HAL_SPI_ENABLE(&hspi1);
+//  __HAL_SPI_ENABLE(&hspi1);
 
     if (count == 1) {    /* Single block read */
         if ((send_cmd(CMD17, sector) == 0)    /* READ_SINGLE_BLOCK */
@@ -483,7 +483,7 @@ DRESULT disk_read (
 
     DESELECT();            /* CS = H */
     rcvr_spi();            /* Idle (Release DO) */
-//	__HAL_SPI_DISABLE(&hspi1);
+//  __HAL_SPI_DISABLE(&hspi1);
 
     return count ? RES_ERROR : RES_OK;
 }
@@ -509,7 +509,7 @@ DRESULT disk_write (
     if (!(CardType & 4)) sector *= 512;    /* Convert to byte address if needed */
 
     SELECT();            /* CS = L */
-//	__HAL_SPI_ENABLE(&hspi1);
+//  __HAL_SPI_ENABLE(&hspi1);
 
     if (count == 1) {    /* Single block write */
         if ((send_cmd(CMD24, sector) == 0)    /* WRITE_BLOCK */
@@ -581,7 +581,7 @@ DRESULT disk_ioctl (
         if (Stat & STA_NOINIT) return RES_NOTRDY;
 
         SELECT();        /* CS = L */
-//    	__HAL_SPI_ENABLE(&hspi1);
+//      __HAL_SPI_ENABLE(&hspi1);
 
         switch (ctrl) {
         case GET_SECTOR_COUNT :    /* Get number of sectors on the disk (DWORD) */
@@ -638,7 +638,7 @@ DRESULT disk_ioctl (
 
         DESELECT();            /* CS = H */
         rcvr_spi();            /* Idle (Release DO) */
-//    	__HAL_SPI_DISABLE(&hspi1);
+//      __HAL_SPI_DISABLE(&hspi1);
 
     }
 

@@ -75,7 +75,7 @@ Please note that this driver is not made using the Arduino IDE/framework, I am u
 
 ---
 
-The standard GRBL/config.h should be modified with these changes at the top:
+The standard grbl/config.h should be modified with these changes at the top:
 
 ```
 Add: #include "esp_attr.h"
@@ -86,9 +86,9 @@ Change: #define ISR_CODE to #define ISR_CODE IRAM_ATTR
 
 index.htm.gz is Copyright (c) 2019 Luc Lebosse - from his [ESP3D-WEBUI](https://github.com/luc-github/ESP3D-webui), I may have pulled a few lines from his backend code too.
 
-dbs_server.c is Copyright (c) 2019 Tony Pottier - from his [ESP32 WiFi Manager](https://github.com/tonyp7/esp32-wifi-manager) 
+dns_server.c is Copyright (c) 2019 Tony Pottier - from his [ESP32 WiFi Manager](https://github.com/tonyp7/esp32-wifi-manager) 
 
 Snippets of code is extracted from Espressif ESP-IDF examples which are public domain.
 
 ---
-2019-11-16
+2020-01-13

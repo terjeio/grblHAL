@@ -44,36 +44,36 @@ static I2C_XFER_T xfer;
 
 void eepromInit (void)
 {
-	Chip_IOCON_PinMux(LPC_IOCON, 0, 19, IOCON_MODE_INACT, IOCON_FUNC3);
-	Chip_IOCON_PinMux(LPC_IOCON, 0, 20, IOCON_MODE_INACT, IOCON_FUNC3);
-	Chip_IOCON_EnableOD(LPC_IOCON, 0, 19);
-	Chip_IOCON_EnableOD(LPC_IOCON, 0, 20);
+    Chip_IOCON_PinMux(LPC_IOCON, 0, 19, IOCON_MODE_INACT, IOCON_FUNC3);
+    Chip_IOCON_PinMux(LPC_IOCON, 0, 20, IOCON_MODE_INACT, IOCON_FUNC3);
+    Chip_IOCON_EnableOD(LPC_IOCON, 0, 19);
+    Chip_IOCON_EnableOD(LPC_IOCON, 0, 20);
 
-	Chip_I2C_Init(I2C1);
-	Chip_I2C_SetClockRate(I2C1, 400000);
+    Chip_I2C_Init(I2C1);
+    Chip_I2C_SetClockRate(I2C1, 400000);
 
-	Chip_I2C_SetMasterEventHandler(I2C1, Chip_I2C_EventHandlerPolling);
+    Chip_I2C_SetMasterEventHandler(I2C1, Chip_I2C_EventHandlerPolling);
 }
 
 static void I2C_EEPROM (i2c_trans_t *i2c, bool read)
 {
-	static uint8_t txbuf[EEPROM_PAGE_SIZE + 2];
+    static uint8_t txbuf[EEPROM_PAGE_SIZE + 2];
 
     txbuf[0] = i2c->word_addr >> 8;
     txbuf[1] = i2c->word_addr & 0xFF;
 
     xfer.slaveAddr = i2c->addr;
-	xfer.rxSz = read ? i2c->count : 0;
-	xfer.rxBuff = read ? i2c->data : NULL;
+    xfer.rxSz = read ? i2c->count : 0;
+    xfer.rxBuff = read ? i2c->data : NULL;
     xfer.txSz = 2;
     xfer.txBuff = txbuf;
 
     if(!read) {
-    	xfer.txSz += i2c->count;
-    	memcpy(&txbuf[2], i2c->data, i2c->count);
+        xfer.txSz += i2c->count;
+        memcpy(&txbuf[2], i2c->data, i2c->count);
     }
 
-	Chip_I2C_MasterTransfer(I2C1, &xfer);
+    Chip_I2C_MasterTransfer(I2C1, &xfer);
 
     if(!read)
         hal.delay_ms(15, NULL);

@@ -44,6 +44,11 @@ static uint8_t probe_invert;
 
 static void driver_delay_ms (uint32_t ms, void (*callback)(void))
 {
+    if(delay.callback) {
+        delay.callback();
+        delay.callback = NULL;
+    }
+
     if((delay.ms = ms > 0)) {
         SYSTICK_TIMER_CCR0 = ms;
         SYSTICK_TIMER_CTL |= TACLR|MC0;
@@ -267,13 +272,18 @@ static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
         pwmEnabled = false;
         if(settings.spindle.disable_with_zero_speed)
             spindle_off();
-        PWM_TIMER_CCTL1 = 0;
+        if(settings.spindle.pwm_off_value == 0.0f)
+            PWM_TIMER_CCTL1 = settings.spindle.invert.pwm ? OUT : 0;
+        else {
+            PWM_TIMER_CCR1 = spindle_pwm.off_value;
+            PWM_TIMER_CCTL1 = settings.spindle.invert.pwm ? OUTMOD_6 : OUTMOD_2;
+        }
     } else {
         if(!pwmEnabled)
             spindle_on();
         pwmEnabled = true;
         PWM_TIMER_CCR1 = pwm_value;
-        PWM_TIMER_CCTL1 = OUTMOD_2;
+        PWM_TIMER_CCTL1 = settings.spindle.invert.pwm ? OUTMOD_6 : OUTMOD_2;
     }
 
     return pwm_value;
@@ -379,7 +389,9 @@ static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t 
 // Configures perhipherals when settings are initialized or changed
 static void settings_changed (settings_t *settings)
 {
-    hal.driver_cap.variable_spindle = spindle_precompute_pwm_values(&spindle_pwm, 3125000UL);
+    PWM_TIMER_EX0 = settings->spindle.pwm_freq < 1000.0f ? TAIDEX_7 : TAIDEX_1;
+
+    hal.driver_cap.variable_spindle = spindle_precompute_pwm_values(&spindle_pwm, 25000000UL / (PWM_TIMER_EX0 == TAIDEX_1 ? 4 : 16));
 
     if(IOInitDone) {
 
@@ -399,8 +411,8 @@ static void settings_changed (settings_t *settings)
 
         if(hal.driver_cap.variable_spindle) {
             PWM_TIMER_CCR0 = spindle_pwm.period;
-            PWM_TIMER_CCTL1 = 0;            // Set PWM output low and
-            PWM_TIMER_CTL |= TACLR|MC0|MC1; // start PWM timer (with no pulse output)
+            PWM_TIMER_CCTL1 = settings->spindle.invert.pwm ? OUT : 0;   // Set PWM output according to invert setting and
+            PWM_TIMER_CTL |= TACLR|MC0|MC1;                             // start PWM timer (with no pulse output)
             hal.spindle_set_state = spindleSetStateVariable;
         } else
             hal.spindle_set_state = spindleSetState;
@@ -590,7 +602,8 @@ static bool driver_setup (settings_t *settings)
     if((hal.driver_cap.variable_spindle)) {
         PWM_PORT_DIR |= PWM_PIN;
         PWM_SEL = PWM_PIN;
-        PWM_TIMER_CTL |= TASSEL1|ID0|ID1;
+        PWM_TIMER_CTL |= TASSEL1;
+        PWM_TIMER_EX0 = TAIDEX_3;
     } else
         hal.spindle_set_state = spindleSetState;
 
@@ -696,6 +709,7 @@ bool driver_init (void)
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
     hal.driver_cap.spindle_dir = On;
     hal.driver_cap.variable_spindle = On;
+    hal.driver_cap.spindle_pwm_invert = On;
     hal.driver_cap.mist_control = On;
     hal.driver_cap.software_debounce = On;
     hal.driver_cap.step_pulse_delay = On;
@@ -801,6 +815,6 @@ __interrupt void systick_isr (void)
     SYSTICK_TIMER_CTL &= ~(MC0|MC1);
     if(delay.callback) {
         delay.callback();
-        delay.callback = 0;
+        delay.callback = NULL;
     }
 }

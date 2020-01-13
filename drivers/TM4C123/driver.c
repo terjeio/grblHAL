@@ -104,11 +104,9 @@ static void stepperPulseStartSyncronized (stepper_t *stepper);
 
 #endif
 
-//static volatile uint32_t delay.ms = 1; // NOTE: initial value 1 is for "resetting" systick timer
 static bool pwmEnabled = false, IOInitDone = false, probeState = false;
 static axes_signals_t next_step_outbits;
 static spindle_pwm_t spindle_pwm;
-//static void (*delay.callback)(void) = 0;
 static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
 
 // Inverts the probe pin state depending on user settings and probing cycle mode.
@@ -163,6 +161,9 @@ static void systick_isr (void);
 
 static void driver_delay_ms (uint32_t ms, void (*callback)(void))
 {
+    if(delay.callback)
+        delay.callback();
+
     if(ms) {
         delay.ms = ms;
         SysTickEnable();
@@ -170,7 +171,7 @@ static void driver_delay_ms (uint32_t ms, void (*callback)(void))
             while(delay.ms);
     } else {
         if(delay.ms) {
-            delay.callback = 0;
+            delay.callback = NULL;
             delay.ms = 1;
         }
         if(callback)
@@ -227,12 +228,6 @@ static void stepperEnable (axes_signals_t enable)
 // Starts stepper driver ISR timer and forces a stepper driver interrupt callback
 static void stepperWakeUp (void)
 {
-    if(settings.steppers.pulse_delay_microseconds) {
-        TimerMatchSet(PULSE_TIMER_BASE, TIMER_A, settings.steppers.pulse_delay_microseconds);
-        TimerLoadSet(PULSE_TIMER_BASE, TIMER_A, settings.steppers.pulse_microseconds + settings.steppers.pulse_delay_microseconds - 1);
-    } else
-        TimerLoadSet(PULSE_TIMER_BASE, TIMER_A, settings.steppers.pulse_microseconds - 1);
-
 #if LASER_PPI
     laser.next_pulse = 0;
 #endif
@@ -242,7 +237,6 @@ static void stepperWakeUp (void)
 
     TimerLoadSet(STEPPER_TIMER_BASE, TIMER_A, 5000);    // dummy...
     TimerEnable(STEPPER_TIMER_BASE, TIMER_A);
-    IntPendSet(STEPPER_TIMER_INT);                  // force immediate Timer1 interrupt
 }
 
 // Disables stepper driver interrupts and reset outputs
@@ -555,18 +549,31 @@ static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
     if (pwm_value == spindle_pwm.off_value) {
         if(settings.spindle.disable_with_zero_speed)
             spindle_off();
-        TimerLoadSet(SPINDLE_PWM_TIMER_BASE, TIMER_A, spindle_pwm.period + 20000);
-        TimerDisable(SPINDLE_PWM_TIMER_BASE, TIMER_A); // Disable PWM. Output voltage is zero.
-        if(pwmEnabled)
-            TimerControlLevel(SPINDLE_PWM_TIMER_BASE, TIMER_A, true);
-        pwmEnabled = false;
+        if(settings.spindle.pwm_off_value == 0.0f) {
+            uint_fast16_t pwm = spindle_pwm.period + 20000;
+            TimerPrescaleSet(SPINDLE_PWM_TIMER_BASE, TIMER_A, pwm >> 16);
+            TimerLoadSet(SPINDLE_PWM_TIMER_BASE, TIMER_A, pwm & 0xFFFF);
+            if(!pwmEnabled)
+                TimerEnable(SPINDLE_PWM_TIMER_BASE, TIMER_A);                                   // Ensure PWM output is enabled to
+            TimerControlLevel(SPINDLE_PWM_TIMER_BASE, TIMER_A, !settings.spindle.invert.pwm);   // ensure correct output level.
+            TimerDisable(SPINDLE_PWM_TIMER_BASE, TIMER_A);                                      // Disable PWM.
+            pwmEnabled = false;
+        } else {
+            pwmEnabled = true;
+            TimerPrescaleMatchSet(SPINDLE_PWM_TIMER_BASE, TIMER_A, spindle_pwm.off_value >> 16);
+            TimerMatchSet(SPINDLE_PWM_TIMER_BASE, TIMER_A, spindle_pwm.off_value & 0xFFFF);
+            TimerControlLevel(SPINDLE_PWM_TIMER_BASE, TIMER_A, !settings.spindle.invert.pwm);
+            TimerEnable(SPINDLE_PWM_TIMER_BASE, TIMER_A); // Ensure PWM output is enabled.
+        }
      } else {
-        TimerMatchSet(SPINDLE_PWM_TIMER_BASE, TIMER_A, spindle_pwm.period - pwm_value);
+        TimerPrescaleMatchSet(SPINDLE_PWM_TIMER_BASE, TIMER_A, pwm_value >> 16);
+        TimerMatchSet(SPINDLE_PWM_TIMER_BASE, TIMER_A, pwm_value & 0xFFFF);
         if(!pwmEnabled) {
             spindle_on();
             pwmEnabled = true;
-            TimerLoadSet(SPINDLE_PWM_TIMER_BASE, TIMER_A, spindle_pwm.period);
-            TimerControlLevel(SPINDLE_PWM_TIMER_BASE, TIMER_A, false);
+            TimerPrescaleSet(SPINDLE_PWM_TIMER_BASE, TIMER_A, spindle_pwm.period >> 16);
+            TimerLoadSet(SPINDLE_PWM_TIMER_BASE, TIMER_A, spindle_pwm.period & 0xFFFF);
+            TimerControlLevel(SPINDLE_PWM_TIMER_BASE, TIMER_A, !settings.spindle.invert.pwm);
             TimerEnable(SPINDLE_PWM_TIMER_BASE, TIMER_A); // Ensure PWM output is enabled.
         }
     }
@@ -690,7 +697,7 @@ static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t 
 // Configures perhipherals when settings are initialized or changed
 static void settings_changed (settings_t *settings)
 {
-    hal.driver_cap.variable_spindle = spindle_precompute_pwm_values(&spindle_pwm, 120000000UL);
+    hal.driver_cap.variable_spindle = spindle_precompute_pwm_values(&spindle_pwm, SysCtlClockGet());
 
 #if (STEP_OUTMODE == GPIO_MAP) || (DIRECTION_OUTMODE == GPIO_MAP)
     uint8_t i;
@@ -715,17 +722,21 @@ static void settings_changed (settings_t *settings)
         stepperEnable(settings->steppers.deenergize);
 
         if(hal.driver_cap.variable_spindle) {
-            TimerLoadSet(SPINDLE_PWM_TIMER_BASE, TIMER_A, spindle_pwm.period);
+            TimerPrescaleSet(SPINDLE_PWM_TIMER_BASE, TIMER_A, spindle_pwm.period >> 16);
+            TimerLoadSet(SPINDLE_PWM_TIMER_BASE, TIMER_A, spindle_pwm.period & 0xFFFF);
             hal.spindle_set_state = spindleSetStateVariable;
         } else
             hal.spindle_set_state = spindleSetState;
 
         if(settings->steppers.pulse_delay_microseconds) {
             TimerIntRegister(PULSE_TIMER_BASE, TIMER_A, stepper_pulse_isr_delayed);
+            TimerMatchSet(PULSE_TIMER_BASE, TIMER_A, settings->steppers.pulse_microseconds);
+            TimerLoadSet(PULSE_TIMER_BASE, TIMER_A, settings->steppers.pulse_microseconds + settings->steppers.pulse_delay_microseconds - 1);
             TimerIntEnable(PULSE_TIMER_BASE, TIMER_TIMA_TIMEOUT|TIMER_TIMA_MATCH);
             hal.stepper_pulse_start = stepperPulseStartDelayed;
         } else {
             TimerIntRegister(PULSE_TIMER_BASE, TIMER_A, stepper_pulse_isr);
+            TimerLoadSet(PULSE_TIMER_BASE, TIMER_A, settings->steppers.pulse_microseconds - 1);
             TimerIntEnable(PULSE_TIMER_BASE, TIMER_TIMA_TIMEOUT);
             hal.stepper_pulse_start = stepperPulseStart;
         }
@@ -1208,6 +1219,7 @@ bool driver_init (void)
 
     hal.driver_cap.spindle_dir = On;
     hal.driver_cap.variable_spindle = On;
+    hal.driver_cap.spindle_pwm_invert = On;
 #if PWM_RAMPED
     hal.driver_cap.spindle_at_speed = On;
 #endif
@@ -1254,15 +1266,15 @@ static void stepper_driver_isr (void)
 // NOTE: TivaC has a shared interrupt for match and timeout
 static void stepper_pulse_isr (void)
 {
-    TimerIntClear(PULSE_TIMER_BASE, TIMER_TIMA_TIMEOUT); // clear interrupt flag
-    set_step_outputs(settings.steppers.step_invert);
+    TimerIntClear(PULSE_TIMER_BASE, TIMER_TIMA_TIMEOUT); // Clear interrupt flag
+    set_step_outputs((axes_signals_t){0});
 }
 
 static void stepper_pulse_isr_delayed (void)
 {
     uint32_t iflags = TimerIntStatus(PULSE_TIMER_BASE, true);
-    TimerIntClear(PULSE_TIMER_BASE, iflags); // clear interrupt flags
-    set_step_outputs(iflags & TIMER_TIMA_MATCH ? next_step_outbits : settings.steppers.step_invert);
+    TimerIntClear(PULSE_TIMER_BASE, iflags);        // clear interrupt flags
+    set_step_outputs(iflags & TIMER_TIMA_MATCH ? next_step_outbits : (axes_signals_t){0});
 }
 
 static void software_debounce_isr (void)
@@ -1421,7 +1433,7 @@ static void systick_isr (void)
         SysTickDisable();
         if(delay.callback) {
             delay.callback();
-            delay.callback = 0;
+            delay.callback = NULL;
         }
     }
 }

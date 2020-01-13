@@ -2,7 +2,7 @@
   spindle_control.c - spindle control methods
   Part of Grbl
 
-  Copyright (c) 2017-2019 Terje Io
+  Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2012-2015 Sungeun K. Jeon
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -49,17 +49,19 @@ bool spindle_set_state (spindle_state_t state, float rpm)
     if (!ABORTED) { // Block during abort.
 
         if (!state.on) { // Halt or set spindle direction and rpm.
-            sys.spindle_rpm = 0.0f;
+            sys.spindle_rpm = rpm = 0.0f;
             hal.spindle_set_state((spindle_state_t){0}, 0.0f);
         } else {
             // NOTE: Assumes all calls to this function is when Grbl is not moving or must remain off.
-        	// TODO: alarm/interlock if going from CW to CCW directly in non-laser mode?
+            // TODO: alarm/interlock if going from CW to CCW directly in non-laser mode?
             if (settings.flags.laser_mode && state.ccw)
                 rpm = 0.0f; // TODO: May need to be rpm_min*(100/MAX_SPINDLE_RPM_OVERRIDE);
 
             hal.spindle_set_state(state, spindle_set_rpm(rpm, sys.override.spindle_rpm));
         }
         sys.report.spindle = On; // Set to report change immediately
+
+        st_rpm_changed(rpm);
     }
 
     return !ABORTED;
@@ -136,16 +138,22 @@ float spindle_set_rpm (float rpm, uint8_t override_pct)
 // The following functions are not called by the core, may be called by driver code.
 //
 
+// calculate inverted pwm value if configured
+static inline uint_fast16_t invert_pwm (spindle_pwm_t *pwm_data, uint_fast16_t pwm_value)
+{
+    return pwm_data->invert_pwm ? pwm_data->period - pwm_value - 1 : pwm_value;
+}
+
 // Precompute PWM values for faster conversion.
 // Returns false if no PWM range possible, driver should revert to simple on/off spindle control if so.
 bool spindle_precompute_pwm_values (spindle_pwm_t *pwm_data, uint32_t clock_hz)
 {
     if(settings.spindle.rpm_max > settings.spindle.rpm_min) {
         pwm_data->period = (uint_fast16_t)((float)clock_hz / settings.spindle.pwm_freq);
-        pwm_data->off_value = settings.spindle.invert.pwm ? pwm_data->period : 0;
-        /* TODO: a use case for the calculation below is needed in order to reimplement it (and reenable related setting)
-        pwm_data->off_value = (uint_fast16_t)(pwm_data->period * settings.spindle.pwm_off_value / 100.0f);
-        */
+        if(settings.spindle.pwm_off_value == 0.0f)
+            pwm_data->off_value = pwm_data->invert_pwm ? pwm_data->period : 0;
+        else
+            pwm_data->off_value = invert_pwm(pwm_data, (uint_fast16_t)(pwm_data->period * settings.spindle.pwm_off_value / 100.0f));
         pwm_data->min_value = (uint_fast16_t)(pwm_data->period * settings.spindle.pwm_min_value / 100.0f);
         pwm_data->max_value = (uint_fast16_t)(pwm_data->period * settings.spindle.pwm_max_value / 100.0f) - 1;
         pwm_data->pwm_gradient = (float)(pwm_data->max_value - pwm_data->min_value) / (settings.spindle.rpm_max - settings.spindle.rpm_min);
@@ -170,7 +178,7 @@ uint_fast16_t spindle_compute_pwm_value (spindle_pwm_t *pwm_data, float rpm, boo
 {
     uint_fast16_t pwm_value;
 
-    if(rpm > 0.0f) {
+    if(rpm > settings.spindle.rpm_min) {
       #ifdef ENABLE_SPINDLE_LINEARIZATION
         // Compute intermediate PWM value with linear spindle speed model via piecewise linear fit model.
         uint_fast8_t idx = pwm_data->n_pieces;
@@ -193,9 +201,9 @@ uint_fast16_t spindle_compute_pwm_value (spindle_pwm_t *pwm_data, float rpm, boo
         else if(pwm_value < pwm_data->min_value)
             pwm_value = pwm_data->min_value;
 
-        pwm_value = settings.spindle.invert.pwm ? pwm_data->period - pwm_value - 1 : pwm_value;
+        pwm_value = invert_pwm(pwm_data, pwm_value);
     } else
-        pwm_value = pwm_data->off_value;
+        pwm_value = rpm == 0.0f ? pwm_data->off_value : invert_pwm(pwm_data, pwm_data->min_value);
 
     return pwm_value;
 }

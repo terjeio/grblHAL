@@ -31,37 +31,37 @@ static void SERIAL_IRQHandler (void);
 
 void serialInit (void)
 {
-	pmc_enable_periph_clk(SERIAL_ID);
-	pmc_enable_periph_clk(ID_PIOA);
+    pmc_enable_periph_clk(SERIAL_ID);
+    pmc_enable_periph_clk(ID_PIOA);
 /*
-	SERIAL_PORT->PIO_PDR  = SERIAL_RX|SERIAL_TX;
-	SERIAL_PORT->PIO_OER  = SERIAL_TX;
-	SERIAL_PORT->PIO_ABSR = SERIAL_RX|SERIAL_TX;
+    SERIAL_PORT->PIO_PDR  = SERIAL_RX|SERIAL_TX;
+    SERIAL_PORT->PIO_OER  = SERIAL_TX;
+    SERIAL_PORT->PIO_ABSR = SERIAL_RX|SERIAL_TX;
 */
 #if SERIAL_DEVICE == -1
-	SERIAL_PERIPH->UART_PTCR = UART_PTCR_RXTDIS | UART_PTCR_TXTDIS;
-	SERIAL_PERIPH->UART_CR = UART_CR_RSTRX|UART_CR_RSTTX|UART_CR_RXDIS|UART_CR_TXDIS;
+    SERIAL_PERIPH->UART_PTCR = UART_PTCR_RXTDIS | UART_PTCR_TXTDIS;
+    SERIAL_PERIPH->UART_CR = UART_CR_RSTRX|UART_CR_RSTTX|UART_CR_RXDIS|UART_CR_TXDIS;
 
-	SERIAL_PERIPH->UART_MR = UART_MR_PAR_NO;
-	SERIAL_PERIPH->UART_BRGR = (SystemCoreClock / 115200) >> 4;
-	SERIAL_PERIPH->UART_IER = UART_IER_RXRDY|UART_IER_OVRE|UART_IER_FRAME;
+    SERIAL_PERIPH->UART_MR = UART_MR_PAR_NO;
+    SERIAL_PERIPH->UART_BRGR = (SystemCoreClock / 115200) >> 4;
+    SERIAL_PERIPH->UART_IER = UART_IER_RXRDY|UART_IER_OVRE|UART_IER_FRAME;
 
-	SERIAL_PERIPH->UART_CR = UART_CR_RXEN|UART_CR_TXEN;
+    SERIAL_PERIPH->UART_CR = UART_CR_RXEN|UART_CR_TXEN;
 #else
-	SERIAL_PERIPH->US_PTCR = US_PTCR_RXTDIS | US_PTCR_TXTDIS;
-	SERIAL_PERIPH->US_CR = US_CR_RSTRX|US_CR_RSTTX|US_CR_RXDIS|US_CR_TXDIS;
+    SERIAL_PERIPH->US_PTCR = US_PTCR_RXTDIS | US_PTCR_TXTDIS;
+    SERIAL_PERIPH->US_CR = US_CR_RSTRX|US_CR_RSTTX|US_CR_RXDIS|US_CR_TXDIS;
 
-	SERIAL_PERIPH->US_MR = US_MR_CHRL_8_BIT|US_MR_PAR_NO; // |US_MR_NBSTOP_2
-	SERIAL_PERIPH->US_BRGR = (SystemCoreClock / 115200) >> 4;
-	SERIAL_PERIPH->US_IER = US_IER_RXRDY|US_IER_OVRE|US_IER_FRAME;
+    SERIAL_PERIPH->US_MR = US_MR_CHRL_8_BIT|US_MR_PAR_NO; // |US_MR_NBSTOP_2
+    SERIAL_PERIPH->US_BRGR = (SystemCoreClock / 115200) >> 4;
+    SERIAL_PERIPH->US_IER = US_IER_RXRDY|US_IER_OVRE|US_IER_FRAME;
 
-	SERIAL_PERIPH->US_CR = US_CR_RXEN|US_CR_TXEN;
+    SERIAL_PERIPH->US_CR = US_CR_RXEN|US_CR_TXEN;
 #endif
 
-	IRQRegister(SERIAL_IRQ, SERIAL_IRQHandler);
+    IRQRegister(SERIAL_IRQ, SERIAL_IRQHandler);
 
-	NVIC_EnableIRQ(SERIAL_IRQ);
-	NVIC_SetPriority(SERIAL_IRQ, 2);
+    NVIC_EnableIRQ(SERIAL_IRQ);
+    NVIC_SetPriority(SERIAL_IRQ, 2);
 }
 
 //
@@ -133,22 +133,22 @@ bool serialPutC (const char c) {
 
     uint32_t next_head;
 
-    if(txbuffer.head != txbuffer.tail || !serialPutCNonBlocking(c)) {	// Try to send character without buffering...
+    if(txbuffer.head != txbuffer.tail || !serialPutCNonBlocking(c)) {   // Try to send character without buffering...
 
-        next_head = (txbuffer.head + 1) & (TX_BUFFER_SIZE - 1);   		// .. if not, set and update head pointer
+        next_head = (txbuffer.head + 1) & (TX_BUFFER_SIZE - 1);         // .. if not, set and update head pointer
 
-        while(txbuffer.tail == next_head) {                       		// While TX buffer full
-      //      SERIAL_MODULE->IE |= EUSCI_A_IE_TXIE;           			// Enable TX interrupts???
-            if(!hal.stream_blocking_callback())           				// check if blocking for space,
-                return false;                               			// exit if not (leaves TX buffer in an inconsistent state)
+        while(txbuffer.tail == next_head) {                             // While TX buffer full
+      //      SERIAL_MODULE->IE |= EUSCI_A_IE_TXIE;                     // Enable TX interrupts???
+            if(!hal.stream_blocking_callback())                         // check if blocking for space,
+                return false;                                           // exit if not (leaves TX buffer in an inconsistent state)
         }
 
-        txbuffer.data[txbuffer.head] = c;                       		// Add data to buffer
-        txbuffer.head = next_head;                                		// and update head pointer
+        txbuffer.data[txbuffer.head] = c;                               // Add data to buffer
+        txbuffer.head = next_head;                                      // and update head pointer
 #if SERIAL_DEVICE == -1
-		SERIAL_PERIPH->UART_IER = UART_IER_TXRDY;      					// Enable TX interrupts
+        SERIAL_PERIPH->UART_IER = UART_IER_TXRDY;                       // Enable TX interrupts
 #else
-		SERIAL_PERIPH->US_IER = US_IER_TXRDY;      						// Enable TX interrupts
+        SERIAL_PERIPH->US_IER = US_IER_TXRDY;                           // Enable TX interrupts
 #endif
     }
 
@@ -196,8 +196,8 @@ int16_t serialGetC (void)
     if(bptr == rxbuffer.head)
         return -1; // no data available else EOF
 
-    char data = rxbuffer.data[bptr++];     			// Get next character, increment tmp pointer
-    rxbuffer.tail = bptr & (RX_BUFFER_SIZE - 1);  	// and update pointer
+    char data = rxbuffer.data[bptr++];              // Get next character, increment tmp pointer
+    rxbuffer.tail = bptr & (RX_BUFFER_SIZE - 1);    // and update pointer
 
     return (int16_t)data;
 }
@@ -221,61 +221,61 @@ bool serialSuspendInput (bool suspend)
 //
 static void SERIAL_IRQHandler (void)
 {
-	uint16_t bptr;
+    uint16_t bptr;
 
 //uint8_t ifg = SERIAL_PERIPH->USART.INTFLAG.reg;
 /*
-	if(SERIAL_PERIPH->USART.STATUS.bit.FERR) {
-		data = SERIAL_PERIPH->USART.DATA.bit.DATA;
-		SERIAL_PERIPH->USART.STATUS.bit.FERR = 1;
-		SERIAL_PERIPH->USART.INTFLAG.reg = ifg;
-	}
+    if(SERIAL_PERIPH->USART.STATUS.bit.FERR) {
+        data = SERIAL_PERIPH->USART.DATA.bit.DATA;
+        SERIAL_PERIPH->USART.STATUS.bit.FERR = 1;
+        SERIAL_PERIPH->USART.INTFLAG.reg = ifg;
+    }
 */
 #if SERIAL_DEVICE == -1
-	if(SERIAL_PERIPH->UART_SR & UART_SR_RXRDY) {
-		char data = (char)SERIAL_PERIPH->UART_RHR;
+    if(SERIAL_PERIPH->UART_SR & UART_SR_RXRDY) {
+        char data = (char)SERIAL_PERIPH->UART_RHR;
 #else
-	if(SERIAL_PERIPH->US_CSR & US_CSR_RXRDY) {
-		char data = (char)SERIAL_PERIPH->US_RHR;
+    if(SERIAL_PERIPH->US_CSR & US_CSR_RXRDY) {
+        char data = (char)SERIAL_PERIPH->US_RHR;
 #endif
-		if(data == CMD_TOOL_ACK && !rxbuffer.backup) {
-			memcpy(&rxbackup, &rxbuffer, sizeof(stream_rx_buffer_t));
-			rxbuffer.backup = true;
-			rxbuffer.tail = rxbuffer.head;
-			hal.stream.read = serialGetC; // restore normal input
+        if(data == CMD_TOOL_ACK && !rxbuffer.backup) {
+            memcpy(&rxbackup, &rxbuffer, sizeof(stream_rx_buffer_t));
+            rxbuffer.backup = true;
+            rxbuffer.tail = rxbuffer.head;
+            hal.stream.read = serialGetC; // restore normal input
 
-		} else if(!hal.stream.enqueue_realtime_command(data)) {
+        } else if(!hal.stream.enqueue_realtime_command(data)) {
 
-			bptr = (rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1);  // Get next head pointer
+            bptr = (rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1);  // Get next head pointer
 
-			if(bptr == rxbuffer.tail)                           // If buffer full
-				rxbuffer.overflow = 1;                          // flag overflow,
-			else {
-				rxbuffer.data[rxbuffer.head] = data;      		// else add data to buffer
-				rxbuffer.head = bptr;                           // and update pointer
-			}
-		}			
-	}
+            if(bptr == rxbuffer.tail)                           // If buffer full
+                rxbuffer.overflow = 1;                          // flag overflow,
+            else {
+                rxbuffer.data[rxbuffer.head] = data;            // else add data to buffer
+                rxbuffer.head = bptr;                           // and update pointer
+            }
+        }           
+    }
 #if SERIAL_DEVICE == -1
-	if(SERIAL_PERIPH->UART_SR & UART_SR_TXRDY) {
+    if(SERIAL_PERIPH->UART_SR & UART_SR_TXRDY) {
 #else
-	if(SERIAL_PERIPH->US_CSR & US_CSR_TXRDY) {
+    if(SERIAL_PERIPH->US_CSR & US_CSR_TXRDY) {
 #endif
-		bptr = txbuffer.tail;                             				// Temp tail position (to avoid volatile overhead)
-		if(txbuffer.tail != txbuffer.head) {
+        bptr = txbuffer.tail;                                           // Temp tail position (to avoid volatile overhead)
+        if(txbuffer.tail != txbuffer.head) {
 #if SERIAL_DEVICE == -1
-			SERIAL_PERIPH->UART_THR = (uint32_t)txbuffer.data[bptr++];	// Send a byte from the buffer
+            SERIAL_PERIPH->UART_THR = (uint32_t)txbuffer.data[bptr++];  // Send a byte from the buffer
 #else
-			SERIAL_PERIPH->US_THR = (uint32_t)txbuffer.data[bptr++];	// Send a byte from the buffer
+            SERIAL_PERIPH->US_THR = (uint32_t)txbuffer.data[bptr++];    // Send a byte from the buffer
 #endif
-			bptr &= (TX_BUFFER_SIZE - 1);               				// and update
-			txbuffer.tail = bptr;                             			// tail position
-		}
-		if (bptr == txbuffer.head)                        				// Turn off TX interrupt
+            bptr &= (TX_BUFFER_SIZE - 1);                               // and update
+            txbuffer.tail = bptr;                                       // tail position
+        }
+        if (bptr == txbuffer.head)                                      // Turn off TX interrupt
 #if SERIAL_DEVICE == -1
-			SERIAL_PERIPH->UART_IDR = UART_IER_TXRDY;  					// when buffer empty
+            SERIAL_PERIPH->UART_IDR = UART_IER_TXRDY;                   // when buffer empty
 #else
-			SERIAL_PERIPH->US_IDR = US_IER_TXRDY;  						// when buffer empty
+            SERIAL_PERIPH->US_IDR = US_IER_TXRDY;                       // when buffer empty
 #endif
-	}
+    }
 }
