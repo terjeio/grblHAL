@@ -1,9 +1,9 @@
 /*
-  driver.c - An embedded CNC Controller with rs274/ngc (g-code) support
+  usermcodes.c - An embedded CNC Controller with rs274/ngc (g-code) support
 
   Driver code for Texas Instruments Tiva C (TM4C123GH6PM) ARM processor
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2017-2018 Terje Io
 
@@ -23,7 +23,7 @@
 
 // User defined mcode handling
 
-#include "GRBL/grbl.h"
+#include "grbl/grbl.h"
 
 #include "tiva.h"
 #include "atc.h"

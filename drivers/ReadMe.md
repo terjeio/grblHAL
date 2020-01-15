@@ -8,8 +8,8 @@
 | Number of axes          | 3        | up to 6     | 3      | up to 6 | 3           | 3<sup>2</sup> | 3 | 3  | up to 5 | up to 6 | up to 6 |
 | Variable spindle        | yes      | yes         | yes    | yes     | yes         | yes    | yes   | yes   | yes     | yes     | yes     |
 | Ramped spindle          | no       | yes         | yes    | yes     | no          | no     | yes   | no    | no      | no      | no      |
-| Inverted spindle PWM    | yes      | yes         | yes    | yes     | yes         | no     | yes   | no    | no      | no      | no      |
-| RC Servo/ESC for spindle<sup>13</sup> | yes | yes | yes   | yes     | yes         | no     | yes   | no    | yes     | no      | yes     |
+| Inverted spindle PWM    | yes      | yes         | yes    | yes     | yes         | no     | yes   | no    | no      | yes     | no      |
+| RC Servo/ESC for spindle<sup>13</sup> | yes | yes | yes   | yes     | yes         | no     | yes   | yes   | yes     | yes     | yes     |
 | Spindle at speed        | yes      | no          | no     | no      | no          | no     | yes<sup>3</sup> | no    | no      | no      | no      |
 | Spindle sync            | yes<sup>4</sup> | no   | no     | no      | no          | no     | no    | no    | no      | no      | no      |
 | Constant surface speed  | yes      | no          | no     | no      | no          | no     | no    | no    | no      | no      | no      |

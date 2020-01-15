@@ -37,10 +37,10 @@ typedef union {
                  backlash_motion      :1,
                  no_feed_override     :1,
                  inverse_time         :1,
-			  	 is_rpm_rate_adjusted :1,
+                 is_rpm_rate_adjusted :1,
                  is_rpm_pos_adjusted  :1,
-				 is_laser_ppi_mode    :1,
-				 unassigned           :7;
+                 is_laser_ppi_mode    :1,
+                 unassigned           :7;
         spindle_state_t spindle;
         coolant_state_t coolant;
     };

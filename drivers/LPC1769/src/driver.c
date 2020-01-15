@@ -92,7 +92,7 @@ static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to
 
 #endif
 
-static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value);
+static void spindle_set_speed (uint_fast16_t pwm_value);
 
 // Interrupt handler prototypes
 
@@ -371,7 +371,7 @@ static void spindleSetState (spindle_state_t state, float rpm)
 // Variable spindle control functions
 
 // Sets spindle speed
-static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
+static void spindle_set_speed (uint_fast16_t pwm_value)
 {
     if (pwm_value == spindle_pwm.off_value) {
         pwmEnabled = false;
@@ -391,14 +391,23 @@ static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
         pwm_set_width(&SPINDLE_PWM_CHANNEL, pwm_value);
         pwm_enable(&SPINDLE_PWM_CHANNEL);
     }
-
-    return pwm_value;
 }
+
+#ifdef SPINDLE_PWM_DIRECT
+
+static uint_fast16_t spindleGetPWM (float rpm)
+{
+    return spindle_compute_pwm_value(&spindle_pwm, rpm, false);
+}
+
+#else
 
 static void spindleUpdateRPM (float rpm)
 {
     spindle_set_speed(spindle_compute_pwm_value(&spindle_pwm, rpm, false));
 }
+
+#endif
 
 // Start or stop spindle
 static void spindleSetStateVariable (spindle_state_t state, float rpm)
@@ -796,7 +805,12 @@ bool driver_init (void) {
 
     hal.spindle_set_state = spindleSetState;
     hal.spindle_get_state = spindleGetState;
+#ifdef SPINDLE_PWM_DIRECT
+    hal.spindle_get_pwm = spindleGetPWM;
+    hal.spindle_update_pwm = spindle_set_speed;
+#else
     hal.spindle_update_rpm = spindleUpdateRPM;
+#endif
 
     hal.system_control_get_state = systemGetState;
 

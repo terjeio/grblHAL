@@ -2,7 +2,7 @@
 
   serial.c - MSP432 low level functions for transmitting bytes via the serial port
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2017-2019 Terje Io
 
@@ -25,7 +25,6 @@
 #define __serial_h__
 
 #include "serial.h"
-#include "GRBL/grbl.h"
 
 #define BUFCOUNT(head, tail, size) ((head >= tail) ? (head - tail) : (size - tail + head))
 

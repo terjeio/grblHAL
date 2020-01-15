@@ -21,7 +21,7 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "GRBL/grbl.h"
+#include "grbl/grbl.h"
 
 #include "tiva.h"
 #include "driver.h"

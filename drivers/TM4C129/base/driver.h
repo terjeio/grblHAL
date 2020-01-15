@@ -3,7 +3,7 @@
 
   For Texas Instruments SimpleLink ARM processors/LaunchPads
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2018-2019 Terje Io
   Copyright (c) 2011-2015 Sungeun K. Jeon
@@ -36,7 +36,7 @@
 #include "tiva.h"
 #endif
 
-#include "GRBL/grbl.h"
+#include "grbl/grbl.h"
 
 // Configuration
 // Set value to 1 to enable, 0 to disable

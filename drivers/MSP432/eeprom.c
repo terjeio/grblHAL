@@ -29,7 +29,7 @@
 
 #include "driver.h"
 
-#include "GRBL/grbl.h"
+#include "grbl/grbl.h"
 
 #define EEPROM_I2C_ADDRESS (0xA0 >> 1)
 #define EEPROM_ADDR_BITS_LO 8

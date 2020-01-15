@@ -3,9 +3,9 @@
 
   Driver code for Texas Instruments MSP430F5529 16-bit processor
 
-  Part of Grbl
+  Part of GrblHAL
 
-  Copyright (c) 2016-2019 Terje Io
+  Copyright (c) 2016-2020 Terje Io
   Copyright (c) 2011-2015 Sungeun K. Jeon
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -25,7 +25,7 @@
 
 #include <msp430.h>
 
-#include "GRBL\grbl.h"
+#include "grbl/grbl.h"
 #include "driver.h"
 #include "eeprom.h"
 #include "serial.h"
@@ -37,7 +37,7 @@ static spindle_pwm_t spindle_pwm;
 static uint16_t step_pulse_ticks;
 static delay_t delay = { .ms = 0, .callback = NULL };
 
-static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value);
+static void spindle_set_speed (uint_fast16_t pwm_value);
 
 // Inverts the probe pin state depending on user settings and probing cycle mode.
 static uint8_t probe_invert;
@@ -266,18 +266,17 @@ static void spindleSetState (spindle_state_t state, float rpm)
 // Variable spindle control functions
 
 // Sets spindle speed
-static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
+static void spindle_set_speed (uint_fast16_t pwm_value)
 {
     if (pwm_value == spindle_pwm.off_value) {
         pwmEnabled = false;
         if(settings.spindle.disable_with_zero_speed)
             spindle_off();
-        if(settings.spindle.pwm_off_value == 0.0f)
-            PWM_TIMER_CCTL1 = settings.spindle.invert.pwm ? OUT : 0;
-        else {
+        if(spindle_pwm.always_on) {
             PWM_TIMER_CCR1 = spindle_pwm.off_value;
             PWM_TIMER_CCTL1 = settings.spindle.invert.pwm ? OUTMOD_6 : OUTMOD_2;
-        }
+        } else
+            PWM_TIMER_CCTL1 = settings.spindle.invert.pwm ? OUT : 0;
     } else {
         if(!pwmEnabled)
             spindle_on();
@@ -285,14 +284,23 @@ static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
         PWM_TIMER_CCR1 = pwm_value;
         PWM_TIMER_CCTL1 = settings.spindle.invert.pwm ? OUTMOD_6 : OUTMOD_2;
     }
-
-    return pwm_value;
 }
+
+#ifdef SPINDLE_PWM_DIRECT
+
+static uint_fast16_t spindleGetPWM (float rpm)
+{
+    return spindle_compute_pwm_value(&spindle_pwm, rpm, false);
+}
+
+#else
 
 static void spindleUpdateRPM (float rpm)
 {
     spindle_set_speed(spindle_compute_pwm_value(&spindle_pwm, rpm, false));
 }
+
+#endif
 
 // Starts or stops spindle
 static void spindleSetStateVariable (spindle_state_t state, float rpm)
@@ -671,7 +679,12 @@ bool driver_init (void)
 
     hal.spindle_set_state = spindleSetStateVariable;
     hal.spindle_get_state = spindleGetState;
+#ifdef SPINDLE_PWM_DIRECT
+    hal.spindle_get_pwm = spindleGetPWM;
+    hal.spindle_update_pwm = spindle_set_speed;
+#else
     hal.spindle_update_rpm = spindleUpdateRPM;
+#endif
 
     hal.system_control_get_state = systemGetState;
 

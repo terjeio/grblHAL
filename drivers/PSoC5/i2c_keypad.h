@@ -3,7 +3,7 @@
 
   Driver code for Cypress PSoC 5 (CY8CKIT-059)
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2017-2018 Terje Io
 

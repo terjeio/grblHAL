@@ -3,7 +3,7 @@
 
   Driver code for my ATC
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2018 Terje Io
 
@@ -24,7 +24,7 @@
 #ifndef _ATC_H_
 #define _ATC_H_
 
-#include "GRBL/grbl.h"
+#include "grbl/grbl.h"
 
 void atc_tool_select (uint8_t tool);
 void atc_tool_selected (tool_data_t *tool);

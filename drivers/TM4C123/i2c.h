@@ -3,7 +3,7 @@
 
   For Texas Instruments MSP432 LaunchPad
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2018-2019 Terje Io
 
@@ -30,8 +30,8 @@ void I2CInit (void);
 
 #if TRINAMIC_ENABLE && TRINAMIC_I2C
 
-#include "trinamic\trinamic2130.h"
-#include "trinamic\TMC2130_I2C_map.h"
+#include "trinamic/trinamic2130.h"
+#include "trinamic/TMC2130_I2C_map.h"
 
 #define I2C_ADR_I2CBRIDGE 0x47
 

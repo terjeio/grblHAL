@@ -3,7 +3,7 @@
 
   Startup entry point for MSP432 (Texas Instruments MSP432 LaunchPad)
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2017 Terje Io
 
@@ -23,7 +23,7 @@
 
 #include <msp.h>
 
-#include "GRBL\grbllib.h"
+#include "grbl\grbllib.h"
 
 int main(void)
 {

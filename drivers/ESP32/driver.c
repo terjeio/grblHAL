@@ -649,12 +649,11 @@ IRAM_ATTR static void spindle_set_speed (uint_fast16_t pwm_value)
         pwm_ramp.pwm_target = pwm_value;
         ledc_set_fade_step_and_start(ledConfig.speed_mode, ledConfig.channel, pwm_ramp.pwm_target, 1, 4, LEDC_FADE_NO_WAIT);
 #else
-        if(spindle_pwm.off_value == settings.spindle.invert.pwm ? pwm_max_value : 0)
-            ledc_stop(ledConfig.speed_mode, ledConfig.channel, settings.spindle.invert.pwm ? 1 : 0);
-        else {
+        if(spindle_pwm.always_on) {
             ledc_set_duty(ledConfig.speed_mode, ledConfig.channel, spindle_pwm.off_value);
             ledc_update_duty(ledConfig.speed_mode, ledConfig.channel);
-        }
+        } else
+            ledc_stop(ledConfig.speed_mode, ledConfig.channel, settings.spindle.invert.pwm ? 1 : 0);
 #endif
         pwmEnabled = false;
      } else {
@@ -842,6 +841,7 @@ static void settings_changed (settings_t *settings)
         spindle_pwm.min_value = (uint32_t)(pwm_max_value * settings->spindle.pwm_min_value / 100.0f);
         spindle_pwm.max_value = (uint32_t)(pwm_max_value * settings->spindle.pwm_max_value / 100.0f);
         spindle_pwm.pwm_gradient = (float)(spindle_pwm.max_value - spindle_pwm.min_value) / (settings->spindle.rpm_max - settings->spindle.rpm_min);
+        spindle_pwm.always_on = settings->spindle.pwm_off_value != 0.0f;
 
         ledc_set_freq(ledTimerConfig.speed_mode, ledTimerConfig.timer_num, ledTimerConfig.freq_hz);
     }

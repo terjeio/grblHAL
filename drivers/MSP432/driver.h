@@ -2,9 +2,9 @@
 
   driver.h - pin mapping configuration file for Texas Instruments MSP432 ARM processor
 
-  Part of Grbl
+  Part of GrblHAL
 
-  Copyright (c) 2017-2019 Terje Io
+  Copyright (c) 2017-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -43,11 +43,11 @@
 #define TRINAMIC_ENABLE        0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
 #define TRINAMIC_I2C           0 // Trinamic I2C - SPI bridge interface.
 #define TRINAMIC_DEV           0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
-#define CNC_BOOSTERPACK        0 // do not change!
+#define CNC_BOOSTERPACK        1 // do not change!
 
 #if CNC_BOOSTERPACK
   #define EEPROM_ENABLE           1 // only change if BoosterPack does not have EEPROM mounted
-  #define CNC_BOOSTERPACK_SHORTS  1 // shorts added to BoosterPack for some signals (for faster and simpler driver)
+  #define CNC_BOOSTERPACK_SHORTS  0 // shorts added to BoosterPack for some signals (for faster and simpler driver)
   #define CNC_BOOSTERPACK_A4998   1 // using Polulu A4998 drivers - for suppying VDD via GPIO (PE5)
 #else
   #define EEPROM_ENABLE          0 // do not change!
@@ -62,7 +62,7 @@
 
 #include "msp.h"
 
-#include "GRBL/grbl.h"
+#include "grbl/grbl.h"
 
 #if TRINAMIC_ENABLE
 #include "tmc2130/trinamic.h"

@@ -39,7 +39,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "GRBL/grbl.h"
+#include "grbl/grbl.h"
 
 #define BACKCHANNEL // comment out to use UART1 instead of UART0 (Tiva C Backchannel)
 

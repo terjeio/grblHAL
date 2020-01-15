@@ -2,7 +2,7 @@
 
   serial.h - low level functions for transmitting bytes via the serial port
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2017-2019 Terje Io
 

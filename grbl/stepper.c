@@ -331,11 +331,11 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
          #endif
 
             if(st.exec_segment->update_rpm) {
-			  #ifdef SPINDLE_PWM_DIRECT
+              #ifdef SPINDLE_PWM_DIRECT
                 hal.spindle_update_pwm(st.exec_segment->spindle_pwm);
-			  #else
+              #else
                 hal.spindle_update_rpm(st.exec_segment->spindle_rpm);
-			  #endif
+              #endif
             }
         } else {
             // Segment buffer empty. Shutdown.
@@ -489,7 +489,7 @@ void st_reset ()
 // Used by st_prep_buffer() to determine if spindle needs update when dynamic RPM is called for.
 void st_rpm_changed (float rpm)
 {
-	prep.current_spindle_rpm = rpm;
+    prep.current_spindle_rpm = rpm;
 }
 
 // Called by planner_recalculate() when the executing block is updated by the new plan.
@@ -849,7 +849,7 @@ void st_prep_buffer()
         */
 
         if (sys.step_control.update_spindle_rpm || st_prep_block->dynamic_rpm) {
-        	float rpm;
+            float rpm;
             if (pl_block->condition.spindle.on) {
                 // NOTE: Feed and rapid overrides are independent of PWM value and do not alter laser power/rate.
                 // If current_speed is zero, then may need to be rpm_min*(100/MAX_SPINDLE_RPM_OVERRIDE)
@@ -866,14 +866,14 @@ void st_prep_buffer()
                 sys.spindle_rpm = rpm = 0.0f;
 
             if(rpm != prep.current_spindle_rpm) {
-			  #ifdef SPINDLE_PWM_DIRECT
-				prep.current_spindle_rpm = rpm;
-				prep_segment->spindle_pwm = hal.spindle_get_pwm(rpm);
-			  #else
-				prep.current_spindle_rpm = prep_segment->spindle_rpm = rpm;
-			  #endif
-				prep_segment->update_rpm = true;
-				sys.step_control.update_spindle_rpm = Off;
+              #ifdef SPINDLE_PWM_DIRECT
+                prep.current_spindle_rpm = rpm;
+                prep_segment->spindle_pwm = hal.spindle_get_pwm(rpm);
+              #else
+                prep.current_spindle_rpm = prep_segment->spindle_rpm = rpm;
+              #endif
+                prep_segment->update_rpm = true;
+                sys.step_control.update_spindle_rpm = Off;
             }
         }
 

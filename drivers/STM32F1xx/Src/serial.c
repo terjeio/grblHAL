@@ -2,7 +2,7 @@
 
   serial.c - serial port implementation for STM32F103C8 ARM processors
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2019 Terje Io
 

@@ -3,7 +3,7 @@
 
   For Texas Instruments MSP432 LaunchPad
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2018-2019 Terje Io
 

@@ -3,7 +3,7 @@
 
   Startup entry point for TM4C123GH6PM (Texas Instruments Tiva C LaunchPad)
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2017 Terje Io
 
@@ -23,7 +23,7 @@
 
 #include <stdbool.h>
 
-#include "GRBL/grbllib.h"
+#include "grbl/grbllib.h"
 #include "driver.h"
 
 #include "driverlib/fpu.h"

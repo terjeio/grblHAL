@@ -3,9 +3,9 @@
 
   Driver for Cypress PSoC 5 (CY8CKIT-059)
 
-  Part of Grbl
+  Part of GrblHAL
 
-  Copyright (c) 2017-2019 Terje Io
+  Copyright (c) 2017-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -68,7 +68,7 @@ static void spindleSetStateFixed (spindle_state_t state, float rpm)
 // Variable spindle
 
 // Set spindle speed. Note: spindle direction must be kept if stopped or restarted
-static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
+static void spindle_set_speed (uint_fast16_t pwm_value)
 {
     if (pwm_value == spindle_pwm.off_value) {
         if(settings.spindle.disable_with_zero_speed)
@@ -78,14 +78,24 @@ static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
             SpindleOutput_Write(SpindleOutput_Read() | 0x01);
         SpindlePWM_WriteCompare(pwm_value);
     }
-    
-    return pwm_value;
 }
+
+#ifdef SPINDLE_PWM_DIRECT
+
+static uint_fast16_t spindleGetPWM (float rpm)
+{
+    return spindle_compute_pwm_value(&spindle_pwm, rpm, false);
+}
+
+#else
 
 static void spindleUpdateRPM (float rpm)
 {
     spindle_set_speed(spindle_compute_pwm_value(&spindle_pwm, rpm, false));
 }
+
+#endif
+
 
 // Start or stop spindle, called from spindle_run() and protocol_execute_realtime()
 static void spindleSetStateVariable (spindle_state_t state, float rpm)
@@ -417,7 +427,12 @@ bool driver_init (void)
 
     hal.spindle_set_state = spindleSetStateVariable;
     hal.spindle_get_state = spindleGetState;
+#ifdef SPINDLE_PWM_DIRECT
+    hal.spindle_get_pwm = spindleGetPWM;
+    hal.spindle_update_pwm = spindle_set_speed;
+#else
     hal.spindle_update_rpm = spindleUpdateRPM;
+#endif
 
     hal.system_control_get_state = systemGetState;
 

@@ -22,13 +22,13 @@ static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to
 // Inverts the probe pin state depending on user settings and probing cycle mode.
 static uint8_t probe_invert;
 
-static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value);
+static void spindle_set_speed (uint_fast16_t pwm_value);
 
 // Interrupt handler prototypes
 // Interrupt handlers needs to be registered, possibly by modifying a system specific startup file.
 // It is possible to relocate the interrupt dispatch table from flash to RAM and programatically attach handlers.
 // See the driver for SAMD21 for an example, relocation is done in the driver_init() function.
-// Also, if a MCU specific driver library is used this might have functions for programatically attach handlers.
+// Also, if a MCU specific driver library is used this might have functions to programatically attach handlers.
 
 static void stepper_driver_isr (void);
 static void stepper_pulse_isr (void);
@@ -49,7 +49,7 @@ static void driver_delay_ms (uint32_t ms, void (*callback)(void))
             while(delay.ms);
     } else {
         if(delay.ms) {
-            delay.callback = 0;
+            delay.callback = NULL;
             delay.ms = 1;
         }
         if(callback)
@@ -264,14 +264,19 @@ static void spindleSetState (spindle_state_t state, float rpm)
 // Variable spindle control functions
 
 // Set spindle speed.
-static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
+static void spindle_set_speed (uint_fast16_t pwm_value)
 {
     if (pwm_value == spindle_pwm.off_value) {
         if(settings.spindle.disable_with_zero_speed)
             spindle_off();
+        pwmEnabled = false;
+        if(spindle_pwm.always_on) {
+        // SPINDLEPWM_TIMER_SET(spindle_pwm.off_value);
+        // SPINDLEPWM_TIMER_START();
+        } else {
         // SPINDLEPWM_TIMER_STOP();
         // NOTE: code may be added to ensure spindle output are at the correct level.
-        pwmEnabled = false;
+        }
      } else {
         if(!pwmEnabled) {
             spindle_on();
@@ -284,11 +289,23 @@ static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
     return pwm_value;
 }
 
+#ifdef SPINDLE_PWM_DIRECT
+
+// Convert spindle speed to PWM value.
+static uint_fast16_t spindleGetPWM (float rpm)
+{
+    return spindle_compute_pwm_value(&spindle_pwm, rpm, false);
+}
+
+#else
+
 // Update spindle speed.
 static void spindleUpdateRPM (float rpm)
 {
     spindle_set_speed(spindle_compute_pwm_value(&spindle_pwm, rpm, false));
 }
+
+#endif
 
 // Start or stop spindle.
 static void spindleSetStateVariable (spindle_state_t state, float rpm)
@@ -524,7 +541,7 @@ bool driver_init (void)
     // Enable serial communication.
     serialInit();
 
-    hal.info = "my driver name"; // Typically set to the MCU or board name
+    hal.info = "my driver name"; // Typically set to MCU or board name
     hal.driver_setup = driver_setup;
     hal.f_step_timer = SystemCoreClock; // NOTE: SystemCoreClock is a CMSIS definition, ...
     hal.rx_buffer_size = RX_BUFFER_SIZE;
@@ -548,7 +565,12 @@ bool driver_init (void)
 
     hal.spindle_set_state = spindleSetState;
     hal.spindle_get_state = spindleGetState;
+#ifdef SPINDLE_PWM_DIRECT
+    hal.spindle_get_pwm = spindleGetPWM;
+    hal.spindle_update_pwm = spindle_set_speed;
+#else
     hal.spindle_update_rpm = spindleUpdateRPM;
+#endif
 
     hal.system_control_get_state = systemGetState;
 
@@ -655,7 +677,7 @@ static void systick_isr (void)
         // SYSTICK_DISABLE; // Disable systick timer
         if(delay.callback) {
             delay.callback();
-            delay.callback = 0;
+            delay.callback = NULL;
         }
     }
 }

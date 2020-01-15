@@ -2,7 +2,7 @@
   report.c - reporting and messaging methods
   Part of Grbl
 
-  Copyright (c) 2017-2019 Terje Io
+  Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2012-2016 Sungeun K. Jeon for Gnea Research LLC
 
   Grbl is free software: you can redistribute it and/or modify
@@ -415,9 +415,11 @@ void report_grbl_settings (void)
 #endif
 
     if(hal.driver_settings_report) {
-    	for(idx = Setting_LinearSpindlePiece4 + 1; idx < Setting_SpindlePGain; idx++)
-    		hal.driver_settings_report((setting_type_t)idx);
+        for(idx = Setting_LinearSpindlePiece4 + 1; idx < Setting_SpindlePGain; idx++)
+            hal.driver_settings_report((setting_type_t)idx);
     }
+
+#ifdef SPINDLE_RPM_CONTROLLED
 
     if(hal.driver_cap.spindle_pid) {
         report_float_setting(Setting_SpindlePGain, settings.spindle.pid.p_gain, N_DECIMAL_SETTINGVALUE);
@@ -426,6 +428,8 @@ void report_grbl_settings (void)
         report_float_setting(Setting_SpindleMaxError, settings.spindle.pid.max_error, N_DECIMAL_SETTINGVALUE);
         report_float_setting(Setting_SpindleIMaxError, settings.spindle.pid.i_max_error, N_DECIMAL_SETTINGVALUE);
     }
+
+#endif
 
     if(hal.driver_cap.spindle_sync) {
         report_float_setting(Setting_PositionPGain, settings.position.pid.p_gain, N_DECIMAL_SETTINGVALUE);
@@ -475,8 +479,8 @@ void report_grbl_settings (void)
     }
 
     if(hal.driver_settings_report) {
-    	for(idx = Setting_AxisSettingsMax + 1; idx <= Setting_SettingsMax; idx++)
-    		hal.driver_settings_report((setting_type_t)idx);
+        for(idx = Setting_AxisSettingsMax + 1; idx <= Setting_SettingsMax; idx++)
+            hal.driver_settings_report((setting_type_t)idx);
     }
 }
 
@@ -808,7 +812,7 @@ void report_build_info (char *line)
 
 #ifdef N_TOOLS
     if(hal.tool_change)
-    	strcat(buf, "ATC,");
+        strcat(buf, "ATC,");
 #else
     if(hal.stream.suspend_read)
         strcat(buf, "TC,"); // Manual tool change supported (M6)

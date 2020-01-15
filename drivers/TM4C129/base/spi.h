@@ -3,7 +3,7 @@
 
   For Texas Instruments SimpleLink ARM processors/LaunchPads
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2018 Terje Io
 
@@ -24,7 +24,7 @@
 #ifndef __SPI_DRIVER_H__
 #define __SPI_DRIVER_H__
 
-#include "trinamic\trinamic2130.h"
+#include "trinamic/trinamic2130.h"
 
 typedef struct {
     uint32_t port;

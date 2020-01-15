@@ -4,7 +4,7 @@
 
   I2C I/O expander
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2018 Terje Io
 

@@ -5,7 +5,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2018-2019 Terje Io
+  Copyright (c) 2018-2020 Terje Io
 
   Some parts
    Copyright (c) 2011-2015 Sungeun K. Jeon
@@ -324,7 +324,7 @@ void selectStream (stream_type_t stream)
     }
 }
 
-static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value);
+static void spindle_set_speed (uint_fast16_t pwm_value);
 
 // Interrupt handler prototypes
 
@@ -918,6 +918,7 @@ static void spindleSetState (spindle_state_t state, float rpm)
 
 // Sets spindle speed
 #if PWM_RAMPED
+
 static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
 {
     if (pwm_value == spindle_pwm.off_value) {
@@ -947,27 +948,28 @@ static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
 
     return pwm_value;
 }
+
 #else
-static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
+
+static void spindle_set_speed (uint_fast16_t pwm_value)
 {
     if (pwm_value == spindle_pwm.off_value) {
+        pwmEnabled = false;
         if(settings.spindle.disable_with_zero_speed)
             spindle_off();
-        if(settings.spindle.pwm_off_value == 0.0f) {
+        if(spindle_pwm.always_on) {
+            TimerPrescaleMatchSet(SPINDLE_PWM_TIMER_BASE, TIMER_B, spindle_pwm.off_value >> 16);
+            TimerMatchSet(SPINDLE_PWM_TIMER_BASE, TIMER_B, spindle_pwm.off_value & 0xFFFF);
+            TimerControlLevel(SPINDLE_PWM_TIMER_BASE, TIMER_B, !settings.spindle.invert.pwm);
+            TimerEnable(SPINDLE_PWM_TIMER_BASE, TIMER_B); // Ensure PWM output is enabled.
+        } else {
             uint_fast16_t pwm = spindle_pwm.period + 20000;
             TimerPrescaleSet(SPINDLE_PWM_TIMER_BASE, TIMER_B, pwm >> 16);
             TimerLoadSet(SPINDLE_PWM_TIMER_BASE, TIMER_B, pwm & 0xFFFF);
             if(!pwmEnabled)
                 TimerEnable(SPINDLE_PWM_TIMER_BASE, TIMER_B);                                   // Ensure PWM output is enabled to
             TimerControlLevel(SPINDLE_PWM_TIMER_BASE, TIMER_B, !settings.spindle.invert.pwm);   // ensure correct output level.
-            TimerDisable(SPINDLE_PWM_TIMER_BASE, TIMER_B);                                      // Disab?le PWM.
-            pwmEnabled = false;
-        } else {
-            pwmEnabled = true;
-            TimerPrescaleMatchSet(SPINDLE_PWM_TIMER_BASE, TIMER_B, spindle_pwm.off_value >> 16);
-            TimerMatchSet(SPINDLE_PWM_TIMER_BASE, TIMER_B, spindle_pwm.off_value & 0xFFFF);
-            TimerControlLevel(SPINDLE_PWM_TIMER_BASE, TIMER_B, !settings.spindle.invert.pwm);
-            TimerEnable(SPINDLE_PWM_TIMER_BASE, TIMER_B); // Ensure PWM output is enabled.
+            TimerDisable(SPINDLE_PWM_TIMER_BASE, TIMER_B);                                      // Disable PWM.
         }
      } else {
         TimerPrescaleMatchSet(SPINDLE_PWM_TIMER_BASE, TIMER_B, pwm_value >> 16);
@@ -981,15 +983,26 @@ static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
             TimerEnable(SPINDLE_PWM_TIMER_BASE, TIMER_B); // Ensure PWM output is enabled.
         }
     }
-
-    return pwm_value;
 }
+
 #endif
+
+#ifdef SPINDLE_PWM_DIRECT
+
+static uint_fast16_t spindleGetPWM (float rpm)
+{
+    return spindle_compute_pwm_value(&spindle_pwm, rpm, false);
+}
+
+#else
 
 static void spindleUpdateRPM (float rpm)
 {
     spindle_set_speed(spindle_compute_pwm_value(&spindle_pwm, rpm, false));
 }
+
+#endif
+
 
 // Start or stop spindle
 static void spindleSetStateVariable (spindle_state_t state, float rpm)
@@ -1758,7 +1771,12 @@ bool driver_init (void)
 
     hal.spindle_set_state = spindleSetStateVariable;
     hal.spindle_get_state = spindleGetState;
+#ifdef SPINDLE_PWM_DIRECT
+    hal.spindle_get_pwm = spindleGetPWM;
+    hal.spindle_update_pwm = spindle_set_speed;
+#else
     hal.spindle_update_rpm = spindleUpdateRPM;
+#endif
 #if SPINDLE_SYNC_ENABLE
     hal.spindle_get_data = spindleGetData;
     hal.spindle_reset_data = spindleDataReset;

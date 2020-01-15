@@ -3,7 +3,7 @@
 
   Serial comms defaults and struct
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2018-2019 Terje Io
 

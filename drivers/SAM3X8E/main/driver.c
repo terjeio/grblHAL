@@ -4,7 +4,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2019 Terje Io
+  Copyright (c) 2019-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -165,7 +165,7 @@ static uint32_t vectorTable[sizeof(DeviceVectors) / sizeof(uint32_t)] __attribut
 driver_settings_t driver_settings;
 #endif
 
-static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value);
+static void spindle_set_speed (uint_fast16_t pwm_value);
 
 static void SysTick_IRQHandler (void);
 static void STEPPER_IRQHandler (void);
@@ -579,19 +579,18 @@ static void spindleSetState (spindle_state_t state, float rpm)
 // Variable spindle control functions
 
 // Sets spindle speed
-static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
+static void spindle_set_speed (uint_fast16_t pwm_value)
 {
     if (pwm_value == spindle_pwm.off_value) {
         pwmEnabled = false;
         if(settings.spindle.disable_with_zero_speed)
             spindle_off();
-        if(settings.spindle.pwm_off_value == 0.0f)
-            SPINDLE_PWM_TIMER.TC_CMR |= TC_CMR_CPCSTOP; // Ensure output is low, by setting timer to stop at TCC match
-        else {
+        if(spindle_pwm.always_on) {
             SPINDLE_PWM_TIMER.TC_RA = spindle_pwm.period - spindle_pwm.off_value;
             SPINDLE_PWM_TIMER.TC_CMR &= ~TC_CMR_CPCSTOP;
             SPINDLE_PWM_TIMER.TC_CCR = TC_CCR_CLKEN|TC_CCR_SWTRG;
-        }
+        } else
+            SPINDLE_PWM_TIMER.TC_CMR |= TC_CMR_CPCSTOP; // Ensure output is low, by setting timer to stop at TCC match
     } else {
         SPINDLE_PWM_TIMER.TC_RA = spindle_pwm.period - pwm_value;
         if(!pwmEnabled) {
@@ -601,14 +600,23 @@ static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
             SPINDLE_PWM_TIMER.TC_CCR = TC_CCR_CLKEN|TC_CCR_SWTRG;
         }
     }
-
-    return pwm_value;
 }
+
+#ifdef SPINDLE_PWM_DIRECT
+
+static uint_fast16_t spindleGetPWM (float rpm)
+{
+    return spindle_compute_pwm_value(&spindle_pwm, rpm, false);
+}
+
+#else
 
 static void spindleUpdateRPM (float rpm)
 {
     spindle_set_speed(spindle_compute_pwm_value(&spindle_pwm, rpm, false));
 }
+
+#endif
 
 // Start or stop spindle
 static void spindleSetStateVariable (spindle_state_t state, float rpm)
@@ -1396,7 +1404,12 @@ bool driver_init (void)
 
     hal.spindle_set_state = spindleSetState;
     hal.spindle_get_state = spindleGetState;
+#ifdef SPINDLE_PWM_DIRECT
+    hal.spindle_get_pwm = spindleGetPWM;
+    hal.spindle_update_pwm = spindle_set_speed;
+#else
     hal.spindle_update_rpm = spindleUpdateRPM;
+#endif
     
     hal.system_control_get_state = systemGetState;
 

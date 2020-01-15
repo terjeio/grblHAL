@@ -3,7 +3,7 @@
 
   Driver code for my ATC
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2018-2019 Terje Io
 
@@ -21,7 +21,7 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "GRBL/grbl.h"
+#include "grbl/grbl.h"
 
 typedef struct {
     float x;

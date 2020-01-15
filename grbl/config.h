@@ -199,16 +199,20 @@
 #define RAPID_OVERRIDE_LOW       25 // Percent of rapid (1-99). Usually 25%.
 // #define RAPID_OVERRIDE_EXTRA_LOW 5 // *NOT SUPPORTED* Percent of rapid (1-99). Usually 5%.
 
-//#define ENABLE_SPINDLE_LINEARIZATION        // Uncomment to enable spindle RPM linearization. Requires compatible driver if enabled.
+// #define ENABLE_SPINDLE_LINEARIZATION        // Uncomment to enable spindle RPM linearization. Requires compatible driver if enabled.
 #define SPINDLE_NPWM_PIECES                 4 // Maximum number of pieces for spindle RPM linearization, do not change unless more are needed.
 #define DEFAULT_SPINDLE_RPM_OVERRIDE      100 // 100%. Don't change this value.
 #define MAX_SPINDLE_RPM_OVERRIDE          200 // Percent of programmed spindle speed (100-255). Usually 200%.
 #define MIN_SPINDLE_RPM_OVERRIDE           10 // Percent of programmed spindle speed (1-100). Usually 10%.
 #define SPINDLE_OVERRIDE_COARSE_INCREMENT  10 // (1-99). Usually 10%.
 #define SPINDLE_OVERRIDE_FINE_INCREMENT     1 // (1-99). Usually 1%.
-// If MCU has a FPU (Floating Point Unit/Coprocessor) that cannot be used in interrupt handlers
-// remove comment from the linebelow and implement the required HAL handlers in the driver (see hal.h).
-//#define SPINDLE_PWM_DIRECT
+// If spindle RPM is set by high-level commands to a spindle controller (eg. via Modbus) or the driver supports closed loop
+// spindle RPM control either uncomment the #define SPINDLE_RPM_CONTROLLED below or add SPINDLE_RPM_CONTROLLED as predefined symbol
+// on the compiler command line. This will send spindle speed as a RPM value instead of a PWM value to the driver.
+// #define SPINDLE_RPM_CONTROLLED
+#ifndef SPINDLE_RPM_CONTROLLED
+#define SPINDLE_PWM_DIRECT
+#endif
 
 // Some status report data isn't necessary for realtime, only intermittently, because the values don't
 // change often. The following macros configures how many times a status report needs to be called before
@@ -393,7 +397,7 @@
 
 #if COMPATIBILITY_LEVEL == 0
 // Number of tools in ATC tool table, comment out to disable
-#define N_TOOLS 8
+// #define N_TOOLS 8
 #endif
 
 // Enable EEPROM emulation/buffering in RAM (allocated from heap)

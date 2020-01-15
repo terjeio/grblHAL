@@ -3,7 +3,7 @@
 
   Driver code for Texas Instruments Tiva C (TM4C123GH6PM) ARM processor
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2017 Terje Io
 

@@ -2,7 +2,7 @@
 
   flash.h - driver code for STM32F103C8 ARM processors
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2019 Terje Io
 
@@ -23,7 +23,7 @@
 
 */
 
-#include "../GRBL/grbl.h"
+#include "../grbl/grbl.h"
 
 #include "main.h"
 #include "stm32f1xx_hal_flash_ex.h"

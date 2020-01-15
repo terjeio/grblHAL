@@ -2,7 +2,7 @@
   settings.c - eeprom configuration handling
   Part of Grbl
 
-  Copyright (c) 2017-2019 Terje Io
+  Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2011-2015 Sungeun K. Jeon
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -734,6 +734,8 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 break;
 #endif
 
+#ifdef SPINDLE_RPM_CONTROLLED
+
             case Setting_SpindlePGain:
                 settings.spindle.pid.p_gain = value;
                 break;
@@ -753,6 +755,8 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
             case Setting_SpindleIMaxError:
                 settings.spindle.pid.i_max_error = value;
                 break;
+
+#endif
 
             case Setting_PositionPGain:
                 settings.position.pid.p_gain = value;

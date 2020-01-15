@@ -2,7 +2,7 @@
   spindle_control.h - spindle control methods
   Part of Grbl
 
-  Copyright (c) 2017-2019 Terje Io
+  Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2012-2015 Sungeun K. Jeon
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -51,7 +51,8 @@ typedef struct {
     uint_fast16_t min_value;
     uint_fast16_t max_value;
     float pwm_gradient;
-    bool invert_pwm;
+    bool invert_pwm; // NOTE: set (by driver) when inversion is done in code
+    bool always_on;
     uint_fast16_t n_pieces;
     pwm_piece_t piece[SPINDLE_NPWM_PIECES];
 } spindle_pwm_t;

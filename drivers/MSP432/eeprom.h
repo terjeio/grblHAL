@@ -4,7 +4,7 @@
 
   for 2K EEPROM on CNC Boosterpack (Microchip 24LC16B)
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2017-2019 Terje Io
 

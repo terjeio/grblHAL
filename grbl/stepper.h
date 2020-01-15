@@ -62,7 +62,7 @@ typedef struct {
     float target_position;          // Target position of segment relative to block start, used by spindle sync code
     uint_fast16_t n_step;           // Number of step events to be executed for this segment
 #ifdef SPINDLE_PWM_DIRECT
-    uint_fast16_t spindle_pwm;		// Spindle PWM to be set at the start of segment execution
+    uint_fast16_t spindle_pwm;      // Spindle PWM to be set at the start of segment execution
 #else
     float spindle_rpm;              // Spindle RPM to be set at the start of the segment execution
 #endif

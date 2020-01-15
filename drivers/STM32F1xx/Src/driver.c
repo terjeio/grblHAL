@@ -2,9 +2,9 @@
 
   driver.c - driver code for STM32F103C8 ARM processors
 
-  Part of Grbl
+  Part of GrblHAL
 
-  Copyright (c) 2019 Terje Io
+  Copyright (c) 2019-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -103,7 +103,7 @@ static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to
 
 #endif
 
-static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value);
+static void spindle_set_speed (uint_fast16_t pwm_value);
 
 static void driver_delay (uint32_t ms, void (*callback)(void))
 {
@@ -333,13 +333,17 @@ static void spindleSetState (spindle_state_t state, float rpm)
 // Variable spindle control functions
 
 // Sets spindle speed
-static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
+static void spindle_set_speed (uint_fast16_t pwm_value)
 {
     if (pwm_value == spindle_pwm.off_value) {
         pwmEnabled = false;
         if(settings.spindle.disable_with_zero_speed)
             spindle_off();
-        SPINDLE_PWM_TIMER->BDTR &= ~TIM_BDTR_MOE; // Set PWM output low
+        if(spindle_pwm.always_on) {
+            SPINDLE_PWM_TIMER->CCR1 = spindle_pwm.off_value;
+            SPINDLE_PWM_TIMER->BDTR |= TIM_BDTR_MOE;
+        } else
+        	SPINDLE_PWM_TIMER->BDTR &= ~TIM_BDTR_MOE; // Set PWM output low
     } else {
         if(!pwmEnabled)
             spindle_on();
@@ -347,14 +351,23 @@ static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
         SPINDLE_PWM_TIMER->CCR1 = pwm_value;
         SPINDLE_PWM_TIMER->BDTR |= TIM_BDTR_MOE;
     }
-
-    return pwm_value;
 }
+
+#ifdef SPINDLE_PWM_DIRECT
+
+static uint_fast16_t spindleGetPWM (float rpm)
+{
+    return spindle_compute_pwm_value(&spindle_pwm, rpm, false);
+}
+
+#else
 
 static void spindleUpdateRPM (float rpm)
 {
     spindle_set_speed(spindle_compute_pwm_value(&spindle_pwm, rpm, false));
 }
+
+#endif
 
 // Start or stop spindle
 static void spindleSetStateVariable (spindle_state_t state, float rpm)
@@ -433,7 +446,7 @@ static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t 
 // Configures peripherals when settings are initialized or changed
 void settings_changed (settings_t *settings)
 {
-    hal.driver_cap.variable_spindle = spindle_precompute_pwm_values(&spindle_pwm, SystemCoreClock);
+    hal.driver_cap.variable_spindle = settings->spindle.rpm_min < settings->spindle.rpm_max;
 
 #if (STEP_OUTMODE == GPIO_MAP) || (DIRECTION_OUTMODE == GPIO_MAP)
     uint8_t i;
@@ -463,12 +476,14 @@ void settings_changed (settings_t *settings)
 
         if(hal.driver_cap.variable_spindle) {
 
-            hal.spindle_set_state = spindleSetStateVariable;
+        	hal.spindle_set_state = spindleSetStateVariable;
 
             SPINDLE_PWM_TIMER->CR1 &= ~TIM_CR1_CEN;
 
+        	spindle_precompute_pwm_values(&spindle_pwm, SystemCoreClock / (settings->spindle.pwm_freq > 200.0f ? 1 : 25));
+
             TIM_Base_InitTypeDef timerInitStructure = {
-                .Prescaler = 9, // hal.f_step_timer / 1000000 / 7 - 1, // 1000
+                .Prescaler = (settings->spindle.pwm_freq > 200.0f ? 1 : 25) - 1,
                 .CounterMode = TIM_COUNTERMODE_UP,
                 .Period = spindle_pwm.period - 1,
                 .ClockDivision = TIM_CLOCKDIVISION_DIV1,
@@ -481,6 +496,14 @@ void settings_changed (settings_t *settings)
             SPINDLE_PWM_TIMER->CCMR1 &= ~(TIM_CCMR1_OC1M|TIM_CCMR1_CC1S);
             SPINDLE_PWM_TIMER->CCMR1 |= TIM_CCMR1_OC1M_1|TIM_CCMR1_OC1M_2;
             SPINDLE_PWM_TIMER->CCR1 = 0;
+            if(settings->spindle.invert.pwm) {
+                SPINDLE_PWM_TIMER->CCER |= TIM_CCER_CC1P;
+            	SPINDLE_PWM_TIMER->CR2 |= TIM_CR2_OIS1;
+            } else {
+                SPINDLE_PWM_TIMER->CCER &= ~TIM_CCER_CC1P;
+            	SPINDLE_PWM_TIMER->CR2 &= ~TIM_CR2_OIS1;
+            }
+            SPINDLE_PWM_TIMER->BDTR |= TIM_BDTR_OSSR|TIM_BDTR_OSSI;
             SPINDLE_PWM_TIMER->CCER |= TIM_CCER_CC1E;
             SPINDLE_PWM_TIMER->CR1 |= TIM_CR1_CEN;
 
@@ -855,7 +878,12 @@ bool driver_init (void)
 
     hal.spindle_set_state = spindleSetState;
     hal.spindle_get_state = spindleGetState;
+#ifdef SPINDLE_PWM_DIRECT
+    hal.spindle_get_pwm = spindleGetPWM;
+    hal.spindle_update_pwm = spindle_set_speed;
+#else
     hal.spindle_update_rpm = spindleUpdateRPM;
+#endif
 
     hal.system_control_get_state = systemGetState;
 
@@ -925,6 +953,7 @@ bool driver_init (void)
 
     hal.driver_cap.spindle_dir = On;
     hal.driver_cap.variable_spindle = On;
+    hal.driver_cap.spindle_pwm_invert = On;
     hal.driver_cap.mist_control = On;
     hal.driver_cap.software_debounce = On;
     hal.driver_cap.step_pulse_delay = On;

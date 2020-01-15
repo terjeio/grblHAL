@@ -4,7 +4,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2018-2019 Terje Io
+  Copyright (c) 2018-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -18,11 +18,7 @@
 
   You should have received a copy of the GNU General Public License
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
-                    if(gc_state.last_error != Status_OK) {
-                        hal.stream.write("[FAULT:");
-                        hal.stream.write(line);
-                        hal.stream.write("]\r\n");
-                    }
+
 */
 
 #include "Arduino.h"
@@ -67,7 +63,7 @@ static delay_t delay_ms = { .ms = 1, .callback = NULL }; // NOTE: initial ms set
 
 static axes_signals_t limit_ies; // declare here for now...
 
-static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value);
+static void spindle_set_speed (uint_fast16_t pwm_value);
 
 #if IOEXPAND_ENABLE
 static ioexpand_t iopins = {0};
@@ -357,14 +353,21 @@ static void spindleSetState (spindle_state_t state, float rpm)
 // Variable spindle control functions
 
 // Sets spindle speed
-static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
+static void spindle_set_speed (uint_fast16_t pwm_value)
 {
     if (pwm_value == spindle_pwm.off_value) {
         pwmEnabled = false;
         if(settings.spindle.disable_with_zero_speed)
             spindle_off();
-        SPINDLE_PWM_TIMER->CTRLBSET.bit.CMD = TCC_CTRLBCLR_CMD_STOP_Val;
-        while(SPINDLE_PWM_TIMER->SYNCBUSY.bit.CTRLB);
+        if(spindle_pwm.always_on) {
+            SPINDLE_PWM_TIMER->CC[SPINDLE_PWM_CCREG].bit.CC = spindle_pwm.off_value;
+            while(SPINDLE_PWM_TIMER->SYNCBUSY.bit.CC2);
+            SPINDLE_PWM_TIMER->CTRLBSET.bit.CMD = TCC_CTRLBCLR_CMD_RETRIGGER_Val;
+            while(SPINDLE_PWM_TIMER->SYNCBUSY.bit.CTRLB);
+        } else {
+            SPINDLE_PWM_TIMER->CTRLBSET.bit.CMD = TCC_CTRLBCLR_CMD_STOP_Val;
+            while(SPINDLE_PWM_TIMER->SYNCBUSY.bit.CTRLB);
+        }
     } else {
         if(!pwmEnabled)
             spindle_on();
@@ -375,14 +378,23 @@ static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
         SPINDLE_PWM_TIMER->CTRLBSET.bit.CMD = TCC_CTRLBCLR_CMD_RETRIGGER_Val;
         while(SPINDLE_PWM_TIMER->SYNCBUSY.bit.CTRLB);
     }
-
-    return pwm_value;
 }
+
+#ifdef SPINDLE_PWM_DIRECT
+
+static uint_fast16_t spindleGetPWM (float rpm)
+{
+    return spindle_compute_pwm_value(&spindle_pwm, rpm, false);
+}
+
+#else
 
 static void spindleUpdateRPM (float rpm)
 {
     spindle_set_speed(spindle_compute_pwm_value(&spindle_pwm, rpm, false));
 }
+
+#endif
 
 // Start or stop spindle
 static void spindleSetStateVariable (spindle_state_t state, float rpm)
@@ -495,7 +507,20 @@ static void showMessage (const char *msg)
 // Configures perhipherals when settings are initialized or changed
 void settings_changed (settings_t *settings)
 {
-    hal.driver_cap.variable_spindle = spindle_precompute_pwm_values(&spindle_pwm, hal.f_step_timer);
+    if((hal.driver_cap.variable_spindle = settings->spindle.rpm_min < settings->spindle.rpm_max)) {
+
+        SPINDLE_PWM_TIMER->CTRLA.bit.ENABLE = 0;
+        while(SPINDLE_PWM_TIMER->SYNCBUSY.bit.ENABLE);
+
+        if(settings->spindle.pwm_freq > 200.0f)
+            SPINDLE_PWM_TIMER->CTRLA.bit.PRESCALER = TC_CTRLA_PRESCALER_DIV1_Val;
+        else
+            SPINDLE_PWM_TIMER->CTRLA.bit.PRESCALER = TC_CTRLA_PRESCALER_DIV8_Val;
+
+//        while(SPINDLE_PWM_TIMER->SYNCBUSY.bit.PRESCALER);
+
+        spindle_precompute_pwm_values(&spindle_pwm, hal.f_step_timer / (settings->spindle.pwm_freq > 200.0f ? 1 : 8));
+    }
 
     if(IOInitDone) {
 
@@ -986,7 +1011,12 @@ bool driver_init (void) {
 
     hal.spindle_set_state = spindleSetState;
     hal.spindle_get_state = spindleGetState;
+#ifdef SPINDLE_PWM_DIRECT
+    hal.spindle_get_pwm = spindleGetPWM;
+    hal.spindle_update_pwm = spindle_set_speed;
+#else
     hal.spindle_update_rpm = spindleUpdateRPM;
+#endif
     
     hal.system_control_get_state = systemGetState;
 

@@ -28,7 +28,7 @@
 
 #include "tiva.h"
 
-#include "GRBL/grbl.h"
+#include "grbl/grbl.h"
 
 // Configuration
 // Set value to 1 to enable, 0 to disable

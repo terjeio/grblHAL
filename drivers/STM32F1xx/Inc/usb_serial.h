@@ -2,7 +2,7 @@
 
   usb_serial.h - low level functions for transmitting bytes via the USB virtual serial port
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2019 Terje Io
 

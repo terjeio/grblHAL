@@ -3,7 +3,7 @@
 
   WiFi comms
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2018-2019 Terje Io
 

@@ -6,7 +6,7 @@
   Note: this must be compiled together with my HALified version of Grbl,
         either as a dependent project or directly embedded in this project
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2017 Terje Io
 

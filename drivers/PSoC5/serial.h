@@ -3,7 +3,7 @@
 
   Serial driver for Cypress PSoC 5 (CY8CKIT-059)
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2017 Terje Io
 
