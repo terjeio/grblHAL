@@ -104,6 +104,7 @@ int grbl_enter (void)
 	hal.stream.enqueue_realtime_command = protocol_enqueue_realtime_command;
 	hal.stream_blocking_callback = stream_tx_blocking;
 	hal.protocol_enqueue_gcode = protocol_enqueue_gcode;
+	hal.driver_reset = dummy_handler;
 
 	memcpy(&hal.report, &report_fns, sizeof(report_t));
 

@@ -5,7 +5,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2018 Terje Io
+  Copyright (c) 2018-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -53,7 +53,6 @@
 #endif
 
 void sdcard_init (void);
-void sdcard_reset (void);
 FATFS *sdcard_getfs(void);
 
 #endif // SDCARD_ENABLE

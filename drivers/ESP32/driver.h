@@ -80,34 +80,6 @@
 // Configuration
 // Set value to 1 to enable, 0 to disable
 
-// The following options should be set in CMakeLists.txt to ensure
-// all relevant files are included for compilation
-
-#ifndef KEYPAD_ENABLE
-#define KEYPAD_ENABLE    0 // I2C keypad for jogging etc.
-#endif
-
-#ifndef NETWORKING_ENABLE
-#define WIFI_ENABLE      1 // Streaming over WiFi.
-#define HTTP_ENABLE      1 // Enable http daemon - requires WiFi enabled
-#define TELNET_ENABLE    1 // Enable telnet daemon - requires WiFi enabled
-#define WEBSOCKET_ENABLE 1 // Enable websocket daemon - requires WiFi enabled
-#endif
-
-#ifndef AUTH_ENABLE
-#define AUTH_ENABLE      1 // Enable WebUI security
-#endif
-#ifndef SDCARD_ENABLE
-#define SDCARD_ENABLE    1 // Run jobs from SD card.
-#endif
-#ifndef WEBUI_ENABLE
-#define WEBUI_ENABLE     1 // Enables WebUi - requires WiFi enabled. Note: experimental - only partly implemented!
-#endif
-#ifndef TRINAMIC_ENABLE
-#define TRINAMIC_ENABLE  0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
-#define TRINAMIC_I2C     0 // Trinamic I2C - SPI bridge interface.
-#endif
-
 #ifdef CNC_BOOSTERPACK
 #undef CNC_BOOSTERPACK
 #define CNC_BOOSTERPACK  1
@@ -123,6 +95,35 @@
 #define WIFI_SOFTAP      0 // Use Soft AP mode for WiFi.
 #define BLUETOOTH_ENABLE 0 // Streaming over Bluetooth.
 #define TRINAMIC_DEV     0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
+
+// The following options should be set in CMakeLists.txt to ensure
+// all relevant files are included for compilation
+// DO NOT change settings here!
+
+#ifndef KEYPAD_ENABLE
+#define KEYPAD_ENABLE    0 // I2C keypad for jogging etc.
+#endif
+
+#ifndef NETWORKING_ENABLE
+#define WIFI_ENABLE      0 // Streaming over WiFi.
+#define HTTP_ENABLE      0 // Enable http daemon - requires WiFi enabled
+#define TELNET_ENABLE    0 // Enable telnet daemon - requires WiFi enabled
+#define WEBSOCKET_ENABLE 0 // Enable websocket daemon - requires WiFi enabled
+#endif
+
+#ifndef AUTH_ENABLE
+#define AUTH_ENABLE      0 // Enable WebUI security
+#endif
+#ifndef SDCARD_ENABLE
+#define SDCARD_ENABLE    0 // Run jobs from SD card.
+#endif
+#ifndef WEBUI_ENABLE
+#define WEBUI_ENABLE     0 // Enables WebUi - requires WiFi enabled. Note: experimental - only partly implemented!
+#endif
+#ifndef TRINAMIC_ENABLE
+#define TRINAMIC_ENABLE  0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
+#define TRINAMIC_I2C     0 // Trinamic I2C - SPI bridge interface.
+#endif
 
 // end configuration
 

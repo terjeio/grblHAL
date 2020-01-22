@@ -28,7 +28,6 @@
  *
  * Add: #include "esp_attr.h"
  * Change: #define ISR_CODE to #define ISR_CODE IRAM_ATTR
- * Uncomment: #define SPINDLE_PWM_DIRECT
  */
 
 // idf.py app-flash -p COM23

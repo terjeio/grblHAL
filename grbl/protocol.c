@@ -402,8 +402,7 @@ bool protocol_exec_rt_system ()
         // Execute system abort.
         if (rt_exec & EXEC_RESET) {
 
-            if(hal.driver_reset)
-                hal.driver_reset();
+            hal.driver_reset();
 
             sys.abort = !hal.system_control_get_state().e_stop;  // Only place this is set true.
             return !sys.abort; // Nothing else to do but exit.
@@ -428,8 +427,7 @@ bool protocol_exec_rt_system ()
             hal.coolant_set_state(gc_state.modal.coolant);
             sys.report.spindle = sys.report.coolant = On; // Set to report change immediately
 
-            if(hal.driver_reset)
-                hal.driver_reset();
+            hal.driver_reset();
 
             if(hal.stream.suspend_read && hal.stream.suspend_read(false))
                 hal.stream.cancel_read_buffer(); // flush pending blocks (after M6)

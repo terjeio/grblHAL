@@ -317,12 +317,12 @@ void initRMT (settings_t *settings)
     rmt_config_t rmtConfig = {
         .rmt_mode = RMT_MODE_TX,
         .clk_div = 20,
-        .mem_block_num = 2,
+        .mem_block_num = 1,
         .tx_config.loop_en = false,
         .tx_config.carrier_en = false,
         .tx_config.carrier_freq_hz = 0,
         .tx_config.carrier_duty_percent = 50,
-        .tx_config.carrier_level = 0,
+        .tx_config.carrier_level = RMT_CARRIER_LEVEL_LOW,
         .tx_config.idle_output_en = true
     };
 
@@ -353,7 +353,7 @@ void initRMT (settings_t *settings)
         rmtItem[0].level0 = rmtConfig.tx_config.idle_level;
         rmtItem[0].level1 = !rmtConfig.tx_config.idle_level;
         rmt_config(&rmtConfig);
-        rmt_fill_tx_items(rmtConfig.channel, &rmtItem[0], rmtConfig.mem_block_num, 0);
+        rmt_fill_tx_items(rmtConfig.channel, &rmtItem[0], 2, 0);
     }
 }
 
@@ -1298,10 +1298,6 @@ bool driver_init (void)
 
 #if KEYPAD_ENABLE
     hal.execute_realtime = keypad_process_keypress;
-#endif
-
-#if SDCARD_ENABLE
-    hal.driver_reset = sdcard_reset;
 #endif
 
 #if TRINAMIC_ENABLE

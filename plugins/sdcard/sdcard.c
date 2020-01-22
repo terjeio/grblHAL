@@ -454,7 +454,7 @@ static status_code_t sdcard_parse (uint_fast16_t state, char *line, char *lcline
     return retval;
 }
 
-void sdcard_reset (void)
+static void sdcard_reset (void)
 {
     if(hal.stream.type == StreamType_SDCard) {
         if(file.line > 0) {
@@ -465,8 +465,7 @@ void sdcard_reset (void)
         sdcard_end_job();
     }
 
-    if(driver_reset)
-        driver_reset();
+    driver_reset();
 }
 
 void sdcard_init (void)

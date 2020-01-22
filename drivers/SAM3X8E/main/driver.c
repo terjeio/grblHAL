@@ -1481,10 +1481,6 @@ bool driver_init (void)
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
 
-#if SDCARD_ENABLE
-    hal.driver_reset = sdcard_reset;
-#endif
-
 #if KEYPAD_ENABLE || USB_SERIAL
     hal.execute_realtime = execute_realtime;
 #endif

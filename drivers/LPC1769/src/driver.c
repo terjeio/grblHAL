@@ -784,10 +784,6 @@ bool driver_init (void) {
     hal.delay_ms = &driver_delay;
     hal.settings_changed = settings_changed;
 
-#if SDCARD_ENABLE
-    hal.driver_reset = sdcard_reset;
-#endif
-
     hal.stepper_wake_up = stepperWakeUp;
     hal.stepper_go_idle = stepperGoIdle;
     hal.stepper_enable = stepperEnable;

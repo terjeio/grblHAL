@@ -163,4 +163,6 @@ float limit_value_by_axis_maximum(float *max_value, float *unit_vec);
 // calculate checksum byte for EEPROM data
 uint8_t calc_checksum (uint8_t *data, uint32_t size);
 
+void dummy_handler (void);
+
 #endif

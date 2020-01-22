@@ -4,7 +4,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2019 Terje Io
+  Copyright (c) 2019-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -26,7 +26,7 @@
 
 #include "grbl/grbl.h"
 
-static driver_reset_ptr driver_reset;
+static driver_reset_ptr driver_reset = NULL;
 
 static void digital_out (uint8_t port, bool on)
 {
@@ -57,8 +57,7 @@ static void reset (void)
 {
     // Add code to handle soft reset here
 
-    if(driver_reset)    // If other plugins needs to be told about the
-        driver_reset(); // reset call the next function in the chain here.
+    driver_reset(); // If other plugins needs to be told about the reset call the next function in the chain here.
 }
 
 // Initialize additional IO outputs and set up HAL pointers.
@@ -79,6 +78,8 @@ void ioports_init (void)
     hal.port.num_analog = 1;                // Set to number of analog outputs handled.
 
     // If any action on soft reset is required uncomment the following lines:
-//    driver_reset = hal.driver_reset;        // Save pointer to previous reset handler and
-//    hal.driver_reset = reset;               // add our to top of the chain.
+//    if(driver_reset == NULL) {
+//        driver_reset = hal.driver_reset;        // Save pointer to previous reset handler and
+//        hal.driver_reset = reset;               // add our to top of the chain.
+//    }
 }
