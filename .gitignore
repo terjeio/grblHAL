@@ -1,3 +1,8 @@
+# grbl driver stuff
+
+drivers/ESP32/grbl/*.c
+drivers/ESP32/grbl/*.h
+
 # Windows thumbnail cache files
 Thumbs.db
 ehthumbs.db

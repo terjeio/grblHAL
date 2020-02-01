@@ -30,6 +30,11 @@
 
 #include "driver.h"
 #include "esp32-hal-uart.h"
+
+#if MPG_MODE_ENABLE
+#include "esp32-hal-uart2.h"
+#endif
+
 #include "serial.h"
 #include "nvs.h"
 #include "esp_log.h"
@@ -124,6 +129,18 @@ const io_stream_t serial_stream = {
     .enqueue_realtime_command = protocol_enqueue_realtime_command
 };
 
+const io_stream_t serial2_stream = {
+    .type = StreamType_Serial2,
+    .read = uart2Read,
+    .write = uart2WriteS,
+    .write_all = uart2WriteS,
+    .get_rx_buffer_available = uart2RXFree,
+    .reset_read_buffer = uart2Flush,
+    .cancel_read_buffer = uart2Cancel,
+    .suspend_read = uart2SuspendInput,
+    .enqueue_realtime_command = protocol_enqueue_realtime_command
+};
+
 #if WIFI_ENABLE
 
 static network_services_t services = {0};
@@ -200,6 +217,7 @@ const io_stream_t bluetooth_stream = {
 #define INPUT_GROUP_CONTROL 1
 #define INPUT_GROUP_PROBE   2
 #define INPUT_GROUP_LIMIT   4
+#define INPUT_GROUP_MPG     5
 #define INPUT_GROUP_KEYPAD  8
 
 #define INPUT_RESET         0
@@ -212,6 +230,7 @@ const io_stream_t bluetooth_stream = {
 #define INPUT_LIMIT_Z       7
 #define INPUT_KEYPAD        8
 
+
 state_signal_t inputpin[] = {
     { .pin = RESET_PIN, .group = INPUT_GROUP_CONTROL },
     { .pin = FEED_HOLD_PIN, .group = INPUT_GROUP_CONTROL },
@@ -221,6 +240,10 @@ state_signal_t inputpin[] = {
     { .pin = X_LIMIT_PIN, .group = INPUT_GROUP_LIMIT },
     { .pin = Y_LIMIT_PIN, .group = INPUT_GROUP_LIMIT },
     { .pin = Z_LIMIT_PIN, .group = INPUT_GROUP_LIMIT }
+#if MPG_MODE_ENABLE
+    //, { .pin = MPG_ENABLE_PIN, .group = INPUT_GROUP_MPG }
+    // duh, i don't understand it
+#endif
 #if KEYPAD_ENABLE
   , { .pin = KEYPAD_STROBE_PIN, .group = INPUT_GROUP_KEYPAD }
 #endif
@@ -261,6 +284,8 @@ static ledc_channel_config_t ledConfig = {
 // Interrupt handler prototypes
 static void stepper_driver_isr (void *arg);
 static void gpio_isr (void *arg);
+static void mode_isr_handler();
+static void gpio_task_mode(void* arg);
 
 static TimerHandle_t xDelayTimer = NULL, debounceTimer = NULL;
 static TaskHandle_t xStepperTask = NULL;
@@ -301,6 +326,15 @@ void selectStream (stream_type_t stream)
 #endif
             if(active_stream != StreamType_Serial)
                 hal.stream.write_all("[MSG:SERIAL STREAM ACTIVE]\r\n");
+            break;
+
+         case StreamType_Serial2:
+            memcpy(&hal.stream, &serial2_stream, sizeof(io_stream_t));
+#if WIFI_ENABLE
+            services.mask = 0;
+#endif
+            if(active_stream != StreamType_Serial2)
+                hal.stream.write_all("[MSG:SERIAL STREAM2 ACTIVE]\r\n");
             break;
 
         default:
@@ -699,6 +733,38 @@ static void spindleSetStateVariable (spindle_state_t state, float rpm)
     }
 }
 
+#if MPG_MODE_ENABLE
+SemaphoreHandle_t xSemaphore = NULL;
+#define ESP_INTR_FLAG_DEFAULT 0
+
+static void modeSelect (bool mpg_mode)
+{
+
+  
+  if(mpg_mode){
+    selectStream(StreamType_Serial2);
+  }
+  else{
+    // ??
+    selectStream(StreamType_Serial);
+  }
+}
+
+static void modeChange (void)
+{
+    modeSelect(gpio_get_level(MPG_ENABLE_PIN));
+}
+
+static void modeEnable (void)
+{
+    //
+#if KEYPAD_ENABLE
+    //KEYPAD_PORT->IE |= KEYPAD_IRQ_BIT;
+#endif
+}
+
+#endif // end MPG_MODE_ENABLE
+
 // Returns spindle state in a spindle_state_t variable
 static spindle_state_t spindleGetState (void)
 {
@@ -1066,6 +1132,19 @@ static bool driver_setup (settings_t *settings)
 
     gpio_isr_register(gpio_isr, NULL, (int)ESP_INTR_FLAG_IRAM, NULL);
 
+    /***************************
+    *   Mode ISR
+    ***************************/
+
+#if MPG_MODE_ENABLE
+  
+    xSemaphore = xSemaphoreCreateBinary();
+    gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);
+    gpio_isr_handler_add(MPG_ENABLE_PIN, mode_isr_handler, NULL);
+    xTaskCreate(gpio_task_mode, "gpio_task_mode", 2048, NULL, 10, NULL);
+
+#endif
+
    /******************
     *  Spindle init  *
     ******************/
@@ -1213,6 +1292,13 @@ bool driver_init (void)
     // Enable EEPROM and serial port here for Grbl to be able to configure itself and report any errors
 
     uartInit();
+  
+
+#if MPG_MODE_ENABLE
+    uart2Init();
+    // Drive MPG mode input pin low until setup complete
+    // TODO 
+#endif
 
 #ifdef I2C_PORT
     I2CInit();
@@ -1407,3 +1493,26 @@ IRAM_ATTR static void gpio_isr (void *arg)
       keypad_keyclick_handler(gpio_get_level(inputpin[INPUT_KEYPAD].pin));
 #endif
 }
+
+
+// Mode ISR
+
+#if MPG_MODE_ENABLE
+
+static void gpio_task_mode(void* arg)
+{
+    for(;;) {
+        if(xSemaphoreTake(xSemaphore,portMAX_DELAY) == pdTRUE) {
+          modeChange();
+        }
+    }
+}
+
+void IRAM_ATTR mode_isr_handler() {
+  
+    // notify the button task
+  xSemaphoreGive(xSemaphore);
+}
+
+#endif
+

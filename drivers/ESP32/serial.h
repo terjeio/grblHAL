@@ -28,6 +28,7 @@
 #include <stdbool.h>
 
 #include "esp32-hal-uart.h"
+#include "esp32-hal-uart2.h"
 
 #define RX_BUFFER_HWM 900
 #define RX_BUFFER_LWM 300

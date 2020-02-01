@@ -75,6 +75,11 @@
 #define TRINAMIC_I2C    1
 #endif
 
+#ifdef MPG_MODE_ENABLE
+#undef MPG_MODE_ENABLE
+#define MPG_MODE_ENABLE 1
+#endif
+
 //
 
 // Configuration
@@ -216,6 +221,10 @@ extern driver_settings_t driver_settings;
 
 #endif
 
+#if MPG_MODE_ENABLE
+#define MPG_ENABLE_PIN 13
+#endif
+
 #if CNC_BOOSTERPACK
 
 #define IOEXPAND 0
@@ -229,8 +238,10 @@ extern driver_settings_t driver_settings;
 #define PIN_NUM_MOSI 23
 #define PIN_NUM_CLK  18
 #define PIN_NUM_CS   5
+#define MPG_ENABLE_PIN 13
 
 #endif // SDCARD_ENABLE
+
 
 // timer definitions
 #define STEP_TIMER_GROUP TIMER_GROUP_0
@@ -308,7 +319,7 @@ typedef union {
 } ioexpand_t;
 #endif
 
-#else
+#else  // ?? else no booster?
 
 #if SDCARD_ENABLE
 
@@ -319,6 +330,7 @@ typedef union {
 #define PIN_NUM_MOSI 23
 #define PIN_NUM_CLK  18
 #define PIN_NUM_CS   5
+#define MPG_ENABLE_PIN 13
 
 #endif // SDCARD_ENABLE
 

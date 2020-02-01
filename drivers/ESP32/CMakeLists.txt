@@ -11,7 +11,8 @@ OPTION(SDcard "SD Card Streaming" OFF)
 OPTION(Trinamic "Trinamic driver support over I2C" OFF)
 OPTION(WebUI "WebUI services" OFF)
 OPTION(WebAuth "WebUI authentication" OFF)
-OPTION(BoosterPack "Compile for CNC BoosterPack" OFF)
+OPTION(BoosterPack "Compile for CNC BoosterPack" ON)
+OPTION(MPG_MODE "MPG mode" ON)
 
 set(SDCARD_SOURCE sdcard/sdcard.c)
 set(KEYPAD_SOURCE keypad/keypad.c)
@@ -19,7 +20,7 @@ set(TRINAMIC_SOURCE trinamic/trinamic2130.c trinamic/TMC2130_I2C_map.c tmc2130/t
 set(NETWORKING_SOURCE wifi.c dns_server.c web/backend.c web/upload.c networking/TCPStream.c networking/WsStream.c networking/base64.c networking/sha1.c networking/urldecode.c networking/strutils.c networking/utils.c networking/multipartparser.c )
 set(WEBUI_SOURCE webui/server.c webui/response.c webui/commands.c webui/flashfs.c )
 
-set(MAIN_SRCS main.c driver.c nvs.c esp32-hal-uart.c bluetooth.c
+set(MAIN_SRCS main.c driver.c nvs.c esp32-hal-uart.c esp32-hal-uart2.c bluetooth.c
  i2c.c
  ioexpand.c
  eeprom.c
@@ -97,6 +98,10 @@ endif()
 
 if(BoosterPack)
 target_compile_definitions(grbl.elf PUBLIC CNC_BOOSTERPACK)
+endif()
+
+if(MPG_MODE)
+target_compile_definitions(grbl.elf PUBLIC MPG_MODE_ENABLE)
 endif()
 
 target_add_binary_data(grbl.elf "favicon.ico" BINARY)
