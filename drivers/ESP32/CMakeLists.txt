@@ -11,7 +11,7 @@ OPTION(SDcard "SD Card Streaming" OFF)
 OPTION(Trinamic "Trinamic driver support over I2C" OFF)
 OPTION(WebUI "WebUI services" OFF)
 OPTION(WebAuth "WebUI authentication" OFF)
-OPTION(BoosterPack "Compile for CNC BoosterPack" ON)
+OPTION(BoosterPack "Compile for CNC BoosterPack" OFF)
 OPTION(MPG_MODE "MPG mode" ON)
 
 set(SDCARD_SOURCE sdcard/sdcard.c)

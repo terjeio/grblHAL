@@ -78,6 +78,7 @@
 #ifdef MPG_MODE_ENABLE
 #undef MPG_MODE_ENABLE
 #define MPG_MODE_ENABLE 1
+#endif
 
 #ifndef CNC_BOOSTERPACK
 // NOTE: Only one board may be enabled!
@@ -99,6 +100,7 @@
 #define EEPROM_ENABLE    0 // I2C EEPROM (24LC16) support.
 #define IOEXPAND_ENABLE  0 // I2C IO expander for some output signals.
 #endif
+
 #define PWM_RAMPED       0 // Ramped spindle PWM.
 #define PROBE_ENABLE     1 // Probe input
 #define PROBE_ISR        0 // Catch probe state change by interrupt TODO: needs verification!
@@ -124,12 +126,15 @@
 #ifndef AUTH_ENABLE
 #define AUTH_ENABLE      0 // Enable WebUI security
 #endif
+
 #ifndef SDCARD_ENABLE
 #define SDCARD_ENABLE    0 // Run jobs from SD card.
 #endif
+
 #ifndef WEBUI_ENABLE
 #define WEBUI_ENABLE     0 // Enables WebUi - requires WiFi enabled. Note: experimental - only partly implemented!
 #endif
+
 #ifndef TRINAMIC_ENABLE
 #define TRINAMIC_ENABLE  0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
 #define TRINAMIC_I2C     0 // Trinamic I2C - SPI bridge interface.
@@ -147,7 +152,7 @@
 #define HTTP_ENABLE      1
 #define WEBSOCKET_ENABLE 1
 
-#endif
+#endif //webui
 
 #if WIFI_ENABLE
 
@@ -162,7 +167,7 @@
 #define NETWORK_IP              "192.168.5.1"
 #define NETWORK_GATEWAY         "192.168.5.1"
 #define NETWORK_MASK            "255.255.255.0"
-#endif
+#endif // wifi
 
 #if NETWORK_IPMODE_STATIC && WIFI_SOFTAP
 #error "Cannot use static IP for station when soft AP is enabled!"
@@ -295,6 +300,7 @@ extern driver_settings_t driver_settings;
 
 // Define probe switch input pin.
 #define PROBE_PIN       GPIO_NUM_13
+#endif
 
 #if KEYPAD_ENABLE
 #define KEYPAD_STROBE_PIN   GPIO_NUM_33
@@ -324,8 +330,6 @@ typedef union {
 } ioexpand_t;
 #endif
 
-#else  // ?? else no booster?
-=======
 #ifdef CNC_BOOSTERPACK
     #include "boosterpack_map.h"
 #elif defined(BOARD_BDRING_V4)
@@ -333,7 +337,6 @@ typedef union {
 #elif defined(BOARD_BDRING_V3P5)
     #include "bdring_v3.5_map.h"
 #else // default board - NOTE: NOT FINAL VERSION!
->>>>>>> f481dd796371fa7627877b4244aa6decd004ec7f
 
 #if SDCARD_ENABLE
 
