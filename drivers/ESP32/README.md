@@ -6,6 +6,10 @@ A GrblHAL driver for the ESP32 processor.
 
 ---
 
+__Update 2020-02-02:__ Added board mapping files for [Bart's v3.5 and v4 ESP32 boards](http://www.buildlog.net/blog/). v4 is now the default mapping. **For verification!** 
+
+---
+
 __Update 2019-11-25:__ Added basic support for Luc's [ESP3D-WEBUI](https://github.com/luc-github/ESP3D-webui) with a backend written from scratch utilizing GrblHALs function pointer based API.
 
 Currently missing is authentication and notification support, and possibly something else that I have overlooked. All GrblHAL settings are available from the GRBL configuration page, however the extended settings provided by GrblHAL does not show any help text. The ESP3D Settings page does not show settings not supported by this backend implementation.
