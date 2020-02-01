@@ -78,6 +78,11 @@
 #ifdef MPG_MODE_ENABLE
 #undef MPG_MODE_ENABLE
 #define MPG_MODE_ENABLE 1
+
+#ifndef CNC_BOOSTERPACK
+// NOTE: Only one board may be enabled!
+#define BOARD_BDRING_V4
+//#define BOARD_BDRING_V3P5
 #endif
 
 //
@@ -320,6 +325,15 @@ typedef union {
 #endif
 
 #else  // ?? else no booster?
+=======
+#ifdef CNC_BOOSTERPACK
+    #include "boosterpack_map.h"
+#elif defined(BOARD_BDRING_V4)
+    #include "bdring_v4_map.h"
+#elif defined(BOARD_BDRING_V3P5)
+    #include "bdring_v3.5_map.h"
+#else // default board - NOTE: NOT FINAL VERSION!
+>>>>>>> f481dd796371fa7627877b4244aa6decd004ec7f
 
 #if SDCARD_ENABLE
 

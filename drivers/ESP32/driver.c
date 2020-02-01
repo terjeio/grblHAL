@@ -648,13 +648,14 @@ inline static void spindle_on ()
 #endif
 }
 
+
 inline static void spindle_dir (bool ccw)
 {
     if(hal.driver_cap.spindle_dir) {
 #if IOEXPAND_ENABLE
         iopins.spindle_dir = (ccw ^ settings.spindle.invert.ccw) ? On : Off;
         ioexpand_out(iopins);
-#else
+#elif defined(SPINDLE_DIRECTION_PIN)
         gpio_set_level(SPINDLE_DIRECTION_PIN, (ccw ^ settings.spindle.invert.ccw) ? 1 : 0);
 #endif
     }
@@ -775,7 +776,9 @@ static spindle_state_t spindleGetState (void)
     state.ccw = hal.driver_cap.spindle_dir && iopins.spindle_dir;
 #else
     state.on = gpio_get_level(SPINDLE_ENABLE_PIN) != 0;
+  #if defined(SPINDLE_DIRECTION_PIN)
     state.ccw = hal.driver_cap.spindle_dir && gpio_get_level(SPINDLE_DIRECTION_PIN) != 0;
+  #endif
 #endif
     state.value ^= settings.spindle.invert.mask;
     state.on |= pwmEnabled;
@@ -797,8 +800,12 @@ static void coolantSetState (coolant_state_t mode)
     iopins.mist_on = mode.mist;
     ioexpand_out(iopins);
 #else
+  #ifdef COOLANT_FLOOD_PIN
     gpio_set_level(COOLANT_FLOOD_PIN, mode.flood ? 1 : 0);
+  #endif
+  #ifdef COOLANT_MIST_PIN
     gpio_set_level(COOLANT_MIST_PIN, mode.mist ? 1 : 0);
+  #endif
 #endif
 }
 
@@ -811,8 +818,12 @@ static coolant_state_t coolantGetState (void)
     state.flood = iopins.flood_on;
     state.mist = iopins.mist_on;
 #else
+  #ifdef COOLANT_FLOOD_PIN
     state.flood = gpio_get_level(COOLANT_FLOOD_PIN);
+  #endif
+  #ifdef COOLANT_MIST_PIN
     state.mist  = gpio_get_level(COOLANT_MIST_PIN);
+  #endif
 #endif
 
     state.value ^= settings.coolant_invert.mask;
@@ -1109,7 +1120,11 @@ static bool driver_setup (settings_t *settings)
 #if IOEXPAND_ENABLE
         .pin_bit_mask = DIRECTION_MASK,
 #else
+  #ifdef COOLANT_MASK
         .pin_bit_mask = DIRECTION_MASK|STEPPERS_DISABLE_MASK|SPINDLE_MASK|COOLANT_MASK,
+  #else
+        .pin_bit_mask = DIRECTION_MASK|STEPPERS_DISABLE_MASK|SPINDLE_MASK,
+  #endif
 #endif
         .mode = GPIO_MODE_OUTPUT,
         .pull_up_en = GPIO_PULLUP_DISABLE,
@@ -1399,13 +1414,17 @@ bool driver_init (void)
 
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
 
+#if IOEXPAND_ENABLE || defined(SPINDLE_DIRECTION_PIN)
     hal.driver_cap.spindle_dir = On;
+#endif
     hal.driver_cap.variable_spindle = On;
     hal.driver_cap.spindle_pwm_invert = On;
 #if PWM_RAMPED
     hal.driver_cap.spindle_at_speed = On;
 #endif
+#if IOEXPAND_ENABLE || defined(COOLANT_MIST_PIN)
     hal.driver_cap.mist_control = On;
+#endif
     hal.driver_cap.software_debounce = On;
     hal.driver_cap.step_pulse_delay = On;
     hal.driver_cap.amass_level = 3;
