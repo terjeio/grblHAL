@@ -733,16 +733,16 @@ SemaphoreHandle_t xSemaphore = NULL;
 static void modeSelect (bool mpg_mode)
 {
 
-  printf("ModeSelect togglated");
+  hal.stream.write_all("ModeSelect togglated\n");
   if(mpg_mode){
-    printf("mode true");
+    hal.stream.write_all("\tmode true\n");
     // TODO check to be sure idle and can switch stream
     //uartStop();
     //uart2Init();
     //memcpy(&hal.stream, &serial2_stream, sizeof(io_stream_t));
   }
   else{
-    printf("mode false");
+    hal.stream.write_all("\tmode false\n");
     // TODO ensure idle to switch stream
     //uart2Stop();
     //uartInit(); 
@@ -1527,7 +1527,9 @@ static void gpio_task_mode(void* arg)
 {
     for(;;) {
         if(xSemaphoreTake(xSemaphore,portMAX_DELAY) == pdTRUE) {
-          printf("mode change");
+          // debounce a bit
+          vTaskDelay(200);
+          hal.stream.write_all("\t\tmode change\n");
           modeChange();
         }
     }
@@ -1535,16 +1537,9 @@ static void gpio_task_mode(void* arg)
 
 void IRAM_ATTR mode_isr_handler(void* arg) {
   if(xSemaphore == NULL){
-    printf("null sem");
+    hal.stream.write_all("ERROR null sem\n");
   }  
-    // notify the button task
-  if( xSemaphoreGive( xSemaphore ) != pdTRUE ){
-    // should never fail
-    printf("doh");
-  }
-
-
-  
+  xSemaphoreGive( xSemaphore );
 }
 
 #endif
