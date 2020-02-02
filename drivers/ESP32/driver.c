@@ -130,7 +130,7 @@ const io_stream_t serial_stream = {
 };
 
 const io_stream_t serial2_stream = {
-    .type = StreamType_Serial2,
+    .type = StreamType_Serial,
     .read = uart2Read,
     .write = uart2WriteS,
     .write_all = uart2WriteS,
@@ -284,7 +284,7 @@ static ledc_channel_config_t ledConfig = {
 // Interrupt handler prototypes
 static void stepper_driver_isr (void *arg);
 static void gpio_isr (void *arg);
-static void mode_isr_handler();
+static void mode_isr_handler(void* arg);
 static void gpio_task_mode(void* arg);
 
 static TimerHandle_t xDelayTimer = NULL, debounceTimer = NULL;
@@ -328,14 +328,6 @@ void selectStream (stream_type_t stream)
                 hal.stream.write_all("[MSG:SERIAL STREAM ACTIVE]\r\n");
             break;
 
-         case StreamType_Serial2:
-            memcpy(&hal.stream, &serial2_stream, sizeof(io_stream_t));
-#if WIFI_ENABLE
-            services.mask = 0;
-#endif
-            if(active_stream != StreamType_Serial2)
-                hal.stream.write_all("[MSG:SERIAL STREAM2 ACTIVE]\r\n");
-            break;
 
         default:
             break;
@@ -741,13 +733,22 @@ SemaphoreHandle_t xSemaphore = NULL;
 static void modeSelect (bool mpg_mode)
 {
 
-  
+  printf("ModeSelect togglated");
   if(mpg_mode){
-    selectStream(StreamType_Serial2);
+    printf("mode true");
+    // TODO check to be sure idle and can switch stream
+    //uartStop();
+    //uart2Init();
+    //memcpy(&hal.stream, &serial2_stream, sizeof(io_stream_t));
   }
   else{
-    // ??
-    selectStream(StreamType_Serial);
+    printf("mode false");
+    // TODO ensure idle to switch stream
+    //uart2Stop();
+    //uartInit(); 
+    //memcpy(&hal.stream, &serial_stream, sizeof(io_stream_t));
+
+    
   }
 }
 
@@ -1147,19 +1148,6 @@ static bool driver_setup (settings_t *settings)
 
     gpio_isr_register(gpio_isr, NULL, (int)ESP_INTR_FLAG_IRAM, NULL);
 
-    /***************************
-    *   Mode ISR
-    ***************************/
-
-#if MPG_MODE_ENABLE
-  
-    xSemaphore = xSemaphoreCreateBinary();
-    gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);
-    gpio_isr_handler_add(MPG_ENABLE_PIN, mode_isr_handler, NULL);
-    xTaskCreate(gpio_task_mode, "gpio_task_mode", 2048, NULL, 10, NULL);
-
-#endif
-
    /******************
     *  Spindle init  *
     ******************/
@@ -1310,9 +1298,26 @@ bool driver_init (void)
   
 
 #if MPG_MODE_ENABLE
-    uart2Init();
+
+    /***************************
+    *   Mode ISR
+    ***************************/
+
+
+    //uart2Init();
+    //hal.driver_cap.mpg_mode = On;
     // Drive MPG mode input pin low until setup complete
     // TODO 
+    gpio_config_t io_conf;
+    io_conf.mode = GPIO_MODE_INPUT;
+    io_conf.pull_up_en = (gpio_pullup_t)1;
+    io_conf.pin_bit_mask = 1ULL << MPG_ENABLE_PIN;
+    gpio_config(&io_conf);
+    gpio_set_intr_type(MPG_ENABLE_PIN, GPIO_INTR_ANYEDGE);
+    xSemaphore = xSemaphoreCreateBinary();
+    gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);
+    gpio_isr_handler_add(MPG_ENABLE_PIN, mode_isr_handler, NULL);
+    xTaskCreate(gpio_task_mode, "gpio_task_mode", 2048, NULL, 10, NULL);
 #endif
 
 #ifdef I2C_PORT
@@ -1522,15 +1527,24 @@ static void gpio_task_mode(void* arg)
 {
     for(;;) {
         if(xSemaphoreTake(xSemaphore,portMAX_DELAY) == pdTRUE) {
+          printf("mode change");
           modeChange();
         }
     }
 }
 
-void IRAM_ATTR mode_isr_handler() {
-  
+void IRAM_ATTR mode_isr_handler(void* arg) {
+  if(xSemaphore == NULL){
+    printf("null sem");
+  }  
     // notify the button task
-  xSemaphoreGive(xSemaphore);
+  if( xSemaphoreGive( xSemaphore ) != pdTRUE ){
+    // should never fail
+    printf("doh");
+  }
+
+
+  
 }
 
 #endif

@@ -221,6 +221,12 @@ void uartInit (void)
     uartEnableInterrupt(rx_uart);
 }
 
+void uartStop(){
+  UART_MUTEX_LOCK();
+  gpio_intr_disable(UART_INTR_SOURCE(rx_uart->num));
+  UART_MUTEX_UNLOCK();
+}
+
 uint32_t uartAvailable (void)
 {
     uint16_t head = rxbuffer.head, tail = rxbuffer.tail;

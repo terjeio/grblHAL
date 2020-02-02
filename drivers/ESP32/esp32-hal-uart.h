@@ -54,6 +54,7 @@ extern "C" {
 #define DEBUG_PRINT(string) uartWriteS(string)
 
 void uartInit (void);
+void uartStop (void);
 uint32_t uartAvailable (void);
 uint16_t uartRXFree (void);
 uint32_t uartAvailableForWrite (void);

@@ -232,7 +232,7 @@ extern driver_settings_t driver_settings;
 #endif
 
 #if MPG_MODE_ENABLE
-#define MPG_ENABLE_PIN 13
+#define MPG_ENABLE_PIN 5
 #endif
 
 #if CNC_BOOSTERPACK
@@ -248,7 +248,6 @@ extern driver_settings_t driver_settings;
 #define PIN_NUM_MOSI 23
 #define PIN_NUM_CLK  18
 #define PIN_NUM_CS   5
-#define MPG_ENABLE_PIN 13
 
 #endif // SDCARD_ENABLE
 
@@ -347,7 +346,6 @@ typedef union {
 #define PIN_NUM_MOSI 23
 #define PIN_NUM_CLK  18
 #define PIN_NUM_CS   5
-#define MPG_ENABLE_PIN 13
 
 #endif // SDCARD_ENABLE
 

@@ -213,12 +213,19 @@ static void uartConfig (uart_t *uart)
 
 void uart2Init (void)
 {
-    rx_uart = tx_uart = &_uart_bus_array[0]; // use UART 0
+    rx_uart = tx_uart = &_uart_bus_array[1]; // use UART 1
 
     uartConfig(rx_uart);
 
     uartFlush();
     uartEnableInterrupt(rx_uart);
+}
+
+void uart2Stop(){
+  UART_MUTEX_LOCK(); 
+  gpio_intr_disable(UART_INTR_SOURCE(rx_uart->num));
+  //gpio_intr_disable(tx_uart);
+  UART_MUTEX_UNLOCK();
 }
 
 uint32_t uart2Available (void)
