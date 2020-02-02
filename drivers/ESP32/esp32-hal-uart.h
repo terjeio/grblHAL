@@ -55,6 +55,7 @@ extern "C" {
 
 void uartInit (void);
 void uartStop (void);
+void uartStart (void);
 uint32_t uartAvailable (void);
 uint16_t uartRXFree (void);
 uint32_t uartAvailableForWrite (void);
@@ -66,6 +67,7 @@ void uartWriteS (const char *data);
 
 void uartFlush (void);
 void uartCancel (void);
+
 
 #ifdef __cplusplus
 }

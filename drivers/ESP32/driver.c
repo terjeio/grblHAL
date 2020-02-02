@@ -737,16 +737,17 @@ static void modeSelect (bool mpg_mode)
   if(mpg_mode){
     hal.stream.write_all("\tmode true\n");
     // TODO check to be sure idle and can switch stream
-    //uartStop();
-    //uart2Init();
-    //memcpy(&hal.stream, &serial2_stream, sizeof(io_stream_t));
+    uartStop();
+    uart2Start();
+    memcpy(&hal.stream, &serial2_stream, sizeof(io_stream_t));
+    hal.stream.write_all("\thello mpg\n");
   }
   else{
     hal.stream.write_all("\tmode false\n");
     // TODO ensure idle to switch stream
-    //uart2Stop();
-    //uartInit(); 
-    //memcpy(&hal.stream, &serial_stream, sizeof(io_stream_t));
+    uart2Stop();
+    uartStart(); 
+    memcpy(&hal.stream, &serial_stream, sizeof(io_stream_t));
 
     
   }
@@ -1304,8 +1305,8 @@ bool driver_init (void)
     ***************************/
 
 
-    //uart2Init();
-    //hal.driver_cap.mpg_mode = On;
+    uart2Init();
+    hal.driver_cap.mpg_mode = On;
     // Drive MPG mode input pin low until setup complete
     // TODO 
     gpio_config_t io_conf;

@@ -19,6 +19,7 @@
 #include "rom/ets_sys.h"
 #include "esp_attr.h"
 #include "esp_intr.h"
+#include "driver/uart.h"
 #include "rom/uart.h"
 #include "soc/uart_reg.h"
 #include "soc/uart_struct.h"
@@ -130,7 +131,6 @@ static void uartEnableInterrupt (uart_t* uart)
     esp_intr_alloc(UART_INTR_SOURCE(rx_uart->num), (int)ESP_INTR_FLAG_IRAM, _uart_isr, NULL, &rx_uart->intr_handle);
     UART_MUTEX_UNLOCK();
 }
-/*
 static void uartDisableInterrupt (uart_t *uart)
 {
     UART_MUTEX_LOCK();
@@ -143,7 +143,7 @@ static void uartDisableInterrupt (uart_t *uart)
 
     UART_MUTEX_UNLOCK();
 }
-*/
+
 static void uartSetBaudRate (uart_t *uart, uint32_t baud_rate)
 {
     if(uart == NULL)
@@ -222,9 +222,14 @@ void uartInit (void)
 }
 
 void uartStop(){
-  UART_MUTEX_LOCK();
-  gpio_intr_disable(UART_INTR_SOURCE(rx_uart->num));
-  UART_MUTEX_UNLOCK();
+  //UART_MUTEX_LOCK();
+  //gpio_intr_disable(UART_INTR_SOURCE(rx_uart->num));
+  //uartDisableInterrupt(UART_INTR_SOURCE(rx_uart->num));
+  //UART_MUTEX_UNLOCK();
+  uart_disable_intr_mask(UART_NUM_0,UART_INTR_MASK);
+}
+void uartStart(){
+  uart_enable_intr_mask(UART_NUM_0,UART_INT_ENA_REG(0));
 }
 
 uint32_t uartAvailable (void)

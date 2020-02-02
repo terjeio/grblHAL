@@ -55,6 +55,7 @@ extern "C" {
 
 void uart2Init (void);
 void uart2Stop (void);
+void uart2Start (void);
 uint32_t uart2Available (void);
 uint16_t uart2RXFree (void);
 uint32_t uart2AvailableForWrite (void);
