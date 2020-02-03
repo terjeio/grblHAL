@@ -30,11 +30,14 @@
 #include "soc/dport_reg.h"
 #include "driver/uart.h"
 #include "esp_intr_alloc.h"
+#include "esp_log.h"
 
 #include "esp32-hal-uart.h"
 #include "grbl/grbl.h"
 
 #define CONFIG_DISABLE_HAL_LOCKS 1
+static const char *TAG = "uart_events";
+
 
 #define UART_REG_BASE(u)    ((u==0)?DR_REG_UART_BASE:(      (u==1)?DR_REG_UART1_BASE:(    (u==2)?DR_REG_UART2_BASE:0)))
 #define UART_RXD_IDX(u)     ((u==0)?U0RXD_IN_IDX:(          (u==1)?U1RXD_IN_IDX:(         (u==2)?U2RXD_IN_IDX:0)))
@@ -154,20 +157,20 @@ static void uartEnableInterrupt (uart_t* uart, bool enable_rx)
 
     UART_MUTEX_UNLOCK(uart);
 }
-/*
+
 static void uartDisableInterrupt (uart_t *uart)
 {
-    UART_MUTEX_LOCK();
-    rx_uart->dev->conf1.val = 0;
-    rx_uart->dev->int_ena.val = 0;
-    rx_uart->dev->int_clr.val = 0xffffffff;
+    UART_MUTEX_LOCK(uart);
+    uart->dev->conf1.val = 0;
+    uart->dev->int_ena.val = 0;
+    uart->dev->int_clr.val = 0xffffffff;
 
-    esp_intr_free(rx_uart->intr_handle);
-    rx_uart->intr_handle = NULL;
+    esp_intr_free(uart->intr_handle);
+    uart->intr_handle = NULL;
 
-    UART_MUTEX_UNLOCK();
+    UART_MUTEX_UNLOCK(uart);
 }
-*/
+
 static void uartSetBaudRate (uart_t *uart, uint32_t baud_rate)
 {
     if(uart == NULL)
@@ -386,10 +389,12 @@ static void IRAM_ATTR _uart2_isr (void *arg)
             rxbuffer2.backup = true;
             rxbuffer2.tail = rxbuffer.head;
             hal.stream.read = uart2Read; // restore normal input
+            //ESP_LOGI(TAG,"poot");
 
         } else if(!hal.stream.enqueue_realtime_command(c)) {
 
             uint32_t bptr = (rxbuffer2.head + 1) & (RX_BUFFER_SIZE - 1);  // Get next head pointer
+            //ESP_LOGI(TAG,"doot");
 
             if(bptr == rxbuffer2.tail)                    // If buffer full
                 rxbuffer2.overflow = 1;                   // flag overflow,
@@ -409,6 +414,8 @@ static void IRAM_ATTR _uart2_isr (void *arg)
 
 void serialSelect(bool mpg_mode)
 {
+
+  ESP_LOGI(TAG,"serialSelect %d",mpg_mode);
 	uart_t *uart_on = mpg_mode ? uart2 : uart1;
 	uart_t *uart_off = mpg_mode ? uart1 : uart2;
 
@@ -424,6 +431,7 @@ void serialSelect(bool mpg_mode)
 	uart_on->dev->int_ena.rxfifo_full = 1;
 	uart_on->dev->int_ena.frm_err = 1;
 	uart_on->dev->int_ena.rxfifo_tout = 1;
+
 }
 
 void uart2Init (void)
@@ -432,7 +440,7 @@ void uart2Init (void)
 
     uartConfig(uart2, _uart2_isr);
 
-    uart2Flush();
+    //uart2Flush();
     uartEnableInterrupt(uart2, true);
     uart2WriteS("hello uart2");
     uart2Flush();

@@ -732,6 +732,7 @@ static void modeSelect (bool mpg_mode)
   if(mpg_mode){
     hal.stream.write_all("\tmode true\n");
     // TODO check to be sure idle and can switch stream
+
     memcpy(&hal.stream, &serial2_stream, sizeof(io_stream_t));
     hal.stream.write_all("\thello mpg\n");
     uart2WriteS("to you friend");
@@ -742,6 +743,8 @@ static void modeSelect (bool mpg_mode)
     // TODO ensure idle to switch stream
     memcpy(&hal.stream, &serial_stream, sizeof(io_stream_t));
   }
+  hal.stream.reset_read_buffer();
+  hal.stream.enqueue_realtime_command(mpg_mode ? CMD_STATUS_REPORT_ALL : CMD_STATUS_REPORT);
 }
 
 static void modeChange (void)
@@ -1531,7 +1534,7 @@ static void gpio_task_mode(void* arg)
     for(;;) {
         if(xSemaphoreTake(xSemaphore,portMAX_DELAY) == pdTRUE) {
           // debounce a bit
-          vTaskDelay(200);
+          vTaskDelay(pdMS_TO_TICKS(20));
           hal.stream.write_all("\t\tmode change\n");
           modeChange();
         }
