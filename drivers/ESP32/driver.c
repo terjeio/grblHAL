@@ -32,7 +32,6 @@
 #include "esp32-hal-uart.h"
 
 #if MPG_MODE_ENABLE
-#include "esp32-hal-uart2.h"
 #endif
 
 #include "serial.h"
@@ -240,10 +239,6 @@ state_signal_t inputpin[] = {
     { .pin = X_LIMIT_PIN, .group = INPUT_GROUP_LIMIT },
     { .pin = Y_LIMIT_PIN, .group = INPUT_GROUP_LIMIT },
     { .pin = Z_LIMIT_PIN, .group = INPUT_GROUP_LIMIT }
-#if MPG_MODE_ENABLE
-    //, { .pin = MPG_ENABLE_PIN, .group = INPUT_GROUP_MPG }
-    // duh, i don't understand it
-#endif
 #if KEYPAD_ENABLE
   , { .pin = KEYPAD_STROBE_PIN, .group = INPUT_GROUP_KEYPAD }
 #endif
@@ -737,25 +732,31 @@ static void modeSelect (bool mpg_mode)
   if(mpg_mode){
     hal.stream.write_all("\tmode true\n");
     // TODO check to be sure idle and can switch stream
-    uartStop();
-    uart2Start();
     memcpy(&hal.stream, &serial2_stream, sizeof(io_stream_t));
     hal.stream.write_all("\thello mpg\n");
+    uart2WriteS("to you friend");
+
   }
   else{
     hal.stream.write_all("\tmode false\n");
     // TODO ensure idle to switch stream
-    uart2Stop();
-    uartStart(); 
     memcpy(&hal.stream, &serial_stream, sizeof(io_stream_t));
-
-    
   }
 }
 
 static void modeChange (void)
 {
-    modeSelect(gpio_get_level(MPG_ENABLE_PIN));
+    //modeSelect(gpio_get_level(MPG_ENABLE_PIN));
+    bool mpgmode = gpio_get_level(MPG_ENABLE_PIN);
+    serialSelect(mpgmode);
+
+    if(mpgmode){
+      uart2WriteS("uart1, nice!");
+    }else{
+
+      uartWriteS("sup uart0");
+    }
+    modeSelect(mpgmode);
 }
 
 static void modeEnable (void)
@@ -1309,6 +1310,7 @@ bool driver_init (void)
     hal.driver_cap.mpg_mode = On;
     // Drive MPG mode input pin low until setup complete
     // TODO 
+    
     gpio_config_t io_conf;
     io_conf.mode = GPIO_MODE_INPUT;
     io_conf.pull_up_en = (gpio_pullup_t)1;
@@ -1538,7 +1540,7 @@ static void gpio_task_mode(void* arg)
 
 void IRAM_ATTR mode_isr_handler(void* arg) {
   if(xSemaphore == NULL){
-    hal.stream.write_all("ERROR null sem\n");
+    //hal.stream.write_all("ERROR null sem\n");
   }  
   xSemaphoreGive( xSemaphore );
 }

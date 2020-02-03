@@ -233,6 +233,8 @@ extern driver_settings_t driver_settings;
 
 #if MPG_MODE_ENABLE
 #define MPG_ENABLE_PIN 5
+#define MPG_RX_PIN 9
+#define MPG_TX_PIN 10
 #endif
 
 #if CNC_BOOSTERPACK

@@ -20,7 +20,7 @@ set(TRINAMIC_SOURCE trinamic/trinamic2130.c trinamic/TMC2130_I2C_map.c tmc2130/t
 set(NETWORKING_SOURCE wifi.c dns_server.c web/backend.c web/upload.c networking/TCPStream.c networking/WsStream.c networking/base64.c networking/sha1.c networking/urldecode.c networking/strutils.c networking/utils.c networking/multipartparser.c )
 set(WEBUI_SOURCE webui/server.c webui/response.c webui/commands.c webui/flashfs.c )
 
-set(MAIN_SRCS main.c driver.c nvs.c esp32-hal-uart.c esp32-hal-uart2.c bluetooth.c
+set(MAIN_SRCS main.c driver.c nvs.c esp32-hal-uart.c  bluetooth.c
  i2c.c
  ioexpand.c
  eeprom.c

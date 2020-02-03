@@ -24,6 +24,8 @@ extern "C" {
 #include <stdbool.h>
 #include <stdlib.h>
 
+#include "driver.h"
+
 #define SERIAL_5N1 0x8000010
 #define SERIAL_6N1 0x8000014
 #define SERIAL_7N1 0x8000018
@@ -54,8 +56,6 @@ extern "C" {
 #define DEBUG_PRINT(string) uartWriteS(string)
 
 void uartInit (void);
-void uartStop (void);
-void uartStart (void);
 uint32_t uartAvailable (void);
 uint16_t uartRXFree (void);
 uint32_t uartAvailableForWrite (void);
@@ -68,9 +68,29 @@ void uartWriteS (const char *data);
 void uartFlush (void);
 void uartCancel (void);
 
+#if MPG_MODE_ENABLE
+
+void uart2Init (void);
+void uart2Stop (void);
+void uart2Start (void);
+uint32_t uart2Available (void);
+uint16_t uart2RXFree (void);
+int16_t uart2Read (void);
+bool uart2SuspendInput (bool suspend);
+
+bool uart2PutC (const char c);
+void uart2WriteS (const char *data);
+
+void uart2Flush (void);
+void uart2Cancel (void);
+
+void serialSelect(bool mpg_mode);
+
+#endif
 
 #ifdef __cplusplus
 }
 #endif
 
 #endif /* MAIN_ESP32_HAL_UART_H_ */
+
