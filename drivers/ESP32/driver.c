@@ -1310,6 +1310,7 @@ bool driver_init (void)
 
 
     uart2Init();
+
     hal.driver_cap.mpg_mode = On;
     // Drive MPG mode input pin low until setup complete
     // TODO 
@@ -1324,6 +1325,8 @@ bool driver_init (void)
     gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);
     gpio_isr_handler_add(MPG_ENABLE_PIN, mode_isr_handler, NULL);
     xTaskCreate(gpio_task_mode, "gpio_task_mode", 2048, NULL, 10, NULL);
+
+    serialSelect(false);
 #endif
 
 #ifdef I2C_PORT
