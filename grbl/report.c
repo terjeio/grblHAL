@@ -390,6 +390,11 @@ void report_grbl_settings (void)
     for(idx = 0 ; idx < N_AXIS ; idx++)
         report_uint_setting((setting_type_t)(Setting_HomingCycle_1 + idx), settings.homing.cycle[idx].mask);
 
+    if(hal.driver_settings_report) {
+        for(idx = Setting_JogStepSpeed; idx < Setting_ParkingPulloutIncrement; idx++)
+            hal.driver_settings_report((setting_type_t)idx);
+    }
+
     report_float_setting(Setting_ParkingPulloutIncrement, settings.parking.pullout_increment, N_DECIMAL_SETTINGVALUE);
     report_float_setting(Setting_ParkingPulloutRate, settings.parking.pullout_rate, N_DECIMAL_SETTINGVALUE);
     report_float_setting(Setting_ParkingTarget, settings.parking.target, N_DECIMAL_SETTINGVALUE);
@@ -813,10 +818,10 @@ void report_build_info (char *line)
 #ifdef N_TOOLS
     if(hal.tool_change)
         strcat(buf, "ATC,");
-#else
+    else
+#endif
     if(hal.stream.suspend_read)
         strcat(buf, "TC,"); // Manual tool change supported (M6)
-#endif
 
     if(hal.driver_cap.spindle_sync)
         strcat(buf, "SS,");

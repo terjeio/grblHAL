@@ -3,7 +3,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2019 Terje Io
+  Copyright (c) 2019-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -48,7 +48,8 @@
 
 typedef enum {
     StreamType_Serial = 0,
-    StreamType_Bluetooth,
+    StreamType_MPG,
+	StreamType_Bluetooth,
     StreamType_Telnet,
     StreamType_WebSocket,
     StreamType_SDCard,

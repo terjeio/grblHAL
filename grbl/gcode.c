@@ -900,7 +900,7 @@ status_code_t gc_execute_block(char *block, char *message)
     // bit_false(value_words,bit(Word_S)); // NOTE: Single-meaning value word. Set at end of error-checking.
 
     // [5. Select tool ]: If not supported then only tracks value. T is negative (done.) Not an integer (done).
-    if(set_tool) { // G61
+    if(set_tool) { // M61
         if(bit_isfalse(value_words, bit(Word_Q)))
             FAIL(Status_GcodeValueWordMissing);
         if (floorf(gc_block.values.q) - gc_block.values.q != 0.0f)
@@ -2441,27 +2441,3 @@ status_code_t gc_execute_block(char *block, char *message)
 
     return Status_OK;
 }
-
-/*
-  Not supported:
-
-  - Some canned cycles
-  - Tool radius compensation
-  - A,B,C-axes (compile-option)
-  - Evaluation of expressions
-  - Variables
-  - Tool changes (driver and/or compile-option)
-  - Switches
-
-   (*) Indicates optional parameter, enabled through config.h and re-compile
-   group 0 = {G92.2, G92.3} (Non modal: Cancel and re-enable G92 offsets)
-   group 1 = {G81 - G89} (Motion modes: Canned cycles)
-   group 4 = {M1} (Optional stop, ignored)
-   group 6 = {M6} (Tool change)
-   group 7 = {G41, G42} cutter radius compensation (G40 is supported)
-   group 8 = {G43} tool length offset (G43.1/G49 are supported)
-   group 8 = {M7*} enable mist coolant (* Compile-option)
-   group 9 = {M48, M49, M56*} enable/disable override switches (* Compile-option)
-   group 10 = {G98, G99} return mode canned cycles
-   group 13 = {G61.1, G64} path control mode (G61 is supported)
-*/

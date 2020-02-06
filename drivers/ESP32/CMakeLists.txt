@@ -11,6 +11,7 @@ OPTION(SDcard "SD Card Streaming" OFF)
 OPTION(Trinamic "Trinamic driver support over I2C" OFF)
 OPTION(WebUI "WebUI services" OFF)
 OPTION(WebAuth "WebUI authentication" OFF)
+OPTION(MPGMode "MPG mode" OFF)
 OPTION(BoosterPack "Compile for CNC BoosterPack" OFF)
 
 set(SDCARD_SOURCE sdcard/sdcard.c)
@@ -95,6 +96,10 @@ if(Keypad)
 target_compile_definitions(grbl.elf PUBLIC KEYPAD_ENABLE)
 endif()
 
+if(MPGMode)
+target_compile_definitions(grbl.elf PUBLIC MPG_MODE_ENABLE)
+endif()
+
 if(BoosterPack)
 target_compile_definitions(grbl.elf PUBLIC CNC_BOOSTERPACK)
 endif()
@@ -109,6 +114,7 @@ unset(SDcard CACHE)
 unset(Trinamic CACHE)
 unset(WebUI CACHE)
 unset(WebAuth CACHE)
+unset(MPGMode CACHE)
 unset(BoosterPack CACHE)
 
 include_directories(BEFORE ".")
@@ -117,4 +123,4 @@ include_directories(BEFORE ".")
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-#add_subdirectory (GRBL)
+#add_subdirectory (grbl)

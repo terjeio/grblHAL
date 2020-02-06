@@ -2,7 +2,7 @@
   system.c - Handles system level commands and real-time processes
   Part of Grbl
 
-  Copyright (c) 2017-2019 Terje Io
+  Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2014-2016 Sungeun K. Jeon for Gnea Research LLC
 
   Grbl is free software: you can redistribute it and/or modify
@@ -203,10 +203,6 @@ status_code_t system_execute_line (char *line)
             }
 
             if(retval == Status_OK) {
-
-                set_state(STATE_HOMING);                                // Set homing system state,
-                hal.stream.enqueue_realtime_command(CMD_STATUS_REPORT); // force a status report and
-                delay_sec(0.1f, DelayMode_Dwell);                       // delay a bit to get it sent (or perhaps wait a bit for a request?)
 
                 if (line[2] == '\0')
                     retval = mc_homing_cycle((axes_signals_t){0}); // Home axes according to configuration

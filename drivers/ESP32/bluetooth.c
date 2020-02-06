@@ -1,11 +1,11 @@
 /*
-  bluetooth.h - An embedded CNC Controller with rs274/ngc (g-code) support
+  bluetooth.c - An embedded CNC Controller with rs274/ngc (g-code) support
 
   Bluetooth comms
 
   Part of GrblHAL
 
-  Copyright (c) 2018-2019 Terje Io
+  Copyright (c) 2018-2020 Terje Io
 
   Some parts of the code is based on example code by Espressif, in the public domain
 
@@ -39,7 +39,6 @@
 #include "esp_spp_api.h"
 
 #include "driver.h"
-#include "serial.h"
 #include "grbl/grbl.h"
 
 typedef struct {
@@ -193,24 +192,28 @@ static void esp_spp_cb (esp_spp_cb_event_t event, esp_spp_cb_param_t *param)
             char c;
             while(param->data_ind.len) {
                 c = *param->data_ind.data;
-                if(c == CMD_TOOL_ACK && !rxbuffer.backup) {
+            	// discard input if MPG has taken over...
+            	if(hal.stream.type != StreamType_MPG) {
 
-                    memcpy(&rxbackup, &rxbuffer, sizeof(stream_rx_buffer_t));
-                    rxbuffer.backup = true;
-                    rxbuffer.tail = rxbuffer.head;
-                    hal.stream.read = BTStreamGetC; // restore normal input
+					if(c == CMD_TOOL_ACK && !rxbuffer.backup) {
 
-                } else if(!hal.stream.enqueue_realtime_command(c)) {
+						memcpy(&rxbackup, &rxbuffer, sizeof(stream_rx_buffer_t));
+						rxbuffer.backup = true;
+						rxbuffer.tail = rxbuffer.head;
+						hal.stream.read = BTStreamGetC; // restore normal input
 
-                    uint32_t bptr = (rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1);  // Get next head pointer
+					} else if(!hal.stream.enqueue_realtime_command(c)) {
 
-                    if(bptr == rxbuffer.tail)                   // If buffer full
-                        rxbuffer.overflow = 1;                  // flag overflow,
-                    else {
-                        rxbuffer.data[rxbuffer.head] = (char)c; // else add data to buffer
-                        rxbuffer.head = bptr;                   // and update pointer
-                    }
-                }
+						uint32_t bptr = (rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1);  // Get next head pointer
+
+						if(bptr == rxbuffer.tail)                   // If buffer full
+							rxbuffer.overflow = 1;                  // flag overflow,
+						else {
+							rxbuffer.data[rxbuffer.head] = (char)c; // else add data to buffer
+							rxbuffer.head = bptr;                   // and update pointer
+						}
+					}
+            	}
                 param->data_ind.len--;
                 param->data_ind.data++;
             }
@@ -355,14 +358,14 @@ status_code_t bluetooth_setting (uint_fast16_t param, float value, char *svalue)
 
     if(svalue) switch(param) {
 
-        case Settings_BlueToothDeviceName:
+        case Setting_BlueToothDeviceName:
             if(strlcpy(driver_settings.bluetooth.device_name, svalue, sizeof(driver_settings.bluetooth.device_name)) <= sizeof(driver_settings.bluetooth.device_name))
                 status = Status_OK;
             else
                 status = Status_InvalidStatement; // too long...                ;
             break;
 
-        case Settings_BlueToothServiceName:
+        case Setting_BlueToothServiceName:
             if(strlcpy(driver_settings.bluetooth.service_name, svalue, sizeof(driver_settings.bluetooth.service_name)) <= sizeof(driver_settings.bluetooth.service_name))
                 status = Status_OK;
             else
@@ -373,10 +376,21 @@ status_code_t bluetooth_setting (uint_fast16_t param, float value, char *svalue)
     return status;
 }
 
-void bluetooth_settings_report (void)
+void bluetooth_settings_report (setting_type_t setting)
 {
-    report_string_setting(Settings_BlueToothDeviceName, driver_settings.bluetooth.device_name);
-    report_string_setting(Settings_BlueToothServiceName, driver_settings.bluetooth.service_name);
+    switch(setting) {
+
+        case Setting_BlueToothDeviceName:
+			report_string_setting(Setting_BlueToothDeviceName, driver_settings.bluetooth.device_name);
+			break;
+
+        case Setting_BlueToothServiceName:
+        	report_string_setting(Setting_BlueToothServiceName, driver_settings.bluetooth.service_name);
+        	break;
+
+        default:
+        	break;
+    }
 }
 
 void bluetooth_settings_restore (void)

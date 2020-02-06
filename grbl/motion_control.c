@@ -2,7 +2,7 @@
   motion_control.c - high level interface for issuing motion commands
   Part of Grbl
 
-  Copyright (c) 2017-2019 Terje Io
+  Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -555,6 +555,10 @@ status_code_t mc_homing_cycle (axes_signals_t cycle)
         system_set_exec_alarm(Alarm_HardLimit);
         return Status_Unhandled;
     }
+
+    set_state(STATE_HOMING);                                // Set homing system state,
+    hal.stream.enqueue_realtime_command(CMD_STATUS_REPORT); // force a status report and
+    delay_sec(0.1f, DelayMode_Dwell);                       // delay a bit to get it sent (or perhaps wait a bit for a request?)
 
     hal.limits_enable(false, true); // Disable hard limits pin change register for cycle duration
 

@@ -6,6 +6,12 @@ A GrblHAL driver for the ESP32 processor.
 
 ---
 
+__Update 2020-02-06:__ Added option for secondary serial input stream with input pin for switching on/off, indended for external MPGs. **For verification!**
+
+---
+
+---
+
 __Update 2020-02-02:__ Added board mapping files for [Bart's v3.5 and v4 ESP32 boards](http://www.buildlog.net/blog/). v4 is now the default mapping. **For verification!** 
 
 ---

@@ -64,6 +64,11 @@
 #define WEBSOCKET_ENABLE 1
 #endif
 
+#ifdef MPG_MODE_ENABLE
+#undef MPG_MODE_ENABLE
+#define MPG_MODE_ENABLE 1
+#endif
+
 #ifdef KEYPAD_ENABLE
 #undef KEYPAD_ENABLE
 #define KEYPAD_ENABLE 1
@@ -327,6 +332,15 @@ typedef union {
 #ifdef I2C_PORT
 extern QueueHandle_t i2cQueue;
 extern SemaphoreHandle_t i2cBusy;
+#endif
+
+#if MPG_MODE_ENABLE
+  #ifndef MPG_ENABLE_PIN
+  #error MPG_ENABLE_PIN must be defined when MPG mode is enabled!
+  #endif
+  #ifndef MPG_RX_PIN
+  #error MPG_RX_PIN must be defined when MPG mode is enabled!
+  #endif
 #endif
 
 void selectStream (stream_type_t stream);

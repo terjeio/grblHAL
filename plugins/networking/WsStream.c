@@ -1,12 +1,12 @@
 //
 // WsStream.c - lw-IP/FreeRTOS websocket stream implementation
 //
-// v1.0 / 2019-11-29 / Io Engineering / Terje
+// v1.0 / 2020-02-04 / Io Engineering / Terje
 //
 
 /*
 
-Copyright (c) 2019, Terje Io
+Copyright (c) 2019-2020, Terje Io
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -42,7 +42,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdbool.h>
 #include <assert.h>
 
-#include "serial.h"
 #include "driver.h"
 #include "networking.h"
 #include "WsStream.h"
@@ -251,17 +250,20 @@ void WsStreamRxCancel (void)
     streamSession.rxbuf.head = (streamSession.rxbuf.tail + 1) & (RX_BUFFER_SIZE - 1);
 }
 
-bool WsStreamRxInsert (char c) {
+bool WsStreamRxInsert (char c)
+{
+	// discard input if MPG has taken over...
+	if(hal.stream.type != StreamType_MPG) {
 
-    uint_fast16_t bptr = (streamSession.rxbuf.head + 1) & (RX_BUFFER_SIZE - 1); // Get next head pointer
+		uint_fast16_t bptr = (streamSession.rxbuf.head + 1) & (RX_BUFFER_SIZE - 1); // Get next head pointer
 
-    if(bptr == streamSession.rxbuf.tail)                        // If buffer full
-        streamSession.rxbuf.overflow = true;                    // flag overflow
-    else if(!hal.stream.enqueue_realtime_command(c)) {          // If not a real time command
-        streamSession.rxbuf.data[streamSession.rxbuf.head] = c; // add data to buffer
-        streamSession.rxbuf.head = bptr;                        // and update pointer
- //       uartPutC(c);
-    }
+		if(bptr == streamSession.rxbuf.tail)                        // If buffer full
+			streamSession.rxbuf.overflow = true;                    // flag overflow
+		else if(!hal.stream.enqueue_realtime_command(c)) {          // If not a real time command
+			streamSession.rxbuf.data[streamSession.rxbuf.head] = c; // add data to buffer
+			streamSession.rxbuf.head = bptr;                        // and update pointer
+		}
+	}
 
     return !streamSession.rxbuf.overflow;
 }

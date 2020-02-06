@@ -39,6 +39,8 @@
 #define STEP_TIMER_GROUP TIMER_GROUP_0
 #define STEP_TIMER_INDEX TIMER_0
 
+#define MPG_ENABLE_PIN       GPIO_NUM_25
+
 // Define step pulse output pins.
 #define X_STEP_PIN      GPIO_NUM_26
 #define Y_STEP_PIN      GPIO_NUM_27
@@ -85,6 +87,10 @@
 
 #if KEYPAD_ENABLE
 #define KEYPAD_STROBE_PIN   GPIO_NUM_33
+#endif
+
+#if MPG_MODE_ENABLE
+#define MPG_RX_PIN GPIO_NUM_33
 #endif
 
 #if IOEXPAND_ENABLE || KEYPAD_ENABLE || EEPROM_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
