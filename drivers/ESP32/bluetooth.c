@@ -190,8 +190,10 @@ static void esp_spp_cb (esp_spp_cb_event_t event, esp_spp_cb_param_t *param)
 
         case ESP_SPP_DATA_IND_EVT:;
             char c;
-            while(param->data_ind.len) {
-                c = *param->data_ind.data;
+            uint16_t len = param->data_ind.len;
+            uint8_t *data = param->data_ind.data;
+            while(len) {
+                c = (char)*data++;
             	// discard input if MPG has taken over...
             	if(hal.stream.type != StreamType_MPG) {
 
@@ -209,13 +211,12 @@ static void esp_spp_cb (esp_spp_cb_event_t event, esp_spp_cb_param_t *param)
 						if(bptr == rxbuffer.tail)                   // If buffer full
 							rxbuffer.overflow = 1;                  // flag overflow,
 						else {
-							rxbuffer.data[rxbuffer.head] = (char)c; // else add data to buffer
+							rxbuffer.data[rxbuffer.head] = c; 		// else add data to buffer
 							rxbuffer.head = bptr;                   // and update pointer
 						}
 					}
             	}
-                param->data_ind.len--;
-                param->data_ind.data++;
+                len--;
             }
             break;
 

@@ -6,6 +6,7 @@ cmake_minimum_required(VERSION 3.5)
 # The following plugins/options are supported:
 
 OPTION(Networking "Wifi + protocols" OFF)
+OPTION(Bluetooth "Bluetooth" OFF)
 OPTION(Keypad "I2C Keypad" OFF)
 OPTION(SDcard "SD Card Streaming" OFF)
 OPTION(Trinamic "Trinamic driver support over I2C" OFF)
@@ -19,8 +20,9 @@ set(KEYPAD_SOURCE keypad/keypad.c)
 set(TRINAMIC_SOURCE trinamic/trinamic2130.c trinamic/TMC2130_I2C_map.c tmc2130/trinamic.c)
 set(NETWORKING_SOURCE wifi.c dns_server.c web/backend.c web/upload.c networking/TCPStream.c networking/WsStream.c networking/base64.c networking/sha1.c networking/urldecode.c networking/strutils.c networking/utils.c networking/multipartparser.c )
 set(WEBUI_SOURCE webui/server.c webui/response.c webui/commands.c webui/flashfs.c )
+set(BLUETOOTH_SOURCE bluetooth.c )
 
-set(MAIN_SRCS main.c driver.c nvs.c esp32-hal-uart.c bluetooth.c
+set(MAIN_SRCS main.c driver.c nvs.c esp32-hal-uart.c
  i2c.c
  ioexpand.c
  eeprom.c
@@ -63,6 +65,10 @@ if(WebUI)
 list (APPEND MAIN_SRCS ${WEBUI_SOURCE})
 endif()
 
+if(Bluetooth) 
+list (APPEND MAIN_SRCS ${BLUETOOTH_SOURCE})
+endif()
+
 set(INCLUDE_DIRS ".")
 
 #file(GLOB GRBL_SOURCE "grbl/*.c")
@@ -74,6 +80,10 @@ project(grbl)
 
 if(Networking)
 target_compile_definitions(grbl.elf PUBLIC NETWORKING_ENABLE)
+endif()
+
+if(Bluetooth)
+target_compile_definitions(grbl.elf PUBLIC BLUETOOTH_ENABLE)
 endif()
 
 if(SDcard)
@@ -109,6 +119,7 @@ target_add_binary_data(grbl.elf "index.html" BINARY)
 target_add_binary_data(grbl.elf "ap_login.html" BINARY)
 
 unset(Networking CACHE)
+unset(Bluetooth CACHE)
 unset(Keypad CACHE)
 unset(SDcard CACHE)
 unset(Trinamic CACHE)

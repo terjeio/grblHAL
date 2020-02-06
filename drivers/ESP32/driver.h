@@ -64,6 +64,11 @@
 #define WEBSOCKET_ENABLE 1
 #endif
 
+#ifdef BLUETOOTH_ENABLE
+#undef BLUETOOTH_ENABLE
+#define BLUETOOTH_ENABLE 1
+#endif
+
 #ifdef MPG_MODE_ENABLE
 #undef MPG_MODE_ENABLE
 #define MPG_MODE_ENABLE 1
@@ -104,7 +109,6 @@
 #define PROBE_ENABLE     1 // Probe input
 #define PROBE_ISR        0 // Catch probe state change by interrupt TODO: needs verification!
 #define WIFI_SOFTAP      0 // Use Soft AP mode for WiFi.
-#define BLUETOOTH_ENABLE 0 // Streaming over Bluetooth.
 #define TRINAMIC_DEV     0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
 
 // The following options should be set in CMakeLists.txt to ensure
@@ -120,6 +124,10 @@
 #define HTTP_ENABLE      0 // Enable http daemon - requires WiFi enabled
 #define TELNET_ENABLE    0 // Enable telnet daemon - requires WiFi enabled
 #define WEBSOCKET_ENABLE 0 // Enable websocket daemon - requires WiFi enabled
+#endif
+
+#ifndef BLUETOOTH_ENABLE
+#define BLUETOOTH_ENABLE 0 // Streaming over Bluetooth.
 #endif
 
 #ifndef AUTH_ENABLE
