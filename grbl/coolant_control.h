@@ -28,11 +28,11 @@ typedef union {
         uint8_t flood          :1,
                 mist           :1,
                 shower         :1,
-				trough_spindle :1,
-				reserved4 :1,
-				reserved5 :1,
-				reserved6 :1,
-				reserved7 :1;
+                trough_spindle :1,
+                reserved4 :1,
+                reserved5 :1,
+                reserved6 :1,
+                reserved7 :1;
     };
 } coolant_state_t;
 

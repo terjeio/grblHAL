@@ -157,7 +157,7 @@ void gc_init(bool cold_start)
 // When active laser power is controlled by external hardware tracking motion and pulsing the laser
 void gc_set_laser_ppimode (bool on)
 {
-	gc_state.is_laser_ppi_mode = on;
+    gc_state.is_laser_ppi_mode = on;
 }
 
 // Add output command to linked list
@@ -519,8 +519,8 @@ status_code_t gc_execute_block(char *block, char *message)
                         switch(int_value) {
 
                             case 7:
-                            	if(!hal.driver_cap.mist_control)
-                            		FAIL(Status_GcodeUnsupportedCommand);
+                                if(!hal.driver_cap.mist_control)
+                                    FAIL(Status_GcodeUnsupportedCommand);
                                 gc_block.modal.coolant.mist = On;
                                 break;
 
@@ -597,27 +597,27 @@ status_code_t gc_execute_block(char *block, char *message)
                 switch(letter) {
 
                   #ifdef A_AXIS
-					case 'A':
-						word_bit.parameter = Word_A;
-						gc_block.values.xyz[A_AXIS] = value;
-						bit_true(axis_words, bit(A_AXIS));
-						break;
+                    case 'A':
+                        word_bit.parameter = Word_A;
+                        gc_block.values.xyz[A_AXIS] = value;
+                        bit_true(axis_words, bit(A_AXIS));
+                        break;
                   #endif
 
-				  #ifdef B_AXIS
-					case 'B':
-						word_bit.parameter = Word_B;
-						gc_block.values.xyz[B_AXIS] = value;
-						bit_true(axis_words, bit(B_AXIS));
-						break;
+                  #ifdef B_AXIS
+                    case 'B':
+                        word_bit.parameter = Word_B;
+                        gc_block.values.xyz[B_AXIS] = value;
+                        bit_true(axis_words, bit(B_AXIS));
+                        break;
                   #endif
 
-				  #ifdef C_AXIS
-					case 'C':
-						word_bit.parameter = Word_C;
-						gc_block.values.xyz[C_AXIS] = value;
-						bit_true(axis_words, bit(C_AXIS));
-						break;
+                  #ifdef C_AXIS
+                    case 'C':
+                        word_bit.parameter = Word_C;
+                        gc_block.values.xyz[C_AXIS] = value;
+                        bit_true(axis_words, bit(C_AXIS));
+                        break;
                  #endif
 
                     case 'D':
@@ -1395,7 +1395,7 @@ status_code_t gc_execute_block(char *block, char *message)
                     break;
 
                 default:
-					break;
+                    break;
             }
     } // end gc_block.non_modal_command
 
@@ -1821,7 +1821,7 @@ status_code_t gc_execute_block(char *block, char *message)
                     break;
 
                 default:
-					break;
+                    break;
 
             } // end switch gc_block.modal.motion
         }
@@ -2033,7 +2033,7 @@ status_code_t gc_execute_block(char *block, char *message)
         // NOTE: All spindle state changes are synced, even in laser mode. Also, plan_data,
         // rather than gc_state, is used to manage laser state for non-laser motions.
         if(spindle_sync(gc_block.modal.spindle, plan_data.spindle.rpm))
-        	gc_state.modal.spindle = gc_block.modal.spindle;
+            gc_state.modal.spindle = gc_block.modal.spindle;
     }
 
 // TODO: Recheck spindle running in CCS mode (is_rpm_pos_adjusted = On)?
@@ -2047,7 +2047,7 @@ status_code_t gc_execute_block(char *block, char *message)
     // NOTE: Coolant M-codes are modal. Only one command per line is allowed. But, multiple states
     // can exist at the same time, while coolant disable clears all states.
         if(coolant_sync(gc_block.modal.coolant))
-        	gc_state.modal.coolant = gc_block.modal.coolant;
+            gc_state.modal.coolant = gc_block.modal.coolant;
     }
 
     plan_data.condition.coolant = gc_state.modal.coolant; // Set condition flag for planner use.
@@ -2131,7 +2131,7 @@ status_code_t gc_execute_block(char *block, char *message)
                     break;
 
                 default:
-                	break;
+                    break;
             }
         } while(idx);
 
@@ -2209,7 +2209,7 @@ status_code_t gc_execute_block(char *block, char *message)
             break;
 
         default:
-			break;
+            break;
     }
 
     // [20. Motion modes ]:

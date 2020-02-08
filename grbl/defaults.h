@@ -108,10 +108,10 @@
 #define DEFAULT_Y_CURRENT 0.0 // amps
 #define DEFAULT_Z_CURRENT 0.0 // amps
 #define DEFAULT_A_CURRENT 0.0 // amps
-#define DEFAULT_SPINDLE_PWM_FREQ          5000	// Hz
+#define DEFAULT_SPINDLE_PWM_FREQ          5000  // Hz
 #define DEFAULT_SPINDLE_PWM_OFF_VALUE     0.0f    // Percent
-#define DEFAULT_SPINDLE_PWM_MIN_VALUE     0.0f	// Percent
-#define DEFAULT_SPINDLE_PWM_MAX_VALUE     100.0f	// Percent
+#define DEFAULT_SPINDLE_PWM_MIN_VALUE     0.0f  // Percent
+#define DEFAULT_SPINDLE_PWM_MAX_VALUE     100.0f    // Percent
 #define DEFAULT_SPINDLE_RPM_MAX 1000.0 // rpm
 #define DEFAULT_SPINDLE_RPM_MIN 0.0 // rpm
 #define DEFAULT_SPINDLE_ENABLE_OFF_WITH_ZERO_SPEED 0

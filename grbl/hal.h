@@ -74,9 +74,9 @@ typedef void (*driver_reset_ptr)(void);
 
 /* TODO: add to HAL so that a different formatting (xml, json etc) of reports may be implemented by driver? */
 typedef struct {
-	status_code_t (*report_status_message)(status_code_t status_code);
-	alarm_code_t (*report_alarm_message)(alarm_code_t alarm_code);
-	message_code_t (*report_feedback_message)(message_code_t message_code);
+    status_code_t (*report_status_message)(status_code_t status_code);
+    alarm_code_t (*report_alarm_message)(alarm_code_t alarm_code);
+    message_code_t (*report_feedback_message)(message_code_t message_code);
     void (*report_init_message)(void);
     void (*report_grbl_help)(void);
     void (*report_grbl_settings)(void);
@@ -90,8 +90,8 @@ typedef struct {
 } HAL_report_t;
 
 typedef struct {
-	status_code_t (*status_message)(status_code_t status_code);
-	message_code_t (*feedback_message)(message_code_t message_code);
+    status_code_t (*status_message)(status_code_t status_code);
+    message_code_t (*feedback_message)(message_code_t message_code);
 } report_t;
 
 typedef struct {

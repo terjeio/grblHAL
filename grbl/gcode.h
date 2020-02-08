@@ -128,7 +128,7 @@ typedef enum {
 // Define parameter word mapping.
 typedef enum {
     Word_E = 0,
-	Word_F,
+    Word_F,
     Word_H,
     Word_I,
     Word_J,
@@ -144,9 +144,9 @@ typedef enum {
     Word_Z,
     Word_Q,
 #if N_AXIS > 3
-	Word_A,
-	Word_B,
-	Word_C,
+    Word_A,
+    Word_B,
+    Word_C,
 #endif
     Word_D
 } parameter_word_t;

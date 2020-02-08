@@ -93,20 +93,20 @@ int grbl_enter (void)
     assert(EEPROM_ADDR_PARAMETERS + SETTING_INDEX_NCOORD * (sizeof(coord_data_t) + 1) < EEPROM_ADDR_STARTUP_BLOCK);
     assert(EEPROM_ADDR_STARTUP_BLOCK + N_STARTUP_LINE * (MAX_STORED_LINE_LENGTH + 1) < EEPROM_ADDR_BUILD_INFO);
 
-	bool looping = true, driver_ok;
+    bool looping = true, driver_ok;
 
-	memset(&hal, 0, sizeof(HAL));  // Clear...
+    memset(&hal, 0, sizeof(HAL));  // Clear...
 
-	hal.version = HAL_VERSION; // Update when signatures and/or contract is changed - driver_init() should fail
-	hal.limit_interrupt_callback = limit_interrupt_handler;
-	hal.control_interrupt_callback = control_interrupt_handler;
-	hal.stepper_interrupt_callback = stepper_driver_interrupt_handler;
-	hal.stream.enqueue_realtime_command = protocol_enqueue_realtime_command;
-	hal.stream_blocking_callback = stream_tx_blocking;
-	hal.protocol_enqueue_gcode = protocol_enqueue_gcode;
-	hal.driver_reset = dummy_handler;
+    hal.version = HAL_VERSION; // Update when signatures and/or contract is changed - driver_init() should fail
+    hal.limit_interrupt_callback = limit_interrupt_handler;
+    hal.control_interrupt_callback = control_interrupt_handler;
+    hal.stepper_interrupt_callback = stepper_driver_interrupt_handler;
+    hal.stream.enqueue_realtime_command = protocol_enqueue_realtime_command;
+    hal.stream_blocking_callback = stream_tx_blocking;
+    hal.protocol_enqueue_gcode = protocol_enqueue_gcode;
+    hal.driver_reset = dummy_handler;
 
-	memcpy(&hal.report, &report_fns, sizeof(report_t));
+    memcpy(&hal.report, &report_fns, sizeof(report_t));
 
 #ifdef KINEMATICS_API
     memset(&kinematics, 0, sizeof(kinematics_t));
@@ -115,26 +115,26 @@ int grbl_enter (void)
 #endif
 
 #ifdef DEBUGOUT
-	hal.debug_out = debug_out; // must be overridden by driver to have any effect
+    hal.debug_out = debug_out; // must be overridden by driver to have any effect
 #endif
-	driver_ok = driver_init();
+    driver_ok = driver_init();
 
 #if COMPATIBILITY_LEVEL > 0
-	hal.stream.suspend_read = NULL;
+    hal.stream.suspend_read = NULL;
 #endif
 
 #if COMPATIBILITY_LEVEL > 1
     hal.driver_setting = NULL;
-	hal.driver_settings_report = NULL;
-	hal.driver_settings_restore = NULL;
+    hal.driver_settings_report = NULL;
+    hal.driver_settings_restore = NULL;
 #endif
 
   #ifdef EMULATE_EEPROM
-	eeprom_emu_init();
+    eeprom_emu_init();
   #endif
-	settings_init(); // Load Grbl settings from EEPROM
+    settings_init(); // Load Grbl settings from EEPROM
 
-	memset(sys_position, 0, sizeof(sys_position)); // Clear machine position.
+    memset(sys_position, 0, sizeof(sys_position)); // Clear machine position.
 
 // check and configure driver
 
@@ -189,60 +189,60 @@ int grbl_enter (void)
         // Reset report entry points
         memcpy(&hal.report, &report_fns, sizeof(report_t));
 
-		// Reset system variables, keeping current state and MPG mode.
-		bool prior_mpg_mode = sys.mpg_mode;
-		uint_fast16_t prior_state = sys.state;
+        // Reset system variables, keeping current state and MPG mode.
+        bool prior_mpg_mode = sys.mpg_mode;
+        uint_fast16_t prior_state = sys.state;
 
         if(sys.message)
             free(sys.message);
 
-		memset(&sys, 0, sizeof(system_t)); // Clear system struct variable.
-		set_state(prior_state);
+        memset(&sys, 0, sizeof(system_t)); // Clear system struct variable.
+        set_state(prior_state);
         sys.override.feed_rate = DEFAULT_FEED_OVERRIDE;          // Set to 100%
         sys.override.rapid_rate = DEFAULT_RAPID_OVERRIDE;        // Set to 100%
         sys.override.spindle_rpm = DEFAULT_SPINDLE_RPM_OVERRIDE; // Set to 100%
 
-		if(settings.parking.flags.enabled)
-		    sys.override.control.parking_disable = settings.parking.flags.deactivate_upon_init;
+        if(settings.parking.flags.enabled)
+            sys.override.control.parking_disable = settings.parking.flags.deactivate_upon_init;
 
-		memset(sys_probe_position, 0, sizeof(sys_probe_position)); // Clear probe position.
-		sys_probe_state = Probe_Off;
-		sys_rt_exec_state = 0;
-		sys_rt_exec_alarm = 0;
+        memset(sys_probe_position, 0, sizeof(sys_probe_position)); // Clear probe position.
+        sys_probe_state = Probe_Off;
+        sys_rt_exec_state = 0;
+        sys_rt_exec_alarm = 0;
 
-		flush_override_buffers();
+        flush_override_buffers();
 
-		// Reset Grbl primary systems.
-		hal.stream.reset_read_buffer(); // Clear input stream buffer
-		gc_init(cold_start); // Set g-code parser to default state
-		hal.limits_enable(settings.limits.flags.hard_enabled, false);
-		plan_reset(); // Clear block buffer and planner variables
-		st_reset(); // Clear stepper subsystem variables.
-		limits_set_homing_axes(); // Set axes to be homed from settings.
+        // Reset Grbl primary systems.
+        hal.stream.reset_read_buffer(); // Clear input stream buffer
+        gc_init(cold_start); // Set g-code parser to default state
+        hal.limits_enable(settings.limits.flags.hard_enabled, false);
+        plan_reset(); // Clear block buffer and planner variables
+        st_reset(); // Clear stepper subsystem variables.
+        limits_set_homing_axes(); // Set axes to be homed from settings.
 #ifdef ENABLE_BACKLASH_COMPENSATION
-		mc_backlash_init(); // Init backlash configuration.
+        mc_backlash_init(); // Init backlash configuration.
 #endif
-		// Sync cleared gcode and planner positions to current system position.
-		plan_sync_position();
-		gc_sync_position();
+        // Sync cleared gcode and planner positions to current system position.
+        plan_sync_position();
+        gc_sync_position();
 
-		// Print welcome message. Indicates an initialization has occured at power-up or with a reset.
-		report_init_message();
+        // Print welcome message. Indicates an initialization has occured at power-up or with a reset.
+        report_init_message();
 
         if(sys.state == STATE_ESTOP)
             set_state(STATE_ALARM);
 
-		if(hal.driver_cap.mpg_mode) {
+        if(hal.driver_cap.mpg_mode) {
             sys.mpg_mode = prior_mpg_mode;
             hal.stream.enqueue_realtime_command(sys.mpg_mode ? CMD_STATUS_REPORT_ALL : CMD_STATUS_REPORT);
-		}
+        }
 
-		// Start Grbl main loop. Processes program inputs and executes them.
-		if(!(looping = protocol_main_loop(cold_start)))
-			looping = hal.driver_release == NULL || hal.driver_release();
+        // Start Grbl main loop. Processes program inputs and executes them.
+        if(!(looping = protocol_main_loop(cold_start)))
+            looping = hal.driver_release == NULL || hal.driver_release();
 
         cold_start = false;
-		sys_rt_exec_state = 0;
+        sys_rt_exec_state = 0;
     }
 
     return 0;

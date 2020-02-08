@@ -49,7 +49,7 @@
 typedef enum {
     StreamType_Serial = 0,
     StreamType_MPG,
-	StreamType_Bluetooth,
+    StreamType_Bluetooth,
     StreamType_Telnet,
     StreamType_WebSocket,
     StreamType_SDCard,
