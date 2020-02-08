@@ -107,7 +107,7 @@ typedef enum {
     Input_FeedHold,
     Input_CycleStart,
     Input_SafetyDoor,
-	Input_ModeSelect,
+    Input_ModeSelect,
     Input_LimitX,
     Input_LimitX_Max,
     Input_LimitY,
@@ -282,19 +282,18 @@ static void stepper_driver_isr (void *arg);
 static void gpio_isr (void *arg);
 
 static TimerHandle_t xDelayTimer = NULL, debounceTimer = NULL;
-static TaskHandle_t xStepperTask = NULL;
 
 static void activateStream (const io_stream_t *stream)
 {
 #if MPG_MODE_ENABLE
-	if(hal.stream.type == StreamType_MPG) {
-		hal.stream.write_all = stream->write_all;
-		if(prev_stream.reset_read_buffer != NULL)
-			prev_stream.reset_read_buffer();
-		memcpy(&prev_stream, stream, sizeof(io_stream_t));
-	} else
+    if(hal.stream.type == StreamType_MPG) {
+        hal.stream.write_all = stream->write_all;
+        if(prev_stream.reset_read_buffer != NULL)
+            prev_stream.reset_read_buffer();
+        memcpy(&prev_stream, stream, sizeof(io_stream_t));
+    } else
 #endif
-		memcpy(&hal.stream, stream, sizeof(io_stream_t));
+        memcpy(&hal.stream, stream, sizeof(io_stream_t));
 }
 
 void selectStream (stream_type_t stream)
@@ -305,14 +304,14 @@ void selectStream (stream_type_t stream)
 
 #if BLUETOOTH_ENABLE
         case StreamType_Bluetooth:
-        	activateStream(&bluetooth_stream);
+            activateStream(&bluetooth_stream);
 //            services.bluetooth = On;
             break;
 #endif
 
 #if TELNET_ENABLE
         case StreamType_Telnet:
-        	activateStream(&telnet_stream);
+            activateStream(&telnet_stream);
             services.telnet = On;
             hal.stream.write_all("[MSG:TELNET STREAM ACTIVE]\r\n");
             break;
@@ -320,14 +319,14 @@ void selectStream (stream_type_t stream)
 
 #if WEBSOCKET_ENABLE
         case StreamType_WebSocket:
-        	activateStream(&websocket_stream);
+            activateStream(&websocket_stream);
             services.websocket = On;
             hal.stream.write_all("[MSG:WEBSOCKET STREAM ACTIVE]\r\n");
             break;
 #endif
 
         case StreamType_Serial:
-        	activateStream(&serial_stream);
+            activateStream(&serial_stream);
 #if WIFI_ENABLE
             services.mask = 0;
 #endif
@@ -834,7 +833,7 @@ IRAM_ATTR static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint
 
 #if MPG_MODE_ENABLE
 
-static void modeSelect (bool mpg_mode)
+IRAM_ATTR static void modeSelect (bool mpg_mode)
 {
     // Deny entering MPG mode if busy
     if(mpg_mode == sys.mpg_mode || (mpg_mode && (gc_state.file_run || !(sys.state == STATE_IDLE || (sys.state & (STATE_ALARM|STATE_ESTOP)))))) {
@@ -845,16 +844,16 @@ static void modeSelect (bool mpg_mode)
     serialSelect(mpg_mode);
 
     if(mpg_mode) {
-    	memcpy(&prev_stream, &hal.stream, sizeof(io_stream_t));
-    	hal.stream.type = StreamType_MPG;
-    	hal.stream.read = uart2Read;
-    	hal.stream.write = serial_stream.write;
-		hal.stream.get_rx_buffer_available = uart2RXFree;
-		hal.stream.reset_read_buffer = uart2Flush;
-		hal.stream.cancel_read_buffer = uart2Cancel;
-		hal.stream.suspend_read = uart2SuspendInput;
+        memcpy(&prev_stream, &hal.stream, sizeof(io_stream_t));
+        hal.stream.type = StreamType_MPG;
+        hal.stream.read = uart2Read;
+        hal.stream.write = serial_stream.write;
+        hal.stream.get_rx_buffer_available = uart2RXFree;
+        hal.stream.reset_read_buffer = uart2Flush;
+        hal.stream.cancel_read_buffer = uart2Cancel;
+        hal.stream.suspend_read = uart2SuspendInput;
     } else if(hal.stream.read != NULL)
-    	memcpy(&hal.stream, &prev_stream, sizeof(io_stream_t));
+        memcpy(&hal.stream, &prev_stream, sizeof(io_stream_t));
 
     hal.stream.reset_read_buffer();
 
@@ -865,12 +864,12 @@ static void modeSelect (bool mpg_mode)
     hal.stream.enqueue_realtime_command(mpg_mode ? CMD_STATUS_REPORT_ALL : CMD_STATUS_REPORT);
 }
 
-static void modeChange(void)
+IRAM_ATTR static void modeChange(void)
 {
-	modeSelect(!gpio_get_level(MPG_ENABLE_PIN));
+    modeSelect(!gpio_get_level(MPG_ENABLE_PIN));
 }
 
-static void modeEnable (void)
+IRAM_ATTR static void modeEnable (void)
 {
     if(sys.mpg_mode == gpio_get_level(MPG_ENABLE_PIN))
         modeSelect(true);
@@ -1049,7 +1048,7 @@ static void settings_changed (settings_t *settings)
                     break;
 #endif
                 default:
-                	break;
+                    break;
 
             }
 
@@ -1081,14 +1080,6 @@ static void settings_changed (settings_t *settings)
             hal.delay_ms(50, modeEnable);
 #endif
 
-    }
-}
-
-void vStepperTask (void *pvParameters)
-{
-    while(true) {
-        vTaskSuspend(NULL);
-        hal.stepper_interrupt_callback();
     }
 }
 
@@ -1135,8 +1126,6 @@ static bool driver_setup (settings_t *settings)
     timer_set_counter_value(STEP_TIMER_GROUP, STEP_TIMER_INDEX, 0ULL);
     timer_isr_register(STEP_TIMER_GROUP, STEP_TIMER_INDEX, stepper_driver_isr, 0, ESP_INTR_FLAG_IRAM, NULL);
     timer_enable_intr(STEP_TIMER_GROUP, STEP_TIMER_INDEX);
-
-    xTaskCreatePinnedToCore(vStepperTask, "Stepper", configMINIMAL_STACK_SIZE, NULL, configMAX_PRIORITIES, &xStepperTask, 1);
 
     /********************
      *  Output signals  *
@@ -1477,27 +1466,10 @@ bool driver_init (void)
 // Main stepper driver
 IRAM_ATTR static void stepper_driver_isr (void *arg)
 {
-//  const int timer_idx = (int)arg;  // get the timer index
-
     TIMERG0.int_clr_timers.t0 = 1;
     TIMERG0.hw_timer[STEP_TIMER_INDEX].config.alarm_en = TIMER_ALARM_EN;
 
-    /* Resume the suspended task. */
-
-    /* A context switch should now be performed so the ISR returns directly to
-    the resumed task. This is because the resumed task had a priority that
-    was equal to or higher than the task that is currently in the Running state.
-    NOTE: The syntax required to perform a context switch from an ISR varies
-    from port to port and from compiler to compiler. Check the
-    documentation and examples for the port being used to find the syntax required by your
-    application. It is likely that this if() statement can be replaced by a
-    single call to portYIELD_FROM_ISR() [or portEND_SWITCHING_ISR()]
-    using xYieldRequired as the macro parameter: portYIELD_FROM_ISR( xYieldRequired );*/
-
     hal.stepper_interrupt_callback();
-
-//    if(xTaskResumeFromISR(xStepperTask) == pdTRUE)
-//         portYIELD_FROM_ISR();
 }
 
   //GPIO intr process
@@ -1539,10 +1511,10 @@ IRAM_ATTR static void gpio_isr (void *arg)
   static bool mpg_mutex = false;
 
   if((grp & INPUT_GROUP_MPG) && !mpg_mutex) {
-	  mpg_mutex = true;
-	  modeChange();
-	 // hal.delay_ms(50, modeChange); // causes intermittent panic... stacked calls due to debounce?
-	  mpg_mutex = false;
+      mpg_mutex = true;
+      modeChange();
+     // hal.delay_ms(50, modeChange); // causes intermittent panic... stacked calls due to debounce?
+      mpg_mutex = false;
   }
 #endif
 

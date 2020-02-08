@@ -74,6 +74,9 @@ static uart_t _uart_bus_array[3] = {
 };
 #endif
 
+static const DRAM_ATTR uint16_t RX_BUFFER_SIZE_MASK = RX_BUFFER_SIZE - 1;
+static const DRAM_ATTR uint8_t ESP_CMD_TOOL_ACK = CMD_TOOL_ACK;
+
 static uart_t *uart1 = NULL;
 
 static stream_rx_buffer_t rxbuffer = {
@@ -112,7 +115,7 @@ static void IRAM_ATTR _uart1_isr (void *arg)
 
         c = uart1->dev->fifo.rw_byte;
 
-        if(c == CMD_TOOL_ACK && !rxbuffer.backup) {
+        if(c == ESP_CMD_TOOL_ACK && !rxbuffer.backup) {
 
             memcpy(&rxbackup, &rxbuffer, sizeof(stream_rx_buffer_t));
             rxbuffer.backup = true;
@@ -121,7 +124,7 @@ static void IRAM_ATTR _uart1_isr (void *arg)
 
         } else if(!hal.stream.enqueue_realtime_command(c)) {
 
-            uint32_t bptr = (rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1);  // Get next head pointer
+            uint32_t bptr = (rxbuffer.head + 1) & RX_BUFFER_SIZE_MASK;  // Get next head pointer
 
             if(bptr == rxbuffer.tail)                   // If buffer full
                 rxbuffer.overflow = 1;                  // flag overflow,
@@ -223,13 +226,13 @@ static void uartConfig (uart_t *uart)
 
 #if MPG_MODE_ENABLE
     if(uart->num == 1)
-    	uart_set_pin(uart->num , UART_PIN_NO_CHANGE, MPG_RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+        uart_set_pin(uart->num , UART_PIN_NO_CHANGE, MPG_RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 #endif
 
     UART_MUTEX_UNLOCK(uart);
 }
 
-static void flush (uart_t *uart)
+IRAM_ATTR static void flush (uart_t *uart)
 {
     UART_MUTEX_LOCK(uart);
 
@@ -247,7 +250,7 @@ static void flush (uart_t *uart)
 
 void uartInit (void)
 {
-	uart1 = &_uart_bus_array[0]; // use UART 0
+    uart1 = &_uart_bus_array[0]; // use UART 0
 
     uartConfig(uart1);
 
@@ -320,9 +323,9 @@ void uartWriteS (const char *data)
         uartPutC(c);
 }
 
-void uartFlush (void)
+IRAM_ATTR void uartFlush (void)
 {
-	flush(uart1);
+    flush(uart1);
 
     rxbuffer.tail = rxbuffer.head;
 }
@@ -362,7 +365,7 @@ static void IRAM_ATTR _uart2_isr (void *arg)
 
         c = uart2->dev->fifo.rw_byte;
 
-        if(c == CMD_TOOL_ACK && !rxbuffer.backup) {
+        if(c == ESP_CMD_TOOL_ACK && !rxbuffer.backup) {
 
             memcpy(&rxbackup2, &rxbuffer2, sizeof(stream_rx_buffer_t));
             rxbuffer2.backup = true;
@@ -371,7 +374,7 @@ static void IRAM_ATTR _uart2_isr (void *arg)
 
         } else if(!hal.stream.enqueue_realtime_command(c)) {
 
-            uint32_t bptr = (rxbuffer2.head + 1) & (RX_BUFFER_SIZE - 1);  // Get next head pointer
+            uint32_t bptr = (rxbuffer2.head + 1) & RX_BUFFER_SIZE_MASK;  // Get next head pointer
 
             if(bptr == rxbuffer2.tail)                    // If buffer full
                 rxbuffer2.overflow = 1;                   // flag overflow,
@@ -389,25 +392,25 @@ static void IRAM_ATTR _uart2_isr (void *arg)
     */
 }
 
-void serialSelect(bool mpg_mode)
+IRAM_ATTR void serialSelect(bool mpg_mode)
 {
-	uart_t *uart_on = mpg_mode ? uart2 : uart1;
-	uart_t *uart_off = mpg_mode ? uart1 : uart2;
+    uart_t *uart_on = mpg_mode ? uart2 : uart1;
+    uart_t *uart_off = mpg_mode ? uart1 : uart2;
 
-	// Disable interrupts
-	uart_off->dev->int_ena.rxfifo_full = 0;
-	uart_off->dev->int_ena.frm_err = 0;
-	uart_off->dev->int_ena.rxfifo_tout = 0;
+    // Disable interrupts
+    uart_off->dev->int_ena.rxfifo_full = 0;
+    uart_off->dev->int_ena.frm_err = 0;
+    uart_off->dev->int_ena.rxfifo_tout = 0;
 
-	flush(uart_on);
+    flush(uart_on);
 
-	// Clear and enable interrupts
-	uart_on->dev->int_clr.rxfifo_full = 1;
-	uart_on->dev->int_clr.frm_err = 1;
-	uart_on->dev->int_clr.rxfifo_tout = 1;
-	uart_on->dev->int_ena.rxfifo_full = 1;
-	uart_on->dev->int_ena.frm_err = 1;
-	uart_on->dev->int_ena.rxfifo_tout = 1;
+    // Clear and enable interrupts
+    uart_on->dev->int_clr.rxfifo_full = 1;
+    uart_on->dev->int_clr.frm_err = 1;
+    uart_on->dev->int_clr.rxfifo_tout = 1;
+    uart_on->dev->int_ena.rxfifo_full = 1;
+    uart_on->dev->int_ena.frm_err = 1;
+    uart_on->dev->int_ena.rxfifo_tout = 1;
 }
 
 void uart2Init (void)
@@ -452,9 +455,9 @@ int16_t uart2Read (void)
     return data;
 }
 
-void uart2Flush (void)
+IRAM_ATTR void uart2Flush (void)
 {
-	flush(uart2);
+    flush(uart2);
 
     rxbuffer2.tail = rxbuffer2.head;
 }
@@ -481,4 +484,3 @@ bool uart2SuspendInput (bool suspend)
 }
 
 #endif
-

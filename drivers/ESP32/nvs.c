@@ -5,7 +5,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2018 Terje Io
+  Copyright (c) 2018-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -31,7 +31,20 @@
 #error EMULATE_EPROM must be enabled to use flash for settings storage
 #endif
 
+static const DRAM_ATTR char ESP_SPACE_CHAR = ' ';
+static const DRAM_ATTR char ESP_DEL_CHAR = 0x7F;
+static const DRAM_ATTR char ESP_CR = ASCII_CR;
+static const DRAM_ATTR char ESP_LF = ASCII_CR;
+static const DRAM_ATTR char ESP_QUESTION_MARK = '?';
 static const esp_partition_t *grblNVS = NULL;
+
+static bool (*realtime_command_handler)(char data); // NOTE: set by grbl at startup
+
+// Strip top bit set characters, control characters except CR and LF and question mark
+static IRAM_ATTR bool nvs_enqueue_realtime_command (char c)
+{
+    return (c < ESP_SPACE_CHAR && !(c == ESP_CR || c == ESP_LF)) || c == ESP_QUESTION_MARK || c >= ESP_DEL_CHAR;
+}
 
 bool nvsRead (uint8_t *dest)
 {
@@ -45,9 +58,19 @@ bool nvsRead (uint8_t *dest)
 
 bool nvsWrite (uint8_t *source)
 {
-    return grblNVS &&
-            esp_partition_erase_range(grblNVS, 0, SPI_FLASH_SEC_SIZE) == ESP_OK &&
-             esp_partition_write(grblNVS, 0, (void *)source, hal.eeprom.size) == ESP_OK;
+    // Save and redirect real time command handler here to avoid panic in uart isr
+    // due to constants in standard handler residing in flash.
+    realtime_command_handler = hal.stream.enqueue_realtime_command;
+    hal.stream.enqueue_realtime_command = nvs_enqueue_realtime_command;
+
+    bool ok = grblNVS &&
+               esp_partition_erase_range(grblNVS, 0, SPI_FLASH_SEC_SIZE) == ESP_OK &&
+                esp_partition_write(grblNVS, 0, (void *)source, hal.eeprom.size) == ESP_OK;
+
+    // Restore real time command handler
+    hal.stream.enqueue_realtime_command = realtime_command_handler;
+
+    return ok;
 }
 
 bool nvsInit (void)

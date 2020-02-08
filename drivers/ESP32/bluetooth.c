@@ -31,6 +31,7 @@
 #include "nvs_flash.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/event_groups.h "
 #include "esp_log.h"
 #include "esp_bt.h"
 #include "esp_bt_main.h"
@@ -41,35 +42,50 @@
 #include "driver.h"
 #include "grbl/grbl.h"
 
+#include "esp32-hal-uart.h"
+
+#define SPP_RUNNING      (1 << 0)
+#define SPP_CONNECTED    (1 << 1)
+#define SPP_CONGESTED    (1 << 2)
+#define SPP_DISCONNECTED (1 << 3)
+#define BT_TX_QUEUE_ENTRIES 32
+#define BT_TX_BUFFER_SIZE 250
+
+#define USE_BT_MUTEX 0
+
+#if USE_BT_MUTEX
+#define BT_MUTEX_LOCK()   do {} while (xSemaphoreTake(lock, portMAX_DELAY) != pdPASS)
+#define BT_MUTEX_UNLOCK() xSemaphoreGive(lock)
+static SemaphoreHandle_t lock = NULL;
+#else
+#define BT_MUTEX_LOCK()
+#define BT_MUTEX_UNLOCK()
+#endif
+
+#define SPP_TAG "BLUETOOTH"
+
 typedef struct {
     volatile uint16_t head;
-//    bool congested;
-//    xSemaphoreHandle lock;
-    char data[TX_BUFFER_SIZE];
+    char data[BT_TX_BUFFER_SIZE];
 } bt_tx_buffer_t;
 
-#define BT_MUTEX_LOCK()    do {} while (xSemaphoreTake(lock, portMAX_DELAY) != pdPASS)
-#define UART_MUTEX_UNLOCK()  xSemaphoreGive(lock)
-
-#define BT_MUTEX_TXLOCK()    do {} while (xSemaphoreTake(txbuffer_send->lock, portMAX_DELAY) != pdPASS)
-#define BT_MUTEX_TXUNLOCK()  xSemaphoreGive(txbuffer_send->lock)
-
-#define SPP_TAG "SPP_ACCEPTOR_DEMO"
+typedef struct {
+    uint16_t length;
+    uint8_t data[1];
+} tx_chunk_t;
 
 static uint32_t connection = 0;
+static bool is_second_attempt = false;
 static bluetooth_settings_t *bt_settings;
-static xSemaphoreHandle lock = NULL;
+static SemaphoreHandle_t tx_busy = NULL;
+static EventGroupHandle_t event_group = NULL;
+static TaskHandle_t polltask = NULL;
+static xQueueHandle tx_queue = NULL;
+static portMUX_TYPE tx_flush_mux = portMUX_INITIALIZER_UNLOCKED;
 
-static stream_rx_buffer_t rxbuffer = {
-    .head = 0,
-    .tail = 0,
-    .backup = false,
-    .overflow = false
-};
-
+static bt_tx_buffer_t txbuffer;
+static stream_rx_buffer_t rxbuffer = {0};
 static stream_rx_buffer_t rxbackup;
-
-static bt_tx_buffer_t tx_buffers[2], *txbuffer, *txbuffer_send;
 
 uint32_t BTStreamAvailable (void)
 {
@@ -94,34 +110,48 @@ static int16_t BTStreamGetNull (void)
 int16_t BTStreamGetC (void)
 {
     BT_MUTEX_LOCK();
+
     int16_t data;
     uint16_t bptr = rxbuffer.tail;
 
     if(bptr == rxbuffer.head) {
-        UART_MUTEX_UNLOCK();
+        BT_MUTEX_UNLOCK();
         return -1; // no data available else EOF
     }
+
     data = rxbuffer.data[bptr++];                 // Get next character, increment tmp pointer
     rxbuffer.tail = bptr & (RX_BUFFER_SIZE - 1);  // and update pointer
-    UART_MUTEX_UNLOCK();
+
+    BT_MUTEX_UNLOCK();
+
     return data;
 }
 
-// Since grbl always sends cr/lf terminated strings we can use double
-// buffering and only send complete strings to improve throughput
-// Note to self: seems like esp_spp_write does a deep copy of payload so db likely not needed...
+static inline bool enqueue_tx_chunk (uint16_t length, uint8_t *data)
+{
+    tx_chunk_t *chunk;
+
+    if((chunk = malloc(sizeof(tx_chunk_t) + length))) {
+        chunk->length = length;
+        memcpy(&chunk->data, data, length);
+        if (xQueueSendToBack(tx_queue, &chunk, portMAX_DELAY) != pdPASS) {
+            free(chunk);
+            chunk = NULL;
+        }
+    }
+
+    return chunk != NULL;
+}
+
+// Since grbl always sends cr/lf terminated strings we can send complete strings to improve throughput
 bool BTStreamPutC (const char c)
 {
-//  while(xSemaphoreTake(txbuffer->lock, portMAX_DELAY) != pdPASS);
-    txbuffer->data[txbuffer->head++] = c;
-//  xSemaphoreGive(txbuffer->lock);
+    if(txbuffer.head < BT_TX_BUFFER_SIZE)
+        txbuffer.data[txbuffer.head++] = c;
 
     if(c == '\n') {
-//      while(xSemaphoreTake(txbuffer->lock, portMAX_DELAY) != pdPASS);
-        esp_spp_write(connection, txbuffer->head, (uint8_t *)txbuffer->data);
-        txbuffer->head = 0;
-        txbuffer_send = txbuffer;
-        txbuffer = txbuffer == &tx_buffers[0] ? &tx_buffers[1] : &tx_buffers[0];
+        enqueue_tx_chunk(txbuffer.head, (uint8_t *)txbuffer.data);
+        txbuffer.head = 0;
     }
 
     return true;
@@ -138,27 +168,34 @@ void BTStreamWriteS (const char *data)
 void BTStreamFlush (void)
 {
     BT_MUTEX_LOCK();
+
     rxbuffer.tail = rxbuffer.head;
-    UART_MUTEX_UNLOCK();
+
+    BT_MUTEX_UNLOCK();
 }
 
 IRAM_ATTR void BTStreamCancel (void)
 {
-//    BT_MUTEX_LOCK();
+    BT_MUTEX_LOCK();
+
     rxbuffer.data[rxbuffer.head] = ASCII_CAN;
     rxbuffer.tail = rxbuffer.head;
     rxbuffer.head = (rxbuffer.tail + 1) & (RX_BUFFER_SIZE - 1);
-//    UART_MUTEX_UNLOCK();
+
+    BT_MUTEX_UNLOCK();
 }
 
 bool BTStreamSuspendInput (bool suspend)
 {
     BT_MUTEX_LOCK();
+
     if(suspend)
         hal.stream.read = BTStreamGetNull;
     else if(rxbuffer.backup)
         memcpy(&rxbuffer, &rxbackup, sizeof(stream_rx_buffer_t));
-    UART_MUTEX_UNLOCK();
+
+    BT_MUTEX_UNLOCK();
+
     return rxbuffer.tail != rxbuffer.head;
 }
 
@@ -173,60 +210,93 @@ static void esp_spp_cb (esp_spp_cb_event_t event, esp_spp_cb_param_t *param)
             break;
 
         case ESP_SPP_SRV_OPEN_EVT:
-            ESP_LOGI(SPP_TAG, "ESP_SPP_OPEN_EVT");
-            connection = param->open.handle;
-            tx_buffers[0].head = tx_buffers[1].head = 0;
-            txbuffer = txbuffer_send = &tx_buffers[0];
-            selectStream(StreamType_Bluetooth);
-            hal.stream.write_all("[MSG:BT OK]\r\n");
+            if(connection == 0) {
+                connection = param->open.handle;
+                txbuffer.head = 0;
+
+                selectStream(StreamType_Bluetooth);
+
+                if(eTaskGetState(polltask) == eSuspended)
+                    vTaskResume(polltask);
+
+                hal.stream.write_all("[MSG:BT OK]\r\n");
+            } else {
+                is_second_attempt = true;
+                esp_spp_disconnect(param->open.handle);
+            }
+
             break;
 
         case ESP_SPP_CLOSE_EVT:
-//          BT_MUTEX_TXUNLOCK();
-            selectStream(StreamType_Serial);
-            connection = 0;
-            ESP_LOGI(SPP_TAG, "ESP_SPP_CLOSE_EVT");
+            if(is_second_attempt)
+                is_second_attempt = false;
+
+            else { // flush TX queue and reenable serial stream
+
+                connection = 0;
+
+                if(uxQueueMessagesWaiting(tx_queue)) {
+
+                    tx_chunk_t *chunk;
+
+                    portENTER_CRITICAL(&tx_flush_mux);
+
+                    while(uxQueueMessagesWaiting(tx_queue)) {
+                        if(xQueueReceive(tx_queue, &chunk, (TickType_t)0) == pdTRUE)
+                            free(chunk);
+                    }
+
+                    portEXIT_CRITICAL(&tx_flush_mux);
+                }
+
+                selectStream(StreamType_Serial);
+            }
             break;
 
         case ESP_SPP_DATA_IND_EVT:;
             char c;
             uint16_t len = param->data_ind.len;
             uint8_t *data = param->data_ind.data;
-            while(len) {
+
+            while(len--) {
                 c = (char)*data++;
-            	// discard input if MPG has taken over...
-            	if(hal.stream.type != StreamType_MPG) {
+                // discard input if MPG has taken over...
+                if(hal.stream.type != StreamType_MPG) {
 
-					if(c == CMD_TOOL_ACK && !rxbuffer.backup) {
+                    if(c == CMD_TOOL_ACK && !rxbuffer.backup) {
 
-						memcpy(&rxbackup, &rxbuffer, sizeof(stream_rx_buffer_t));
-						rxbuffer.backup = true;
-						rxbuffer.tail = rxbuffer.head;
-						hal.stream.read = BTStreamGetC; // restore normal input
+                        memcpy(&rxbackup, &rxbuffer, sizeof(stream_rx_buffer_t));
+                        rxbuffer.backup = true;
+                        rxbuffer.tail = rxbuffer.head;
+                        hal.stream.read = BTStreamGetC; // restore normal input
 
-					} else if(!hal.stream.enqueue_realtime_command(c)) {
+                    } else if(!hal.stream.enqueue_realtime_command(c)) {
 
-						uint32_t bptr = (rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1);  // Get next head pointer
+                        uint32_t bptr = (rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1);  // Get next head pointer
 
-						if(bptr == rxbuffer.tail)                   // If buffer full
-							rxbuffer.overflow = 1;                  // flag overflow,
-						else {
-							rxbuffer.data[rxbuffer.head] = c; 		// else add data to buffer
-							rxbuffer.head = bptr;                   // and update pointer
-						}
-					}
-            	}
-                len--;
+                        if(bptr == rxbuffer.tail)               // If buffer full
+                            rxbuffer.overflow = 1;              // flag overflow,
+                        else {
+                            rxbuffer.data[rxbuffer.head] = c;   // else add data to buffer
+                            rxbuffer.head = bptr;               // and update pointer
+                        }
+                    }
+                }
             }
             break;
 
         case ESP_SPP_CONG_EVT:
+            if(param->cong.cong)
+                xEventGroupClearBits(event_group, SPP_CONGESTED);
+            else
+                xEventGroupSetBits(event_group, SPP_CONGESTED);
             ESP_LOGI(SPP_TAG, "ESP_SPP_CONG_EVT");
             break;
 
         case ESP_SPP_WRITE_EVT:
-        //  ESP_LOGI(SPP_TAG, "ESP_SPP_WRITE_EVT");
-        //  xSemaphoreGive(txbuffer_send->lock);
+            if(param->write.cong)
+                xEventGroupClearBits(event_group, SPP_CONGESTED);
+            xSemaphoreGive(tx_busy);
             break;
 
         default:
@@ -251,11 +321,8 @@ void esp_bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param)
                 esp_bt_pin_code_t pin_code = {0};
                 esp_bt_gap_pin_reply(param->pin_req.bda, true, 16, pin_code);
             } else {
-                esp_bt_pin_code_t pin_code;
-                pin_code[0] = '1';
-                pin_code[1] = '2';
-                pin_code[2] = '3';
-                pin_code[3] = '4';
+                ESP_LOGI(SPP_TAG, "Input pin code: 1234");
+                esp_bt_pin_code_t pin_code = {'1', '2', '3', '4'};
                 esp_bt_gap_pin_reply(param->pin_req.bda, true, 4, pin_code);
             }
             break;
@@ -278,17 +345,64 @@ void esp_bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param)
     }
 }
 
+static void pollTX (void * arg)
+{
+    tx_chunk_t *chunk = NULL;
+    bool data_sent = false;
+    uint8_t buffer[256], *ptr;
+    size_t remaining;
+
+    while(true) {
+
+        if(connection &&
+            xEventGroupWaitBits(event_group, SPP_CONGESTED, pdFALSE, pdTRUE, 0) &&
+             uxQueueMessagesWaiting(tx_queue) &&
+              xSemaphoreTake(tx_busy, (TickType_t)0)) {
+
+            data_sent = false;
+
+            if(chunk || xQueueReceive(tx_queue, &chunk, (TickType_t)0) == pdTRUE) {
+
+                remaining = sizeof(buffer);
+                ptr = buffer;
+
+                if(chunk->length >= remaining) {
+                    data_sent = esp_spp_write(connection, chunk->length, chunk->data) == ESP_OK;
+                    free(chunk);
+                    chunk = NULL;
+                } else while(chunk && chunk->length < remaining) {
+
+                    memcpy(ptr, chunk->data, chunk->length);
+                    ptr += chunk->length;
+                    remaining -= chunk->length;
+                    free(chunk);
+
+                    if(xQueueReceive(tx_queue, &chunk, (TickType_t)0) != pdTRUE)
+                        chunk = NULL;
+                }
+
+                if(remaining != sizeof(buffer))
+                    data_sent = esp_spp_write(connection, sizeof(buffer) - remaining, buffer) == ESP_OK;
+            }
+
+            if(!data_sent)
+               xSemaphoreGive(tx_busy);
+        }
+
+        if(connection)
+            vTaskDelay(pdMS_TO_TICKS(10));
+        else
+            vTaskSuspend(NULL);
+    }
+}
+
 bool bluetooth_init (bluetooth_settings_t *settings)
 {
     bt_settings = settings;
 
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        if((ret = nvs_flash_erase()) == ESP_OK)
-            ret = nvs_flash_init();
-    }
+    if(esp_bt_controller_mem_release(ESP_BT_MODE_BLE) == ESP_OK) {
 
-    if(ret == ESP_OK && (ret = esp_bt_controller_mem_release(ESP_BT_MODE_BLE)) == ESP_OK) {
+        esp_err_t ret;
 
         esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
 
@@ -327,25 +441,52 @@ bool bluetooth_init (bluetooth_settings_t *settings)
             return false;
         }
 
-        /* Set default parameters for Secure Simple Pairing */
-        esp_bt_sp_param_t param_type = ESP_BT_SP_IOCAP_MODE;
+        // Set default parameters for Secure Simple Pairing;
         esp_bt_io_cap_t iocap = ESP_BT_IO_CAP_IO;
-        esp_bt_gap_set_security_param(param_type, &iocap, sizeof(uint8_t));
+        esp_bt_gap_set_security_param(ESP_BT_SP_IOCAP_MODE, &iocap, sizeof(uint8_t));
 
-        /*
-         * Set default parameters for Legacy Pairing
-         * Use variable pin, input pin code when pairing
-         */
-        esp_bt_pin_type_t pin_type = ESP_BT_PIN_TYPE_VARIABLE;
+        // Set default parameters for Legacy Pairing. Use variable pin, input pin code when pairing
         esp_bt_pin_code_t pin_code;
-        esp_bt_gap_set_pin(pin_type, 0, pin_code);
+        esp_bt_gap_set_pin(ESP_BT_PIN_TYPE_VARIABLE, 0, pin_code);
 
-    //    tx_buffers[0].lock = xSemaphoreCreateMutex();
-    //    tx_buffers[1].lock = xSemaphoreCreateMutex();
+        // The default BTA_DM_COD_LOUDSPEAKER does not work with the macOS BT stack
+        esp_bt_cod_t cod = {
+            .major = 0b00001,
+            .minor = 0b000100,
+            .service = 0b00000010110
+        };
+        if (esp_bt_gap_set_cod(cod, ESP_BT_INIT_COD) != ESP_OK)
+            return false;
 
-        lock = xSemaphoreCreateMutex();
+        if(event_group == NULL) {
+            if(!(event_group = xEventGroupCreate()))
+                return false;
+        }
 
-        return lock != NULL;
+        xEventGroupClearBits(event_group, 0xFFFFFF);
+        xEventGroupSetBits(event_group, SPP_CONGESTED);
+
+#if USE_BT_MUTEX
+        if(!(lock = xSemaphoreCreateMutex()))
+            return false;
+#endif
+
+        if(tx_queue == NULL) {
+            if(!(tx_queue = xQueueCreate(BT_TX_QUEUE_ENTRIES, sizeof(tx_chunk_t *))))
+                return false;
+        }
+
+        if((tx_busy = xSemaphoreCreateBinary()) == NULL)
+            return false;
+
+        xSemaphoreGive(tx_busy);
+
+        if(xTaskCreatePinnedToCore(pollTX, "btTX", 4096, NULL, 2, &polltask, 1) == pdPASS)
+            vTaskSuspend(polltask);
+        else
+            return false;
+
+        return polltask != NULL;
     }
 
     return false;
@@ -363,14 +504,14 @@ status_code_t bluetooth_setting (uint_fast16_t param, float value, char *svalue)
             if(strlcpy(driver_settings.bluetooth.device_name, svalue, sizeof(driver_settings.bluetooth.device_name)) <= sizeof(driver_settings.bluetooth.device_name))
                 status = Status_OK;
             else
-                status = Status_InvalidStatement; // too long...                ;
+                status = Status_InvalidStatement; // too long...
             break;
 
         case Setting_BlueToothServiceName:
             if(strlcpy(driver_settings.bluetooth.service_name, svalue, sizeof(driver_settings.bluetooth.service_name)) <= sizeof(driver_settings.bluetooth.service_name))
                 status = Status_OK;
             else
-                status = Status_InvalidStatement; // too long...                ;
+                status = Status_InvalidStatement; // too long...
             break;
     }
 
@@ -382,15 +523,15 @@ void bluetooth_settings_report (setting_type_t setting)
     switch(setting) {
 
         case Setting_BlueToothDeviceName:
-			report_string_setting(Setting_BlueToothDeviceName, driver_settings.bluetooth.device_name);
-			break;
+            report_string_setting(Setting_BlueToothDeviceName, driver_settings.bluetooth.device_name);
+            break;
 
         case Setting_BlueToothServiceName:
-        	report_string_setting(Setting_BlueToothServiceName, driver_settings.bluetooth.service_name);
-        	break;
+            report_string_setting(Setting_BlueToothServiceName, driver_settings.bluetooth.service_name);
+            break;
 
         default:
-        	break;
+            break;
     }
 }
 

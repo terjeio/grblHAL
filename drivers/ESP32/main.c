@@ -37,6 +37,9 @@
 
 #include "grbl/grbllib.h"
 
+#include "nvs.h"
+#include "nvs_flash.h"
+
 /* Scheduler includes. */
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -49,5 +52,11 @@ static void vGrblTask (void *pvParameters)
 
 void app_main(void)
 {
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        if((ret = nvs_flash_erase()) == ESP_OK)
+            ret = nvs_flash_init();
+    }
+
     xTaskCreatePinnedToCore(vGrblTask, "Grbl", 4096, NULL, 0, NULL, 1);
 }

@@ -5,7 +5,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2018-2019 Terje Io
+  Copyright (c) 2018-2020 Terje Io
 
   Some parts of the code is based on example code by Espressif, in the public domain
 
@@ -320,15 +320,6 @@ bool wifi_init (wifi_settings_t *settings)
 #endif
 
     if(esp_wifi_get_mode(&currentMode) == ESP_ERR_WIFI_NOT_INIT) {
-
-        ret = nvs_flash_init();
-        if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-            if((ret = nvs_flash_erase()) == ESP_OK)
-                ret = nvs_flash_init();
-        }
-
-        if(ret != ESP_OK)
-            return false;
 
         tcpip_adapter_init();
 
