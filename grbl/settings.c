@@ -811,6 +811,7 @@ void settings_init() {
         mc_backlash_init();
 #endif
         hal.settings_changed(&settings);
-        hal.probe_configure_invert_mask(false); // Initialize probe invert mask.
+        if(hal.probe_configure_invert_mask) // Initialize probe invert mask.
+            hal.probe_configure_invert_mask(false);
     }
 }

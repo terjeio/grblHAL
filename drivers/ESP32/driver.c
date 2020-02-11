@@ -627,7 +627,7 @@ bool probeGetState (void)
 }
 
 // Static spindle (off, on cw & on ccw)
-inline static void spindle_off ()
+IRAM_ATTR inline static void spindle_off (void)
 {
 #if IOEXPAND_ENABLE
     iopins.spindle_on = settings.spindle.invert.on ? On : Off;
@@ -637,7 +637,7 @@ inline static void spindle_off ()
 #endif
 }
 
-inline static void spindle_on ()
+IRAM_ATTR inline static void spindle_on (void)
 {
 #if IOEXPAND_ENABLE
     iopins.spindle_on = settings.spindle.invert.on ? Off : On;
@@ -648,7 +648,7 @@ inline static void spindle_on ()
 }
 
 
-inline static void spindle_dir (bool ccw)
+IRAM_ATTR inline static void spindle_dir (bool ccw)
 {
     if(hal.driver_cap.spindle_dir) {
 #if IOEXPAND_ENABLE
@@ -661,7 +661,7 @@ inline static void spindle_dir (bool ccw)
 }
 
 // Start or stop spindle
-static void spindleSetState (spindle_state_t state, float rpm)
+IRAM_ATTR static void spindleSetState (spindle_state_t state, float rpm)
 {
     if (!state.on)
         spindle_off();
@@ -722,15 +722,20 @@ IRAM_ATTR static void spindleUpdateRPM (float rpm)
 #endif
 
 // Start or stop spindle, variable version
-static void spindleSetStateVariable (spindle_state_t state, float rpm)
+
+IRAM_ATTR void __attribute__ ((noinline)) _setSpeed (spindle_state_t state, float rpm)
 {
-    if (!state.on || rpm == 0.0f) {
+    spindle_dir(state.ccw);
+    spindle_set_speed(spindle_compute_pwm_value(&spindle_pwm, rpm, false));
+}
+
+IRAM_ATTR static void spindleSetStateVariable (spindle_state_t state, float rpm)
+{
+    if (!state.on || memcmp(&rpm, &FZERO, sizeof(float)) == 0) { // rpm == 0.0f cannot be used, causes intermittent panic on soft reset!
         spindle_set_speed(spindle_pwm.off_value);
         spindle_off();
-    } else {
-        spindle_dir(state.ccw);
-        spindle_set_speed(spindle_compute_pwm_value(&spindle_pwm, rpm, false));
-    }
+    } else
+        _setSpeed(state, rpm);
 }
 
 // Returns spindle state in a spindle_state_t variable
@@ -759,7 +764,7 @@ static spindle_state_t spindleGetState (void)
 // end spindle code
 
 // Start/stop coolant (and mist if enabled)
-static void coolantSetState (coolant_state_t mode)
+IRAM_ATTR static void coolantSetState (coolant_state_t mode)
 {
     mode.value ^= settings.coolant_invert.mask;
 #if IOEXPAND_ENABLE
@@ -1088,7 +1093,24 @@ static void reportIP (void)
 {
     hal.stream.write("[IP:");
     hal.stream.write(wifi_get_ip());
-    hal.stream.write("]\r\n");
+    hal.stream.write("]"  ASCII_EOL);
+}
+#endif
+
+#if BLUETOOTH_ENABLE
+static void report_bt_MAC (void)
+{
+    char *client_mac;
+
+    hal.stream.write("[BT DEVICE MAC:");
+    hal.stream.write(bluetooth_get_device_mac());
+    hal.stream.write("]" ASCII_EOL);
+
+    if((client_mac = bluetooth_get_client_mac())) {
+        hal.stream.write("[BT CLIENT MAC:");
+        hal.stream.write(client_mac);
+        hal.stream.write("]" ASCII_EOL);
+    }
 }
 #endif
 
@@ -1423,6 +1445,9 @@ bool driver_init (void)
 
 #if WIFI_ENABLE
     hal.report_options = reportIP;
+#endif
+#if BLUETOOTH_ENABLE
+    hal.report_options = report_bt_MAC;
 #endif
 
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality

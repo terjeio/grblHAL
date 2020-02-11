@@ -6,6 +6,10 @@ A GrblHAL driver for the ESP32 processor.
 
 ---
 
+__NOTE:__ `grbl/config.h` or `CMakeLists.txt` may need modification before compilation. If needed an `#error` (with instructions) will be generated when compiling.
+
+---
+
 __Update 2020-02-06:__ Added option for secondary serial input stream with input pin for switching on/off, indended for external MPGs. **For verification!**
 
 ---
@@ -85,13 +89,6 @@ Please note that this driver is not made using the Arduino IDE/framework, I am u
 
 ---
 
-The standard grbl/config.h should be modified with these changes at the top:
-
-```
-Add: #include "esp_attr.h"
-Change: #define ISR_CODE to #define ISR_CODE IRAM_ATTR
-```
-
 ### Credits:
 
 index.htm.gz is Copyright (c) 2019 Luc Lebosse - from his [ESP3D-WEBUI](https://github.com/luc-github/ESP3D-webui), I may have pulled a few lines from his backend code too.
@@ -101,4 +98,4 @@ dns_server.c is Copyright (c) 2019 Tony Pottier - from his [ESP32 WiFi Manager](
 Snippets of code is extracted from Espressif ESP-IDF examples which are public domain.
 
 ---
-2020-01-13
+2020-02-10

@@ -30,15 +30,14 @@ bool bluetooth_init (bluetooth_settings_t *settings);
 status_code_t bluetooth_setting (uint_fast16_t param, float value, char *svalue);
 void bluetooth_settings_report (setting_type_t setting);
 void bluetooth_settings_restore (void);
+char *bluetooth_get_device_mac (void);
+char *bluetooth_get_client_mac (void);
 
 uint32_t BTStreamAvailable (void);
 uint16_t BTStreamRXFree (void);
 int16_t BTStreamGetC (void);
 bool BTStreamSuspendInput (bool suspend);
-
-bool BTStreamPutC (const char c);
 void BTStreamWriteS (const char *data);
-
 void BTStreamFlush (void);
 void BTStreamCancel (void);
 

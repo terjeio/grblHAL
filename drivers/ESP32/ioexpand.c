@@ -6,7 +6,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2018 Terje Io
+  Copyright (c) 2018-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -67,7 +67,7 @@ void ioexpand_init (void)
     }
 }
 
-void ioexpand_out (ioexpand_t pins)
+IRAM_ATTR void ioexpand_out (ioexpand_t pins)
 {
     static i2c_task_t i2c_task = {
         .action = 2,
@@ -76,8 +76,6 @@ void ioexpand_out (ioexpand_t pins)
 
     if(xPortInIsrContext()) {
         i2c_task.params = (void *)((uint32_t)pins.mask);
-//      printf("EXP %d %d %d\n", i2c_task.action, (uint32_t)i2c_task.params, pins.mask);
-
         BaseType_t xHigherPriorityTaskWoken = pdFALSE;
         xQueueSendFromISR(i2cQueue, (void *)&i2c_task, &xHigherPriorityTaskWoken);
     } else if(i2cBusy != NULL && xSemaphoreTake(i2cBusy, 5 / portTICK_PERIOD_MS) == pdTRUE) {

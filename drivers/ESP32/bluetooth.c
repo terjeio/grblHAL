@@ -42,8 +42,6 @@
 #include "driver.h"
 #include "grbl/grbl.h"
 
-#include "esp32-hal-uart.h"
-
 #define SPP_RUNNING      (1 << 0)
 #define SPP_CONNECTED    (1 << 1)
 #define SPP_CONGESTED    (1 << 2)
@@ -82,6 +80,7 @@ static EventGroupHandle_t event_group = NULL;
 static TaskHandle_t polltask = NULL;
 static xQueueHandle tx_queue = NULL;
 static portMUX_TYPE tx_flush_mux = portMUX_INITIALIZER_UNLOCKED;
+static char client_mac[18];
 
 static bt_tx_buffer_t txbuffer;
 static stream_rx_buffer_t rxbuffer = {0};
@@ -185,6 +184,21 @@ IRAM_ATTR void BTStreamCancel (void)
     BT_MUTEX_UNLOCK();
 }
 
+char *bluetooth_get_device_mac (void)
+{
+    static char device_mac[18];
+    const uint8_t *mac = esp_bt_dev_get_address();
+
+    sprintf(device_mac, "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+    return device_mac;
+}
+
+char *bluetooth_get_client_mac (void)
+{
+    return client_mac[0] == '\0' ? NULL : client_mac;
+}
+
 bool BTStreamSuspendInput (bool suspend)
 {
     BT_MUTEX_LOCK();
@@ -197,6 +211,23 @@ bool BTStreamSuspendInput (bool suspend)
     BT_MUTEX_UNLOCK();
 
     return rxbuffer.tail != rxbuffer.head;
+}
+
+static void flush_tx_queue (void)
+{
+    if(uxQueueMessagesWaiting(tx_queue)) {
+
+        tx_chunk_t *chunk;
+
+        portENTER_CRITICAL(&tx_flush_mux);
+
+        while(uxQueueMessagesWaiting(tx_queue)) {
+            if(xQueueReceive(tx_queue, &chunk, (TickType_t)0) == pdTRUE)
+                free(chunk);
+        }
+
+        portEXIT_CRITICAL(&tx_flush_mux);
+    }
 }
 
 static void esp_spp_cb (esp_spp_cb_event_t event, esp_spp_cb_param_t *param)
@@ -213,7 +244,8 @@ static void esp_spp_cb (esp_spp_cb_event_t event, esp_spp_cb_param_t *param)
             if(connection == 0) {
                 connection = param->open.handle;
                 txbuffer.head = 0;
-
+                uint8_t *mac = param->srv_open.rem_bda;
+                sprintf(client_mac, "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
                 selectStream(StreamType_Bluetooth);
 
                 if(eTaskGetState(polltask) == eSuspended)
@@ -232,23 +264,9 @@ static void esp_spp_cb (esp_spp_cb_event_t event, esp_spp_cb_param_t *param)
                 is_second_attempt = false;
 
             else { // flush TX queue and reenable serial stream
-
                 connection = 0;
-
-                if(uxQueueMessagesWaiting(tx_queue)) {
-
-                    tx_chunk_t *chunk;
-
-                    portENTER_CRITICAL(&tx_flush_mux);
-
-                    while(uxQueueMessagesWaiting(tx_queue)) {
-                        if(xQueueReceive(tx_queue, &chunk, (TickType_t)0) == pdTRUE)
-                            free(chunk);
-                    }
-
-                    portEXIT_CRITICAL(&tx_flush_mux);
-                }
-
+                client_mac[0] = '\0';
+                flush_tx_queue();
                 selectStream(StreamType_Serial);
             }
             break;
@@ -398,7 +416,37 @@ static void pollTX (void * arg)
 
 bool bluetooth_init (bluetooth_settings_t *settings)
 {
+    client_mac[0] = '\0';
     bt_settings = settings;
+
+    if(!(event_group || (event_group = xEventGroupCreate())))
+        return false;
+
+    xEventGroupClearBits(event_group, 0xFFFFFF);
+    xEventGroupSetBits(event_group, SPP_CONGESTED);
+
+#if USE_BT_MUTEX
+    if(!(lock || (lock = xSemaphoreCreateMutex())))
+        return false;
+#endif
+
+    if(!(tx_queue || (tx_queue = xQueueCreate(BT_TX_QUEUE_ENTRIES, sizeof(tx_chunk_t *)))))
+        return false;
+
+    if(!(tx_busy || (tx_busy = xSemaphoreCreateBinary())))
+        return false;
+
+    xSemaphoreGive(tx_busy);
+
+    if(polltask == NULL) {
+        if(xTaskCreatePinnedToCore(pollTX, "btTX", 4096, NULL, 2, &polltask, 1) == pdPASS)
+            vTaskSuspend(polltask);
+        else
+            return false;
+    }
+
+    if(esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_ENABLED)
+        return true;
 
     if(esp_bt_controller_mem_release(ESP_BT_MODE_BLE) == ESP_OK) {
 
@@ -458,38 +506,53 @@ bool bluetooth_init (bluetooth_settings_t *settings)
         if (esp_bt_gap_set_cod(cod, ESP_BT_INIT_COD) != ESP_OK)
             return false;
 
-        if(event_group == NULL) {
-            if(!(event_group = xEventGroupCreate()))
-                return false;
-        }
-
-        xEventGroupClearBits(event_group, 0xFFFFFF);
-        xEventGroupSetBits(event_group, SPP_CONGESTED);
-
-#if USE_BT_MUTEX
-        if(!(lock = xSemaphoreCreateMutex()))
-            return false;
-#endif
-
-        if(tx_queue == NULL) {
-            if(!(tx_queue = xQueueCreate(BT_TX_QUEUE_ENTRIES, sizeof(tx_chunk_t *))))
-                return false;
-        }
-
-        if((tx_busy = xSemaphoreCreateBinary()) == NULL)
-            return false;
-
-        xSemaphoreGive(tx_busy);
-
-        if(xTaskCreatePinnedToCore(pollTX, "btTX", 4096, NULL, 2, &polltask, 1) == pdPASS)
-            vTaskSuspend(polltask);
-        else
-            return false;
-
-        return polltask != NULL;
+        return true;
     }
 
     return false;
+}
+
+bool bluetooth_disable (void)
+{
+    if(esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_ENABLED) {
+
+        if(connection)
+            esp_spp_disconnect(connection);
+
+        esp_spp_deinit();
+        esp_bluedroid_disable();
+        esp_bluedroid_deinit();
+
+        if (esp_bt_controller_disable() != ESP_OK)
+            return false;
+
+        while(esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_ENABLED);
+
+        if(esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_INITED) {
+
+            if (esp_bt_controller_deinit() != ESP_OK)
+                return false;
+
+            vTaskDelay(1);
+
+            if (esp_bt_controller_get_status() != ESP_BT_CONTROLLER_STATUS_IDLE)
+                return false;
+        }
+
+        if(polltask) {
+            flush_tx_queue();
+            vTaskDelete(polltask);
+            vEventGroupDelete(event_group);
+            vSemaphoreDelete(tx_busy);
+            vQueueDelete(tx_queue);
+            polltask = event_group = tx_busy = tx_queue = NULL;
+#if USE_BT_MUTEX
+            vSemaphoreDelete(lock);
+            lock = NULL;
+#endif
+        }
+    }
+    return true;
 }
 
 #if BLUETOOTH_ENABLE

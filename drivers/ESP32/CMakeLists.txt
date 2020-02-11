@@ -1,5 +1,5 @@
 # CMake for GrblHAL driver for ESP32
-# 2020-01-07
+# 2020-02-10
 
 cmake_minimum_required(VERSION 3.5)
 
@@ -77,6 +77,8 @@ set(INCLUDE_DIRS ".")
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
 project(grbl)
+
+target_compile_definitions(grbl.elf PUBLIC GRBL_ESP32)
 
 if(Networking)
 target_compile_definitions(grbl.elf PUBLIC NETWORKING_ENABLE)

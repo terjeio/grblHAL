@@ -339,7 +339,7 @@ IRAM_ATTR void uartCancel (void)
 //    UART_MUTEX_UNLOCK(uart1);
 }
 
-bool uartSuspendInput (bool suspend)
+IRAM_ATTR bool uartSuspendInput (bool suspend)
 {
     UART_MUTEX_LOCK(uart1);
     if(suspend)

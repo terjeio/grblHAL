@@ -38,6 +38,8 @@
 
 #include "grbl/grbl.h"
 
+static const DRAM_ATTR float FZERO = 0.0f;
+
 //
 // Set config from compile definitions in CMakeLists.txt
 //
@@ -342,12 +344,16 @@ extern QueueHandle_t i2cQueue;
 extern SemaphoreHandle_t i2cBusy;
 #endif
 
+#ifndef GRBL_ESP32
+#error "Add #define GRBL_ESP32 in grbl/config.h or update your CMakeLists.txt to the latest version!"
+#endif
+
 #if MPG_MODE_ENABLE
   #ifndef MPG_ENABLE_PIN
-  #error MPG_ENABLE_PIN must be defined when MPG mode is enabled!
+  #error "MPG_ENABLE_PIN must be defined when MPG mode is enabled!"
   #endif
   #ifndef MPG_RX_PIN
-  #error MPG_RX_PIN must be defined when MPG mode is enabled!
+  #error "MPG_RX_PIN must be defined when MPG mode is enabled!"
   #endif
 #endif
 

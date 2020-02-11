@@ -2,6 +2,7 @@
   config.h - compile time configuration
   Part of Grbl
 
+  Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2012-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -28,6 +29,15 @@
 #ifndef _grbl_config_h_
 #define _grbl_config_h_
 
+#ifdef GRBL_ESP32
+#include "esp_attr.h"
+#define ISR_CODE IRAM_ATTR
+#else
+// Used to decorate code run in interrupt context.
+// Do not remove or change unless you know what you are doing.
+#define ISR_CODE
+#endif
+
 // Defines compatibility level with the grbl 1.1 protocol.
 // Additional G- and M-codes are not disabled except when level is set to >= 10.
 //  This does not apply to G- and M-codes dependent on driver and/or configuration settings disabled by stting level > 1.
@@ -39,9 +49,6 @@
 // NOTE: if switching to a level > 1 please reset EEPROM with $RST=* after reflashing!
 #define COMPATIBILITY_LEVEL 0
 
-// Used to decorate code run in interrupt context, is used by ESP32 driver
-// Do not remove or change unless you know what you are doing.
-#define ISR_CODE
 
 //#define KINEMATICS_API // Remove comment to add HAL entry points for custom kinematics
 
