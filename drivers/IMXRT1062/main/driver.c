@@ -106,8 +106,6 @@ typedef struct {
     input_signal_t *signal[DEBOUNCE_QUEUE];
 } debounce_queue_t;
 
-static volatile bool spin = false;
-
 static debounce_queue_t debounce_queue = {0};
 
 // Standard inputs
@@ -256,7 +254,7 @@ static void stepperGoIdle (bool clear_signals)
 //       to cover the needed range. Refer to actual drivers for code examples.
 static void stepperCyclesPerTick (uint32_t cycles_per_tick)
 {
-    PIT_LDVAL0 = cycles_per_tick;
+    PIT_LDVAL0 = cycles_per_tick < (1UL << 20) ? cycles_per_tick : 0x000FFFFFUL;
 }
 
 
@@ -271,7 +269,7 @@ static void stepperPulseStart (stepper_t *stepper)
 
     if(stepper->step_outbits.value) {
         set_step_outputs(stepper->step_outbits);
-        TMR1_CTRL0 |= TMR_CTRL_CM(0b001);
+        TMR2_CTRL0 |= TMR_CTRL_CM(0b001);
     }
 }
 
@@ -287,7 +285,7 @@ static void stepperPulseStartDelayed (stepper_t *stepper)
 
     if(stepper->step_outbits.value) {
         next_step_outbits = stepper->step_outbits; // Store out_bits
-        TMR1_CTRL0 |= TMR_CTRL_CM(0b001);
+        TMR2_CTRL0 |= TMR_CTRL_CM(0b001);
     }
 }
 
@@ -411,22 +409,22 @@ static void spindle_set_speed (uint_fast16_t pwm_value)
             spindle_off();
         pwmEnabled = false;
         if(spindle_pwm.always_on) {
-            TMR2_COMP20 = spindle_pwm.off_value;
-            TMR2_CMPLD10 = spindle_pwm.period - spindle_pwm.off_value;
-            TMR2_CTRL0 |= TMR_CTRL_CM(0b001);
+            TMR1_COMP21 = spindle_pwm.off_value;
+            TMR1_CMPLD11 = spindle_pwm.period - spindle_pwm.off_value;
+            TMR1_CTRL1 |= TMR_CTRL_CM(0b001);
         } else {
-            TMR2_CTRL0 &= ~TMR_CTRL_CM(0b111);
-            TMR2_SCTRL0 |= TMR_SCTRL_FORCE;
-        // NOTE: code may be added to ensure spindle output are at the correct level.
+            TMR1_CTRL1 &= ~TMR_CTRL_CM(0b111);
+            TMR1_SCTRL1 &= ~TMR_SCTRL_VAL; //  set TMR_SCTRL_VAL || TMR_SCTRL_OPS if inverted PWM
+            TMR1_SCTRL1 |= TMR_SCTRL_FORCE;
         }
      } else {
         if(!pwmEnabled) {
             spindle_on();
             pwmEnabled = true;
         }
-        TMR2_COMP20 = pwm_value;
-        TMR2_CMPLD10 = spindle_pwm.period - pwm_value;
-        TMR2_CTRL0 |= TMR_CTRL_CM(0b001);
+        TMR1_COMP21 = pwm_value;
+        TMR1_CMPLD11 = spindle_pwm.period - pwm_value;
+        TMR1_CTRL1 |= TMR_CTRL_CM(0b001);
     }
 
     return pwm_value;
@@ -469,12 +467,15 @@ static spindle_state_t spindleGetState (void)
 {
     spindle_state_t state = {0};
 
-//    state.on = GPIO_READ(SPINDLE_PORT, SPINDLE_ENABLE_PIN) != 0;
-//    if(hal.driver_cap.spindle_dir)
-//        state.ccw = GPIO_READ((SPINDLE_PORT, SPINDLE_DIRECTION_PIN) != 0;
+    state.on = (spindleEnable.reg->DR & spindleEnable.bit) != 0;
+
+    if(hal.driver_cap.spindle_dir)
+        state.ccw = (spindleDir.reg->DR & spindleDir.bit) != 0;
+ 
     state.value ^= settings.spindle.invert.mask;
     if(pwmEnabled)
         state.on |= pwmEnabled;
+
     state.value ^= settings.spindle.invert.mask;
 
     return state;
@@ -509,35 +510,28 @@ static coolant_state_t coolantGetState (void)
 // Helper functions for setting/clearing/inverting individual bits atomically (uninterruptable)
 static void bitsSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t bits)
 {
-while(spin);
-spin = true;
     __disable_irq();
     *ptr |= bits;
     __enable_irq();
-spin = false;
 }
 
 static uint_fast16_t bitsClearAtomic (volatile uint_fast16_t *ptr, uint_fast16_t bits)
 {
-while(spin);
-spin = true;
     __disable_irq();
     uint_fast16_t prev = *ptr;
     *ptr &= ~bits;
     __enable_irq();
-spin = false;
+
     return prev;
 }
 
 static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t value)
 {
-while(spin);
-spin = true;
     __disable_irq();
     uint_fast16_t prev = *ptr;
     *ptr = value;
     __enable_irq();
-spin = false;
+
     return prev;
 }
 
@@ -552,8 +546,8 @@ static void settings_changed (settings_t *settings)
         stepperEnable(settings->steppers.deenergize);
 
         if(hal.driver_cap.variable_spindle) {
-            TMR2_COMP10 = spindle_pwm.period;
-            TMR2_CMPLD10 = spindle_pwm.period;
+            TMR1_COMP11 = spindle_pwm.period;
+            TMR1_CMPLD11 = spindle_pwm.period;
             hal.spindle_set_state = spindleSetStateVariable;
         } else
             hal.spindle_set_state = spindleSetState;
@@ -567,7 +561,7 @@ static void settings_changed (settings_t *settings)
         } else {
             // Configure step pulse timer for pulse off here.
             hal.stepper_pulse_start = stepperPulseStart;
-            TMR1_COMP10 = 150 * settings->steppers.pulse_microseconds; // 150 MHz
+            TMR2_COMP10 = 150 * settings->steppers.pulse_microseconds; // 150 MHz
         }
 
         /****************************************
@@ -730,21 +724,22 @@ static bool driver_setup (settings_t *settings)
     // Configure stepper driver timer here.
     PIT_MCR = 0x00;
 	attachInterruptVector(IRQ_PIT, stepper_driver_isr);
-//	NVIC_SET_PRIORITY(IRQ_PIT, top_priority);
+	NVIC_SET_PRIORITY(IRQ_PIT, 1);
 	NVIC_ENABLE_IRQ(IRQ_PIT);
 
     // Configure step pulse timer here.
 
-    TMR1_ENBL = 0;
-    TMR1_LOAD0 = 0;
-    TMR1_CTRL0 = TMR_CTRL_PCS(0b1000) | TMR_CTRL_ONCE | TMR_CTRL_LENGTH;
-    TMR1_COMP10 = 150 * 10; // 150 MHz
-    TMR1_CSCTRL0 = TMR_CSCTRL_TCF1EN;
+    TMR2_ENBL = 0;
+    TMR2_LOAD0 = 0;
+    TMR2_CTRL0 = TMR_CTRL_PCS(0b1000) | TMR_CTRL_ONCE | TMR_CTRL_LENGTH;
+    TMR2_COMP10 = 150 * 10; // 150 MHz
+    TMR2_CSCTRL0 = TMR_CSCTRL_TCF1EN;
 
-	attachInterruptVector(IRQ_QTIMER1, stepper_pulse_isr);
-	NVIC_ENABLE_IRQ(IRQ_QTIMER1);
+	attachInterruptVector(IRQ_QTIMER2, stepper_pulse_isr);
+	NVIC_SET_PRIORITY(IRQ_QTIMER2, 0);
+	NVIC_ENABLE_IRQ(IRQ_QTIMER2);
 
-    TMR1_ENBL = 1;
+    TMR2_ENBL = 1;
 
     pinModeOutput(&stepX, X_STEP_PIN);
     pinModeOutput(&stepY, Y_STEP_PIN);
@@ -774,6 +769,7 @@ static bool driver_setup (settings_t *settings)
         TMR3_CSCTRL0 = TMR_CSCTRL_TCF1EN;
 
         attachInterruptVector(IRQ_QTIMER3, debounce_isr);
+        NVIC_SET_PRIORITY(IRQ_QTIMER3, 3);
         NVIC_ENABLE_IRQ(IRQ_QTIMER3);
 
         TMR3_ENBL = 1;
@@ -799,13 +795,13 @@ static bool driver_setup (settings_t *settings)
     pinModeOutput(&spindleEnable, SPINDLE_ENABLE_PIN);
     pinModeOutput(&spindleDir, SPINDLE_DIRECTION_PIN);
 
-    TMR2_ENBL = 0;
-    TMR2_LOAD0 = 0;
-    TMR2_CTRL0 = TMR_CTRL_PCS(0b1001) | TMR_CTRL_OUTMODE(0b100) | TMR_CTRL_LENGTH;
-    TMR2_SCTRL0 = TMR_SCTRL_OEN | TMR_SCTRL_FORCE; //  set TMR_SCTRL_VAL || TMR_SCTRL_OPS if inverted PWM
-    TMR2_ENBL = 1;
+    TMR1_ENBL = 0;
+    TMR1_LOAD1 = 0;
+    TMR1_CTRL1 = TMR_CTRL_PCS(0b1001) | TMR_CTRL_OUTMODE(0b100) | TMR_CTRL_LENGTH;
+    TMR1_SCTRL1 = TMR_SCTRL_OEN | TMR_SCTRL_FORCE; //  set TMR_SCTRL_VAL || TMR_SCTRL_OPS if inverted PWM
+    TMR1_ENBL = 1 << 1;
 
-//    *(portConfigRegister(13)) = 1;
+    *(portConfigRegister(SPINDLEPWMPIN)) = 1;
 
   // Set defaults
 
@@ -853,7 +849,7 @@ void debugOut (bool on)
 {
 static bool l = false;
 l = !l;
-    digitalWrite(13, l); // LED
+    digitalWrite(13, on); // LED
 }
 #endif
 
@@ -957,9 +953,13 @@ bool driver_init (void)
   // Driver capabilities, used for announcing and negotiating (with Grbl) driver functionality.
   // See driver_cap_t union i grbl/hal.h for available flags.
 
+#ifdef SPINDLE_DIRECTION_PIN
     hal.driver_cap.spindle_dir = On;
+#endif
     hal.driver_cap.variable_spindle = On;
+#ifdef COOLANT_MIST_PIN
     hal.driver_cap.mist_control = On;
+#endif
     hal.driver_cap.software_debounce = On;
     hal.driver_cap.step_pulse_delay = On;
     hal.driver_cap.amass_level = 3;
@@ -995,7 +995,7 @@ static void stepper_driver_isr (void)
 // completing one step cycle.
 static void stepper_pulse_isr (void)
 {
-    TMR1_CSCTRL0 &= ~TMR_CSCTRL_TCF1;
+    TMR2_CSCTRL0 &= ~TMR_CSCTRL_TCF1;
 
     set_step_outputs((axes_signals_t){0});
 }
