@@ -20,7 +20,7 @@ Some of these issues may be due to the processor having a relatively large instr
 
 1 can be solved by uncommenting line 392 in protocol.c: `hal.delay_ms(20, NULL);`  
 The delay should be shortened? I do not remember now why I have left it commented out...  
-2 can be likely be solved by adding a call after line 329 in protocol.c: `if(hal.execute_realtime) hal.execute_realtime(sys.state);`  
+2 can be likely be solved by adding a call after line 392 in protocol.c: `if(hal.execute_realtime) hal.execute_realtime(sys.state);`  
 
 The default serial mode is over physical UART connected to pin 0 and 1, an external USB > UART interface connected to these is recommended for now.  
 Native USB serial _can_ be enabled in [driver.h](main/driver.h) by changing `#define USB_SERIAL` to `1` - note that this has undegone very little testing by me.
