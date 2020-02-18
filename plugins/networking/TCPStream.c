@@ -171,18 +171,18 @@ void TCPStreamRxCancel (void)
 
 static bool streamBufferRX (char c)
 {
-	// discard input if MPG has taken over...
-	if(hal.stream.type != StreamType_MPG) {
+    // discard input if MPG has taken over...
+    if(hal.stream.type != StreamType_MPG) {
 
-		uint_fast16_t bptr = (streamSession.rxbuf.head + 1) & (RX_BUFFER_SIZE - 1); // Get next head pointer
+        uint_fast16_t bptr = (streamSession.rxbuf.head + 1) & (RX_BUFFER_SIZE - 1); // Get next head pointer
 
-		if(bptr == streamSession.rxbuf.tail)                        // If buffer full
-			streamSession.rxbuf.overflow = true;                    // flag overflow
-		else if(!hal.stream.enqueue_realtime_command(c)) {          // If not a real time command
-			streamSession.rxbuf.data[streamSession.rxbuf.head] = c; // add data to buffer
-			streamSession.rxbuf.head = bptr;                        // and update pointer
-		}
-	}
+        if(bptr == streamSession.rxbuf.tail)                        // If buffer full
+            streamSession.rxbuf.overflow = true;                    // flag overflow
+        else if(!hal.stream.enqueue_realtime_command(c)) {          // If not a real time command
+            streamSession.rxbuf.data[streamSession.rxbuf.head] = c; // add data to buffer
+            streamSession.rxbuf.head = bptr;                        // and update pointer
+        }
+    }
 
     return !streamSession.rxbuf.overflow;
 }
