@@ -14,7 +14,7 @@ Note that this driver currently has a couple of known issues:
 2. USB serial stops working when hard limit is triggered.
 3. Keyboard jogging causes intermittent hang, likely on jog cancel (movement stops so the command is acted upon). __Fixed__.
 4. There is no hard reset pin available!
-5. Delayed step pulse is not yet implemented.
+5. Delayed step pulse is not yet implemented. __Done__.
 
 Some of these issues may be due to the processor having a relatively large instruction cache and beeing fast...
 
@@ -31,5 +31,5 @@ Native USB serial _can_ be enabled in [driver.h](main/driver.h) by changing `#de
 **NOTE:** Only tested on my bench with an oscilloscope, some switches and LEDs.
 
 ---
-2020-02-14
+2020-02-19
 

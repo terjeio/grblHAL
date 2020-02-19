@@ -41,8 +41,75 @@
 
 #include "driver.h"
 
-static stream_tx_buffer_t txbuffer = {0};
-static stream_rx_buffer_t rxbuffer = {0}, rxbackup;
+#define UART_CLOCK 24000000
+#define CTRL_ENABLE         (LPUART_CTRL_TE | LPUART_CTRL_RE | LPUART_CTRL_RIE | LPUART_CTRL_ILIE)
+#define CTRL_TX_ACTIVE      (CTRL_ENABLE | LPUART_CTRL_TIE)
+#define CTRL_TX_COMPLETING  (CTRL_ENABLE | LPUART_CTRL_TCIE)
+#define CTRL_TX_INACTIVE    CTRL_ENABLE 
+
+#ifndef UART_PORT
+#define UART uart1_hardware
+#elif UART_PORT == 5
+#define UART uart5_hardware
+#else
+#error "UART port not available!"
+#endif
+
+typedef struct {
+    IMXRT_LPUART_t *port;
+    volatile uint32_t *ccm_register;
+    const uint32_t ccm_value;
+    enum IRQ_NUMBER_t irq;
+    void (*irq_handler)(void);
+    pin_info_t rx_pin;
+    pin_info_t tx_pin;
+} uart_hardware_t;
+
+static void uart_interrupt_handler (void);
+
+static const uart_hardware_t uart1_hardware =
+{
+    .port = &IMXRT_LPUART6,
+    .ccm_register = &CCM_CCGR3,
+    .ccm_value = CCM_CCGR3_LPUART6(CCM_CCGR_ON), 
+    .irq = IRQ_LPUART6,
+    .irq_handler = uart_interrupt_handler,
+    .rx_pin = {
+        .pin = 0,
+        .mux_val = 2,
+        .select_reg = &IOMUXC_LPUART6_RX_SELECT_INPUT,
+        .select_val = 1
+    },
+    .tx_pin = {
+        .pin = 1,
+        .mux_val = 2,
+        .select_reg = NULL,
+        .select_val = 0
+    }
+};
+
+static const uart_hardware_t uart5_hardware =
+{
+    .port = &IMXRT_LPUART8,
+    .ccm_register = &CCM_CCGR6,
+    .ccm_value = CCM_CCGR6_LPUART8(CCM_CCGR_ON), 
+    .irq = IRQ_LPUART8,
+    .irq_handler = uart_interrupt_handler,
+    .rx_pin = {
+        .pin = 21,
+        .mux_val = 2,
+        .select_reg = &IOMUXC_LPUART8_RX_SELECT_INPUT,
+        .select_val = 1
+    },
+    .tx_pin = {
+        .pin = 20,
+        .mux_val = 2,
+        .select_reg = &IOMUXC_LPUART8_TX_SELECT_INPUT,
+        .select_val = 1
+    }
+};
+
+/*
 
 #define PIN_TO_BASEREG(pin)             (portOutputRegister(pin))
 #define PIN_TO_BITMASK(pin)             (digitalPinToBitMask(pin))
@@ -55,53 +122,10 @@ static stream_rx_buffer_t rxbuffer = {0}, rxbackup;
 #define DIRECT_WRITE_LOW(base, mask)    (*((base)+34) = (mask))
 #define DIRECT_WRITE_HIGH(base, mask)   (*((base)+33) = (mask))
 
-#define CTRL_ENABLE         (LPUART_CTRL_TE | LPUART_CTRL_RE | LPUART_CTRL_RIE | LPUART_CTRL_ILIE)
-#define CTRL_TX_ACTIVE      (CTRL_ENABLE | LPUART_CTRL_TIE)
-#define CTRL_TX_COMPLETING  (CTRL_ENABLE | LPUART_CTRL_TCIE)
-#define CTRL_TX_INACTIVE    CTRL_ENABLE 
 
-#define UART_CLOCK 24000000
-IMXRT_LPUART_t *port;
-
-uint8_t             rx_pin_index_ = 0x0;    // default is always first item
-uint8_t             tx_pin_index_ = 0x0;
-
-typedef struct {
-    const uint8_t       pin;        // The pin number
-    const uint32_t      mux_val;    // Value to set for mux;
-    volatile uint32_t   *select_input_register; // Which register controls the selection
-    const uint32_t      select_val; // Value for that selection
-} pin_info_t;
-
-typedef struct {
-    uint8_t serial_index;   // which object are we? 0 based
-    enum IRQ_NUMBER_t irq;
-    void (*irq_handler)(void);
-    volatile uint32_t *ccm_register;
-    const uint32_t ccm_value;
-    pin_info_t rx_pins[2];
-    pin_info_t tx_pins[2];
-    const uint16_t irq_priority;
-} hardware_t;
-
-static void uart_interrupt_handler (void);
-    volatile uint32_t   *transmit_pin_baseReg_ = 0;
-    uint32_t            transmit_pin_bitmask_ = 0;
-
-static hardware_t hw =
-{
-    .serial_index = 0,
-    .irq = IRQ_LPUART6,
-    .irq_handler = uart_interrupt_handler,
-    .irq_priority = 3,
-    .ccm_register = &CCM_CCGR3,
-    .ccm_value = CCM_CCGR3_LPUART6(CCM_CCGR_ON), 
-    .rx_pins = {{0,2, &IOMUXC_LPUART6_RX_SELECT_INPUT, 1}, {0xff, 0xff, NULL, 0}},
-    .tx_pins = {{1,2, NULL, 0}, {0xff, 0xff, NULL, 0}}
-};
-
-static hardware_t *hardware;
 static bool transmitting_ = 0;
+volatile uint32_t   *transmit_pin_baseReg_ = 0;
+uint32_t            transmit_pin_bitmask_ = 0;
 
 void transmitterEnable(uint8_t pin)
 {
@@ -111,44 +135,47 @@ void transmitterEnable(uint8_t pin)
     transmit_pin_bitmask_ = PIN_TO_BITMASK(pin);
     DIRECT_WRITE_LOW(transmit_pin_baseReg_, transmit_pin_bitmask_);
 }
+*/
+
+static stream_tx_buffer_t txbuffer = {0};
+static stream_rx_buffer_t rxbuffer = {0}, rxbackup;
 
 void serialInit (void)
 {
-    hardware = &hw;
+//    uart_hardware_t *hardware = &UART;
 
-    port = &IMXRT_LPUART6;
+    *UART.ccm_register |= UART.ccm_value;
 
-    *hardware->ccm_register |= hardware->ccm_value;
+    *(portControlRegister(UART.rx_pin.pin)) = IOMUXC_PAD_DSE(7) | IOMUXC_PAD_PKE | IOMUXC_PAD_PUE | IOMUXC_PAD_PUS(3) | IOMUXC_PAD_HYS;
+    *(portConfigRegister(UART.rx_pin.pin)) = UART.rx_pin.mux_val;
+    if (UART.rx_pin.select_reg)
+        *(UART.rx_pin.select_reg) = UART.rx_pin.select_val;        
+  
+    *(portControlRegister(UART.tx_pin.pin)) = IOMUXC_PAD_SRE | IOMUXC_PAD_DSE(3) | IOMUXC_PAD_SPEED(3);
+    *(portConfigRegister(UART.tx_pin.pin)) = UART.tx_pin.mux_val;
+    if (UART.tx_pin.select_reg)
+        *(UART.tx_pin.select_reg) = UART.tx_pin.select_val;        
 
-    *(portControlRegister(hardware->rx_pins[rx_pin_index_].pin)) = IOMUXC_PAD_DSE(7) | IOMUXC_PAD_PKE | IOMUXC_PAD_PUE | IOMUXC_PAD_PUS(3) | IOMUXC_PAD_HYS;
-    *(portConfigRegister(hardware->rx_pins[rx_pin_index_].pin)) = hardware->rx_pins[rx_pin_index_].mux_val;
-    if (hardware->rx_pins[rx_pin_index_].select_input_register) {
-        *(hardware->rx_pins[rx_pin_index_].select_input_register) = hardware->rx_pins[rx_pin_index_].select_val;        
-    }   
-
-    *(portControlRegister(hardware->tx_pins[tx_pin_index_].pin)) = IOMUXC_PAD_SRE | IOMUXC_PAD_DSE(3) | IOMUXC_PAD_SPEED(3);
-    *(portConfigRegister(hardware->tx_pins[tx_pin_index_].pin)) = hardware->tx_pins[tx_pin_index_].mux_val;
-
-    port->BAUD = 419430408UL; // 115200 @ UART CLOCK = 24 MHz
-    port->PINCFG = 0;
+    UART.port->BAUD = 419430408UL; // 115200 @ UART CLOCK = 24 MHz
+    UART.port->PINCFG = 0;
 
     // Enable the transmitter, receiver and enable receiver interrupt
-    NVIC_DISABLE_IRQ(hardware->irq);
-    attachInterruptVector(hardware->irq, hardware->irq_handler);
-    NVIC_SET_PRIORITY(hardware->irq, hardware->irq_priority);   // maybe should put into hardware...
-    NVIC_ENABLE_IRQ(hardware->irq);
+    NVIC_DISABLE_IRQ(UART.irq);
+    attachInterruptVector(UART.irq, UART.irq_handler);
+    NVIC_SET_PRIORITY(UART.irq, 3);
+    NVIC_ENABLE_IRQ(UART.irq);
 
-    uint16_t tx_fifo_size = (((port->FIFO >> 4) & 0x7) << 2);
+    uint16_t tx_fifo_size = (((UART.port->FIFO >> 4) & 0x7) << 2);
     uint8_t tx_water = (tx_fifo_size < 16) ? tx_fifo_size >> 1 : 7;
-    uint16_t rx_fifo_size = (((port->FIFO >> 0) & 0x7) << 2);
+    uint16_t rx_fifo_size = (((UART.port->FIFO >> 0) & 0x7) << 2);
     uint8_t rx_water = (rx_fifo_size < 16) ? rx_fifo_size >> 1 : 7;
     /*
-    Serial.printf("SerialX::begin stat:%x ctrl:%x fifo:%x water:%x\n", port->STAT, port->CTRL, port->FIFO, port->WATER );
+    Serial.printf("SerialX::begin stat:%x ctrl:%x fifo:%x water:%x\n", UART.port->STAT, UART.port->CTRL, UART.port->FIFO, UART.port->WATER );
     Serial.printf("  FIFO sizes: tx:%d rx:%d\n",tx_fifo_size, rx_fifo_size);    
     Serial.printf("  Watermark tx:%d, rx: %d\n", tx_water, rx_water);
     */
-    port->WATER = LPUART_WATER_RXWATER(rx_water) | LPUART_WATER_TXWATER(tx_water);
-    port->FIFO |= LPUART_FIFO_TXFE | LPUART_FIFO_RXFE;
+    UART.port->WATER = LPUART_WATER_RXWATER(rx_water) | LPUART_WATER_TXWATER(tx_water);
+    UART.port->FIFO |= LPUART_FIFO_TXFE | LPUART_FIFO_RXFE;
     // lets configure up our CTRL register value
     uint32_t ctrl = CTRL_TX_INACTIVE;
 
@@ -164,19 +191,19 @@ uint16_t format = 0;
     if (format & 0x20) ctrl |= LPUART_CTRL_TXINV;       // tx invert
 
     // write out computed CTRL
-    port->CTRL = ctrl;
+    UART.port->CTRL = ctrl;
 
     // Bit 3 10 bit - Will assume that begin already cleared it.
     // process some other bits which change other registers.
-    if (format & 0x08)  port->BAUD |= LPUART_BAUD_M10;
+    if (format & 0x08)  UART.port->BAUD |= LPUART_BAUD_M10;
 
     // Bit 4 RXINVERT 
-    uint32_t c = port->STAT & ~LPUART_STAT_RXINV;
+    uint32_t c = UART.port->STAT & ~LPUART_STAT_RXINV;
     if (format & 0x10) c |= LPUART_STAT_RXINV;      // rx invert
-    port->STAT = c;
+    UART.port->STAT = c;
 
     // bit 8 can turn on 2 stop bit mote
-    if ( format & 0x100) port->BAUD |= LPUART_BAUD_SBNS;
+    if ( format & 0x100) UART.port->BAUD |= LPUART_BAUD_SBNS;
 
 //transmitterEnable(1);
 }
@@ -231,8 +258,8 @@ bool serialPutC (const char c)
 
 //  if (transmit_pin_baseReg_) DIRECT_WRITE_HIGH(transmit_pin_baseReg_, transmit_pin_bitmask_);
 
-    if(txbuffer.head == txbuffer.tail && ((port->WATER >> 8) & 0x7) < ((port->FIFO >> 4) & 0x7)) {
-        port->DATA  = c;
+    if(txbuffer.head == txbuffer.tail && ((UART.port->WATER >> 8) & 0x7) < ((UART.port->FIFO >> 4) & 0x7)) {
+        UART.port->DATA  = c;
         return true;
     } 
 
@@ -247,8 +274,8 @@ bool serialPutC (const char c)
     txbuffer.head = next_head;                                  // and update head pointer
 
     __disable_irq();
-    transmitting_ = 1;
-    port->CTRL |= LPUART_CTRL_TIE; // (may need to handle this issue)BITBAND_SET_BIT(LPUART0_CTRL, TIE_BIT); // Enable TX interrupts
+//    transmitting_ = 1;
+    UART.port->CTRL |= LPUART_CTRL_TIE; // (may need to handle this issue)BITBAND_SET_BIT(LPUART0_CTRL, TIE_BIT); // Enable TX interrupts
     __enable_irq();
 
     return true;
@@ -288,45 +315,45 @@ uint16_t serialTxCount(void) {
 static void uart_interrupt_handler (void)
 {
     uint_fast16_t bptr;
-    uint32_t data, ctrl = port->CTRL;
+    uint32_t data, ctrl = UART.port->CTRL;
 
-    if ((ctrl & LPUART_CTRL_TIE) && (port->STAT & LPUART_STAT_TDRE))
+    if ((ctrl & LPUART_CTRL_TIE) && (UART.port->STAT & LPUART_STAT_TDRE))
     {
         bptr = txbuffer.tail;
 
         do {
             if(txbuffer.head != bptr) {
 
-                port->DATA = txbuffer.data[bptr++]; // Put character in TXT register
-                bptr &= (TX_BUFFER_SIZE - 1);       // and update tmp tail pointer
+                UART.port->DATA = txbuffer.data[bptr++];    // Put character in TXT register
+                bptr &= (TX_BUFFER_SIZE - 1);               // and update tmp tail pointer
 
             } else
                 break;
 
-        } while(((port->WATER >> 8) & 0x7) < ((port->FIFO >> 4) & 0x7));
+        } while(((UART.port->WATER >> 8) & 0x7) < ((UART.port->FIFO >> 4) & 0x7));
 
         txbuffer.tail = bptr;                                       //  Update tail pinter
 
-        if(bptr == txbuffer.head)      {                             // Disable TX interrups
-            port->CTRL &= ~LPUART_CTRL_TIE; 
-//            port->CTRL |= LPUART_CTRL_TCIE; // Actually wondering if we can just leave this one on...
+        if(bptr == txbuffer.head)      {                            // Disable TX interrups
+            UART.port->CTRL &= ~LPUART_CTRL_TIE; 
+//            UART.port->CTRL |= LPUART_CTRL_TCIE; // Actually wondering if we can just leave this one on...
         }
     }
 
-    if ((ctrl & LPUART_CTRL_TCIE) && (port->STAT & LPUART_STAT_TC))
+    if ((ctrl & LPUART_CTRL_TCIE) && (UART.port->STAT & LPUART_STAT_TC))
     {
-        transmitting_ = 0;
+//        transmitting_ = 0;
 //      if (transmit_pin_baseReg_) DIRECT_WRITE_LOW(transmit_pin_baseReg_, transmit_pin_bitmask_);
 
-        port->CTRL &= ~LPUART_CTRL_TCIE;
+        UART.port->CTRL &= ~LPUART_CTRL_TCIE;
     }
 
-    if (port->STAT & (LPUART_STAT_RDRF | LPUART_STAT_IDLE)) {
+    if (UART.port->STAT & (LPUART_STAT_RDRF | LPUART_STAT_IDLE)) {
 
-        while ((port->WATER >> 24) & 0x7) {
+        while ((UART.port->WATER >> 24) & 0x7) {
 
             bptr = (rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1);  // Get next head pointer
-            data = port->DATA & 0xFF;                           // and read input (use only 8 bits of data)
+            data = UART.port->DATA & 0xFF;                      // and read input (use only 8 bits of data)
 
             if(bptr == rxbuffer.tail) {                         // If buffer full
                 rxbuffer.overflow = true;                       // flag overflow
@@ -343,7 +370,7 @@ static void uart_interrupt_handler (void)
             }
         }
 
-        if (port->STAT & LPUART_STAT_IDLE)
-            port->STAT |= LPUART_STAT_IDLE; // writing a 1 to idle should clear it. 
+        if (UART.port->STAT & LPUART_STAT_IDLE)
+            UART.port->STAT |= LPUART_STAT_IDLE; // writing a 1 to idle should clear it. 
     }
 }

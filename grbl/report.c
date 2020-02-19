@@ -284,9 +284,9 @@ void report_init_message (void)
 {
     override_counter = wco_counter = 0;
 #if COMPATIBILITY_LEVEL == 0
-    hal.stream.write("\r\nGrblHAL " GRBL_VERSION " ['$' for help]\r\n");
+    hal.stream.write_all("\r\nGrblHAL " GRBL_VERSION " ['$' for help]\r\n");
 #else
-    hal.stream.write("\r\nGrbl " GRBL_VERSION " ['$' for help]\r\n");
+    hal.stream.write_all("\r\nGrbl " GRBL_VERSION " ['$' for help]\r\n");
 #endif
 }
 

@@ -40,14 +40,12 @@
 // NOTE: none of these extensions are available, TBC!
 #if CNC_BOOSTERPACK
   #define KEYPAD_ENABLE    0 // I2C keypad for jogging etc.
-  #define IOEXPAND_ENABLE  1 // I2C IO expander for some output signals.
   #define EEPROM_ENABLE    1 // I2C EEPROM (24LC16) support.
   #define TRINAMIC_ENABLE  0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
   #define TRINAMIC_I2C     0 // Trinamic I2C - SPI bridge interface.
   #define TRINAMIC_DEV     0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
 #else
   #define KEYPAD_ENABLE    0 // I2C keypad for jogging etc.
-  #define IOEXPAND_ENABLE  0 // I2C IO expander for some output signals.
   #define EEPROM_ENABLE    0 // I2C EEPROM (24LC16) support.
   #define TRINAMIC_ENABLE  0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
   #define TRINAMIC_I2C     0 // Trinamic I2C - SPI bridge interface.
@@ -97,8 +95,8 @@ extern driver_settings_t driver_settings;
 #define STEPPERS_ENABLE_PIN (10u)
 
 // Define homing/hard limit switch input pins.
-#define X_LIMIT_PIN     (20u)
-#define Y_LIMIT_PIN     (21u)
+#define X_LIMIT_PIN     (22u)
+#define Y_LIMIT_PIN     (22u)
 #define Z_LIMIT_PIN     (22u)
 
 #if N_AXIS > 3
@@ -107,22 +105,51 @@ extern driver_settings_t driver_settings;
 #define A_LIMIT_PIN     (23u)
 #endif
 
+#if N_AXIS > 4
+#define B_STEP_PIN      (26u)
+#define B_DIRECTION_PIN (27u)
+#define B_LIMIT_PIN     (28u)
+#endif
+
 // Define spindle enable and spindle direction output pins.
 #define SPINDLE_ENABLE_PIN      (13u)
 #define SPINDLE_DIRECTION_PIN   (11u)
 #define SPINDLEPWMPIN           (12u) // NOTE: Do not change - current driver does not allow remapping!
 
 // Define flood and mist coolant enable output pins.
-#define COOLANT_FLOOD_PIN   (18u)
-#define COOLANT_MIST_PIN    (19u)
+#define COOLANT_FLOOD_PIN   (19u)
+#define COOLANT_MIST_PIN    (18u)
 
-// Define user-control CONTROLs (cycle start, reset, feed hold) input pins.
+// Define user-control CONTROLs (cycle start, reset, feed hold, door) input pins.
 #define RESET_PIN           (14u)
 #define FEED_HOLD_PIN       (16u)
 #define CYCLE_START_PIN     (17u)
+#define SAFETY_DOOR_PIN     (17u)
 
 // Define probe switch input pin.
 #define PROBE_PIN           (15U)
 
+#if EEPROM_ENABLE
+#define I2C_PORT    4
+#define I2C_SCL4    (24u) // Not used, for info only
+#define I2C_SDA4    (25u) // Not used, for info only
+#endif
+
 #endif // default pin mappings
+
+#ifndef I2C_PORT
+  #if EEPROM_ENABLE
+  #error "EEPROM_ENABLE requires I2C_PORT to be defined!"
+  #endif
+#endif
+
+// The following struct is pulled from the Teensy Library core, Copyright (c) 2019 PJRC.COM, LLC.
+
+typedef struct {
+    const uint8_t pin;              // The pin number
+    const uint32_t mux_val;         // Value to set for mux;
+    volatile uint32_t *select_reg;  // Which register controls the selection
+    const uint32_t select_val;      // Value for that selection
+} pin_info_t;
+
 #endif // __DRIVER_H__

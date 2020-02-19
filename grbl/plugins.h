@@ -1,10 +1,13 @@
 /*
+  plugins.h - An embedded CNC Controller with rs274/ngc (g-code) support
 
-  eeprom.h - plugin for for I2C EEPROM
+  Some data structures and function declarations for plugins that require driver code
+
+  These are NOT referenced in the core grbl code
 
   Part of GrblHAL
 
-  Copyright (c) 2017-2019 Terje Io
+  Copyright (c) 2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -18,16 +21,23 @@
 
   You should have received a copy of the GNU General Public License
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
-
 */
 
-#ifndef _EEPROM_H_
-#define _EEPROM_H_
+#ifndef __PLUGINS_H__
+#define __PLUGINS_H__
 
-void eepromInit (void);
-uint8_t eepromGetByte (uint32_t addr);
-void eepromPutByte (uint32_t addr, uint8_t new_value);
-void eepromWriteBlockWithChecksum (uint32_t destination, uint8_t *source, uint32_t size);
-bool eepromReadBlockWithChecksum (uint8_t *destination, uint32_t source, uint32_t size);
+#include <stdint.h>
+#include <stdbool.h>
+
+typedef struct {
+    uint8_t address;
+    uint8_t word_addr_bytes;
+    uint16_t word_addr;
+    volatile uint_fast16_t count;
+    uint8_t *data;
+} i2c_eeprom_trans_t;
+
+extern void i2c_init (void);
+extern void i2c_eeprom_transfer (i2c_eeprom_trans_t *i2c, bool read);
 
 #endif

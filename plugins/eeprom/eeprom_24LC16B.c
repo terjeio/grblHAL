@@ -21,71 +21,78 @@
 
 */
 
+#ifdef ARDUINO
 #include "../../driver.h"
+#else
+#include "driver.h"
+#endif
 
 #if EEPROM_ENABLE
 
-#include "../../i2c.h"
+#ifdef ARDUINO
+#include "../../grbl/grbl.h"
+#include "../../grbl/plugins.h"
+#else
+#include "grbl/grbl.h"
+#include "grbl/plugins.h"
+#endif
 
 #define EEPROM_I2C_ADDRESS (0xA0 >> 1)
 #define EEPROM_ADDR_BITS_LO 8
 #define EEPROM_BLOCK_SIZE (2 ^ EEPROM_LO_ADDR_BITS)
 #define EEPROM_PAGE_SIZE 16
 
-static i2c_eeprom_t i2c;
+static i2c_eeprom_trans_t i2c = { .word_addr_bytes = 1 };
 
-void eeprom_init (void)
+void eepromInit (void)
 {
-    I2CInit();
+    i2c_init();
 }
 
 uint8_t eepromGetByte (uint32_t addr)
 {
     uint8_t value = 0;
 
-    i2c.addr = EEPROM_I2C_ADDRESS | (addr >> 8);
+    i2c.address = EEPROM_I2C_ADDRESS | (addr >> 8);
     i2c.word_addr = addr & 0xFF;
     i2c.data = &value;
     i2c.count = 1;
 
-    I2C_EEPROM(&i2c, true);
+    i2c_eeprom_transfer(&i2c, true);
 
     return value;
 }
 
 void eepromPutByte (uint32_t addr, uint8_t new_value)
 {
-    i2c.addr = EEPROM_I2C_ADDRESS | (addr >> 8);
+    i2c.address = EEPROM_I2C_ADDRESS | (addr >> 8);
     i2c.word_addr = addr & 0xFF;
     i2c.data = &new_value;
     i2c.count = 1;
 
-    I2C_EEPROM(&i2c, false);
+    i2c_eeprom_transfer(&i2c, false);
 }
 
 void eepromWriteBlockWithChecksum (uint32_t destination, uint8_t *source, uint32_t size)
 {
-    uint32_t bytes = size;
+    uint32_t remaining = size;
+    uint8_t *target = source;
 
-    i2c.word_addr = destination & 0xFF;
-    i2c.data = source;
-
-    while(bytes > 0) {
+    while(remaining > 0) {
+        i2c.address = EEPROM_I2C_ADDRESS | (destination >> EEPROM_ADDR_BITS_LO);
+        i2c.word_addr = destination & 0xFF;
         i2c.count = EEPROM_PAGE_SIZE - (destination & (EEPROM_PAGE_SIZE - 1));
-        i2c.count = bytes < i2c.count ? bytes : i2c.count;
-        i2c.addr = EEPROM_I2C_ADDRESS | (destination >> EEPROM_ADDR_BITS_LO);
-        bytes -= i2c.count;
+        i2c.count = remaining < i2c.count ? remaining : i2c.count;
+        i2c.data = target;
+        remaining -= i2c.count;
+        target += i2c.count;
         destination += i2c.count;
 
-        I2C_EEPROM(&i2c, false);
-
-        i2c.data += i2c.count;
-        i2c.word_addr = destination & 0xFF;
+        i2c_eeprom_transfer(&i2c, false);
     }
 
     if(size > 0)
         eepromPutByte(destination, calc_checksum(source, size));
-
 }
 
 bool eepromReadBlockWithChecksum (uint8_t *destination, uint32_t source, uint32_t size)
@@ -94,14 +101,15 @@ bool eepromReadBlockWithChecksum (uint8_t *destination, uint32_t source, uint32_
     uint8_t *target = destination;
 
     while(remaining) {
-        i2c.addr = EEPROM_I2C_ADDRESS | (source >> 8);
+        i2c.address = EEPROM_I2C_ADDRESS | (source >> 8);
         i2c.word_addr = source & 0xFF;
         i2c.count = remaining > 255 ? 255 : (uint8_t)remaining;
         i2c.data = target;
         remaining -= i2c.count;
         target += i2c.count;
         source += i2c.count;
-        I2C_EEPROM(&i2c, true);
+
+        i2c_eeprom_transfer(&i2c, true);
     }
 
     return calc_checksum(destination, size) == eepromGetByte(source);

@@ -19,11 +19,15 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "avr/eeprom.h"
-
 #include "uart.h"
 #include "driver.h"
 #include "src/grbl/grbl.h"
+
+#if EEPROM_ENABLE
+#include "src/eeprom/eeprom.h"
+#else
+#include "avr/eeprom.h"
+#endif
 
 #if USB_SERIAL
 #include "usb_serial.h"
@@ -73,13 +77,11 @@ typedef enum {
     Input_KeypadStrobe
 } input_t;
 
-typedef enum {
-    InputGroup_Control = (1 << 0),
-    InputGroup_Probe   = (1 << 1),
-    InputGroup_Limit   = (1 << 2),
-    InputGroup_Keypad  = (1 << 3),
-    InputGroup_MPG     = (1 << 4)
-} input_group_t;
+#define INPUT_GROUP_CONTROL (1 << 0)
+#define INPUT_GROUP_PROBE   (1 << 1)
+#define INPUT_GROUP_LIMIT   (1 << 2)
+#define INPUT_GROUP_KEYPAD  (1 << 3)
+#define INPUT_GROUP_MPG     (1 << 4)
 
 typedef enum {
     IRQ_Mode_None    = 0b00,
@@ -90,7 +92,7 @@ typedef enum {
 
 typedef struct {
     input_t id;
-    input_group_t group;
+    uint8_t group;
     uint8_t pin;
     gpio_t *port;
     gpio_t gpio; // doubled up for now for speed...
@@ -116,26 +118,35 @@ static gpio_t spindleEnable, spindleDir, steppersEnable, Mist, Flood, stepX, ste
 #ifdef A_AXIS
 static gpio_t stepA, dirA, LimitA;
 #endif
+#ifdef A_AXIS
+static gpio_t stepB, dirB, LimitB;
+#endif
+#ifdef STEPPERS_ENABLE_Z_PIN
+static gpio_t steppersEnableZ;
+#endif
 
 static input_signal_t inputpin[] = {
-    { .id = Input_Reset,        .port = &Reset,        .pin = RESET_PIN,       .group = InputGroup_Control },
-    { .id = Input_FeedHold,     .port = &FeedHold,     .pin = FEED_HOLD_PIN,   .group = InputGroup_Control },
-    { .id = Input_CycleStart,   .port = &CycleStart,   .pin = CYCLE_START_PIN, .group = InputGroup_Control },
+    { .id = Input_Reset,        .port = &Reset,        .pin = RESET_PIN,       .group = INPUT_GROUP_CONTROL },
+    { .id = Input_FeedHold,     .port = &FeedHold,     .pin = FEED_HOLD_PIN,   .group = INPUT_GROUP_CONTROL },
+    { .id = Input_CycleStart,   .port = &CycleStart,   .pin = CYCLE_START_PIN, .group = INPUT_GROUP_CONTROL },
 #ifdef SAFETY_DOOR_PIN
-    { .id = Input_SafetyDoor,   .port = &SafetyDoor ,  .pin = SAFETY_DOOR_PIN, .group = InputGroup_Control },
+    { .id = Input_SafetyDoor,   .port = &SafetyDoor ,  .pin = SAFETY_DOOR_PIN, .group = INPUT_GROUP_CONTROL },
 #endif
-    { .id = Input_Probe,        .port = &Probe,        .pin = PROBE_PIN,       .group = InputGroup_Probe },
-    { .id = Input_LimitX,       .port = &LimitX,       .pin = X_LIMIT_PIN,     .group = InputGroup_Limit },
-    { .id = Input_LimitY,       .port = &LimitY,       .pin = Y_LIMIT_PIN,     .group = InputGroup_Limit },
-    { .id = Input_LimitZ,       .port = &LimitZ,       .pin = Z_LIMIT_PIN,     .group = InputGroup_Limit }
-#ifdef A_AXIS
-  , { .id = Input_LimitA,       .port = &LimitA,       .pin = A_LIMIT_PIN,     .group = InputGroup_Limit }
+    { .id = Input_Probe,        .port = &Probe,        .pin = PROBE_PIN,       .group = INPUT_GROUP_PROBE },
+    { .id = Input_LimitX,       .port = &LimitX,       .pin = X_LIMIT_PIN,     .group = INPUT_GROUP_LIMIT },
+    { .id = Input_LimitY,       .port = &LimitY,       .pin = Y_LIMIT_PIN,     .group = INPUT_GROUP_LIMIT },
+    { .id = Input_LimitZ,       .port = &LimitZ,       .pin = Z_LIMIT_PIN,     .group = INPUT_GROUP_LIMIT }
+#ifdef A_LIMIT_PIN
+  , { .id = Input_LimitA,       .port = &LimitA,       .pin = A_LIMIT_PIN,     .group = INPUT_GROUP_LIMIT }
+#endif
+#ifdef B_LIMIT_PIN
+  , { .id = Input_LimitB,       .port = &LimitB,       .pin = B_LIMIT_PIN,     .group = INPUT_GROUP_LIMIT }
 #endif
 #if MPG_MODE_ENABLE
-  ,  { .id = Input_ModeSelect,  .port = &ModeSelect,   .pin = MODE_PIN,        .group = InputGroup_MPG }
+  ,  { .id = Input_ModeSelect,  .port = &ModeSelect,   .pin = MODE_PIN,        .group = INPUT_GROUP_MPG }
 #endif
 #if KEYPAD_ENABLE
-  , { .id = Input_KeypadStrobe, .port = &KeypadStrobe, .pin = KEYPAD_PIN,      .group = InputGroup_Keypad }
+  , { .id = Input_KeypadStrobe, .port = &KeypadStrobe, .pin = KEYPAD_PIN,      .group = INPUT_GROUP_KEYPAD }
 #endif
 };
 
@@ -189,13 +200,16 @@ static void driver_delay_ms (uint32_t ms, void (*callback)(void))
 // Individual step bits can be accessed by step_outbits.x, step_outbits.y, ...
 inline static void set_step_outputs (axes_signals_t step_outbits)
 {
-    step_outbits.value ^ settings.steppers.step_invert.mask;
+    step_outbits.value ^= settings.steppers.step_invert.mask;
 
     DIGITAL_OUT(stepX, step_outbits.x);
     DIGITAL_OUT(stepY, step_outbits.y);
     DIGITAL_OUT(stepZ, step_outbits.z);
 #ifdef A_AXIS
     DIGITAL_OUT(stepA, step_outbits.a);
+#endif
+#ifdef B_AXIS
+    DIGITAL_OUT(stepB, step_outbits.b);
 #endif
 }
 
@@ -204,13 +218,16 @@ inline static void set_step_outputs (axes_signals_t step_outbits)
 // Individual direction bits can be accessed by dir_outbits.x, dir_outbits.y, ...
 inline static void set_dir_outputs (axes_signals_t dir_outbits)
 {
-    dir_outbits.value ^ settings.steppers.dir_invert.mask;
+    dir_outbits.value ^= settings.steppers.dir_invert.mask;
 
     DIGITAL_OUT(dirX, dir_outbits.x);
     DIGITAL_OUT(dirY, dir_outbits.y);
     DIGITAL_OUT(dirZ, dir_outbits.z);
 #ifdef A_AXIS
     DIGITAL_OUT(dirA, dir_outbits.a);
+#endif
+#ifdef A_AXIS
+    DIGITAL_OUT(dirB, dir_outbits.b);
 #endif
 }
 
@@ -223,6 +240,9 @@ static void stepperEnable (axes_signals_t enable)
     enable.value ^= settings.steppers.enable_invert.mask;
 
     DIGITAL_OUT(steppersEnable, enable.x)
+#ifdef STEPPERS_ENABLE_Z_PIN
+    DIGITAL_OUT(steppersEnableZ, enable.x)
+#endif
 }
 
 // Starts stepper driver timer and forces a stepper driver interrupt callback.
@@ -273,7 +293,6 @@ static void stepperPulseStart (stepper_t *stepper)
     }
 }
 
-
 // Start a stepper pulse, delay version
 // stepper_t struct is defined in grbl/stepper.h
 static void stepperPulseStartDelayed (stepper_t *stepper)
@@ -299,7 +318,7 @@ static void limitsEnable (bool on, bool homing)
     on &= settings.limits.flags.hard_enabled;
 
     do {
-        if(inputpin[--i].group == InputGroup_Limit) {
+        if(inputpin[--i].group == INPUT_GROUP_LIMIT) {
             inputpin[i].gpio.reg->ISR = inputpin[i].gpio.bit;       // Clear interrupt.
             if(on)
                 inputpin[i].gpio.reg->IMR |= inputpin[i].gpio.bit;  // Enable interrupt.
@@ -321,8 +340,11 @@ inline static axes_signals_t limitsGetState()
     signals.x = (LimitX.reg->DR & LimitX.bit) != 0;
     signals.y = (LimitY.reg->DR & LimitY.bit) != 0;
     signals.z = (LimitZ.reg->DR & LimitZ.bit) != 0;
-#ifdef A_AXIS
+#ifdef A_LIMIT_PIN
     signals.a = (LimitA.reg->DR & LimitA.bit) != 0;
+#endif
+#ifdef B_LIMIT_PIN
+    signals.b = (LimitB.reg->DR & LimitB.bit) != 0;
 #endif
 
     if (settings.limits.invert.mask)
@@ -426,8 +448,6 @@ static void spindle_set_speed (uint_fast16_t pwm_value)
         TMR1_CMPLD11 = spindle_pwm.period - pwm_value;
         TMR1_CTRL1 |= TMR_CTRL_CM(0b001);
     }
-
-    return pwm_value;
 }
 
 #ifdef SPINDLE_PWM_DIRECT
@@ -555,13 +575,20 @@ static void settings_changed (settings_t *settings)
         // Stepper pulse timeout setup.
         // When the stepper pulse is delayed either two timers or a timer that supports multiple
         // compare registers is required.
-        if(settings->steppers.pulse_delay_microseconds && false) {
-            // Configure step pulse timer(s) for delayed pulse here.
+        TMR2_CSCTRL0 &= ~(TMR_CSCTRL_TCF1|TMR_CSCTRL_TCF2);
+        if(settings->steppers.pulse_delay_microseconds) {
+            TMR2_COMP10 = 150 * settings->steppers.pulse_delay_microseconds; // 150 MHz
+            TMR2_COMP20 = 150 * settings->steppers.pulse_microseconds; // 150 MHz
+            TMR2_CSCTRL0 |= TMR_CSCTRL_TCF2EN;
+            TMR2_CTRL0 |= TMR_CTRL_OUTMODE(0b100);
             hal.stepper_pulse_start = stepperPulseStartDelayed;
+            attachInterruptVector(IRQ_QTIMER2, stepper_pulse_isr_delayed);
         } else {
-            // Configure step pulse timer for pulse off here.
             hal.stepper_pulse_start = stepperPulseStart;
             TMR2_COMP10 = 150 * settings->steppers.pulse_microseconds; // 150 MHz
+            TMR2_CSCTRL0 &= ~TMR_CSCTRL_TCF2EN;
+            TMR2_CTRL0 &= ~TMR_CTRL_OUTMODE(0b000);
+            attachInterruptVector(IRQ_QTIMER2, stepper_pulse_isr);
         }
 
         /****************************************
@@ -631,6 +658,18 @@ static void settings_changed (settings_t *settings)
                     pullup = !settings->limits.disable_pullup.z;
                     signal->irq_mode = limit_fei.z ? IRQ_Mode_Falling : IRQ_Mode_Rising;
                     break;
+#ifdef A_LIMIT_PIN
+                case Input_LimitA:
+                    pullup = !settings->limits.disable_pullup.a;
+                    signal->irq_mode = limit_fei.a ? IRQ_Mode_Falling : IRQ_Mode_Rising;
+                    break;
+#endif
+#ifdef B_LIMIT_PIN
+                case Input_LimitB:
+                    pullup = !settings->limits.disable_pullup.b;
+                    signal->irq_mode = limit_fei.b ? IRQ_Mode_Falling : IRQ_Mode_Rising;
+                    break;
+#endif
 #if MPG_MODE_ENABLE
                 case Input_ModeSelect:
                     irq_mode = IRQ_Mode_Change;
@@ -654,11 +693,11 @@ static void settings_changed (settings_t *settings)
 
             if(signal->irq_mode != IRQ_Mode_None) {
 
-                if(signal->gpio.reg == &GPIO6_DR)
+                if(signal->gpio.reg == (gpio_reg_t *)&GPIO6_DR)
                     signal->offset = 0;
-                else if(signal->gpio.reg == &GPIO7_DR)
+                else if(signal->gpio.reg == (gpio_reg_t *)&GPIO7_DR)
                     signal->offset = 1;
-                else if(signal->gpio.reg == &GPIO8_DR)
+                else if(signal->gpio.reg == (gpio_reg_t *)&GPIO8_DR)
                     signal->offset = 2;
                 else
                     signal->offset = 3;
@@ -679,7 +718,7 @@ static void settings_changed (settings_t *settings)
 
                 signal->gpio.reg->ISR = signal->gpio.bit;     // Clear interrupt.
 
-                if(signal->group != InputGroup_Limit)           // If pin is not a limit pin
+                if(signal->group != INPUT_GROUP_LIMIT)           // If pin is not a limit pin
                     signal->gpio.reg->IMR |= signal->gpio.bit;  // enable interrupt
 
                 signal->active = (signal->gpio.reg->DR & signal->gpio.bit) != 0;
@@ -732,7 +771,6 @@ static bool driver_setup (settings_t *settings)
     TMR2_ENBL = 0;
     TMR2_LOAD0 = 0;
     TMR2_CTRL0 = TMR_CTRL_PCS(0b1000) | TMR_CTRL_ONCE | TMR_CTRL_LENGTH;
-    TMR2_COMP10 = 150 * 10; // 150 MHz
     TMR2_CSCTRL0 = TMR_CSCTRL_TCF1EN;
 
 	attachInterruptVector(IRQ_QTIMER2, stepper_pulse_isr);
@@ -754,7 +792,15 @@ static bool driver_setup (settings_t *settings)
     pinModeOutput(&dirA, A_DIRECTION_PIN);
 #endif
 
+#ifdef B_AXIS
+    pinModeOutput(&stepB, B_STEP_PIN);
+    pinModeOutput(&dirB, B_DIRECTION_PIN);
+#endif
+
     pinModeOutput(&steppersEnable, STEPPERS_ENABLE_PIN);
+#ifdef STEPPERS_ENABLE_Z_PIN
+    pinModeOutput(&steppersEnableZ, STEPPERS_ENABLE_Z_PIN);
+#endif
 
    /****************************
     *  Software debounce init  *
@@ -863,10 +909,6 @@ bool driver_init (void)
         systick_isr_org = _VectorsRam[15];
     _VectorsRam[15] = systick_isr;
 
-    // Enable EEPROM peripheral here if available.
-
-    eeprom_initialize();
-
     // Enable lazy stacking of FPU registers here if a FPU is available.
 
  //   FPU->FPCCR = (FPU->FPCCR & ~FPU_FPCCR_LSPEN_Msk) | FPU_FPCCR_ASPEN_Msk;  // enable lazy stacking
@@ -924,19 +966,19 @@ bool driver_init (void)
     hal.stream.suspend_read = serialSuspendInput;
 #endif
 
-    // If EEPROM is available for settings storage uncomment the following lines:
-
-    // hal.eeprom.type = EEPROM_Physical;
-    // hal.eeprom.get_byte = eepromGetByte;
-    // hal.eeprom.put_byte = eepromPutByte;
-    // hal.eeprom.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
-    // hal.eeprom.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
-
-    // end EEPROM available
-
+#if EEPROM_ENABLE
+    eepromInit(); 
+    hal.eeprom.type = EEPROM_Physical;
+    hal.eeprom.get_byte = eepromGetByte;
+    hal.eeprom.put_byte = eepromPutByte;
+    hal.eeprom.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
+    hal.eeprom.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
+#else // use Arduino emulated EEPROM in flash
+    eeprom_initialize();
     hal.eeprom.type = EEPROM_Emulated;
     hal.eeprom.memcpy_from_flash = nvsRead;
     hal.eeprom.memcpy_to_flash = nvsWrite;
+#endif
 
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
@@ -1002,14 +1044,13 @@ static void stepper_pulse_isr (void)
 
 static void stepper_pulse_isr_delayed (void)
 {
-/*
-    if(STEP_PULSE_ON)
+    if(TMR2_CSCTRL0 & TMR_CSCTRL_TCF1) {
+        TMR2_CSCTRL0 &= ~TMR_CSCTRL_TCF1;
         set_step_outputs(next_step_outbits);
-    else {
-        // STEPPULSETIMER_STOP(); // Stop step pulse timer.
+    } else {
+        TMR2_CSCTRL0 &= ~TMR_CSCTRL_TCF2;
         set_step_outputs((axes_signals_t){0});
     }
-*/
 }
 
 inline static bool enqueue_debounce (input_signal_t *signal)
@@ -1052,11 +1093,11 @@ static void debounce_isr (void)
         if(((signal->gpio.reg->DR & signal->gpio.bit) != 0) == (signal->irq_mode == IRQ_Mode_Falling ? 0 : 1))
           switch(signal->group) {
 
-            case InputGroup_Limit:
+            case INPUT_GROUP_LIMIT:
                 hal.limit_interrupt_callback(limitsGetState());
                 break;
 
-            case InputGroup_Control:
+            case INPUT_GROUP_CONTROL:
                 hal.control_interrupt_callback(systemGetState());
                 break;
         }
@@ -1101,10 +1142,10 @@ static void gpio_isr (void)
         TMR3_CTRL0 |= TMR_CTRL_CM(0b001); 
     }
 
-    if(grp & InputGroup_Limit)
+    if(grp & INPUT_GROUP_LIMIT)
         hal.limit_interrupt_callback(limitsGetState());
 
-    if(grp & InputGroup_Control)
+    if(grp & INPUT_GROUP_CONTROL)
         hal.control_interrupt_callback(systemGetState());
 
 #if MPG_MODE_ENABLE
