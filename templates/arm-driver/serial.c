@@ -1,5 +1,5 @@
 /*
-  driver.c - An embedded CNC Controller with rs274/ngc (g-code) support
+  serial.c - An embedded CNC Controller with rs274/ngc (g-code) support
 
   Template driver code for ARM processors
 
@@ -51,7 +51,7 @@ uint16_t serialRxFree (void)
 void serialRxFlush (void)
 {
     rxbuffer.tail = rxbuffer.head;
-    rxbuffer.overflow = rxbuffer.rts_state = false;
+    rxbuffer.overflow = false;
 }
 
 void serialRxCancel (void)
@@ -59,14 +59,6 @@ void serialRxCancel (void)
     serialRxFlush();
     rxbuffer.data[rxbuffer.head] = ASCII_CAN;
     rxbuffer.head = (rxbuffer.tail + 1) & (RX_BUFFER_SIZE - 1);
-}
-
-void serialWriteS (const char *data)
-{
-    char c, *ptr = (char *)data;
-
-    while((c = *ptr++) != '\0')
-        serialPutC(c);
 }
 
 bool serialPutC (const char c)
@@ -89,6 +81,14 @@ bool serialPutC (const char c)
     UART_TX_IRQ_ENABLE();                                       // Enable TX interrupts
 
     return true;
+}
+
+void serialWriteS (const char *data)
+{
+    char c, *ptr = (char *)data;
+
+    while((c = *ptr++) != '\0')
+        serialPutC(c);
 }
 
 // "dummy" version of serialGetC

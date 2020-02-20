@@ -63,7 +63,7 @@ static void driver_delay_ms (uint32_t ms, void (*callback)(void))
 // Individual step bits can be accessed by step_outbits.x, step_outbits.y, ...
 inline static void set_step_outputs (axes_signals_t step_outbits)
 {
-    step_outbits.value ^ settings.steppers.step_invert.mask;
+    step_outbits.value ^= settings.steppers.step_invert.mask;
 
     // GPIO_WRITE(STEP_PORT, step_outbits.value); // Output step bits.
 }
@@ -74,7 +74,7 @@ inline static void set_step_outputs (axes_signals_t step_outbits)
 // Individual direction bits can be accessed by dir_outbits.x, dir_outbits.y, ...
 inline static void set_dir_outputs (axes_signals_t dir_outbits)
 {
-    dir_outbits.value ^ settings.dir_invert.mask;
+    dir_outbits.value ^= settings.steppers.dir_invert.mask;
 
     // GPIO_WRITE(STEP_PORT, dir_outbits.value);    // Output direction bits.
 }
@@ -285,8 +285,6 @@ static void spindle_set_speed (uint_fast16_t pwm_value)
         // SPINDLEPWM_TIMER_SET(pwm_value);
         // SPINDLEPWM_TIMER_START();
     }
-
-    return pwm_value;
 }
 
 #ifdef SPINDLE_PWM_DIRECT
@@ -489,7 +487,7 @@ static bool driver_setup (settings_t *settings)
     *  Probe pin init  *
     ********************/
 
-    // Configure priobe pin here. Pullup/pulldown is set up in the settings_changed() function.
+    // Configure probe pin here. Pullup/pulldown is set up in the settings_changed() function.
 
    /***********************
     *  Coolant pins init  *

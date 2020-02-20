@@ -35,6 +35,8 @@
 
 #define DEBOUNCE_QUEUE 8 // Must be a power of 2
 
+#define F_BUS_MHZ (F_BUS_ACTUAL / 1000000)
+
 typedef struct {
     volatile uint32_t DR;
     volatile uint32_t GDIR;
@@ -118,7 +120,7 @@ static gpio_t spindleEnable, spindleDir, steppersEnable, Mist, Flood, stepX, ste
 #ifdef A_AXIS
 static gpio_t stepA, dirA, LimitA;
 #endif
-#ifdef A_AXIS
+#ifdef B_AXIS
 static gpio_t stepB, dirB, LimitB;
 #endif
 #ifdef STEPPERS_ENABLE_Z_PIN
@@ -252,6 +254,7 @@ static void stepperWakeUp (void)
     stepperEnable((axes_signals_t){AXES_BITMASK});
 
     PIT_LDVAL0 = 5000;
+    PIT_TFLG0 |= PIT_TFLG_TIF;
     PIT_TCTRL0 |= (PIT_TCTRL_TIE|PIT_TCTRL_TEN);
 }
 
@@ -289,7 +292,7 @@ static void stepperPulseStart (stepper_t *stepper)
 
     if(stepper->step_outbits.value) {
         set_step_outputs(stepper->step_outbits);
-        TMR2_CTRL0 |= TMR_CTRL_CM(0b001);
+        TMR4_CTRL0 |= TMR_CTRL_CM(0b001);
     }
 }
 
@@ -304,7 +307,7 @@ static void stepperPulseStartDelayed (stepper_t *stepper)
 
     if(stepper->step_outbits.value) {
         next_step_outbits = stepper->step_outbits; // Store out_bits
-        TMR2_CTRL0 |= TMR_CTRL_CM(0b001);
+        TMR4_CTRL0 |= TMR_CTRL_CM(0b001);
     }
 }
 
@@ -431,22 +434,41 @@ static void spindle_set_speed (uint_fast16_t pwm_value)
             spindle_off();
         pwmEnabled = false;
         if(spindle_pwm.always_on) {
+#if SPINDLEPWMPIN == 12
             TMR1_COMP21 = spindle_pwm.off_value;
             TMR1_CMPLD11 = spindle_pwm.period - spindle_pwm.off_value;
             TMR1_CTRL1 |= TMR_CTRL_CM(0b001);
+#else // 13
+            TMR2_COMP20 = spindle_pwm.off_value;
+            TMR2_CMPLD10 = spindle_pwm.period - spindle_pwm.off_value;
+            TMR2_CTRL0 |= TMR_CTRL_CM(0b001);
+#endif
+
         } else {
+#if SPINDLEPWMPIN == 12
             TMR1_CTRL1 &= ~TMR_CTRL_CM(0b111);
             TMR1_SCTRL1 &= ~TMR_SCTRL_VAL; //  set TMR_SCTRL_VAL || TMR_SCTRL_OPS if inverted PWM
             TMR1_SCTRL1 |= TMR_SCTRL_FORCE;
+#else // 13
+            TMR2_CTRL0 &= ~TMR_CTRL_CM(0b111);
+            TMR2_SCTRL0 &= ~TMR_SCTRL_VAL; //  set TMR_SCTRL_VAL || TMR_SCTRL_OPS if inverted PWM
+            TMR2_SCTRL0 |= TMR_SCTRL_FORCE;
+#endif
         }
      } else {
         if(!pwmEnabled) {
             spindle_on();
             pwmEnabled = true;
         }
+#if SPINDLEPWMPIN == 12
         TMR1_COMP21 = pwm_value;
         TMR1_CMPLD11 = spindle_pwm.period - pwm_value;
         TMR1_CTRL1 |= TMR_CTRL_CM(0b001);
+#else // 13
+        TMR2_COMP20 = pwm_value;
+        TMR2_CMPLD10 = spindle_pwm.period - pwm_value;
+        TMR2_CTRL0 |= TMR_CTRL_CM(0b001);
+#endif
     }
 }
 
@@ -559,15 +581,20 @@ static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t 
 static void settings_changed (settings_t *settings)
 {
     //
-    hal.driver_cap.variable_spindle = spindle_precompute_pwm_values(&spindle_pwm, 150000000ULL / 2);
+    hal.driver_cap.variable_spindle = spindle_precompute_pwm_values(&spindle_pwm, F_BUS_ACTUAL / 2);
 
     if(IOInitDone) {
 
         stepperEnable(settings->steppers.deenergize);
 
         if(hal.driver_cap.variable_spindle) {
+#if SPINDLEPWMPIN == 12
             TMR1_COMP11 = spindle_pwm.period;
             TMR1_CMPLD11 = spindle_pwm.period;
+#else // 13
+            TMR2_COMP10 = spindle_pwm.period;
+            TMR2_CMPLD10 = spindle_pwm.period;
+#endif
             hal.spindle_set_state = spindleSetStateVariable;
         } else
             hal.spindle_set_state = spindleSetState;
@@ -575,20 +602,20 @@ static void settings_changed (settings_t *settings)
         // Stepper pulse timeout setup.
         // When the stepper pulse is delayed either two timers or a timer that supports multiple
         // compare registers is required.
-        TMR2_CSCTRL0 &= ~(TMR_CSCTRL_TCF1|TMR_CSCTRL_TCF2);
+        TMR4_CSCTRL0 &= ~(TMR_CSCTRL_TCF1|TMR_CSCTRL_TCF2);
         if(settings->steppers.pulse_delay_microseconds) {
-            TMR2_COMP10 = 150 * settings->steppers.pulse_delay_microseconds; // 150 MHz
-            TMR2_COMP20 = 150 * settings->steppers.pulse_microseconds; // 150 MHz
-            TMR2_CSCTRL0 |= TMR_CSCTRL_TCF2EN;
-            TMR2_CTRL0 |= TMR_CTRL_OUTMODE(0b100);
+            TMR4_COMP10 = F_BUS_MHZ * settings->steppers.pulse_delay_microseconds;
+            TMR4_COMP20 = F_BUS_MHZ * settings->steppers.pulse_microseconds;
+            TMR4_CSCTRL0 |= TMR_CSCTRL_TCF2EN;
+            TMR4_CTRL0 |= TMR_CTRL_OUTMODE(0b100);
             hal.stepper_pulse_start = stepperPulseStartDelayed;
-            attachInterruptVector(IRQ_QTIMER2, stepper_pulse_isr_delayed);
+            attachInterruptVector(IRQ_QTIMER4, stepper_pulse_isr_delayed);
         } else {
             hal.stepper_pulse_start = stepperPulseStart;
-            TMR2_COMP10 = 150 * settings->steppers.pulse_microseconds; // 150 MHz
-            TMR2_CSCTRL0 &= ~TMR_CSCTRL_TCF2EN;
-            TMR2_CTRL0 &= ~TMR_CTRL_OUTMODE(0b000);
-            attachInterruptVector(IRQ_QTIMER2, stepper_pulse_isr);
+            TMR4_COMP10 = F_BUS_MHZ * settings->steppers.pulse_microseconds;
+            TMR4_CSCTRL0 &= ~TMR_CSCTRL_TCF2EN;
+            TMR4_CTRL0 &= ~TMR_CTRL_OUTMODE(0b000);
+            attachInterruptVector(IRQ_QTIMER4, stepper_pulse_isr);
         }
 
         /****************************************
@@ -762,22 +789,24 @@ static bool driver_setup (settings_t *settings)
 
     // Configure stepper driver timer here.
     PIT_MCR = 0x00;
+	CCM_CCGR1 |= CCM_CCGR1_PIT(CCM_CCGR_ON);
+
 	attachInterruptVector(IRQ_PIT, stepper_driver_isr);
 	NVIC_SET_PRIORITY(IRQ_PIT, 1);
 	NVIC_ENABLE_IRQ(IRQ_PIT);
 
     // Configure step pulse timer here.
 
-    TMR2_ENBL = 0;
-    TMR2_LOAD0 = 0;
-    TMR2_CTRL0 = TMR_CTRL_PCS(0b1000) | TMR_CTRL_ONCE | TMR_CTRL_LENGTH;
-    TMR2_CSCTRL0 = TMR_CSCTRL_TCF1EN;
+    TMR4_ENBL = 0;
+    TMR4_LOAD0 = 0;
+    TMR4_CTRL0 = TMR_CTRL_PCS(0b1000) | TMR_CTRL_ONCE | TMR_CTRL_LENGTH;
+    TMR4_CSCTRL0 = TMR_CSCTRL_TCF1EN;
 
 	attachInterruptVector(IRQ_QTIMER2, stepper_pulse_isr);
-	NVIC_SET_PRIORITY(IRQ_QTIMER2, 0);
-	NVIC_ENABLE_IRQ(IRQ_QTIMER2);
+	NVIC_SET_PRIORITY(IRQ_QTIMER4, 0);
+	NVIC_ENABLE_IRQ(IRQ_QTIMER4);
 
-    TMR2_ENBL = 1;
+    TMR4_ENBL = 1;
 
     pinModeOutput(&stepX, X_STEP_PIN);
     pinModeOutput(&stepY, Y_STEP_PIN);
@@ -811,7 +840,7 @@ static bool driver_setup (settings_t *settings)
         TMR3_ENBL = 0;
         TMR3_LOAD0 = 0;
         TMR3_CTRL0 = TMR_CTRL_PCS(0b1111) | TMR_CTRL_ONCE | TMR_CTRL_LENGTH;
-        TMR3_COMP10 = (40000 * 128) / 150; // 150 MHz -> 40ms
+        TMR3_COMP10 = (40000 * 128) / F_BUS_MHZ; // 150 MHz -> 40ms
         TMR3_CSCTRL0 = TMR_CSCTRL_TCF1EN;
 
         attachInterruptVector(IRQ_QTIMER3, debounce_isr);
@@ -841,11 +870,19 @@ static bool driver_setup (settings_t *settings)
     pinModeOutput(&spindleEnable, SPINDLE_ENABLE_PIN);
     pinModeOutput(&spindleDir, SPINDLE_DIRECTION_PIN);
 
+#if SPINDLEPWMPIN == 12
     TMR1_ENBL = 0;
     TMR1_LOAD1 = 0;
     TMR1_CTRL1 = TMR_CTRL_PCS(0b1001) | TMR_CTRL_OUTMODE(0b100) | TMR_CTRL_LENGTH;
     TMR1_SCTRL1 = TMR_SCTRL_OEN | TMR_SCTRL_FORCE; //  set TMR_SCTRL_VAL || TMR_SCTRL_OPS if inverted PWM
     TMR1_ENBL = 1 << 1;
+#else // 13
+    TMR2_ENBL = 0;
+    TMR2_LOAD0 = 0;
+    TMR2_CTRL0 = TMR_CTRL_PCS(0b1001) | TMR_CTRL_OUTMODE(0b100) | TMR_CTRL_LENGTH;
+    TMR2_SCTRL0 = TMR_SCTRL_OEN | TMR_SCTRL_FORCE; //  set TMR_SCTRL_VAL || TMR_SCTRL_OPS if inverted PWM
+    TMR2_ENBL = 1;
+#endif
 
     *(portConfigRegister(SPINDLEPWMPIN)) = 1;
 
@@ -862,6 +899,8 @@ static bool driver_setup (settings_t *settings)
     return IOInitDone;
 }
 
+#if EEPROM_ENABLE == 0
+
 bool nvsRead (uint8_t *dest)
 {
 // assert size ? E2END
@@ -877,6 +916,8 @@ bool nvsWrite (uint8_t *source)
 
     return true; //?;
 }
+
+#endif
 
 #if KEYPAD_ENABLE || USB_SERIAL
 static void execute_realtime (uint_fast16_t state)
@@ -1037,18 +1078,18 @@ static void stepper_driver_isr (void)
 // completing one step cycle.
 static void stepper_pulse_isr (void)
 {
-    TMR2_CSCTRL0 &= ~TMR_CSCTRL_TCF1;
+    TMR4_CSCTRL0 &= ~TMR_CSCTRL_TCF1;
 
     set_step_outputs((axes_signals_t){0});
 }
 
 static void stepper_pulse_isr_delayed (void)
 {
-    if(TMR2_CSCTRL0 & TMR_CSCTRL_TCF1) {
-        TMR2_CSCTRL0 &= ~TMR_CSCTRL_TCF1;
+    if(TMR4_CSCTRL0 & TMR_CSCTRL_TCF1) {
+        TMR4_CSCTRL0 &= ~TMR_CSCTRL_TCF1;
         set_step_outputs(next_step_outbits);
     } else {
-        TMR2_CSCTRL0 &= ~TMR_CSCTRL_TCF2;
+        TMR4_CSCTRL0 &= ~TMR_CSCTRL_TCF2;
         set_step_outputs((axes_signals_t){0});
     }
 }

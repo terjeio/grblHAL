@@ -95,8 +95,8 @@ extern driver_settings_t driver_settings;
 #define STEPPERS_ENABLE_PIN (10u)
 
 // Define homing/hard limit switch input pins.
-#define X_LIMIT_PIN     (22u)
-#define Y_LIMIT_PIN     (22u)
+#define X_LIMIT_PIN     (20u)
+#define Y_LIMIT_PIN     (21u)
 #define Z_LIMIT_PIN     (22u)
 
 #if N_AXIS > 3
@@ -112,9 +112,9 @@ extern driver_settings_t driver_settings;
 #endif
 
 // Define spindle enable and spindle direction output pins.
-#define SPINDLE_ENABLE_PIN      (13u)
+#define SPINDLE_ENABLE_PIN      (12u)
 #define SPINDLE_DIRECTION_PIN   (11u)
-#define SPINDLEPWMPIN           (12u) // NOTE: Do not change - current driver does not allow remapping!
+#define SPINDLEPWMPIN           (13u) // NOTE: only pin 12 or pin 13 can be assigned!
 
 // Define flood and mist coolant enable output pins.
 #define COOLANT_FLOOD_PIN   (19u)
@@ -124,7 +124,7 @@ extern driver_settings_t driver_settings;
 #define RESET_PIN           (14u)
 #define FEED_HOLD_PIN       (16u)
 #define CYCLE_START_PIN     (17u)
-#define SAFETY_DOOR_PIN     (17u)
+#define SAFETY_DOOR_PIN     (29u)
 
 // Define probe switch input pin.
 #define PROBE_PIN           (15U)
@@ -141,6 +141,10 @@ extern driver_settings_t driver_settings;
   #if EEPROM_ENABLE
   #error "EEPROM_ENABLE requires I2C_PORT to be defined!"
   #endif
+#endif
+
+#if !(SPINDLEPWMPIN == 12 || SPINDLEPWMPIN == 13)
+  #error "SPINDLEPWMPIN can only be routed to pin 12 or 13!"
 #endif
 
 // The following struct is pulled from the Teensy Library core, Copyright (c) 2019 PJRC.COM, LLC.

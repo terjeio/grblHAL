@@ -30,8 +30,8 @@
 #if EEPROM_ENABLE
 
 #ifdef ARDUINO
-#include "../../grbl/grbl.h"
-#include "../../grbl/plugins.h"
+#include "../grbl/grbl.h"
+#include "../grbl/plugins.h"
 #else
 #include "grbl/grbl.h"
 #include "grbl/plugins.h"

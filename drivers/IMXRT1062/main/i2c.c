@@ -12,7 +12,7 @@
 #include "driver.h"
 #include "src/eeprom/eeprom.h"
 
-#ifdef EEPROM_ENABLE
+#if EEPROM_ENABLE
 
 #include "i2c.h"
 

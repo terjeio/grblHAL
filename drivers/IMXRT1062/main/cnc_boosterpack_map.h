@@ -39,9 +39,9 @@
 #define Z_LIMIT_PIN     (0u)
 
 // Define spindle enable and spindle direction output pins.
-#define SPINDLE_ENABLE_PIN      (14u)
+#define SPINDLE_ENABLE_PIN      (12u)
 #define SPINDLE_DIRECTION_PIN   (16u)
-#define SPINDLEPWMPIN           (12u) // NOTE: Do not change - current driver does not allow remapping!
+#define SPINDLEPWMPIN           (12u)
 
 // Define flood and mist coolant enable output pins.
 #define COOLANT_FLOOD_PIN   (4u)
@@ -63,8 +63,8 @@
 #endif
 
 #define UART_PORT   5
-#define UART_RX5    (21u)
-#define UART_TX5    (20u)
+#define UART_RX5    (21u) // Not used, for info only
+#define UART_TX5    (20u) // Not used, for info only
 
 #define GPIO0_PIN   (3u)
 #define GPIO1_PIN   (29u)
