@@ -29,7 +29,7 @@
 #include "avr/eeprom.h"
 #endif
 
-#if USB_SERIAL
+#if USB_SERIAL_GRBL
 #include "usb_serial.h"
 #endif
 
@@ -113,18 +113,29 @@ typedef struct {
 static debounce_queue_t debounce_queue = {0};
 
 // Standard inputs
-static gpio_t Reset, FeedHold, CycleStart, SafetyDoor, Probe, LimitX, LimitY, LimitZ, ModeSelect, KeypadStrobe;
+static gpio_t Reset, FeedHold, CycleStart, SafetyDoor, Probe, LimitX, LimitY, LimitZ;
+
 // Standard outputs
 static gpio_t spindleEnable, spindleDir, steppersEnable, Mist, Flood, stepX, stepY, stepZ, dirX, dirY, dirZ;
-// Extra I/O
+
+// Optional I/O
 #ifdef A_AXIS
 static gpio_t stepA, dirA, LimitA;
 #endif
 #ifdef B_AXIS
 static gpio_t stepB, dirB, LimitB;
 #endif
+#ifdef STEPPERS_ENABLE_Y_PIN
+static gpio_t steppersEnableY;
+#endif
 #ifdef STEPPERS_ENABLE_Z_PIN
 static gpio_t steppersEnableZ;
+#endif
+#if KEYPAD_ENABLE
+static gpio_t KeypadStrobe;
+#endif
+#if MPG_MODE_ENABLE
+static gpio_t ModeSelect;
 #endif
 
 static input_signal_t inputpin[] = {
@@ -154,13 +165,10 @@ static input_signal_t inputpin[] = {
 
 #define DIGITAL_OUT(gpio, on) { if(on) gpio.reg->DR_SET = gpio.bit; else gpio.reg->DR_CLEAR = gpio.bit; } 
 
-static bool pwmEnabled = false, IOInitDone = false;
+static bool pwmEnabled = false, IOInitDone = false, probe_invert = false;
 static axes_signals_t next_step_outbits;
 static spindle_pwm_t spindle_pwm;
-static delay_t grbl_delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
-
-// Inverts the probe pin state depending on user settings and probing cycle mode.
-static uint8_t probe_invert;
+static delay_t grbl_delay = { .ms = 0, .callback = NULL };
 
 static void spindle_set_speed (uint_fast16_t pwm_value);
 
@@ -228,7 +236,7 @@ inline static void set_dir_outputs (axes_signals_t dir_outbits)
 #ifdef A_AXIS
     DIGITAL_OUT(dirA, dir_outbits.a);
 #endif
-#ifdef A_AXIS
+#ifdef B_AXIS
     DIGITAL_OUT(dirB, dir_outbits.b);
 #endif
 }
@@ -242,8 +250,17 @@ static void stepperEnable (axes_signals_t enable)
     enable.value ^= settings.steppers.enable_invert.mask;
 
     DIGITAL_OUT(steppersEnable, enable.x)
+#ifdef STEPPERS_ENABLE_Y_PIN
+    DIGITAL_OUT(steppersEnableY, enable.y)
+#endif
 #ifdef STEPPERS_ENABLE_Z_PIN
-    DIGITAL_OUT(steppersEnableZ, enable.x)
+    DIGITAL_OUT(steppersEnableZ, enable.z)
+#endif
+#ifdef STEPPERS_ENABLE_A_PIN
+    DIGITAL_OUT(steppersEnableA, enable.a)
+#endif
+#ifdef STEPPERS_ENABLE_B_PIN
+    DIGITAL_OUT(steppersEnableB, enable.b)
 #endif
 }
 
@@ -365,7 +382,11 @@ inline static control_signals_t systemGetState (void)
 {
     control_signals_t signals = {0};
 
+#if ESTOP_ENABLE
+    signals.e_stop = (Reset.reg->DR & Reset.bit) != 0;
+#else
     signals.reset = (Reset.reg->DR & Reset.bit) != 0;
+#endif
     signals.feed_hold = (FeedHold.reg->DR & FeedHold.bit) != 0;
     signals.cycle_start = (CycleStart.reg->DR & CycleStart.bit) != 0;
 #ifdef SAFETY_DOOR_PIN
@@ -383,16 +404,16 @@ inline static control_signals_t systemGetState (void)
 // and the probing cycle modes for toward-workpiece/away-from-workpiece.
 static void probeConfigure (bool is_probe_away)
 {
-    probe_invert = settings.flags.invert_probe_pin ? 0 : Probe.bit;
+    probe_invert = !settings.flags.invert_probe_pin;
 
     if (is_probe_away)
-        probe_invert ^= Probe.bit;
+        probe_invert = !probe_invert;
 }
 
 // Returns the probe pin state. Triggered = true.
 bool probeGetState (void)
 {
-    return ((Probe.reg->DR & Probe.bit) ^ probe_invert) != 0;
+    return ((Probe.reg->DR & Probe.bit) != 0) ^ probe_invert;
 }
 
 // Static spindle (off, on cw & on ccw)
@@ -743,9 +764,9 @@ static void settings_changed (settings_t *settings)
                     }
                 }
 
-                signal->gpio.reg->ISR = signal->gpio.bit;     // Clear interrupt.
+                signal->gpio.reg->ISR = signal->gpio.bit;       // Clear interrupt.
 
-                if(signal->group != INPUT_GROUP_LIMIT)           // If pin is not a limit pin
+                if(signal->group != INPUT_GROUP_LIMIT)          // If pin is not a limit pin
                     signal->gpio.reg->IMR |= signal->gpio.bit;  // enable interrupt
 
                 signal->active = (signal->gpio.reg->DR & signal->gpio.bit) != 0;
@@ -779,23 +800,16 @@ static bool driver_setup (settings_t *settings)
     }
 #endif
 
-    // System init
-
-    // Enable peripherals to use here (if required).
-
     /******************
      *  Stepper init  *
      ******************/
 
-    // Configure stepper driver timer here.
     PIT_MCR = 0x00;
 	CCM_CCGR1 |= CCM_CCGR1_PIT(CCM_CCGR_ON);
 
 	attachInterruptVector(IRQ_PIT, stepper_driver_isr);
 	NVIC_SET_PRIORITY(IRQ_PIT, 1);
 	NVIC_ENABLE_IRQ(IRQ_PIT);
-
-    // Configure step pulse timer here.
 
     TMR4_ENBL = 0;
     TMR4_LOAD0 = 0;
@@ -827,8 +841,17 @@ static bool driver_setup (settings_t *settings)
 #endif
 
     pinModeOutput(&steppersEnable, STEPPERS_ENABLE_PIN);
+#ifdef STEPPERS_ENABLE_Y_PIN
+    pinModeOutput(&steppersEnableY, STEPPERS_ENABLE_Y_PIN);
+#endif
 #ifdef STEPPERS_ENABLE_Z_PIN
     pinModeOutput(&steppersEnableZ, STEPPERS_ENABLE_Z_PIN);
+#endif
+#ifdef STEPPERS_ENABLE_A_PIN
+    pinModeOutput(&steppersEnableA, STEPPERS_ENABLE_A_PIN);
+#endif
+#ifdef STEPPERS_ENABLE_B_PIN
+    pinModeOutput(&steppersEnableB, STEPPERS_ENABLE_B_PIN);
 #endif
 
    /****************************
@@ -919,21 +942,10 @@ bool nvsWrite (uint8_t *source)
 
 #endif
 
-#if KEYPAD_ENABLE || USB_SERIAL
-static void execute_realtime (uint_fast16_t state)
-{
-#if USB_SERIAL
-    usb_execute_realtime(state);
-#endif
-#if KEYPAD_ENABLE
-    keypad_process_keypress(state);
-#endif
-}
-#endif
-
 #ifdef DEBUGOUT
 void debugOut (bool on)
 {
+//    pinModeOutput(&dirZ, Z_DIRECTION_PIN);
 static bool l = false;
 l = !l;
     digitalWrite(13, on); // LED
@@ -956,7 +968,7 @@ bool driver_init (void)
 
     hal.info = "Teensy 4.0"; // Typically set to MCU or board name
     hal.driver_setup = driver_setup;
-    hal.f_step_timer = 24000000;
+    hal.f_step_timer = 33000000;
     hal.rx_buffer_size = RX_BUFFER_SIZE;
     hal.delay_ms = driver_delay_ms;
     hal.settings_changed = settings_changed;
@@ -987,7 +999,7 @@ bool driver_init (void)
 
     hal.system_control_get_state = systemGetState;
 
-#if USB_SERIAL
+#if USB_SERIAL_GRBL
     usb_serialInit();
     hal.stream.read = usb_serialGetC;
     hal.stream.get_rx_buffer_available = usb_serialRxFree;
@@ -1025,8 +1037,8 @@ bool driver_init (void)
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
 
-#if KEYPAD_ENABLE || USB_SERIAL
-    hal.execute_realtime = execute_realtime;
+#if KEYPAD_ENABLE
+    hal.execute_realtime = keypad_process_keypress;
 #endif
 
 #ifdef DEBUGOUT
@@ -1211,6 +1223,10 @@ static void gpio_isr (void)
 static void systick_isr (void)
 {
     systick_isr_org();
+
+#if USB_SERIAL_GRBL
+    usb_serial_poll();
+#endif
 
     if(grbl_delay.ms && !(--grbl_delay.ms)) {
         if(grbl_delay.callback) {

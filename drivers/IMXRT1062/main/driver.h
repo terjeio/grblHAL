@@ -34,7 +34,8 @@
 // Configuration
 // Set value to 1 to enable, 0 to disable
 
-#define USB_SERIAL         0
+#define USB_SERIAL_GRBL    0
+#define ESTOP_ENABLE       0 // When enabled it only real-time report requests will be executed when the reset pin is asserted.
 #define CNC_BOOSTERPACK    0 // do not change!
 
 // NOTE: none of these extensions are available, TBC!
@@ -43,13 +44,13 @@
   #define EEPROM_ENABLE    1 // I2C EEPROM (24LC16) support.
   #define TRINAMIC_ENABLE  0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
   #define TRINAMIC_I2C     0 // Trinamic I2C - SPI bridge interface.
-  #define TRINAMIC_DEV     0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
+  #define TRINAMIC_DEV     0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code.
 #else
   #define KEYPAD_ENABLE    0 // I2C keypad for jogging etc.
   #define EEPROM_ENABLE    0 // I2C EEPROM (24LC16) support.
   #define TRINAMIC_ENABLE  0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
   #define TRINAMIC_I2C     0 // Trinamic I2C - SPI bridge interface.
-  #define TRINAMIC_DEV     0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
+  #define TRINAMIC_DEV     0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code.
 #endif
 
 // End configuration
