@@ -2,7 +2,7 @@
   protocol.c - controls Grbl execution protocol and procedures
   Part of Grbl
 
-  Copyright (c) 2017-2019 Terje Io
+  Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -389,9 +389,10 @@ bool protocol_exec_rt_system ()
                 // the user and a GUI time to do what is needed before resetting, like killing the
                 // incoming stream. The same could be said about soft limits. While the position is not
                 // lost, continued streaming could cause a serious crash if by chance it gets executed.
-         //       hal.delay_ms(20, NULL);
-                if (system_clear_exec_state_flag(EXEC_STATUS_REPORT) & EXEC_STATUS_REPORT)
+                if(bit_istrue(sys_rt_exec_state, EXEC_STATUS_REPORT)) {
+                    system_clear_exec_state_flag(EXEC_STATUS_REPORT);
                     report_realtime_status();
+                }
             }
             system_clear_exec_alarm(); // Clear alarm
         }
