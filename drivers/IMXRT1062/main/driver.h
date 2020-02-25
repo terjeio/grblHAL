@@ -34,8 +34,9 @@
 // Configuration
 // Set value to 1 to enable, 0 to disable
 
-#define USB_SERIAL_GRBL    0
-#define ESTOP_ENABLE       0 // When enabled it only real-time report requests will be executed when the reset pin is asserted.
+#define USB_SERIAL_GRBL    1
+#define USB_SERIAL_WAIT    0 // Wait for USB connection before starting grblHAL 
+#define ESTOP_ENABLE       1 // When enabled it only real-time report requests will be executed when the reset pin is asserted.
 #define CNC_BOOSTERPACK    0 // do not change!
 
 // NOTE: none of these extensions are available, TBC!
@@ -137,6 +138,10 @@ extern driver_settings_t driver_settings;
 #endif
 
 #endif // default pin mappings
+
+#ifndef IOPORTS_ENABLE
+#define IOPORTS_ENABLE 0
+#endif
 
 #ifndef I2C_PORT
   #if EEPROM_ENABLE

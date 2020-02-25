@@ -29,6 +29,10 @@
 #include "avr/eeprom.h"
 #endif
 
+#if IOPORTS_ENABLE
+#include "ioports.h"
+#endif
+
 #if USB_SERIAL_GRBL
 #include "usb_serial.h"
 #endif
@@ -601,14 +605,11 @@ static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t 
 // Configures perhipherals when settings are initialized or changed
 static void settings_changed (settings_t *settings)
 {
-    //
-    hal.driver_cap.variable_spindle = spindle_precompute_pwm_values(&spindle_pwm, F_BUS_ACTUAL / 2);
-
     if(IOInitDone) {
 
         stepperEnable(settings->steppers.deenergize);
 
-        if(hal.driver_cap.variable_spindle) {
+        if(hal.driver_cap.variable_spindle && spindle_precompute_pwm_values(&spindle_pwm, F_BUS_ACTUAL / 2)) {
 #if SPINDLEPWMPIN == 12
             TMR1_COMP11 = spindle_pwm.period;
             TMR1_CMPLD11 = spindle_pwm.period;
@@ -919,6 +920,10 @@ static bool driver_setup (settings_t *settings)
     hal.spindle_set_state((spindle_state_t){0}, 0.0f);
     hal.coolant_set_state((coolant_state_t){0});
 
+#if IOPORTS_ENABLE
+    ioports_init();
+#endif
+
     return IOInitDone;
 }
 
@@ -968,7 +973,7 @@ bool driver_init (void)
 
     hal.info = "Teensy 4.0"; // Typically set to MCU or board name
     hal.driver_setup = driver_setup;
-    hal.f_step_timer = 33000000;
+    hal.f_step_timer = 24000000;
     hal.rx_buffer_size = RX_BUFFER_SIZE;
     hal.delay_ms = driver_delay_ms;
     hal.settings_changed = settings_changed;

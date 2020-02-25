@@ -22,6 +22,8 @@
 
 */
 
+#include <string.h>
+
 #include "Arduino.h"
 
 #include "driver.h"
@@ -30,14 +32,24 @@
 extern "C" {
 #endif
 
+static size_t tx_max;
+static stream_block_tx_buffer_t txbuf = {0};
 static stream_rx_buffer_t usb_rxbuffer, usb_rxbackup;
 
 void usb_serialInit(void)
 {
+    txbuf.s = txbuf.data;
+
     SerialUSB.begin(BAUD_RATE);
 
+#if USB_SERIAL_WAIT
     while(!SerialUSB); // Wait for connection
+#endif
+
+    tx_max = SerialUSB.availableForWrite();
+    tx_max = (tx_max > BLOCK_TX_BUFFER_SIZE ? BLOCK_TX_BUFFER_SIZE : tx_max) - 20;
 }
+
 //
 // Returns number of characters in serial input buffer
 //
@@ -57,7 +69,7 @@ uint16_t usb_serialRxFree (void)
 }
 
 //
-// Flushes the serial input buffer
+// Flushes the serial input buffer (including the USB buffer)
 //
 void usb_serialRxFlush (void)
 {
@@ -70,7 +82,6 @@ void usb_serialRxFlush (void)
 //
 void usb_serialRxCancel (void)
 {
-    SerialUSB.flush();
     usb_rxbuffer.data[usb_rxbuffer.head] = CMD_RESET;
     usb_rxbuffer.tail = usb_rxbuffer.head;
     usb_rxbuffer.head = (usb_rxbuffer.tail + 1) & (RX_BUFFER_SIZE - 1);
@@ -87,14 +98,44 @@ bool usb_serialPutC (const char c)
 }
 
 //
-// Writes a null terminated string to the serial output stream, blocks if buffer full
+// Writes a null terminated string to the serial output stream, blocks if buffer full.
+// Buffers locally up to 40 characters or until the string is terminated with a ASCII_LF character.
+// NOTE: grbl always sends ASCII_LF terminated strings!
 //
 void usb_serialWriteS (const char *s)
 {
-    char c, *ptr = (char *)s;
+    size_t length = strlen(s);
 
-    while((c = *ptr++) != '\0')
-        usb_serialPutC(c);
+    if((length + txbuf.length) < BLOCK_TX_BUFFER_SIZE) {
+
+        memcpy(txbuf.s, s, length);
+        txbuf.length += length;
+        txbuf.s += length;
+
+        if(s[length - 1] == ASCII_LF || txbuf.length > tx_max) {
+
+            size_t avail;
+            txbuf.s = txbuf.data;
+
+            while(txbuf.length) {
+
+                if((avail = Serial.availableForWrite()) > 10) {
+
+                    length = avail < txbuf.length ? avail : txbuf.length;
+
+                    Serial.write((uint8_t *)txbuf.s, length); // doc is wrong - does not return bytes sent!
+
+                    txbuf.length -= length;
+                    txbuf.s += length;
+                }
+
+                if(txbuf.length && !hal.stream_blocking_callback())
+                    return;
+            }
+            txbuf.length = 0;
+            txbuf.s = txbuf.data;
+        }
+    }
 }
 
 //
@@ -127,8 +168,8 @@ int16_t usb_serialGetC (void)
     if(bptr == usb_rxbuffer.head)
         return -1; // no data available else EOF
 
-    char data = usb_rxbuffer.data[bptr++];     // Get next character, increment tmp pointer
-    usb_rxbuffer.tail = bptr & (RX_BUFFER_SIZE - 1);  // and update pointer
+    char data = usb_rxbuffer.data[bptr++];              // Get next character, increment tmp pointer
+    usb_rxbuffer.tail = bptr & (RX_BUFFER_SIZE - 1);    // and update pointer
 
     return (int16_t)data;
 }
@@ -159,8 +200,7 @@ void usb_execute_realtime (uint_fast16_t state)
 {
     int data;
 
-    while((data = SerialUSB.peek()) != -1 ) {
-        SerialUSB.read();
+    while((data = SerialUSB.read()) != -1 ) {
         if(data == CMD_TOOL_ACK && !usb_rxbuffer.backup) {
             memcpy(&usb_rxbackup, &usb_rxbuffer, sizeof(stream_rx_buffer_t));
             usb_rxbuffer.backup = true;
