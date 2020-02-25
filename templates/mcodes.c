@@ -25,7 +25,11 @@
  * NOTE: this template is also a bare bones example for adding M100 with two parameters: P and Q
  */
 
+#ifdef ARDUINO
+#include "src/grbl/grbl.h"
+#else
 #include "grbl/grbl.h"
+#endif
 
 // check - check if M-code is handled here.
 // parameters: mcode - M-code to check for (some are predefined in user_mcode_t in grbl/gcode.h), use a cast if not.

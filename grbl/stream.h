@@ -44,6 +44,10 @@
 #define TX_BUFFER_SIZE 512  // must be a power of 2
 #endif
 
+#ifndef BLOCK_TX_BUFFER_SIZE
+#define BLOCK_TX_BUFFER_SIZE 200
+#endif
+
 #define BUFCOUNT(head, tail, size) ((head >= tail) ? (head - tail) : (size - tail + head))
 
 typedef enum {
@@ -76,5 +80,11 @@ typedef struct {
     volatile uint_fast16_t tail;
     char data[TX_BUFFER_SIZE];
 } stream_tx_buffer_t;
+
+typedef struct {
+    size_t length;
+    char *s;
+    char data[BLOCK_TX_BUFFER_SIZE];
+} stream_block_tx_buffer_t;
 
 #endif

@@ -24,7 +24,11 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#ifdef ARDUINO
+#include "src/grbl/grbl.h"
+#else
 #include "grbl/grbl.h"
+#endif
 
 static driver_reset_ptr driver_reset = NULL;
 

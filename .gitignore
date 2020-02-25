@@ -18,6 +18,14 @@ $RECYCLE.BIN/
 # Windows shortcuts
 *.lnk
 
+# Subversion folders
+
+.svn
+
+# Eclipse folders
+
+.settings
+
 # =========================
 # Operating System Files
 # =========================
