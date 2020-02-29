@@ -25,21 +25,7 @@
 #define __I2C_DRIVER_H__
 
 #include "driver.h"
-
-void I2CInit (void);
-
-#if EEPROM_ENABLE
-
-typedef struct {
-    uint8_t addr;
-    volatile int16_t count;
-    uint8_t *data;
-    uint8_t word_addr;
-} i2c_eeprom_t;
-
-void I2C_EEPROM (i2c_eeprom_t *i2c, bool read);
-
-#endif
+#include "src/grbl/plugins.h"
 
 #if TRINAMIC_ENABLE && TRINAMIC_I2C
 

@@ -1,11 +1,10 @@
 /*
 
-  usb_serial.cpp - USB serial port wrapper for Arduino Due
+  usb_serial.cpp - USB serial port wrapper for Arduino MKRZERO
 
   Part of GrblHAL
 
   Copyright (c) 2018-2020 Terje Io
-
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -32,9 +31,6 @@
 extern "C" {
 #endif
 
-#include "usb_serial.h"
-#include "src/grbl/grbl.h"
-
 static size_t tx_max;
 static stream_block_tx_buffer_t txbuf = {0};
 static stream_rx_buffer_t usb_rxbuffer, usb_rxbackup;
@@ -46,10 +42,10 @@ void usb_serialInit(void)
     SerialUSB.begin(BAUD_RATE);
 
 #if USB_SERIAL_WAIT
-    while(!SerialUSB); // Wait for connection
+//    while(!SerialUSB); // Hangs forever...
 #endif
 
-    tx_max = SerialUSB.availableForWrite(); // 511 bytes
+    tx_max = SerialUSB.availableForWrite(); // 63 bytes
     tx_max = (tx_max > BLOCK_TX_BUFFER_SIZE ? BLOCK_TX_BUFFER_SIZE : tx_max) - 20;    
 }
 
@@ -72,11 +68,12 @@ uint16_t usb_serialRxFree (void)
 }
 
 //
-// Flushes the serial input buffer
+// Flushes the serial input buffer (including the USB buffer)
 //
 void usb_serialRxFlush (void)
 {
     SerialUSB.flush();
+    usb_rxbuffer.overflow = Off;
     usb_rxbuffer.head = usb_rxbuffer.tail = 0;
 }
 
@@ -107,9 +104,12 @@ bool usb_serialPutC (const char c)
 //
 void usb_serialWriteS (const char *s)
 {
+    if(*s == '\0')
+        return;
+
     size_t length = strlen(s);
 
-    if(length && (length + txbuf.length) < BLOCK_TX_BUFFER_SIZE) {
+    if((length + txbuf.length) <= BLOCK_TX_BUFFER_SIZE) {
 
         memcpy(txbuf.s, s, length);
         txbuf.length += length;
@@ -120,13 +120,15 @@ void usb_serialWriteS (const char *s)
             size_t txfree;
             txbuf.s = txbuf.data;
 
+
             while(txbuf.length) {
 
                 if((txfree = SerialUSB.availableForWrite()) > 10) {
 
-                    length = txfree < txbuf.length ? txfree : txbuf.length;
+                    length = txfree < txbuf.length ? txfree - 2 : txbuf.length;
 
                     SerialUSB.write((uint8_t *)txbuf.s, length); // doc is wrong - does not return bytes sent!
+                    SerialUSB.flush();
 
                     txbuf.length -= length;
                     txbuf.s += length;
@@ -140,7 +142,7 @@ void usb_serialWriteS (const char *s)
             }
             txbuf.s = txbuf.data;
         }
-    }
+    } 
 }
 
 //
@@ -153,7 +155,7 @@ void usb_serialWriteLn (const char *s)
 }
 
 //
-// Writes a number of characters from string to the serial output stream followed by EOL, blocks if buffer full
+// Writes a number of characters from string to the serial output stream, blocks if buffer full
 //
 void usb_serialWrite (const char *s, uint16_t length)
 {
@@ -173,8 +175,8 @@ int16_t usb_serialGetC (void)
     if(bptr == usb_rxbuffer.head)
         return -1; // no data available else EOF
 
-    char data = usb_rxbuffer.data[bptr++];     // Get next character, increment tmp pointer
-    usb_rxbuffer.tail = bptr & (RX_BUFFER_SIZE - 1);  // and update pointer
+    char data = usb_rxbuffer.data[bptr++];              // Get next character, increment tmp pointer
+    usb_rxbuffer.tail = bptr & (RX_BUFFER_SIZE - 1);    // and update pointer
 
     return (int16_t)data;
 }

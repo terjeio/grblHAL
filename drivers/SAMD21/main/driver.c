@@ -2,7 +2,7 @@
 
   driver.c - driver code for Atmel SAMD21 ARM processor
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2018-2020 Terje Io
 
@@ -40,7 +40,7 @@
 #endif
 
 #if EEPROM_ENABLE
-#include "eeprom.h"
+#include "src/eeprom/eeprom.h"
 #endif
 
 #if KEYPAD_ENABLE
@@ -307,8 +307,11 @@ bool probeGetState (void)
 inline static void spindle_off (void)
 {
 #if IOEXPAND_ENABLE
-    iopins.spindle_on = settings.spindle.invert.on ? On : Off;
-    ioexpand_out(iopins);
+    bool on = settings.spindle.invert.on ? On : Off;
+    if(iopins.spindle_on != on) {
+        iopins.spindle_on = on;
+        ioexpand_out(iopins);
+    }
 #else
     pinOut(SPINDLE_ENABLE_PIN, settings.spindle.invert.on);
 #endif
@@ -317,8 +320,11 @@ inline static void spindle_off (void)
 inline static void spindle_on (void)
 {
 #if IOEXPAND_ENABLE
-    iopins.spindle_on = settings.spindle.invert.on ? Off : On;
-    ioexpand_out(iopins);
+    bool on = settings.spindle.invert.on ? Off : On;
+    if(iopins.spindle_on != on) {
+        iopins.spindle_on = on;
+        ioexpand_out(iopins);
+    }
 #else
     pinOut(SPINDLE_ENABLE_PIN, !settings.spindle.invert.on);
 #endif
@@ -329,8 +335,11 @@ inline static void spindle_dir (bool ccw)
 #ifdef SPINDLE_DIRECTION_PIN
 #if IOEXPAND_ENABLE
     if(hal.driver_cap.spindle_dir) {
-        iopins.spindle_dir = (ccw ^ settings.spindle.invert.ccw) ? On : Off;
-        ioexpand_out(iopins);
+        bool ccw = (ccw ^ settings.spindle.invert.ccw) ? On : Off;
+        if(iopins.spindle_dir != ccw) {
+            iopins.spindle_dir = ccw;
+            ioexpand_out(iopins);
+        }
     }
 #else
     if(hal.driver_cap.spindle_dir)
@@ -435,7 +444,7 @@ static spindle_state_t spindleGetState (void)
 #ifdef DEBUGOUT
 void debug_out (bool on)
 {
-    pinOut(COOLANT_MIST_PIN, on);
+    pinOut(LED_BUILTIN, on);
 }
 #endif
 
@@ -444,9 +453,11 @@ static void coolantSetState (coolant_state_t mode)
 {
     mode.value ^= settings.coolant_invert.mask;
 #if IOEXPAND_ENABLE
-    iopins.flood_on = mode.flood;
-    iopins.mist_on = mode.mist;
-    ioexpand_out(iopins);
+    if(!((iopins.flood_on == mode.flood) && (iopins.mist_on == mode.mist))) {
+        iopins.flood_on = mode.flood;
+        iopins.mist_on = mode.mist;
+        ioexpand_out(iopins);
+    }
 #else
     pinOut(COOLANT_FLOOD_PIN, mode.flood);
     pinOut(COOLANT_MIST_PIN, mode.mist);
@@ -507,7 +518,9 @@ static void showMessage (const char *msg)
 // Configures perhipherals when settings are initialized or changed
 void settings_changed (settings_t *settings)
 {
-    if((hal.driver_cap.variable_spindle = settings->spindle.rpm_min < settings->spindle.rpm_max)) {
+    bool variable_spindle;
+
+    if((variable_spindle = (hal.driver_cap.variable_spindle && settings->spindle.rpm_min < settings->spindle.rpm_max))) {
 
         SPINDLE_PWM_TIMER->CTRLA.bit.ENABLE = 0;
         while(SPINDLE_PWM_TIMER->SYNCBUSY.bit.ENABLE);
@@ -530,7 +543,7 @@ void settings_changed (settings_t *settings)
 
         stepperEnable(settings->steppers.deenergize);
 
-        if(hal.driver_cap.variable_spindle) {
+        if(variable_spindle) {
             SPINDLE_PWM_TIMER->PER.bit.PER = spindle_pwm.period;
             while(SPINDLE_PWM_TIMER->SYNCBUSY.bit.PER);
             SPINDLE_PWM_TIMER->CC[SPINDLE_PWM_CCREG].bit.CC = 0;
@@ -561,6 +574,7 @@ void settings_changed (settings_t *settings)
          *************************/
 
         NVIC_DisableIRQ(EIC_IRQn);
+        NVIC_SetPriority(EIC_IRQn, 3);
 
         control_signals_t control_ies;
 
@@ -754,8 +768,8 @@ static bool driver_setup (settings_t *settings)
 
         DEBOUNCE_TIMER->INTENSET.bit.OVF = 1; // Enable overflow interrupt
 
+        NVIC_SetPriority(DEBOUNCE_TIMER_IRQn, 3);
         IRQRegister(DEBOUNCE_TIMER_IRQn, DEBOUNCE_IRQHandler);
-
         NVIC_EnableIRQ(DEBOUNCE_TIMER_IRQn);    // Enable stepper interrupt
     }
 
@@ -801,6 +815,10 @@ static bool driver_setup (settings_t *settings)
     trinamic_init();
 #endif
 
+#ifdef DEBUGOUT
+    pinMode(LED_BUILTIN, OUTPUT);
+#endif
+
  // Set defaults
 
     IOInitDone = settings->version == 15;
@@ -812,7 +830,7 @@ static bool driver_setup (settings_t *settings)
     hal.coolant_set_state((coolant_state_t){0});
 
 #if KEYPAD_ENABLE
-//    keypad_init();
+    keypad_init();
 #endif
 
 #if SDCARD_ENABLE
@@ -947,18 +965,6 @@ bool nvsInit (void)
 
 // End EEPROM emulation
 
-#if KEYPAD_ENABLE || USB_SERIAL
-static void execute_realtime (uint_fast16_t state)
-{
-#if USB_SERIAL
-    usb_execute_realtime(state);
-#endif
-#if KEYPAD_ENABLE
-    keypad_process_keypress(state);
-#endif
-}
-#endif
-
 // Initialize HAL pointers, setup serial comms and enable EEPROM
 // NOTE: Grbl is not yet configured (from EEPROM data), driver_setup() will be called when done
 bool driver_init (void) {
@@ -1043,7 +1049,7 @@ bool driver_init (void) {
 #endif
 
 #if EEPROM_ENABLE
-    eeprom_init();
+    eepromInit();
     hal.eeprom.type = EEPROM_Physical;
     hal.eeprom.get_byte = eepromGetByte;
     hal.eeprom.put_byte = eepromPutByte;
@@ -1060,7 +1066,7 @@ bool driver_init (void) {
 #endif
 
 #if KEYPAD_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
-    I2CInit();
+    i2c_init();
 #endif
 
 #ifdef DRIVER_SETTINGS
@@ -1087,8 +1093,8 @@ bool driver_init (void) {
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
 
-#if KEYPAD_ENABLE || USB_SERIAL
-    hal.execute_realtime = execute_realtime;
+#if KEYPAD_ENABLE
+    hal.execute_realtime = keypad_process_keypress;
 #endif
 
 #ifdef DEBUGOUT
@@ -1194,12 +1200,19 @@ void KEYPAD_IRQHandler (void)
 // Interrupt handler for 1 ms interval timer
 static void SysTick_IRQHandler (void)
 {
+#if SDCARD_ENABLE || USB_SERIAL
+
+#if USB_SERIAL
+    usb_serial_poll();
+#endif
+
 #if SDCARD_ENABLE
     static uint32_t fatfs_ticks = 10;
     if(!(--fatfs_ticks)) {
         disk_timerproc();
         fatfs_ticks = 10;
     }
+#endif
 
     if(delay_ms.ms && !(--delay_ms.ms)) {
         if(delay_ms.callback) {

@@ -46,7 +46,7 @@ void usb_serialInit(void)
     while(!SerialUSB); // Wait for connection
 #endif
 
-    tx_max = SerialUSB.availableForWrite();
+    tx_max = SerialUSB.availableForWrite(); // 6144 bytes
     tx_max = (tx_max > BLOCK_TX_BUFFER_SIZE ? BLOCK_TX_BUFFER_SIZE : tx_max) - 20;
 }
 
@@ -55,8 +55,8 @@ void usb_serialInit(void)
 //
 uint16_t usb_serialRxCount (void)
 {
-  uint16_t tail = usb_rxbuffer.tail, head = usb_rxbuffer.head;
-  return BUFCOUNT(head, tail, RX_BUFFER_SIZE);
+    uint_fast16_t tail = usb_rxbuffer.tail, head = usb_rxbuffer.head;
+    return (uint16_t)BUFCOUNT(head, tail, RX_BUFFER_SIZE);
 }
 
 //
@@ -64,8 +64,8 @@ uint16_t usb_serialRxCount (void)
 //
 uint16_t usb_serialRxFree (void)
 {
-  unsigned int tail = usb_rxbuffer.tail, head = usb_rxbuffer.head;
-  return (RX_BUFFER_SIZE - 1) - BUFCOUNT(head, tail, RX_BUFFER_SIZE);
+    uint_fast16_t tail = usb_rxbuffer.tail, head = usb_rxbuffer.head;
+    return (uint16_t)((RX_BUFFER_SIZE - 1) - BUFCOUNT(head, tail, RX_BUFFER_SIZE));
 }
 
 //
@@ -104,6 +104,9 @@ bool usb_serialPutC (const char c)
 //
 void usb_serialWriteS (const char *s)
 {
+    if(*s == '\0')
+        return;
+
     size_t length = strlen(s);
 
     if((length + txbuf.length) < BLOCK_TX_BUFFER_SIZE) {
@@ -114,25 +117,27 @@ void usb_serialWriteS (const char *s)
 
         if(s[length - 1] == ASCII_LF || txbuf.length > tx_max) {
 
-            size_t avail;
+            size_t txfree;
             txbuf.s = txbuf.data;
 
             while(txbuf.length) {
 
-                if((avail = Serial.availableForWrite()) > 10) {
+                if((txfree = SerialUSB.availableForWrite()) > 10) {
 
-                    length = avail < txbuf.length ? avail : txbuf.length;
+                    length = txfree < txbuf.length ? txfree : txbuf.length;
 
-                    Serial.write((uint8_t *)txbuf.s, length); // doc is wrong - does not return bytes sent!
+                    SerialUSB.write((uint8_t *)txbuf.s, length); // doc is wrong - does not return bytes sent!
 
                     txbuf.length -= length;
                     txbuf.s += length;
                 }
 
-                if(txbuf.length && !hal.stream_blocking_callback())
+                if(txbuf.length && !hal.stream_blocking_callback()) {
+                    txbuf.length = 0;
+                    txbuf.s = txbuf.data;
                     return;
+                }
             }
-            txbuf.length = 0;
             txbuf.s = txbuf.data;
         }
     }
@@ -191,7 +196,7 @@ bool usb_serialSuspendInput (bool suspend)
 }
 
 //
-// This function get called from the protocol_execute_realtime function,
+// This function get called from the systick interrupt handler,
 // used here to get characters off the USB serial input stream and buffer
 // them for processing by grbl. Real time command characters are stripped out
 // and submitted for realtime processing.
@@ -206,10 +211,14 @@ void usb_execute_realtime (uint_fast16_t state)
             usb_rxbuffer.backup = true;
             usb_rxbuffer.tail = usb_rxbuffer.head;
             hal.stream.read = usb_serialGetC; // restore normal input
-        } else if(!hal.stream.enqueue_realtime_command(data) && usb_serialRxFree()) {;
-            uint32_t bptr = (usb_rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1); // Get next head pointer,
-            usb_rxbuffer.data[usb_rxbuffer.head] = data;                    // add data to buffer
-            usb_rxbuffer.head = bptr;                                       // and update pointer
+        } else if(!hal.stream.enqueue_realtime_command(data)) {;
+            uint32_t bptr = (usb_rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1); // Get next head pointer
+            if(bptr == usb_rxbuffer.tail)                                   // If buffer full
+                usb_rxbuffer.overflow = On;                                 // flag overflow,
+            else {
+                usb_rxbuffer.data[usb_rxbuffer.head] = data;                // else add data to buffer
+                usb_rxbuffer.head = bptr;                                   // and update pointer
+            }
         }
     }
 }

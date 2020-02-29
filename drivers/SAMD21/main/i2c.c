@@ -68,12 +68,12 @@ typedef struct {
     uint8_t buffer[8];
 } i2c_trans_t;
 
-static i2c_trans_t i2c;
+static i2c_trans_t i2c = {0};
 
 static void I2C_interrupt_handler (void);
 
 #define WIRE_RISE_TIME_NANOSECONDS 125
-void I2CInit (void)
+void i2c_init (void)
 {
     static bool init_ok = false;
 
@@ -137,6 +137,8 @@ uint8_t *I2C_Receive (uint32_t i2cAddr, uint8_t *buf, uint32_t bytes, bool block
 
 void I2C_Send (uint32_t i2cAddr, uint8_t *buf, uint8_t bytes, bool block)
 {
+//    while(i2cIsBusy);
+
     i2c.count = bytes;
     i2c.data  = buf ? buf : i2c.buffer;
     i2c.state = bytes == 0 ? I2CState_AwaitCompletion : (bytes == 1 ? I2CState_SendLast : I2CState_SendNext);
@@ -167,7 +169,7 @@ uint8_t *I2C_ReadRegister (uint32_t i2cAddr, uint8_t *buf, uint8_t bytes, bool b
 
 #if EEPROM_ENABLE
 
-void I2C_EEPROM (i2c_eeprom_t *eeprom, bool read)
+void i2c_eeprom_transfer (i2c_eeprom_trans_t *eeprom, bool read)
 {
     static uint8_t txbuf[34];
 
@@ -175,11 +177,11 @@ void I2C_EEPROM (i2c_eeprom_t *eeprom, bool read)
 
     if(read) {
         eeprom->data[0] = eeprom->word_addr; // !!
-        I2C_ReadRegister(eeprom->addr, eeprom->data, eeprom->count, true);
+        I2C_ReadRegister(eeprom->address, eeprom->data, eeprom->count, true);
     } else {
         memcpy(&txbuf[1], eeprom->data, eeprom->count);
         txbuf[0] = eeprom->word_addr;
-        I2C_Send(eeprom->addr, txbuf, eeprom->count + 1, true);
+        I2C_Send(eeprom->address, txbuf, eeprom->count + 1, true);
         hal.delay_ms(5, NULL);
     }
 }
@@ -205,7 +207,7 @@ static TMC2130_status_t I2C_TMC_ReadRegister (TMC2130_t *driver, TMC2130_datagra
 {
     uint8_t *res, i2creg;
     TMC2130_status_t status = {0};
-;
+
     if((i2creg = TMCI2C_GetMapAddress((uint8_t)(driver ? (uint32_t)driver->cs_pin : 0), reg->addr).value) == 0xFF)
         return status; // unsupported register
 
@@ -253,7 +255,7 @@ static TMC2130_status_t I2C_TMC_WriteRegister (TMC2130_t *driver, TMC2130_datagr
 
 void I2C_DriverInit (TMC_io_driver_t *driver)
 {
-I2CInit();
+i2c_init();
     driver->WriteRegister = I2C_TMC_WriteRegister;
     driver->ReadRegister = I2C_TMC_ReadRegister;
 }

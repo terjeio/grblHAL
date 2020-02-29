@@ -56,6 +56,7 @@ void IRQUnRegister(int32_t IRQnum);
 // Configuration
 // Set value to 1 to enable, 0 to disable
 #define USB_SERIAL       0
+#define USB_SERIAL_WAIT  0 // Wait for connection before starting grblHAL 
 #define EEPROM_ENABLE    0 // I2C EEPROM (24LC16) support (using TWI0).
 // NOTE: none of the following options are ready. DO NOT ENABLE!
 #define SDCARD_ENABLE    0

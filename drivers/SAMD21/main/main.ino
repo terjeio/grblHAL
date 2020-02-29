@@ -1,12 +1,10 @@
 /*
 
-  eeprom.h - driver code for Atmel SAMD21 ARM processor
+  main.ino - startup for Atmel SAMD21 ARM processor (Arduino MKRZERO version)
 
-  for 2K EEPROM on CNC BoosterPack (Microchip 24LC16B)
+  Part of Grbl
 
-  Part of GrblHAL
-
-  Copyright (c) 2017-2019 Terje Io
+  Copyright (c) 2018-2019 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,13 +21,15 @@
 
 */
 
-#ifndef _EEPROM_H_
-#define _EEPROM_H_
+// Double tap reset to enter bootloader mode - select bootloader port for programming
 
-void eeprom_init (void);
-uint8_t eepromGetByte (uint32_t addr);
-void eepromPutByte (uint32_t addr, uint8_t new_value);
-void eepromWriteBlockWithChecksum (uint32_t destination, uint8_t *source, uint32_t size);
-bool eepromReadBlockWithChecksum (uint8_t *destination, uint32_t source, uint32_t size);
+#include "src/grbl/grbllib.h"
 
-#endif
+void setup ()
+{
+    grbl_enter();
+}
+
+void loop ()
+{
+}

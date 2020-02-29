@@ -5,7 +5,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2019 Terje Io
+  Copyright (c) 2019-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -21,14 +21,16 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#define X2_STEP_PORT      A_STEP_PORT
-#define X2_STEP_PIN       A_STEP_PIN
-#define X2_DIRECTION_PORT A_DIRECTION_PORT
-#define X2_DIRECTION_PIN  A_DIRECTION_PIN
-#define X2_DISABLE_PORT   A_DISABLE_PORT
-#define X2_DISABLE_PIN    A_DISABLE_PIN
+// Uncomment ONE line below to enable dual motors with auto squaring for axis
+// NOTE: if more than one is uncommented only the first will be honored.
+// NOTE: the max limit definitions for the enabled axis will be used as input for the second motor when homing.
+//#define SQUARING_ENABLED_X
+//#define SQUARING_ENABLED_Y
+//#define SQUARING_ENABLED_Z
 
-//#define SQUARING_ENABLED - DO NOT ENABLE! work in progress!
+#if defined(SQUARING_ENABLED_X) || defined(SQUARING_ENABLED_Y) ||defined(SQUARING_ENABLED_Z)
+#define SQUARING_ENABLED
+#endif
 
  // Define step pulse output pins.
 #define X_STEP_PORT         PIOB
@@ -40,9 +42,11 @@
 #define Z_STEP_PORT         PIOC
 #define Z_STEP_PIN          26  // Due Digital Pin 4
 #define Z_STEP_BIT          (1<<Z_STEP_PIN)
+#ifndef SQUARING_ENABLED
 #define A_STEP_PORT         PIOA
 #define A_STEP_PIN          7   // Due Digital Pin 31
 #define A_STEP_BIT          (1<<A_STEP_PIN)
+#endif
 
 // Define step direction output pins.
 #define X_DIRECTION_PORT    PIOC
@@ -54,9 +58,11 @@
 #define Z_DIRECTION_PORT    PIOC
 #define Z_DIRECTION_PIN     23  // Due Digital Pin 7
 #define Z_DIRECTION_BIT     (1<<Z_DIRECTION_PIN)
+#ifndef SQUARING_ENABLED
 #define A_DIRECTION_PORT    PIOD
 #define A_DIRECTION_PIN     10  // Due Digital Pin 32
 #define A_DIRECTION_BIT     (1<<A_DIRECTION_PIN)
+#endif
 
 // Define stepper driver enable/disable output pin(s).
 #define X_DISABLE_PORT      PIOB
@@ -68,9 +74,49 @@
 #define Z_DISABLE_PORT      PIOD
 #define Z_DISABLE_PIN       3   // Due Digital Pin 28
 #define Z_DISABLE_BIT       (1<<Z_DISABLE_PIN)
+#ifndef SQUARING_ENABLED
 #define A_DISABLE_PORT      PIOC
 #define A_DISABLE_PIN       1   // Due Digital Pin 33
 #define A_DISABLE_BIT       (1<<A_DISABLE_PIN)
+#endif
+
+// Define signals for axis motor #2 in dual configuration
+#ifdef SQUARING_ENABLED_X
+
+#define X2_STEP_PORT      PIOA
+#define X2_STEP_PIN       7   // Due Digital Pin 31
+#define X2_STEP_BIT       (1<<X2_STEP_PIN)
+#define X2_DIRECTION_PORT PIOD
+#define X2_DIRECTION_PIN  10  // Due Digital Pin 32
+#define X2_DIRECTION_BIT  (1<<X2_DIRECTION_PIN)
+#define X2_DISABLE_PORT   PIOC
+#define X2_DISABLE_PIN    1   // Due Digital Pin 33
+#define X2_DISABLE_BIT    (1<<X2_DISABLE_PIN)
+
+#elif defined(SQUARING_ENABLED_Y)
+
+#define Y2_STEP_PORT      PIOA
+#define Y2_STEP_PIN       7   // Due Digital Pin 31
+#define Y2_STEP_BIT       (1<<Y2_STEP_PIN)
+#define Y2_DIRECTION_PORT PIOD
+#define Y2_DIRECTION_PIN  10  // Due Digital Pin 32
+#define Y2_DIRECTION_BIT  (1<<Y2_DIRECTION_PIN)
+#define Y2_DISABLE_PORT   PIOC
+#define Y2_DISABLE_PIN    1   // Due Digital Pin 33
+#define Y2_DISABLE_BIT    (1<<Y2_DISABLE_PIN)
+
+#elif defined(SQUARING_ENABLED_Z)
+
+#define Z2_STEP_PORT      PIOA
+#define Z2_STEP_PIN       7   // Due Digital Pin 31
+#define Z2_STEP_BIT       (1<<Z2_STEP_PIN)
+#define Z2_DIRECTION_PORT PIOD
+#define Z2_DIRECTION_PIN  10  // Due Digital Pin 32
+#define Z2_DIRECTION_BIT  (1<<Z2_DIRECTION_PIN)
+#define Z2_DISABLE_PORT   PIOC
+#define Z2_DISABLE_PIN    1   // Due Digital Pin 33
+#define Z2_DISABLE_BIT    (1<<Z2_DISABLE_PIN)
+#endif
 
 // Define homing/hard limit switch min input pins.
 #define X_LIMIT_PORT        PIOD
@@ -83,12 +129,6 @@
 #define Z_LIMIT_PIN         11  // Due Digital Pin 18
 #define Z_LIMIT_BIT         (1<<Z_LIMIT_PIN)
 
-#ifdef SQUARING_ENABLED
-#define X2_LIMIT_PORT       PIOA
-#define X2_LIMIT_PIN        11  // Due Digital Pin 18
-#define X2_LIMIT_BIT        (1<<Z_LIMIT_PIN)
-#endif
-
 // Define homing/hard limit switch max input pins.
 #define X_LIMIT_PORT_MAX    PIOD
 #define X_LIMIT_PIN_MAX     5   // Due Digital Pin 15
@@ -99,12 +139,6 @@
 #define Z_LIMIT_PORT_MAX    PIOA
 #define Z_LIMIT_PIN_MAX     10  // Due Digital Pin 19
 #define Z_LIMIT_BIT_MAX     (1<<Z_LIMIT_PIN_MAX)
-
-#ifdef SQUARING_ENABLED
-#define X2_LIMIT_PORT_MAX   PIOA
-#define X2_LIMIT_PIN_MAX    11  // Due Digital Pin 18
-#define X2_LIMIT_BIT_MAX    (1<<Z_LIMIT_PIN)
-#endif
 
 // Define spindle enable and spindle direction output pins.
 #define SPINDLE_ENABLE_PORT     PIOD
