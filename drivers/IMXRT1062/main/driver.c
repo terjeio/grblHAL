@@ -33,8 +33,10 @@
 #include "ioports.h"
 #endif
 
-#if USB_SERIAL_GRBL
-#include "usb_serial.h"
+#if USB_SERIAL_GRBL == 1
+#include "usb_serial_ard.h"
+#elif USB_SERIAL_GRBL == 2
+#include "usb_serial_pjrc.h"
 #endif
 
 #define DEBOUNCE_QUEUE 8 // Must be a power of 2
@@ -809,7 +811,7 @@ static bool driver_setup (settings_t *settings)
 	CCM_CCGR1 |= CCM_CCGR1_PIT(CCM_CCGR_ON);
 
 	attachInterruptVector(IRQ_PIT, stepper_driver_isr);
-	NVIC_SET_PRIORITY(IRQ_PIT, 1);
+	NVIC_SET_PRIORITY(IRQ_PIT, 2);
 	NVIC_ENABLE_IRQ(IRQ_PIT);
 
     TMR4_ENBL = 0;
@@ -868,7 +870,7 @@ static bool driver_setup (settings_t *settings)
         TMR3_CSCTRL0 = TMR_CSCTRL_TCF1EN;
 
         attachInterruptVector(IRQ_QTIMER3, debounce_isr);
-        NVIC_SET_PRIORITY(IRQ_QTIMER3, 3);
+        NVIC_SET_PRIORITY(IRQ_QTIMER3, 4);
         NVIC_ENABLE_IRQ(IRQ_QTIMER3);
 
         TMR3_ENBL = 1;
@@ -1227,7 +1229,10 @@ static void gpio_isr (void)
 // Interrupt handler for 1 ms interval timer
 static void systick_isr (void)
 {
+
+#if USB_SERIAL_GRBL == 2
     systick_isr_org();
+#endif
 
 #if USB_SERIAL_GRBL
     usb_serial_poll();

@@ -34,7 +34,7 @@
 // Configuration
 // Set value to 1 to enable, 0 to disable
 
-#define USB_SERIAL_GRBL    1
+#define USB_SERIAL_GRBL    0 // Set to 1 for Arduino class library, 2 for PJRC C library
 #define USB_SERIAL_WAIT    0 // Wait for USB connection before starting grblHAL 
 #define ESTOP_ENABLE       1 // When enabled it only real-time report requests will be executed when the reset pin is asserted.
 #define CNC_BOOSTERPACK    0 // do not change!
@@ -42,13 +42,13 @@
 // NOTE: none of these extensions are available, TBC!
 #if CNC_BOOSTERPACK
   #define KEYPAD_ENABLE    0 // I2C keypad for jogging etc.
-  #define EEPROM_ENABLE    1 // I2C EEPROM (24LC16) support.
+  #define EEPROM_ENABLE    1 // I2C EEPROM support. Set to 1 for 24LC16(2K), 2 for larger sizes.
   #define TRINAMIC_ENABLE  0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
   #define TRINAMIC_I2C     0 // Trinamic I2C - SPI bridge interface.
   #define TRINAMIC_DEV     0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code.
 #else
   #define KEYPAD_ENABLE    0 // I2C keypad for jogging etc.
-  #define EEPROM_ENABLE    0 // I2C EEPROM (24LC16) support.
+  #define EEPROM_ENABLE    0 // I2C EEPROM support. Set to 1 for 24LC16(2K), 2 for larger sizes.
   #define TRINAMIC_ENABLE  0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
   #define TRINAMIC_I2C     0 // Trinamic I2C - SPI bridge interface.
   #define TRINAMIC_DEV     0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code.

@@ -1,6 +1,6 @@
 /*
 
-  usb_serial.cpp - driver code for IMXRT1062 processor (on Teensy 4.0 board) : USB serial port wrapper
+  usb_serial_pjrc.c - driver code for IMXRT1062 processor (on Teensy 4.0 board) : USB serial port wrapper, PJRC version
 
   Part of GrblHAL
 
@@ -22,15 +22,12 @@
 
 */
 
-#include <string.h>
-
-#include "Arduino.h"
+//#include "avr/pgmspace.h"
+#include "usb_serial.h"
 
 #include "driver.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#if USB_SERIAL_GRBL == 2
 
 static size_t tx_max;
 static stream_block_tx_buffer_t txbuf = {0};
@@ -38,15 +35,9 @@ static stream_rx_buffer_t usb_rxbuffer, usb_rxbackup;
 
 void usb_serialInit(void)
 {
-    txbuf.s = txbuf.data;
+//    usb_serial_configure(); // Done somewhere already - do not call again
 
-    SerialUSB.begin(BAUD_RATE);
-
-#if USB_SERIAL_WAIT
-    while(!SerialUSB); // Wait for connection
-#endif
-
-    tx_max = SerialUSB.availableForWrite(); // 6144 bytes
+    tx_max = usb_serial_write_buffer_free(); // 6144
     tx_max = (tx_max > BLOCK_TX_BUFFER_SIZE ? BLOCK_TX_BUFFER_SIZE : tx_max) - 20;
 }
 
@@ -73,7 +64,7 @@ uint16_t usb_serialRxFree (void)
 //
 void usb_serialRxFlush (void)
 {
-    SerialUSB.flush();
+    usb_serial_flush_input();
     usb_rxbuffer.head = usb_rxbuffer.tail = 0;
 }
 
@@ -92,15 +83,13 @@ void usb_serialRxCancel (void)
 //
 bool usb_serialPutC (const char c)
 {
-    SerialUSB.write(c);
+    usb_serial_putchar(c);
 
     return true;
 }
 
 //
-// Writes a null terminated string to the serial output stream, blocks if buffer full.
-// Buffers locally up to 40 characters or until the string is terminated with a ASCII_LF character.
-// NOTE: grbl always sends ASCII_LF terminated strings!
+// Writes a null terminated string to the serial output stream, blocks if buffer full
 //
 void usb_serialWriteS (const char *s)
 {
@@ -122,11 +111,11 @@ void usb_serialWriteS (const char *s)
 
             while(txbuf.length) {
 
-                if((txfree = SerialUSB.availableForWrite()) > 10) {
+                if((txfree = usb_serial_write_buffer_free()) > 10) {
 
                     length = txfree < txbuf.length ? txfree : txbuf.length;
 
-                    SerialUSB.write((uint8_t *)txbuf.s, length); // doc is wrong - does not return bytes sent!
+                    usb_serial_write(txbuf.s, length); //
 
                     txbuf.length -= length;
                     txbuf.s += length;
@@ -205,7 +194,7 @@ void usb_execute_realtime (uint_fast16_t state)
 {
     int data;
 
-    while((data = SerialUSB.read()) != -1 ) {
+    while((data = usb_serial_getchar()) != -1) {
         if(data == CMD_TOOL_ACK && !usb_rxbuffer.backup) {
             memcpy(&usb_rxbackup, &usb_rxbuffer, sizeof(stream_rx_buffer_t));
             usb_rxbuffer.backup = true;
@@ -223,6 +212,4 @@ void usb_execute_realtime (uint_fast16_t state)
     }
 }
 
-#ifdef __cplusplus
-}
 #endif

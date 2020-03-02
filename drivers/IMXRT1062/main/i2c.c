@@ -1,5 +1,5 @@
 /*
-  uart.c - driver code for IMXRT1062 processor (on Teensy 4.0 board)
+  i2c.c - driver code for IMXRT1062 processor (on Teensy 4.0 board)
 
   Part of GrblHAL
 
@@ -169,7 +169,9 @@ typedef struct {
     uint8_t addr;
     volatile uint8_t count;
     volatile uint8_t rcount;
+    volatile uint8_t acount;
     uint8_t *data;
+    uint8_t regaddr[2];
 #if KEYPAD_ENABLE
     keycode_callback_ptr keycode_callback;
 #endif
@@ -226,7 +228,7 @@ void i2c_init (void)
 
         attachInterruptVector(hardware->irq, I2C_interrupt_handler);
 
-        NVIC_SET_PRIORITY(hardware->irq, 0);
+        NVIC_SET_PRIORITY(hardware->irq, 1);
         NVIC_ENABLE_IRQ(hardware->irq);
     }
 }
@@ -271,13 +273,14 @@ void I2C_Send (uint32_t i2cAddr, uint8_t *buf, uint8_t bytes, bool block)
         while(i2cIsBusy);
 }
 
-uint8_t *I2C_ReadRegister (uint32_t i2cAddr, uint8_t *buf, uint8_t bytes, bool block)
+uint8_t *I2C_ReadRegister (uint32_t i2cAddr, uint8_t *buf, uint8_t abytes, uint8_t bytes, bool block)
 {
     while(i2cIsBusy);
 
     i2c.addr   = i2cAddr;
     i2c.count  = bytes;
     i2c.rcount = 0;
+    i2c.acount = abytes;
     i2c.data   = buf ? buf : i2c.buffer;
     i2c.state  = I2CState_SendAddr;
 
@@ -295,18 +298,28 @@ uint8_t *I2C_ReadRegister (uint32_t i2cAddr, uint8_t *buf, uint8_t bytes, bool b
 
 void i2c_eeprom_transfer (i2c_eeprom_trans_t *eeprom, bool read)
 {
-    static uint8_t txbuf[34];
+    static uint8_t txbuf[66];
 
     while(i2cIsBusy);
 
     if(read) {
-        eeprom->data[0] = eeprom->word_addr; // !!
-        I2C_ReadRegister(eeprom->address, eeprom->data, eeprom->count, true);
+        if(eeprom->word_addr_bytes == 1)
+            i2c.regaddr[0] = eeprom->word_addr;
+        else {
+            i2c.regaddr[0] = eeprom->word_addr & 0xFF;
+            i2c.regaddr[1] = eeprom->word_addr >> 8;
+        }
+        I2C_ReadRegister(eeprom->address, eeprom->data, eeprom->word_addr_bytes, eeprom->count, true);
     } else {
-        memcpy(&txbuf[1], eeprom->data, eeprom->count);
-        txbuf[0] = eeprom->word_addr;
-        I2C_Send(eeprom->address, txbuf, eeprom->count + 1, true);
-        hal.delay_ms(5, NULL);
+        memcpy(&txbuf[eeprom->word_addr_bytes], eeprom->data, eeprom->count);
+        if(eeprom->word_addr_bytes == 1)
+            txbuf[0] = eeprom->word_addr;
+        else {
+            txbuf[0] = eeprom->word_addr >> 8;
+            txbuf[1] = eeprom->word_addr & 0xFF;
+        }
+        I2C_Send(eeprom->address, txbuf, eeprom->count + eeprom->word_addr_bytes, true);
+        hal.delay_ms(7, NULL);
     }
 }
 
@@ -388,7 +401,6 @@ void I2C_DriverInit (TMC_io_driver_t *driver)
 
 static void I2C_interrupt_handler (void)
 {
-
     uint32_t ifg = port->MSR & 0xFFFF;
 
     port->MSR &= ~ifg;
@@ -438,8 +450,9 @@ hal.stream.write(ASCII_EOL);
             break;
 
         case I2CState_SendAddr:
-            port->MTDR = LPI2C_MTDR_CMD_TRANSMIT | (uint32_t)(*i2c.data);
-            i2c.state = I2CState_Restart;  
+            port->MTDR = LPI2C_MTDR_CMD_TRANSMIT | (uint32_t)(i2c.regaddr[--i2c.acount]);
+            if(i2c.acount == 0)
+                i2c.state = I2CState_Restart;  
             break;
 
         case I2CState_Restart:

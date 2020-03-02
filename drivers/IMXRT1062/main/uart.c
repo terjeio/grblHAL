@@ -162,7 +162,7 @@ void serialInit (void)
     // Enable the transmitter, receiver and enable receiver interrupt
     NVIC_DISABLE_IRQ(UART.irq);
     attachInterruptVector(UART.irq, UART.irq_handler);
-    NVIC_SET_PRIORITY(UART.irq, 3);
+    NVIC_SET_PRIORITY(UART.irq, 0);
     NVIC_ENABLE_IRQ(UART.irq);
 
     uint16_t tx_fifo_size = (((UART.port->FIFO >> 4) & 0x7) << 2);
