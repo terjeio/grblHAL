@@ -1,10 +1,12 @@
 /*
 
-  eeprom_24LC16B.c - plugin for for I2C EEPROM (Microchip 24LC16B)
+  eeprom_24AAxxx.c - plugin for for I2C EEPROM (Microchip 24AAxxx > 16kbit, 2 byte address)
+
+  NOTE: only tested with 24AA256
 
   Part of GrblHAL
 
-  Copyright (c) 2017-2020 Terje Io
+  Copyright (c) 2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -27,8 +29,8 @@
 #include "driver.h"
 #endif
 
-#if EEPROM_ENABLE == 1
-
+#if EEPROM_ENABLE == 2
+xx
 #ifdef ARDUINO
 #include "../grbl/grbl.h"
 #include "../grbl/plugins.h"
@@ -38,11 +40,9 @@
 #endif
 
 #define EEPROM_I2C_ADDRESS (0xA0 >> 1)
-#define EEPROM_ADDR_BITS_LO 8
-#define EEPROM_BLOCK_SIZE (2 ^ EEPROM_LO_ADDR_BITS)
-#define EEPROM_PAGE_SIZE 16
+#define EEPROM_PAGE_SIZE 64
 
-static i2c_eeprom_trans_t i2c = { .word_addr_bytes = 1 };
+static i2c_eeprom_trans_t i2c = { .word_addr_bytes = 2 };
 
 void eepromInit (void)
 {
@@ -53,8 +53,8 @@ uint8_t eepromGetByte (uint32_t addr)
 {
     uint8_t value = 0;
 
-    i2c.address = EEPROM_I2C_ADDRESS | (addr >> 8);
-    i2c.word_addr = addr & 0xFF;
+    i2c.address = EEPROM_I2C_ADDRESS;
+    i2c.word_addr = addr;
     i2c.data = &value;
     i2c.count = 1;
 
@@ -65,8 +65,8 @@ uint8_t eepromGetByte (uint32_t addr)
 
 void eepromPutByte (uint32_t addr, uint8_t new_value)
 {
-    i2c.address = EEPROM_I2C_ADDRESS | (addr >> 8);
-    i2c.word_addr = addr & 0xFF;
+    i2c.address = EEPROM_I2C_ADDRESS;
+    i2c.word_addr = addr;
     i2c.data = &new_value;
     i2c.count = 1;
 
@@ -79,8 +79,8 @@ void eepromWriteBlockWithChecksum (uint32_t destination, uint8_t *source, uint32
     uint8_t *target = source;
 
     while(remaining > 0) {
-        i2c.address = EEPROM_I2C_ADDRESS | (destination >> EEPROM_ADDR_BITS_LO);
-        i2c.word_addr = destination & 0xFF;
+        i2c.address = EEPROM_I2C_ADDRESS;
+        i2c.word_addr = destination;
         i2c.count = EEPROM_PAGE_SIZE - (destination & (EEPROM_PAGE_SIZE - 1));
         i2c.count = remaining < i2c.count ? remaining : i2c.count;
         i2c.data = target;
@@ -101,8 +101,8 @@ bool eepromReadBlockWithChecksum (uint8_t *destination, uint32_t source, uint32_
     uint8_t *target = destination;
 
     while(remaining) {
-        i2c.address = EEPROM_I2C_ADDRESS | (source >> 8);
-        i2c.word_addr = source & 0xFF;
+        i2c.address = EEPROM_I2C_ADDRESS;
+        i2c.word_addr = source;
         i2c.count = remaining > 255 ? 255 : (uint8_t)remaining;
         i2c.data = target;
         remaining -= i2c.count;
