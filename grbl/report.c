@@ -836,7 +836,19 @@ void report_build_info (char *line)
 
     if(*append != ':') {
         hal.stream.write(buf);
-        hal.stream.write("]\r\n");
+        hal.stream.write("]" ASCII_EOL);
+    }
+
+    if(hal.driver_version) {
+        hal.stream.write("[DRIVER VERSION:");
+        hal.stream.write(hal.driver_version);
+        hal.stream.write("]"  ASCII_EOL);
+    }
+
+    if(hal.driver_options) {
+        hal.stream.write("[DRIVER OPTIONS:");
+        hal.stream.write(hal.driver_options);
+        hal.stream.write("]"  ASCII_EOL);
     }
 
     if(hal.report_options)

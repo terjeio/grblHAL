@@ -50,6 +50,10 @@
 
 #define BUFCOUNT(head, tail, size) ((head >= tail) ? (head - tail) : (size - tail + head))
 
+#include <stddef.h>
+#include <stdint.h>
+#include <stdbool.h>
+
 typedef enum {
     StreamType_Serial = 0,
     StreamType_MPG,
@@ -82,7 +86,8 @@ typedef struct {
 } stream_tx_buffer_t;
 
 typedef struct {
-    size_t length;
+    uint_fast16_t length;
+    uint_fast16_t max_length;
     char *s;
     char data[BLOCK_TX_BUFFER_SIZE];
 } stream_block_tx_buffer_t;

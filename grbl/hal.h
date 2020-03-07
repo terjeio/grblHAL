@@ -118,6 +118,8 @@ typedef struct {
 typedef struct HAL {
     uint32_t version;
     char *info;
+    char *driver_version;
+    char *driver_options;
     uint32_t f_step_timer;
     uint32_t rx_buffer_size;
 

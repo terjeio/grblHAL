@@ -262,14 +262,14 @@ status_code_t system_execute_line (char *line)
         case '#': // Print Grbl NGC parameters
             if (line[2] != '\0')
                 retval = Status_InvalidStatement;
-            else if (!(sys.state == STATE_IDLE || (sys.state & (STATE_ALARM|STATE_ESTOP))))
+            else if (!(sys.state == STATE_IDLE || (sys.state & (STATE_ALARM|STATE_ESTOP|STATE_CHECK_MODE))))
                 retval = Status_IdleError;
             else
                 report_ngc_parameters();
             break;
 
         case 'I': // Print or store build info. [IDLE/ALARM]
-            if (!(sys.state == STATE_IDLE || (sys.state & (STATE_ALARM|STATE_ESTOP))))
+            if (!(sys.state == STATE_IDLE || (sys.state & (STATE_ALARM|STATE_ESTOP|STATE_CHECK_MODE))))
                 retval = Status_IdleError;
             else if (line[2] == '\0') {
                 settings_read_build_info(line);
@@ -329,7 +329,7 @@ status_code_t system_execute_line (char *line)
             break;
 
         case 'N': // Startup lines. [IDLE/ALARM]
-            if (!(sys.state == STATE_IDLE || (sys.state & (STATE_ALARM|STATE_ESTOP))))
+            if (!(sys.state == STATE_IDLE || (sys.state & (STATE_ALARM|STATE_ESTOP|STATE_CHECK_MODE))))
                 retval = Status_IdleError;
             else if (line[2] == '\0') { // Print startup lines
                 uint_fast8_t counter;
@@ -379,7 +379,7 @@ status_code_t system_execute_line (char *line)
 
             if (retval == Status_Unhandled) {
                 // Check for global setting, store if so
-                if(sys.state == STATE_IDLE || (sys.state & (STATE_ALARM|STATE_ESTOP))) {
+                if(sys.state == STATE_IDLE || (sys.state & (STATE_ALARM|STATE_ESTOP|STATE_CHECK_MODE))) {
                     uint_fast8_t counter = 1;
                     float parameter;
                     if(!read_float(line, &counter, &parameter))
