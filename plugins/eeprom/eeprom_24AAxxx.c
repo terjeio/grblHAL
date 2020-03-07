@@ -30,7 +30,7 @@
 #endif
 
 #if EEPROM_ENABLE == 2
-xx
+
 #ifdef ARDUINO
 #include "../grbl/grbl.h"
 #include "../grbl/plugins.h"

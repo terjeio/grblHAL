@@ -19,7 +19,7 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifdef ARDUINO_SAMD_MKRZERO
+#ifdef ARDUINO
 #include "../../driver.h"
 #else
 #include "driver.h"
@@ -30,7 +30,7 @@
 #include <stdio.h>
 #include <math.h>
 
-#ifdef ARDUINO_SAMD_MKRZERO
+#ifdef ARDUINO
 #if TRINAMIC_I2C
 #include "../../i2c.h"
 #else

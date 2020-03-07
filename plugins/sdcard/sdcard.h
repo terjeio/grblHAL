@@ -24,7 +24,7 @@
 #ifndef _SDCARD_H_
 #define _SDCARD_H_
 
-#ifdef ARDUINO_SAMD_MKRZERO
+#ifdef ARDUINO
 #include "../../driver.h"
 #include "../grbl/grbl.h"
 #else

@@ -3,7 +3,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2017-2019 Terje Io
+  Copyright (c) 2017-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -20,7 +20,7 @@
 */
 
 
-#if defined(ARDUINO_SAMD_MKRZERO) || defined(__SAM3X8E__)
+#ifdef ARDUINO
 #include "../../driver.h"
 #else
 #include "driver.h"
@@ -30,7 +30,7 @@
 
 #include "keypad.h"
 
-#if defined(ARDUINO_SAMD_MKRZERO) || defined(__SAM3X8E__)
+#ifdef ARDUINO
 #include "../../i2c.h"
 #include "../grbl/grbl.h"
 #else
@@ -174,6 +174,9 @@ void keypad_process_keypress (uint_fast16_t state)
 {
     bool addedGcode, jogCommand = false;
     char command[30] = "", keycode = keypad_get_keycode();
+
+    if(state == STATE_ESTOP)
+        return;
 
     if(keycode)
       switch(keycode) {

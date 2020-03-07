@@ -300,7 +300,7 @@ static int16_t sdcard_read (void)
 
     if(file.handle) {
 
-        if(sys.state == STATE_IDLE || (sys.state & (STATE_CYCLE|STATE_HOLD)))
+        if(sys.state == STATE_IDLE || (sys.state & (STATE_CYCLE|STATE_HOLD|STATE_CHECK_MODE)))
             c = file_read();
 
         if(c == -1) { // EOF or error reading or grbl problem
@@ -422,7 +422,7 @@ static status_code_t sdcard_parse (uint_fast16_t state, char *line, char *lcline
             break;
 
         case '=':
-            if (state != STATE_IDLE)
+            if (!(state == STATE_IDLE || state == STATE_CHECK_MODE))
                 retval = Status_SystemGClock;
             else {
                 if(file_open(&lcline[3])) {

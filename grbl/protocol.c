@@ -393,6 +393,9 @@ bool protocol_exec_rt_system ()
                     system_clear_exec_state_flag(EXEC_STATUS_REPORT);
                     report_realtime_status();
                 }
+
+                if(hal.execute_realtime)
+                    hal.execute_realtime(STATE_ESTOP);
             }
             system_clear_exec_alarm(); // Clear alarm
         }
