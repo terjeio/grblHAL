@@ -29,16 +29,18 @@
 
 #if USB_SERIAL_GRBL == 2
 
-static size_t tx_max;
+#define BLOCK_RX_BUFFER_SIZE 20
+
 static stream_block_tx_buffer_t txbuf = {0};
+static char rxbuf[BLOCK_RX_BUFFER_SIZE];
 static stream_rx_buffer_t usb_rxbuffer, usb_rxbackup;
 
 void usb_serialInit(void)
 {
 //    usb_serial_configure(); // Done somewhere already - do not call again
 
-    tx_max = usb_serial_write_buffer_free(); // 6144
-    tx_max = (tx_max > BLOCK_TX_BUFFER_SIZE ? BLOCK_TX_BUFFER_SIZE : tx_max) - 20;
+    txbuf.max_length = usb_serial_write_buffer_free(); // 6144
+    txbuf.max_length = (txbuf.max_length > BLOCK_TX_BUFFER_SIZE ? BLOCK_TX_BUFFER_SIZE : txbuf.max_length) - 20;
 }
 
 //
@@ -104,7 +106,7 @@ void usb_serialWriteS (const char *s)
         txbuf.length += length;
         txbuf.s += length;
 
-        if(s[length - 1] == ASCII_LF || txbuf.length > tx_max) {
+        if(s[length - 1] == ASCII_LF || txbuf.length > txbuf.max_length) {
 
             size_t txfree;
             txbuf.s = txbuf.data;
@@ -192,21 +194,33 @@ bool usb_serialSuspendInput (bool suspend)
 //
 void usb_execute_realtime (uint_fast16_t state)
 {
-    int data;
+    char c, *dp;
+    int avail, free;
 
-    while((data = usb_serial_getchar()) != -1) {
-        if(data == CMD_TOOL_ACK && !usb_rxbuffer.backup) {
-            memcpy(&usb_rxbackup, &usb_rxbuffer, sizeof(stream_rx_buffer_t));
-            usb_rxbuffer.backup = true;
-            usb_rxbuffer.tail = usb_rxbuffer.head;
-            hal.stream.read = usb_serialGetC; // restore normal input
-        } else if(!hal.stream.enqueue_realtime_command(data)) {;
-            uint32_t bptr = (usb_rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1); // Get next head pointer
-            if(bptr == usb_rxbuffer.tail)                                   // If buffer full
-                usb_rxbuffer.overflow = On;                                 // flag overflow,
-            else {
-                usb_rxbuffer.data[usb_rxbuffer.head] = data;                // else add data to buffer
-                usb_rxbuffer.head = bptr;                                   // and update pointer
+    if((avail = usb_serial_available())) {
+
+        dp = rxbuf;
+        free = usb_serialRxFree();
+        free = free > BLOCK_RX_BUFFER_SIZE ? BLOCK_RX_BUFFER_SIZE : free;
+        avail = avail > free ? free : avail;
+
+        usb_serial_read(rxbuf, avail);
+
+        while(avail--) {
+            c = *dp++;
+            if(c == CMD_TOOL_ACK && !usb_rxbuffer.backup) {
+                memcpy(&usb_rxbackup, &usb_rxbuffer, sizeof(stream_rx_buffer_t));
+                usb_rxbuffer.backup = true;
+                usb_rxbuffer.tail = usb_rxbuffer.head;
+                hal.stream.read = usb_serialGetC; // restore normal input
+            } else if(!hal.stream.enqueue_realtime_command(c)) {;
+                uint32_t bptr = (usb_rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1); // Get next head pointer
+                if(bptr == usb_rxbuffer.tail)                                   // If buffer full
+                    usb_rxbuffer.overflow = On;                                 // flag overflow,
+                else {
+                    usb_rxbuffer.data[usb_rxbuffer.head] = c;                   // else add character data to buffer
+                    usb_rxbuffer.head = bptr;                                   // and update pointer
+                }
             }
         }
     }

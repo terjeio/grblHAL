@@ -974,6 +974,7 @@ bool driver_init (void)
  //   FPU->FPCCR = (FPU->FPCCR & ~FPU_FPCCR_LSPEN_Msk) | FPU_FPCCR_ASPEN_Msk;  // enable lazy stacking
 
     hal.info = "Teensy 4.0"; // Typically set to MCU or board name
+    hal.driver_version = "200303";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = 24000000;
     hal.rx_buffer_size = RX_BUFFER_SIZE;

@@ -61,7 +61,7 @@ void serialInit (void)
     IRQRegister(SERIAL_IRQ, SERIAL_IRQHandler);
 
     NVIC_EnableIRQ(SERIAL_IRQ);
-    NVIC_SetPriority(SERIAL_IRQ, 2);
+    NVIC_SetPriority(SERIAL_IRQ, 1);
 }
 
 //

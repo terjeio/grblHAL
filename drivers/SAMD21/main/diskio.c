@@ -56,15 +56,14 @@ typedef enum
 #define pinIn(p) ((PORT->Group[g_APinDescription[p].ulPort].IN.reg & (1 << g_APinDescription[p].ulPin)) != 0)
 #define pinOut(p, e) { if(e) PORT->Group[g_APinDescription[p].ulPort].OUTSET.reg = (1 << g_APinDescription[p].ulPin); else PORT->Group[g_APinDescription[p].ulPort].OUTCLR.reg = (1 << g_APinDescription[p].ulPin); }
 
-
-#define SD_SCK_PIN  26
-#define SD_MOSI_PIN 27
+#define SD_SCK_PIN  27
+#define SD_MOSI_PIN 26
 #define SD_CS_PIN   28
 #define SD_MISO_PIN 29
 #define SD_CLOCKMODE SERCOM_SPI_MODE_0
-#define SD_CLOCK_ID GCM_SERCOM2_CORE
+#define SD_CLOCK_ID GCM_SERCOM4_CORE
 
-static Sercom *sd_spi = SERCOM2; // Alt mode C
+static Sercom *sd_spi = SERCOM4; // Alt mode C
 
 /*
 #define SD_SCK_PIN  8
@@ -197,17 +196,17 @@ void power_on (void)
      */
 
     if(!init) {
-
-    // Assign clock
+        // Assign clock
         GCLK->CLKCTRL.reg = GCLK_CLKCTRL_ID(SD_CLOCK_ID)|GCLK_CLKCTRL_GEN_GCLK0|GCLK_CLKCTRL_CLKEN;
         while(GCLK->STATUS.reg & GCLK_STATUS_SYNCBUSY);
-
-        /* Enable the peripherals used to drive the SDC on SSI */
-
+ 
+        // Enable the peripherals used to drive the SDC on SSI
         pinMode(SD_CS_PIN, OUTPUT);
         pinPeripheral(SD_MISO_PIN, g_APinDescription[SD_MISO_PIN].ulPinType); // PIO_SERCOM
         pinPeripheral(SD_SCK_PIN, g_APinDescription[SD_SCK_PIN].ulPinType);
         pinPeripheral(SD_MOSI_PIN, g_APinDescription[SD_MOSI_PIN].ulPinType);
+
+        hal.delay_ms(1, NULL);
     }
 
     // Disable and reset peripheral
@@ -216,32 +215,25 @@ void power_on (void)
 
     if(!init) {
 
-        sd_spi->SPI.CTRLA.bit.SWRST = 1;    
+        sd_spi->SPI.CTRLA.bit.SWRST = 1;
         while(sd_spi->SPI.CTRLA.bit.SWRST || sd_spi->SPI.SYNCBUSY.bit.SWRST);
-        
+
         // Init
         sd_spi->SPI.CTRLA.reg = SERCOM_SPI_CTRLA_MODE_SPI_MASTER |
-                              SERCOM_SPI_CTRLA_DOPO(0) |
-                              SERCOM_SPI_CTRLA_DIPO(3) |
-                              0 << SERCOM_SPI_CTRLA_DORD_Pos;
+                                SERCOM_SPI_CTRLA_DOPO(0) |
+                                SERCOM_SPI_CTRLA_DIPO(3) |
+                                0 << SERCOM_SPI_CTRLA_DORD_Pos;
 
         //Setting the CTRLB register    //Active the SPI receiver.
         sd_spi->SPI.CTRLB.reg = SERCOM_SPI_CTRLB_CHSIZE(8)|SERCOM_SPI_CTRLB_RXEN;
 
-        int cpha, cpol;
-
-        if((SD_CLOCKMODE & (0x1ul)) == 0 )
-        cpha = 0;
-        else
-        cpha = 1;
-
-        if((SD_CLOCKMODE & (0x2ul)) == 0)
-        cpol = 0;
-        else
-        cpol = 1;
+        int cpha = (SD_CLOCKMODE & 0x1ul) == 0 ? 0 : 1;
+        int cpol = (SD_CLOCKMODE & 0x2ul) == 0 ? 0 : 1;
 
         //Setting the CTRLA register
-        sd_spi->SPI.CTRLA.reg |= ( cpha << SERCOM_SPI_CTRLA_CPHA_Pos )|( cpol << SERCOM_SPI_CTRLA_CPOL_Pos );
+        sd_spi->SPI.CTRLA.reg |= ( cpha << SERCOM_SPI_CTRLA_CPHA_Pos )|( cpol << SERCOM_SPI_CTRLA_CPOL_Pos);
+
+        hal.delay_ms(1, NULL);
     }
 
     //Synchronous arithmetic

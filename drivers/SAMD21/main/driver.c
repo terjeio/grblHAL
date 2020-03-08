@@ -444,6 +444,7 @@ static spindle_state_t spindleGetState (void)
 #ifdef DEBUGOUT
 void debug_out (bool on)
 {
+hal.stream.write(on ? "#" : "!");
     pinOut(LED_BUILTIN, on);
 }
 #endif
@@ -965,6 +966,18 @@ bool nvsInit (void)
 
 // End EEPROM emulation
 
+#if KEYPAD_ENABLE || USB_SERIAL
+static void execute_realtime (uint_fast16_t state)
+{
+#if USB_SERIAL
+    usb_execute_realtime(state);
+#endif
+#if KEYPAD_ENABLE
+    keypad_process_keypress(state);
+#endif
+}
+#endif
+
 // Initialize HAL pointers, setup serial comms and enable EEPROM
 // NOTE: Grbl is not yet configured (from EEPROM data), driver_setup() will be called when done
 bool driver_init (void) {
@@ -993,6 +1006,7 @@ bool driver_init (void) {
     IRQRegister(SysTick_IRQn, SysTick_IRQHandler);
 
     hal.info = "SAMD21";
+    hal.driver_version = "200307";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = SystemCoreClock / 3;
     hal.rx_buffer_size = RX_BUFFER_SIZE;
@@ -1065,7 +1079,7 @@ bool driver_init (void) {
         hal.eeprom.type = EEPROM_None;
 #endif
 
-#if KEYPAD_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
+#if I2C_ENABLE
     i2c_init();
 #endif
 
@@ -1093,8 +1107,8 @@ bool driver_init (void) {
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
 
-#if KEYPAD_ENABLE
-    hal.execute_realtime = keypad_process_keypress;
+#if KEYPAD_ENABLE || USB_SERIAL
+    hal.execute_realtime = execute_realtime;
 #endif
 
 #ifdef DEBUGOUT
@@ -1200,19 +1214,12 @@ void KEYPAD_IRQHandler (void)
 // Interrupt handler for 1 ms interval timer
 static void SysTick_IRQHandler (void)
 {
-#if SDCARD_ENABLE || USB_SERIAL
-
-#if USB_SERIAL
-    usb_serial_poll();
-#endif
-
 #if SDCARD_ENABLE
     static uint32_t fatfs_ticks = 10;
     if(!(--fatfs_ticks)) {
         disk_timerproc();
         fatfs_ticks = 10;
     }
-#endif
 
     if(delay_ms.ms && !(--delay_ms.ms)) {
         if(delay_ms.callback) {

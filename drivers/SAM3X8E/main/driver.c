@@ -1117,7 +1117,7 @@ static bool driver_setup (settings_t *settings)
 
     IRQRegister(STEPPER_TIMER_IRQn, STEPPER_IRQHandler);
     NVIC_EnableIRQ(STEPPER_TIMER_IRQn); // Enable stepper interrupt
-    NVIC_SetPriority(STEPPER_TIMER_IRQn, 1);
+    NVIC_SetPriority(STEPPER_TIMER_IRQn, 2);
 
     STEP_TIMER.TC_CCR = TC_CCR_CLKDIS;
     STEP_TIMER.TC_CMR = TC_CMR_WAVE|TC_CMR_WAVSEL_UP|TC_CMR_CPCSTOP;
@@ -1436,6 +1436,18 @@ bool nvsInit (void)
 
 // End EEPROM emulation
 
+#if KEYPAD_ENABLE || USB_SERIAL
+static void execute_realtime (uint_fast16_t state)
+{
+#if USB_SERIAL
+    usb_execute_realtime(state);
+#endif
+#if KEYPAD_ENABLE
+    keypad_process_keypress(state);
+#endif
+}
+#endif
+
 // Initialize HAL pointers, setup serial comms and enable EEPROM
 // NOTE: Grbl is not yet configured (from EEPROM data), driver_setup() will be called when done
 bool driver_init (void)
@@ -1462,10 +1474,11 @@ bool driver_init (void)
 
     IRQRegister(SysTick_IRQn, SysTick_IRQHandler);
 
-    NVIC_SetPriority(SysTick_IRQn, (1 << __NVIC_PRIO_BITS) - 1);
+//    NVIC_SetPriority(SysTick_IRQn, (1 << __NVIC_PRIO_BITS) - 1);
     NVIC_EnableIRQ(SysTick_IRQn);
 
     hal.info = "SAM3X8E";
+	hal.driver_version = "200307";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = SystemCoreClock / 2; // 42 MHz
     hal.rx_buffer_size = RX_BUFFER_SIZE;
@@ -1570,8 +1583,8 @@ bool driver_init (void)
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
 
-#if KEYPAD_ENABLE
-    hal.execute_realtime = keypad_process_keypress;
+#if KEYPAD_ENABLE || USB_SERIAL
+    hal.execute_realtime = execute_realtime;
 #endif
 
 #ifdef DEBUGOUT
@@ -1749,7 +1762,6 @@ static void SysTick_IRQHandler (void)
 
 #if USB_SERIAL
     SysTick_Handler(); // SerialUSB needs the Arduino SysTick handler running
-    usb_serial_poll();
 #endif
 
 #if SDCARD_ENABLE

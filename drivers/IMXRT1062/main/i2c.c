@@ -71,7 +71,7 @@ static const i2c_hardware_t i2c3_hardware = {
 };
 
 static const i2c_hardware_t i2c4_hardware = {
-    .clock_gate_register = &CCM_CCGR2,
+    .clock_gate_register = &CCM_CCGR6,
     .clock_gate_mask = CCM_CCGR6_LPI2C4_SERIAL(CCM_CCGR_ON),
     .port = &IMXRT_LPI2C4,
     .irq = IRQ_LPI2C4,
@@ -84,7 +84,7 @@ static const i2c_hardware_t i2c4_hardware = {
     .scl_pin = {
         .pin = 24,
         .mux_val = 0 | 0x10,
-        .select_reg = &IOMUXC_LPI2C4_SDA_SELECT_INPUT,
+        .select_reg = &IOMUXC_LPI2C4_SCL_SELECT_INPUT,
         .select_val = 1
     }
 };

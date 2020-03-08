@@ -46,6 +46,8 @@
   #define TRINAMIC_DEV     0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
 #endif
 
+#define SDCARD_ENABLE 0
+
 // End configuration
 
 #if TRINAMIC_ENABLE
@@ -189,12 +191,16 @@ void IRQUnRegister(int32_t IRQnum);
 
 #if KEYPAD_ENABLE || IOEXPAND_ENABLE || EEPROM_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
 
+#define I2C_ENABLE 1
+
 // Define I2C port/pins
 #define I2C_PORT SERCOM0
 #define I2C_SDA_PIN 11
 #define I2C_SCL_PIN 12
 #define I2C_CLOCK 100000
 
+#else
+#define I2C_ENABLE 0
 #endif
 
 #endif

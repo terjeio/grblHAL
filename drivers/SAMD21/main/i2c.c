@@ -42,7 +42,7 @@ typedef enum
     I2C_MASTER_OPERATION = 0x5u
 } SercomI2CMode;
 
-static Sercom *i2c_port = SERCOM0; // Alt mode C
+static Sercom *i2c_port = SERCOM2; // Alt mode C
 
 typedef enum {
     I2CState_Idle = 0,
@@ -86,8 +86,8 @@ void i2c_init (void)
 
         initSerClockNVIC(i2c_port);
 
-        NVIC_SetPriority(SERCOM0_IRQn, 0);
-        IRQRegister(SERCOM0_IRQn, I2C_interrupt_handler);
+        NVIC_SetPriority(SERCOM2_IRQn, 0);
+        IRQRegister(SERCOM2_IRQn, I2C_interrupt_handler);
 
         /* Enable the peripherals used to drive the SDC on SSI */
 
