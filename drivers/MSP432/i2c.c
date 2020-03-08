@@ -83,7 +83,7 @@ bool I2CPOS (void)
     return (P6->IN & (BIT4|BIT5)) == (BIT4|BIT5);
 }
 
-void I2CInit (void)
+void i2c_init (void)
 {
     memset(&i2c, 0, sizeof(i2c_tr_trans_t));
 
@@ -160,6 +160,75 @@ static uint8_t *I2C_ReadRegister (uint32_t i2cAddr, uint8_t bytes, bool block)
 
     return i2c.buffer;
 }
+
+#if EEPROM_ENABLE
+
+/* could not get ACK polling to work...
+static void WaitForACK (void)
+{
+    while(EUSCI_B1->STATW & EUSCI_B_STATW_BBUSY);
+
+    do {
+        EUSCI_B1->IFG &= ~(EUSCI_B_IFG_TXIFG0|EUSCI_B_IFG_RXIFG0);
+        EUSCI_B1->CTLW0 |= EUSCI_B_CTLW0_TR|EUSCI_B_CTLW0_TXSTT;     // I2C TX, start condition
+
+        while (EUSCI_B1->CTLW0 & EUSCI_B_CTLW0_TXSTT) {               // Ensure stop condition got sent
+            if(!(EUSCI_B1->IFG & EUSCI_B_IFG_NACKIFG))           // Break out if ACK received
+              break;
+        }
+//        EUSCI_B1->CTLW0 |= EUSCI_B_CTLW0_TXSTP;
+//        while (EUSCI_B1->CTLW0 & EUSCI_B_CTLW0_TXSTP);               // Ensure stop condition got sent
+        __delay_cycles(5000);
+    } while(EUSCI_B1->IFG & EUSCI_B_IFG_NACKIFG);
+//    EUSCI_B1->CTLW0 |= EUSCI_B_CTLW0_TXSTP;
+//    while (EUSCI_B1->CTLW0 & EUSCI_B_CTLW0_TXSTP);               // Ensure stop condition got sent
+}
+*/
+void i2c_eeprom_transfer (i2c_eeprom_trans_t *i2c, bool read)
+{
+    bool single = i2c->count == 1;
+
+    EUSCI_B1->I2CSA = i2c->address;                                     // Set EEPROM address and MSB part of data address
+    EUSCI_B1->IE &= ~(EUSCI_B_IE_TXIE0|EUSCI_B_IE_TXIE0);               // Diasable and
+    EUSCI_B1->IFG &= ~(EUSCI_B_IFG_TXIFG0|EUSCI_B_IFG_RXIFG0);          // clear interrupts
+    EUSCI_B1->CTLW0 |= EUSCI_B_CTLW0_TR|EUSCI_B_CTLW0_TXSTT;            // Transmit start condition and address
+    while(!(EUSCI_B1->IFG & EUSCI_B_IFG_TXIFG0));                       // Wait for TX completed
+    EUSCI_B1->TXBUF = i2c->word_addr;                                    // Transmit data address LSB
+    while(!(EUSCI_B1->IFG & EUSCI_B_IFG_TXIFG0));                       // Wait for TX completed
+
+    if(read) {                                                          // Read data from EEPROM:
+        EUSCI_B1->CTLW0 |= EUSCI_B_CTLW0_TXSTP;                         // Transmit STOP condtition
+        while (EUSCI_B1->CTLW0 & EUSCI_B_CTLW0_TXSTP);                  // and wait for it to complete
+        EUSCI_B1->CTLW0 &= ~EUSCI_B_CTLW0_TR;                           // Set read mode
+        if(single)                                                      // and issue
+            EUSCI_B1->CTLW0 |= EUSCI_B_CTLW0_TXSTT|EUSCI_B_CTLW0_TXSTP; // restart and stop condition if single byte read
+        else                                                            // else
+            EUSCI_B1->CTLW0 |= EUSCI_B_CTLW0_TXSTT;                     // restart condition only
+
+        while(i2c->count) {                                              // Read data...
+            if(!single && i2c->count == 1) {
+                EUSCI_B1->CTLW0 |= EUSCI_B_CTLW0_TXSTP;
+                while (EUSCI_B1->CTLW0 & EUSCI_B_CTLW0_TXSTP) {
+                    while(!(EUSCI_B1->IFG & EUSCI_B_IFG_RXIFG0));
+                }
+            } else
+                while(!(EUSCI_B1->IFG & EUSCI_B_IFG_RXIFG0));
+            i2c->count--;
+            *i2c->data++ = EUSCI_B1->RXBUF;
+        }
+    } else {                                                            // Write data to EEPROM:
+        while (i2c->count--) {
+            EUSCI_B1->TXBUF = *i2c->data++;
+            while(!(EUSCI_B1->IFG & EUSCI_B_IFG_TXIFG0));
+        }
+        EUSCI_B1->CTLW0 |= EUSCI_B_CTLW0_TXSTP;                         // I2C stop condition
+ //       WaitForACK();
+        hal.delay_ms(5, 0);                                             // Wait a bit for the write cycle to complete
+    }
+    while (EUSCI_B1->CTLW0 & EUSCI_B_CTLW0_TXSTP);                      // Ensure stop condition got sent
+}
+
+#endif
 
 #if KEYPAD_ENABLE
 

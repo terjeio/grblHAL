@@ -19,6 +19,10 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+// NOTE:
+// P0.27, P0.28 are dedicated I2C pins without pull up/down.
+// P0.29, P0.30 must have same direction as used for USB operation.
+
  // Define step pulse output pins.
 
 #define STEP_PN             2
@@ -90,8 +94,9 @@
 #define Y_LIMIT_BIT         (1<<Y_LIMIT_PIN)
 #define Z_LIMIT_PIN         28
 #define Z_LIMIT_BIT         (1<<Z_LIMIT_PIN)
+#define A_LIMIT_PORT        LIMIT_PORT
 #define A_LIMIT_PIN         29
-#define A_LIMIT_BIT         (1<<Z_LIMIT_PIN)
+#define A_LIMIT_BIT         (1<<A_LIMIT_PIN)
 
 //#define LIMIT_MASK (X_LIMIT_BIT|X_LIMIT_BIT_MAX|Y_LIMIT_BIT|Y_LIMIT_BIT_MAX|Z_LIMIT_BIT|Z_LIMIT_BIT_MAX) // All limit bits (needs to be on same port)
 #define LIMIT_INMODE GPIO_BITBAND
@@ -123,25 +128,16 @@
 // Define user-control CONTROLs (cycle start, reset, feed hold) input pins.
 #define RESET_PORT_PN       0
 #define RESET_PORT          port(RESET_PORT_PN)
-#define RESET_INTCLR        portINTCLR(RESET_PORT_PN)
-#define RESET_INTENF        portINTEF(RESET_PORT_PN)
-#define RESET_INTENR        portINTER(RESET_PORT_PN)
 #define RESET_PIN           27  // DUE Analog Pin 3
 #define RESET_BIT           (1<<RESET_PIN)
 
 #define FEED_HOLD_PN        0
 #define FEED_HOLD_PORT      port(FEED_HOLD_PN)
-#define FEED_HOLD_INTCLR    portINTCLR(FEED_HOLD_PN)
-#define FEED_HOLD_INTENF    portINTEF(FEED_HOLD_PN)
-#define FEED_HOLD_INTENR    portINTER(FEED_HOLD_PN)
 #define FEED_HOLD_PIN       28  // DUE Analog Pin 4
 #define FEED_HOLD_BIT       (1<<FEED_HOLD_PIN)
 
 #define CYCLE_START_PN      2
 #define CYCLE_START_PORT    port(CYCLE_START_PN)
-#define CYCLE_START_INTCLR  portINTCLR(CYCLE_START_PN)
-#define CYCLE_START_INTENF  portINTEF(CYCLE_START_PN)
-#define CYCLE_START_INTENR  portINTER(CYCLE_START_PN)
 #define CYCLE_START_PIN     6   // DUE Analog Pin 5
 #define CYCLE_START_BIT     (1<<CYCLE_START_PIN)
 

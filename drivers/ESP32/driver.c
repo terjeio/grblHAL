@@ -1091,6 +1091,10 @@ static void settings_changed (settings_t *settings)
 #if WIFI_ENABLE
 static void reportIP (void)
 {
+    hal.stream.write("[WIFI MAC:");
+    hal.stream.write(wifi_get_mac());
+    hal.stream.write("]"  ASCII_EOL);
+
     hal.stream.write("[IP:");
     hal.stream.write(wifi_get_ip());
     hal.stream.write("]"  ASCII_EOL);
@@ -1355,6 +1359,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "ESP32";
+    hal.driver_version = "200211";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = rtc_clk_apb_freq_get() / STEPPER_DRIVER_PRESCALER; // 20 MHz
     hal.rx_buffer_size = RX_BUFFER_SIZE;

@@ -1,9 +1,9 @@
 /*
-  i2c.c - I2C support for keypad and Trinamic plugins
+  i2c.c - I2C support for EEPROM, keypad and Trinamic plugins
 
   Part of GrblHAL driver for STM32F103C8
 
-  Copyright (c) 2018-2019 Terje Io
+  Copyright (c) 2018-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -32,7 +32,7 @@
 
 extern I2C_HandleTypeDef hi2c2;
 
-void I2C_Init (void)
+void i2c_init (void)
 {
     hi2c2.Instance = I2C2;
     hi2c2.Init.ClockSpeed = 100000;
@@ -54,16 +54,16 @@ void I2C_Init (void)
 
 #if EEPROM_ENABLE
 
-void I2C_EEPROM (i2c_trans_t *i2c, bool read)
+void i2c_eeprom_transfer (i2c_eeprom_trans_t *i2c, bool read)
 {
     while (HAL_I2C_GetState(&hi2c2) != HAL_I2C_STATE_READY);
 
 //    while (HAL_I2C_IsDeviceReady(&hi2c2, (uint16_t)(0xA0), 3, 100) != HAL_OK);
 
     if(read)
-        HAL_I2C_Mem_Read(&hi2c2, i2c->addr << 1, i2c->word_addr, I2C_MEMADD_SIZE_8BIT, i2c->data, i2c->count, 100);
+        HAL_I2C_Mem_Read(&hi2c2, i2c->address << 1, i2c->word_addr, I2C_MEMADD_SIZE_8BIT, i2c->data, i2c->count, 100);
     else {
-        HAL_I2C_Mem_Write(&hi2c2, i2c->addr << 1, i2c->word_addr, I2C_MEMADD_SIZE_8BIT, i2c->data, i2c->count, 100);
+        HAL_I2C_Mem_Write(&hi2c2, i2c->address << 1, i2c->word_addr, I2C_MEMADD_SIZE_8BIT, i2c->data, i2c->count, 100);
         hal.delay_ms(5, NULL);
     }
     i2c->data += i2c->count;

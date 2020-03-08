@@ -45,7 +45,7 @@
 #endif
 
 #if EEPROM_ENABLE
-#include "..\Inc\eeprom.h"
+#include "eeprom/eeprom.h"
 #endif
 
 #if KEYPAD_ENABLE
@@ -107,18 +107,14 @@ static void spindle_set_speed (uint_fast16_t pwm_value);
 
 static void driver_delay (uint32_t ms, void (*callback)(void))
 {
-     if(callback) {
-        callback();
-        callback = NULL;
-    }
-
     if((delay.ms = ms) > 0) {
         // Restart systick...
         SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
         SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
         if(!(delay.callback = callback))
             while(delay.ms);
-    }
+    } else if(callback)
+        callback();
 }
 
 // Enable/disable stepper motors
@@ -845,12 +841,13 @@ bool driver_init (void)
 #endif
 
 #ifdef I2C_PORT
-    I2C_Init();
+    i2c_init();
 #endif
 
 //  __HAL_AFIO_REMAP_SWJ_NOJTAG();
 
     hal.info = "STM32F103C8";
+    hal.driver_version = "200218";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = SystemCoreClock;
     hal.rx_buffer_size = RX_BUFFER_SIZE;

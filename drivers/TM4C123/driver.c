@@ -1133,6 +1133,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "TM4C123HP6PM";
+    hal.driver_version = "200120";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = SysCtlClockGet() / (STEPPER_DRIVER_PRESCALER + 1); // 20 MHz
     hal.rx_buffer_size = RX_BUFFER_SIZE;

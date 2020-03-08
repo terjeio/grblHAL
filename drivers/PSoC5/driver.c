@@ -377,7 +377,7 @@ static bool driver_setup (settings_t *settings)
     DelayTimer_Interrupt_Enable();
     DelayTimer_Start();
 
-    IOInitDone = settings->version == 15;
+    IOInitDone = true;
 
     hal.spindle_set_state((spindle_state_t){0}, 0.0f);
     hal.coolant_set_state((coolant_state_t){0});
@@ -393,7 +393,7 @@ static bool driver_setup (settings_t *settings)
 
 #endif
 
-    return settings->version == 14;
+    return settings->version == 15;
 }
 
 // Initialize HAL pointers
@@ -404,6 +404,7 @@ bool driver_init (void)
     EEPROM_Start();
     
     hal.info = "PSoC 5";
+    hal.driver_version = "200303";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = 24000000UL;
     hal.rx_buffer_size = RX_BUFFER_SIZE;

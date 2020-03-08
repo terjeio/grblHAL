@@ -27,7 +27,7 @@
 
 #include "grbl/grbl.h"
 #include "driver.h"
-#include "eeprom.h"
+#include "eeprom/eeprom.h"
 #include "serial.h"
 
 static volatile uint16_t debounce_count = 0;
@@ -44,11 +44,6 @@ static uint8_t probe_invert;
 
 static void driver_delay_ms (uint32_t ms, void (*callback)(void))
 {
-    if(delay.callback) {
-        delay.callback();
-        delay.callback = NULL;
-    }
-
     if((delay.ms = ms > 0)) {
         SYSTICK_TIMER_CCR0 = ms;
         SYSTICK_TIMER_CTL |= TACLR|MC0;
@@ -57,7 +52,6 @@ static void driver_delay_ms (uint32_t ms, void (*callback)(void))
     } else if(callback)
         callback();
 }
-
 
 // Set stepper pulse output pins
 // NOTE: step_outbits are: bit0 -> X, bit1 -> Y, bit2 -> Z, needs to be mapped to physical pins by bit shifting or other means
@@ -189,17 +183,13 @@ inline static axes_signals_t limitsGetState()
 // Each bitfield bit indicates a control signal, where triggered is 1 and not triggered is 0.
 inline static control_signals_t systemGetState (void)
 {
-    uint8_t flags = CONTROL_PORT_IN & HWCONTROL_MASK;
+    uint8_t flags = CONTROL_PORT_IN;
     control_signals_t signals = {0};
 
-    if(flags & RESET_PIN)
-        signals.reset = On;
-    else if(flags & SAFETY_DOOR_PIN)
-        signals.safety_door_ajar = On;
-    else if(flags & FEED_HOLD_PIN)
-        signals.feed_hold = On;
-    else if(flags & CYCLE_START_PIN)
-        signals.cycle_start = On;
+    signals.reset            = (flags & RESET_PIN) == RESET_PIN;
+    signals.safety_door_ajar = (flags & SAFETY_DOOR_PIN) == SAFETY_DOOR_PIN;
+    signals.feed_hold        = (flags & FEED_HOLD_PIN) == FEED_HOLD_PIN;
+    signals.cycle_start      = (flags & CYCLE_START_PIN) == CYCLE_START_PIN;
 
     if(settings.control_invert.value)
         signals.value ^= settings.control_invert.value;
@@ -453,7 +443,7 @@ static void settings_changed (settings_t *settings)
         if(settings->control_disable_pullup.safety_door_ajar)
             CONTROL_PORT_OUT &= ~SAFETY_DOOR_PIN;
         else
-             CONTROL_PORT_OUT |= SAFETY_DOOR_PIN;
+            CONTROL_PORT_OUT |= SAFETY_DOOR_PIN;
 
         if(control_ies.cycle_start)
             CONTROL_PORT_IES &= ~CYCLE_START_PIN;
@@ -651,11 +641,8 @@ bool driver_init (void)
 
     serialInit();
 
-#ifdef HAS_EEPROM
-    eepromInit();
-#endif
-
     hal.info = "MSP430F5529";
+    hal.driver_version = "200218";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = 24000000;
     hal.rx_buffer_size = RX_BUFFER_SIZE;
@@ -697,7 +684,8 @@ bool driver_init (void)
 
     hal.show_message = showMessage;
 
-#ifdef HAS_EEPROM
+#ifdef EEPROM_ENABLE
+    eepromInit();
     hal.eeprom.type = EEPROM_Physical;
     hal.eeprom.get_byte = eepromGetByte;
     hal.eeprom.put_byte = eepromPutByte;
@@ -731,7 +719,7 @@ bool driver_init (void)
     hal.driver_cap.limits_pull_up = On;
     hal.driver_cap.probe_pull_up = On;
 
-    __bis_SR_register(GIE);	// Enable interrupts
+    __bis_SR_register(GIE); // Enable interrupts
 
     // no need to move version check before init - compiler will fail any signature mismatch for existing entries
     return hal.version == 6;

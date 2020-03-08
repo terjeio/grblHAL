@@ -7,7 +7,7 @@
 <stringAttribute key="com.ti.ccstudio.debug.debugModel.ATTR_TARGET_CONFIG" value="${target_config_active_default:GRBL Driver Tiva C}"/>
 <stringAttribute key="com.ti.ccstudio.debug.debugModel.MRU_PROGRAM.D:\Projects\CCS8\GRBL Driver Tiva C\targetConfigs\Tiva TM4C123GH6PM.ccxml.Stellaris In-Circuit Debug Interface/CORTEX_M4_0" value="D:/Projects\CCS8\GRBL Driver Tiva C\Debug\GRBL Driver Tiva C.out"/>
 <mapAttribute key="com.ti.ccstudio.debug.ui.displayFormats">
-<mapEntry key="Stellaris In-Circuit Debug Interface/CORTEX_M4_0@##separator##@0" value="Character"/>
+<mapEntry key="Stellaris In-Circuit Debug Interface/CORTEX_M4_0@##separator##@0" value="32-Bit Floating Point"/>
 </mapAttribute>
 <listAttribute key="org.eclipse.debug.core.MAPPED_RESOURCE_PATHS">
 <listEntry value="/GRBL Driver Tiva C"/>

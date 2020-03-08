@@ -248,8 +248,8 @@ void SERIAL_IRQHandler (void)
 */
         case UART_IIR_INTID_THRE:
             bptr = txbuffer.tail;                                       // Temp tail position (to avoid volatile overhead)
-            SERIAL_MODULE->SCR = UART_TX_FIFO_SIZE;						// Use UART scratch pad register as
-            while((--SERIAL_MODULE->SCR) && bptr != txbuffer.head) {	// counter variable for filling the transmit FIFO
+            SERIAL_MODULE->SCR = UART_TX_FIFO_SIZE;                     // Use UART scratch pad register as
+            while((--SERIAL_MODULE->SCR) && bptr != txbuffer.head) {    // counter variable for filling the transmit FIFO
                 SERIAL_MODULE->THR = txbuffer.data[bptr++];             // Send a byte from the buffer
                 bptr &= (TX_BUFFER_SIZE - 1);                           // and
                 txbuffer.tail = bptr;                                   // update tail position

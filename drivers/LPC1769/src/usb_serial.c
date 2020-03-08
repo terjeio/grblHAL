@@ -54,8 +54,12 @@ static void usb_pin_clk_init(void)
 {
     /* enable USB PLL and clocks */
     Chip_USB_Init();
+
     /* enable USB 1 port on the board */
-//  Board_USBD_Init(1);
+
+    /* set a bias to this pin to enable the host system to detect and begin enumeration */
+    Chip_IOCON_PinMux(LPC_IOCON, 2, 9, IOCON_MODE_INACT, IOCON_FUNC1);  /* USB_CONNECT */
+
     Chip_IOCON_PinMux(LPC_IOCON, 0, 29, IOCON_MODE_INACT, IOCON_FUNC1); /* P0.29 D1+, P0.30 D1- */
     Chip_IOCON_PinMux(LPC_IOCON, 0, 30, IOCON_MODE_INACT, IOCON_FUNC1);
 

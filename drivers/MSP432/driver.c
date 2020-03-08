@@ -28,7 +28,7 @@
 #include "i2c.h"
 
 #if EEPROM_ENABLE
-#include "eeprom.h"
+#include "eeprom/eeprom.h"
 #endif
 
 #if KEYPAD_ENABLE
@@ -81,7 +81,7 @@ typedef struct {
 typedef struct {
     pid_state_t pid_state;
     pid_t pid;
-} spindle_pid_t;
+} spindle_control_t;
 
 typedef struct {
     float block_start;              // Spindle position at start of move (number of revolutions)
@@ -102,14 +102,14 @@ static volatile uint32_t pid_count = 0;
 static volatile bool spindleLock = false;
 static bool pwmEnabled = false, IOInitDone = false;
 // Inverts the probe pin state depending on user settings and probing cycle mode.
-static uint8_t probe_invert;
+static bool probe_invert;
 static axes_signals_t next_step_outbits;
 static spindle_pwm_t spindle_pwm;
 static spindle_data_t spindle_data;
 static spindle_encoder_t spindle_encoder = {0};
 static spindle_sync_t spindle_tracker;
 #ifdef SPINDLE_RPM_CONTROLLED
-static spindle_pid_t spindle_control = {0};
+static spindle_control_t spindle_control = { .pid_state = PIDState_Disabled, .pid = {0}};
 #endif
 static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
 
@@ -215,9 +215,6 @@ inline static float pid (pid_t *pid, float command, float actual, float sample_r
 
 static void driver_delay_ms (uint32_t ms, void (*callback)(void))
 {
-    if(delay.callback)
-        delay.callback();
-
     if((delay.ms = ms) > 0) {
         SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
         if(!(delay.callback = callback))
@@ -240,9 +237,9 @@ inline static void set_step_outputs (axes_signals_t step_outbits)
     BITBAND_PERI(STEP_PORT->OUT, Y_STEP_PIN) = step_outbits.y;
     BITBAND_PERI(STEP_PORT->OUT, Z_STEP_PIN) = step_outbits.z;
 #elif STEP_OUTMODE == GPIO_MAP
-    STEP_PORT->OUT = (STEP_PORT->IN & ~STEP_MASK) | step_outmap[step_outbits.value];
+    STEP_PORT->OUT = (STEP_PORT->OUT & ~STEP_MASK) | step_outmap[step_outbits.value];
 #else
-    STEP_PORT->OUT = (STEP_PORT->IN & ~STEP_MASK) | ((step_outbits.value << STEP_OUTMODE) ^ settings.steppers.step_invert.mask);
+    STEP_PORT->OUT = (STEP_PORT->OUT & ~STEP_MASK) | ((step_outbits.value << STEP_OUTMODE) ^ settings.steppers.step_invert.mask);
 #endif
 }
 
@@ -256,9 +253,9 @@ inline static void set_dir_outputs (axes_signals_t dir_outbits)
     BITBAND_PERI(DIRECTION_PORT->OUT, Y_DIRECTION_PIN) = dir_outbits.y;
     BITBAND_PERI(DIRECTION_PORT->OUT, Z_DIRECTION_PIN) = dir_outbits.z;
 #elif DIRECTION_OUTMODE == GPIO_MAP
-    DIRECTION_PORT->OUT = (DIRECTION_PORT->IN & ~DIRECTION_MASK) | dir_outmap[dir_outbits.value];
+    DIRECTION_PORT->OUT = (DIRECTION_PORT->OUT & ~DIRECTION_MASK) | dir_outmap[dir_outbits.value];
 #else
-    DIRECTION_PORT->OUT = (DIRECTION_PORT->IN & ~DIRECTION_MASK) | ((dir_outbits.value << DIRECTION_OUTMODE) ^ settings.steppers.dir_invert.mask);
+    DIRECTION_PORT->OUT = (DIRECTION_PORT->OUT & ~DIRECTION_MASK) | ((dir_outbits.value << DIRECTION_OUTMODE) ^ settings.steppers.dir_invert.mask);
 #endif
 }
 
@@ -548,7 +545,7 @@ static control_signals_t systemGetState (void)
 // and the probing cycle modes for toward-workpiece/away-from-workpiece.
 static void probeConfigureInvertMask (bool is_probe_away)
 {
-  probe_invert = settings.flags.invert_probe_pin ? 0 : PROBE_BIT;
+  probe_invert = settings.flags.invert_probe_pin;
 
   if (is_probe_away)
       probe_invert ^= PROBE_BIT;
@@ -557,7 +554,7 @@ static void probeConfigureInvertMask (bool is_probe_away)
 // Returns the probe pin state. Triggered = true.
 bool probeGetState (void)
 {
-    return (PROBE_PORT->IN & PROBE_BIT) ^ probe_invert != 0;
+    return BITBAND_PERI(PROBE_PORT->IN, PROBE_PIN) ^ probe_invert;
 }
 
 // Static spindle (off, on cw & on ccw)
@@ -1392,7 +1389,7 @@ bool driver_init (void)
     serialInit();
 
 #if EEPROM_ENABLE || KEYPAD_ENABLE || TRINAMIC_I2C
-    I2CInit();
+    i2c_init();
 #endif
 
     hal.info = "MSP432";

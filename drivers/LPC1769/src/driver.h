@@ -4,7 +4,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2018-2019 Terje Io
+  Copyright (c) 2018-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -31,13 +31,13 @@
 
 // NOTE: Only one board may be enabled!
 //#define SMOOTHIEBOARD
-#define BOARD_RAMPS_16
+//#define BOARD_RAMPS_16
 
 // Configuration
 // Set value to 1 to enable, 0 to disable
 
-#define SDCARD_ENABLE 1 // Run jobs from SD card.
-#define USB_ENABLE    0
+#define SDCARD_ENABLE 0 // Run jobs from SD card.
+#define USB_ENABLE    1
 #define EEPROM_ENABLE 0 // I2C EEPROM (24LC64) support. - Do not enable, NOT yet implemented
 
 #if EEPROM_ENABLE == 0
@@ -66,6 +66,10 @@
 #elif defined(BOARD_CMCGRATH)
     #include "cmcgrath_rev3_map.h"
 #else // default board - NOTE: NOT FINAL VERSION!
+
+// NOTE:
+// P0.27, P0.28 are dedicated I2C pins without pull up/down.
+// P0.29, P0.30 must have same direction as used for USB operation.
 
 // Define step pulse output pins. NOTE: All step bit pins must be on the same port.
 
@@ -110,10 +114,6 @@
 
 #define LIMIT_PN      0
 #define LIMIT_PORT    port(LIMIT_PN)
-#define LIMIT_INTCLR  portINTCLR(LIMIT_PN)
-#define LIMIT_INTENR  portINTER(LIMIT_PN)
-#define LIMIT_INTSTR  portINTSR(LIMIT_PN)
-#define LIMIT_INTSTF  portINTSF(LIMIT_PN)
 
 #define X_LIMIT_PIN 24
 #define Y_LIMIT_PIN 26
@@ -142,16 +142,11 @@
 
 #define CONTROL_PN       0
 #define CONTROL_PORT     port(CONTROL_PN)
-#define CONTROL_INTENR   portINTER(CONTROL_PN)
-#define CONTROL_INTENF   portINTEF(CONTROL_PN)
-#define CONTROL_INTSTR   portINTSR(CONTROL_PN)
-#define CONTROL_INTSTF   portINTSF(CONTROL_PN)
-#define CONTROL_INTCLR   portINTCLR(CONTROL_PN)
-#define CONTROL_RDI      portRDI(CONTROL_PN)
 
 #define RESET_PIN           6
 #define FEED_HOLD_PIN       7
 #define CYCLE_START_PIN     8
+#define SAFETY_DOOR_PORT    CONTROL_PORT
 #define SAFETY_DOOR_PIN     9
 #define RESET_BIT           (1<<RESET_PIN)
 #define FEED_HOLD_BIT       (1<<FEED_HOLD_PIN)

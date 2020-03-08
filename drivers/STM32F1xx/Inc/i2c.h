@@ -1,9 +1,9 @@
 /*
-  i2c.h - I2C support for keypad and Trinamic plugins
+  i2c.h - I2C support for EEPROM, keypad and Trinamic plugins
 
   Part of GrblHAL driver for STM32F103C8
 
-  Copyright (c) 2018-2019 Terje Io
+  Copyright (c) 2018-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,21 +23,8 @@
 #define __I2C_DRIVER_H__
 
 #include "driver.h"
-
-void I2C_Init (void);
-
-#if EEPROM_ENABLE
-
-typedef struct {
-    uint8_t addr;
-    volatile int16_t count;
-    uint8_t *data;
-    uint8_t word_addr;
-} i2c_trans_t;
-
-void I2C_EEPROM (i2c_trans_t *i2c, bool read);
-
-#endif
+#include "driver.h"
+#include "grbl/plugins.h"
 
 #if TRINAMIC_ENABLE && TRINAMIC_I2C
 

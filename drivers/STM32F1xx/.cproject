@@ -85,6 +85,7 @@
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="Middlewares/ST/STM32_USB_Device_Library/Core/Src"/>
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="Src"/>
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="Startup"/>
+						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="eeprom"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="grbl"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="keypad"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="sdcard"/>

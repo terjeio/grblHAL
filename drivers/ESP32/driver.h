@@ -196,6 +196,11 @@ static const DRAM_ATTR float FZERO = 0.0f;
 #error "Networking protocols reqires WiFi enabled!"
 #endif // WIFI_ENABLE
 
+#if BLUETOOTH_ENABLE
+#define BLUETOOTH_DEVICE    "GRBL"
+#define BLUETOOTH_SERVICE   "GRBL Serial Port" // Minimum 8 characters, or blank for open
+#endif
+
 // End configuration
 
 #if TRINAMIC_ENABLE

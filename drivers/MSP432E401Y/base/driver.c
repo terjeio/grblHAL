@@ -1745,6 +1745,7 @@ bool driver_init (void)
   #endif
 #endif
     hal.driver_setup = driver_setup;
+    hal.driver_version = "200115";
 #if !USE_32BIT_TIMER
     hal.f_step_timer = hal.f_step_timer / (STEPPER_DRIVER_PRESCALER + 1);
 #elif USE_PIOSC

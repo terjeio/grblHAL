@@ -600,8 +600,8 @@ void bluetooth_settings_report (setting_type_t setting)
 
 void bluetooth_settings_restore (void)
 {
-    strcpy(driver_settings.bluetooth.device_name, "GRBL");
-    strcpy(driver_settings.bluetooth.service_name, "GRBL Serial Port");
+    strcpy(driver_settings.bluetooth.device_name, BLUETOOTH_DEVICE);
+    strcpy(driver_settings.bluetooth.service_name, BLUETOOTH_SERVICE);
 }
 
 #endif

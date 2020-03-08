@@ -41,7 +41,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdint.h>
 
 #include "portmacros.h"
-#include "GRBL/grbl.h"
+#include "grbl/grbl.h"
 
 #define XONOK (ASCII_XON|0x80)
 #define XOFFOK (ASCII_XOFF|0x80)

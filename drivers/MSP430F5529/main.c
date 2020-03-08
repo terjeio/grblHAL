@@ -33,7 +33,7 @@ void SetVCoreUp (unsigned int level)
 
 int main (void)
 {
-    WDTCTL = WDTPW | WDTHOLD;	// Stop watchdog timer
+    WDTCTL = WDTPW | WDTHOLD;   // Stop watchdog timer
 
     /* Power settings */
      SetVCoreUp(1u);
@@ -67,5 +67,5 @@ int main (void)
      } while (SFRIFG1&OFIFG);                       // Test oscillator fault flag
 
     grbl_enter();
-	return 0;
+    return 0;
 }

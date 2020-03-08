@@ -23,6 +23,8 @@
 
 #include "portmacros.h"
 
+#define EEPROM_ENABLE 1
+
 // Define step pulse output pins
 #define STEP_PORT       6
 #define X_STEP_PIN      BIT1

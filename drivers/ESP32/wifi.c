@@ -92,6 +92,18 @@ char *wifi_get_ip (void)
     return iptoa(ip);
 }
 
+char *wifi_get_mac (void)
+{
+    static char mac[18];
+    uint8_t bmac[6];
+
+    esp_wifi_get_mac(ESP_IF_WIFI_STA, bmac);
+    sprintf(mac, "%02X:%02X:%02X:%02X:%02X:%02X", bmac[0], bmac[1], bmac[2], bmac[3], bmac[4], bmac[5]);
+
+    return mac;
+}
+
+
 bool wifi_dns_running (void)
 {
     return services.dns == On;

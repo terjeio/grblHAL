@@ -43,6 +43,7 @@ bool wifi_ap_connect (char *ssid, char *password);
 ap_list_t *wifi_get_aplist (void);
 void wifi_release_aplist (void);
 char *wifi_get_ip (void);
+char *wifi_get_mac (void);
 bool wifi_dns_running (void);
 
 status_code_t wifi_setting (uint_fast16_t param, float value, char *svalue);

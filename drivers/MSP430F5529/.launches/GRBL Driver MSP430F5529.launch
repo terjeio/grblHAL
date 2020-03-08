@@ -5,7 +5,7 @@
 <stringAttribute key="com.ti.ccstudio.debug.debugModel.ATTR_PROGRAM.D:\Projects\CCS8\GRBL Driver MSP430F5529\targetConfigs\MSP430F5529.ccxml.TI MSP430 USB1/MSP430" value="${build_artifact:GRBL Driver MSP430F5529}"/>
 <stringAttribute key="com.ti.ccstudio.debug.debugModel.ATTR_PROJECT.D:\Projects\CCS8\GRBL Driver MSP430F5529\targetConfigs\MSP430F5529.ccxml.TI MSP430 USB1/MSP430" value="GRBL Driver MSP430F5529"/>
 <stringAttribute key="com.ti.ccstudio.debug.debugModel.ATTR_TARGET_CONFIG" value="${target_config_active_default:GRBL Driver MSP430F5529}"/>
-<stringAttribute key="com.ti.ccstudio.debug.debugModel.MRU_PROGRAM.D:\Projects\CCS8\GRBL Driver MSP430F5529\targetConfigs\MSP430F5529.ccxml.TI MSP430 USB1/MSP430" value="D:/Projects\CCS\GRBL Driver MSP430F5529\Debug\GRBL Driver MSP430F5529.out"/>
+<stringAttribute key="com.ti.ccstudio.debug.debugModel.MRU_PROGRAM.D:\Projects\CCS8\GRBL Driver MSP430F5529\targetConfigs\MSP430F5529.ccxml.TI MSP430 USB1/MSP430" value="D:/Projects\CCS8\GRBL Driver MSP430F5529\Debug\GRBL Driver MSP430F5529.out"/>
 <mapAttribute key="com.ti.ccstudio.debug.ui.displayFormats">
 <mapEntry key="TI MSP430 USB1/MSP430@##separator##@0" value="16-Bit Hex - TI Style"/>
 </mapAttribute>
