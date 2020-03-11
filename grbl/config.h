@@ -76,6 +76,12 @@
 
 // #define DEBUGOUT // Remove comment to add HAL entry point for debug output
 
+// Add a short delay for each block processed in Check Mode to
+// avoid overwhelming the sender with fast reply messages.
+// This is likely to happen when streaming is done via a protocol where
+// the speed is not limited to 115200 baud. An example is native USB streaming.
+#define CHECK_MODE_DELAY 0 // ms
+
 // Define CPU pin map and default settings.
 // NOTE: OEMs can avoid the need to maintain/update the defaults.h and cpu_map.h files and use only
 // one configuration file by placing their specific defaults and pin map at the bottom of this file.

@@ -181,6 +181,16 @@ bool protocol_main_loop(bool cold_start)
                     gcode_error = gc_state.last_error != Status_OK;
 #endif
                 }
+
+                // Add a short delay for each block processed in Check Mode to
+                // avoid overwhelming the sender with fast reply messages.
+                // This is likely to happen when streaming is done via a protocol where
+                // the speed is not limited to 115200 baud. An example is native USB streaming.
+#if CHECK_MODE_DELAY
+                if(sys.state == STATE_CHECK_MODE)
+                    hal.delay_ms(CHECK_MODE_DELAY, NULL);
+#endif
+
                 hal.report.status_message(gc_state.last_error);
 
                 // Reset tracking data for next line.
@@ -322,9 +332,6 @@ void protocol_auto_cycle_start ()
 bool protocol_execute_realtime ()
 {
     if(protocol_exec_rt_system()) {
-
-        if(hal.execute_realtime)
-            hal.execute_realtime(sys.state);
 
         if (sys.suspend)
             protocol_exec_rt_suspend();
@@ -468,6 +475,9 @@ bool protocol_exec_rt_system ()
         if(rt_exec)
             update_state(rt_exec);
     }
+
+    if(hal.execute_realtime)
+        hal.execute_realtime(sys.state);
 
     if(!sys.flags.delay_overrides) {
 
