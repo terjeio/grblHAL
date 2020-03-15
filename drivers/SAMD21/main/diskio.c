@@ -11,6 +11,10 @@
  * For FatFs R0.09b
  */
 
+#include "driver.h"
+
+#if SDCARD_ENABLE
+
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -741,3 +745,5 @@ DWORD get_fattime (void)
             ;
 
 }
+
+#endif // SDCARD_ENABLE

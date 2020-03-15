@@ -28,6 +28,8 @@
 // Set value to 1 to enable, 0 to disable
 
 #define USB_SERIAL         1
+#define SDCARD_ENABLE      0 // When enabled source files for FatFs R0.09b must be added to the main folder.
+                             // These are: ccsbcs.c, conf_fatfs.h, diskio.h, ff.c, ff.h, ffconf.h and integer.h
 #define CNC_BOOSTERPACK    0 // do not change!
 
 #if CNC_BOOSTERPACK
@@ -45,8 +47,6 @@
   #define TRINAMIC_I2C     0 // Trinamic I2C - SPI bridge interface.
   #define TRINAMIC_DEV     0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
 #endif
-
-#define SDCARD_ENABLE 0
 
 // End configuration
 
