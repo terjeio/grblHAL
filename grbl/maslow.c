@@ -403,7 +403,7 @@ static bool maslow_segment_line (float *target, plan_line_data_t *pl_data, bool 
         do {
             idx--;
             delta[idx] = target[idx] - gc_state.position[idx];
-            max_delta = max(max_delta, fabs(delta[idx]));
+            max_delta = max(max_delta, fabsf(delta[idx]));
         } while(idx);
 
         if((segmented = !(pl_data->condition.rapid_motion || pl_data->condition.jog_motion) &&

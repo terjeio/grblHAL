@@ -659,6 +659,8 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                         settings.flags.lathe_mode = Off;
                         break;
                 }
+                if(!settings.flags.lathe_mode)
+                    gc_state.modal.diameter_mode = false;
                 break;
 
 #if COMPATIBILITY_LEVEL <= 1

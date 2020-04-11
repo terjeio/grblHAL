@@ -445,6 +445,9 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
 // Reset and clear stepper subsystem variables
 void st_reset ()
 {
+
+    hal.probe_configure_invert_mask(false);
+
     // Initialize stepper driver idle state, clear step and direction port pins.
     hal.stepper_go_idle(true);
 

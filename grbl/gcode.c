@@ -2,7 +2,7 @@
   gcode.c - rs274/ngc parser.
   Part of Grbl
 
-  Copyright (c) 2017-2019 Terje Io
+  Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -332,7 +332,7 @@ status_code_t gc_execute_block(char *block, char *message)
                         mantissa = 0; // Set to zero to indicate valid non-integer G command.
                         //  No break. Continues to next line.
 
-                    case 0: case 1: case 2: case 3:
+                    case 0: case 1: case 2: case 3: case 5:
                         // Check for G0/1/2/3/38 being called with G10/28/30/92 on same block.
                         // * G43.1 is also an axis command but is not explicitly defined this way.
                         if (axis_command)
@@ -866,8 +866,6 @@ status_code_t gc_execute_block(char *block, char *message)
         if (bit_isfalse(value_words, bit(Word_F))) {
             if(gc_block.modal.feed_mode == gc_state.modal.feed_mode)
                 gc_block.values.f = gc_state.feed_rate; // Push last state feed rate
-            else
-                FAIL(Status_GcodeUndefinedFeedRate); // [F word missing]
         } else if (gc_block.modal.units_imperial)
             gc_block.values.f *= MM_PER_INCH;
     } // else, switching to G94 from G93, so don't push last state feed rate. Its undefined or the passed F word value.
@@ -1067,7 +1065,7 @@ status_code_t gc_execute_block(char *block, char *message)
     } while(idx);
 
     if (bit_istrue(command_words, bit(ModalGroup_G15))) {
-        sys.report.xmode = gc_state.modal.diameter_mode != gc_block.modal.diameter_mode;
+        sys.report.xmode |= gc_state.modal.diameter_mode != gc_block.modal.diameter_mode;
         gc_state.modal.diameter_mode = gc_block.modal.diameter_mode;
     }
 
@@ -1412,6 +1410,8 @@ status_code_t gc_execute_block(char *block, char *message)
     // Check remaining motion modes, if axis word are implicit (exist and not used by G10/28/30/92), or
     // was explicitly commanded in the g-code block.
     } else if (axis_command == AxisCommand_MotionMode) {
+
+        gc_parser_flags.motion_mode_changed = gc_block.modal.motion != gc_state.modal.motion;
 
         if (gc_block.modal.motion == MotionMode_Seek) {
             // [G0 Errors]: Axis letter not configured or without real value (done.)
@@ -1799,6 +1799,55 @@ status_code_t gc_execute_block(char *block, char *message)
                                 FAIL(Status_GcodeInvalidTarget); // [Arc definition error] > 0.005mm AND 0.1% radius
                         }
                     }
+                    break;
+
+                case MotionMode_CubicSpline:
+                    // [G5 Errors]: Feed rate undefined.
+                    // [G5 Plane Errors]: The active plane is not G17.
+                    // [G5 Offset Errors]: P and Q are not both specified.
+                    // [G5 Offset Errors]: Just one of I or J are specified.
+                    // [G5 Offset Errors]: I or J are unspecified in the first of a series of G5 commands.
+                    // [G5 Axisword Errors]: An axis other than X or Y is specified.
+                    if(gc_block.modal.plane_select != PlaneSelect_XY)
+                        FAIL(Status_GcodeIllegalPlane); // [The active plane is not G17]
+
+                    if (axis_words & ~(bit(X_AXIS)|bit(Y_AXIS)))
+                        FAIL(Status_GcodeAxisCommandConflict); // [An axis other than X or Y is specified]
+
+                    if((value_words & (bit(Word_P)|bit(Word_Q))) != (bit(Word_P)|bit(Word_Q)))
+                        FAIL(Status_GcodeValueWordMissing); // [P and Q are not both specified]
+
+                    if(gc_parser_flags.motion_mode_changed && (value_words & (bit(Word_I)|bit(Word_J))) != (bit(Word_I)|bit(Word_J)))
+                        FAIL(Status_GcodeValueWordMissing); // [I or J are unspecified in the first of a series of G5 commands]
+
+                    if(!(value_words & (bit(Word_I)|bit(Word_J)))) {
+                        gc_block.values.ijk[I_VALUE] = - gc_block.values.p;
+                        gc_block.values.ijk[J_VALUE] = - gc_block.values.q;
+                    } else {
+                        // Convert I and J values to proper units.
+                        if (gc_block.modal.units_imperial) {
+                            gc_block.values.ijk[I_VALUE] *= MM_PER_INCH;
+                            gc_block.values.ijk[J_VALUE] *= MM_PER_INCH;
+                        }
+                        // Scale values if scaling active
+                        if(gc_state.modal.scaling_active) {
+                            gc_block.values.ijk[I_VALUE] *= scale_factor.ijk[X_AXIS];
+                            gc_block.values.ijk[J_VALUE] *= scale_factor.ijk[Y_AXIS];
+                        }
+                    }
+                    // Convert P and Q values to proper units.
+                    if (gc_block.modal.units_imperial) {
+                        gc_block.values.p *= MM_PER_INCH;
+                        gc_block.values.q *= MM_PER_INCH;
+                    }
+                    // Scale values if scaling active
+                    if(gc_state.modal.scaling_active) {
+                        gc_block.values.p *= scale_factor.ijk[X_AXIS];
+                        gc_block.values.q *= scale_factor.ijk[Y_AXIS];
+                    }
+                    gc_state.modal.spline_pq[X_AXIS] = gc_block.values.p;
+                    gc_state.modal.spline_pq[Y_AXIS] = gc_block.values.q;
+                    bit_false(value_words, bit(Word_P)|bit(Word_Q)|bit(Word_I)|bit(Word_J));
                     break;
 
                 case MotionMode_ProbeTowardNoError:
@@ -2189,6 +2238,7 @@ status_code_t gc_execute_block(char *block, char *message)
 
         case NonModal_SetCoordinateOffset: // G92
             memcpy(gc_state.g92_coord_offset, gc_block.values.xyz, sizeof(gc_state.g92_coord_offset));
+// TODO: enable and load at startup?            settings_write_coord_data(SETTING_INDEX_G92, &gc_state.g92_coord_offset); // Save G92 offsets to EEPROM
             system_flag_wco_change();
             break;
 
@@ -2246,6 +2296,10 @@ status_code_t gc_execute_block(char *block, char *message)
                 // fail if spindle synchronized motion?
                 mc_arc(gc_block.values.xyz, &plan_data, gc_state.position, gc_block.values.ijk, gc_block.values.r,
                         plane, gc_parser_flags.arc_is_clockwise);
+                break;
+
+            case MotionMode_CubicSpline:
+                mc_cubic_b_spline(gc_block.values.xyz, &plan_data, gc_state.position, gc_block.values.ijk, gc_state.modal.spline_pq);
                 break;
 
             case MotionMode_SpindleSynchronized:

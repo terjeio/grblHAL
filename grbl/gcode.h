@@ -2,7 +2,7 @@
   gcode.h - rs274/ngc parser.
   Part of Grbl
 
-  Copyright (c) 2017-2019 Terje Io
+  Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -195,6 +195,7 @@ typedef enum {
     MotionMode_Linear = 1,                  // G1 (Do not alter value)
     MotionMode_CwArc = 2,                   // G2 (Do not alter value)
     MotionMode_CcwArc = 3,                  // G3 (Do not alter value)
+    MotionMode_CubicSpline = 5,             // G5 (Do not alter value)
     MotionMode_SpindleSynchronized = 33,    // G33 (Do not alter value)
     MotionMode_DrillChipBreak = 73,         // G73 (Do not alter value)
     MotionMode_Threading = 76,              // G76 (Do not alter value)
@@ -331,7 +332,7 @@ typedef union {
     uint16_t value;
     struct {
         uint16_t jog_motion          :1,
-                 canned_cycle_change :1,
+                 canned_cycle_change :1, // Use motion_mode_changed?
                  arc_is_clockwise    :1,
                  probe_is_away       :1,
                  probe_is_no_error   :1,
@@ -339,7 +340,8 @@ typedef union {
                  laser_disable       :1,
                  laser_is_motion     :1,
                  set_coolant         :1,
-                 reserved            :7;
+                 motion_mode_changed :1,
+                 reserved            :6;
     };
 } gc_parser_flags_t;
 
@@ -405,6 +407,7 @@ typedef struct {
     cc_retract_mode_t retract_mode;      // {G98,G99}
     bool scaling_active;                 // {G50,G51}
     bool canned_cycle_active;
+    float spline_pq[2];                  // {G5}
 } gc_modal_t;
 
 typedef struct {

@@ -319,6 +319,12 @@
 // much greater than this. The default setting should capture most, if not all, full arc error situations.
 #define ARC_ANGULAR_TRAVEL_EPSILON 5E-7f // Float (radians)
 
+// Default constants for G5 Cubic splines
+//
+#define BEZIER_MIN_STEP 0.002f
+#define BEZIER_MAX_STEP 0.1f
+#define BEZIER_SIGMA 0.1f
+
 // Time delay increments performed during a dwell. The default value is set at 50ms, which provides
 // a maximum time delay of roughly 55 minutes, more than enough for most any application. Increasing
 // this delay will increase the maximum dwell time linearly, but also reduces the responsiveness of
