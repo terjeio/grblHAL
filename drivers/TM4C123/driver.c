@@ -715,12 +715,12 @@ static void settings_changed (settings_t *settings)
 
 #if STEP_OUTMODE == GPIO_MAP
     for(i = 0; i < sizeof(step_outmap); i++)
-        step_outmap[i] = c_step_outmap[i] ^ c_step_outmap[settings->step_invert.mask];
+        step_outmap[i] = c_step_outmap[i ^ settings->step_invert.mask];
 #endif
 
 #if DIRECTION_OUTMODE == GPIO_MAP
     for(i = 0; i < sizeof(dir_outmap); i++)
-        dir_outmap[i] = c_dir_outmap[i] ^ c_dir_outmap[settings->steppers.dir_invert.mask];
+        dir_outmap[i] = c_dir_outmap[i ^ settings->steppers.dir_invert.mask];
 #endif
 
     if(IOInitDone) {
@@ -1133,7 +1133,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "TM4C123HP6PM";
-    hal.driver_version = "200120";
+    hal.driver_version = "200329";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = SysCtlClockGet() / (STEPPER_DRIVER_PRESCALER + 1); // 20 MHz
     hal.rx_buffer_size = RX_BUFFER_SIZE;

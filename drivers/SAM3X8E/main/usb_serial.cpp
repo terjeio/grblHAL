@@ -32,7 +32,7 @@
 extern "C" {
 #endif
 
-#define BLOCK_RX_BUFFER_SIZE 20
+#define BLOCK_RX_BUFFER_SIZE 64
 
 #include "usb_serial.h"
 #include "src/grbl/grbl.h"
@@ -129,7 +129,7 @@ void usb_serialWriteS (const char *s)
                     length = txfree < txbuf.length ? txfree : txbuf.length;
 
                     SerialUSB.write((uint8_t *)txbuf.s, length); // doc is wrong - does not return bytes sent!
-                    SerialUSB.flush();
+//                    SerialUSB.flush();
 
                     txbuf.length -= length;
                     txbuf.s += length;

@@ -4,7 +4,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2017-2019 Terje Io
+  Copyright (c) 2017-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -49,7 +49,7 @@ void serialInit (void)
     SERIAL_MODULE->IE = EUSCI_A_IE_RXIE;
 
     NVIC_EnableIRQ(SERIAL_MODULE_INT);
-    NVIC_SetPriority(SERIAL_MODULE_INT, 3);
+    NVIC_SetPriority(SERIAL_MODULE_INT, 0);
 
     SERIAL_PORT->SEL0 = SERIAL_RX|SERIAL_TX;    // set 2-UART pins as second function
 
@@ -61,7 +61,7 @@ void serialInit (void)
     SERIAL2_MODULE->CTLW0 &= ~EUSCI_A_CTLW0_SWRST;
 
     NVIC_EnableIRQ(SERIAL2_MODULE_INT);
-    NVIC_SetPriority(SERIAL2_MODULE_INT, 3);
+    NVIC_SetPriority(SERIAL2_MODULE_INT, 0);
 
     SERIAL2_PORT->SEL0 = SERIAL_RX|SERIAL_TX;    // set 2-UART pins as second function
 #endif

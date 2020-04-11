@@ -362,12 +362,14 @@ static void stepperGoIdle (bool clear_signals)
 // Sets up stepper driver interrupt timeout, AMASS version
 static void stepperCyclesPerTick (uint32_t cycles_per_tick)
 {
+    STEPPER_TIMER.TC_CCR = TC_CCR_CLKDIS;
 // Limit min steps/s to about 2 (hal.f_step_timer @ 20MHz)
 #ifdef ADAPTIVE_MULTI_AXIS_STEP_SMOOTHING
     STEPPER_TIMER.TC_RC = cycles_per_tick < (1UL << 18) ? cycles_per_tick : (1UL << 18) - 1UL;
 #else
     STEPPER_TIMER.TC_RC = cycles_per_tick < (1UL << 23) ? cycles_per_tick : (1UL << 23) - 1UL;
 #endif
+    STEPPER_TIMER.TC_CCR = TC_CCR_CLKEN|TC_CCR_SWTRG;
 }
 
 // Sets stepper direction and pulse pins and starts a step pulse
@@ -1478,7 +1480,7 @@ bool driver_init (void)
     NVIC_EnableIRQ(SysTick_IRQn);
 
     hal.info = "SAM3X8E";
-	hal.driver_version = "200307";
+	hal.driver_version = "200316";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = SystemCoreClock / 2; // 42 MHz
     hal.rx_buffer_size = RX_BUFFER_SIZE;

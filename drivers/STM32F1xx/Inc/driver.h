@@ -4,7 +4,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2019 Terje Io
+  Copyright (c) 2019-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -37,12 +37,12 @@
 // Configuration
 // Set value to 1 to enable, 0 to disable
 
-#define USB_ENABLE      0
+#define USB_ENABLE      1
 #define KEYPAD_ENABLE   0 // I2C keypad for jogging etc.
 #define TRINAMIC_ENABLE 0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
 #define TRINAMIC_I2C    0 // Trinamic I2C - SPI bridge interface.
 #define TRINAMIC_DEV    0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
-#define CNC_BOOSTERPACK 1
+#define CNC_BOOSTERPACK 0
 
 #if CNC_BOOSTERPACK
 #if N_AXIS > 3
@@ -128,7 +128,7 @@ extern driver_settings_t driver_settings;
 #else
 #define STEP_MASK       (X_STEP_BIT|Y_STEP_BIT|Z_STEP_BIT) // All step bits
 #endif
-#define STEP_OUTMODE GPIO_SHIFT0
+#define STEP_OUTMODE GPIO_MAP
 
 // Define step direction output pins.
 #define DIRECTION_PORT      GPIOA
@@ -145,7 +145,7 @@ extern driver_settings_t driver_settings;
 #else
 #define DIRECTION_MASK      (X_DIRECTION_BIT|Y_DIRECTION_BIT|Z_DIRECTION_BIT) // All direction bits
 #endif
-#define DIRECTION_OUTMODE   GPIO_SHIFT4
+#define DIRECTION_OUTMODE   GPIO_MAP
 
 // Define stepper driver enable/disable output pin.
 #define STEPPERS_DISABLE_PORT   GPIOA

@@ -11,14 +11,17 @@
  * For FatFs R0.13c
  */
 
+
+#include "driver.h"
+
+#if SDCARD_ENABLE
+
 #include <stdint.h>
 #include <stdbool.h>
 
 #include "main.h"
-
 #include "ff.h"
 #include "diskio.h"
-#include "driver.h"
 
 /* Definitions for MMC/SDC command */
 #define CMD0    (0x40+0)    /* GO_IDLE_STATE */
@@ -684,3 +687,5 @@ DWORD get_fattime (void)
             ;
 
 }
+
+#endif

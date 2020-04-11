@@ -931,6 +931,8 @@ static bool driver_setup (settings_t *settings)
 
 #if EEPROM_ENABLE == 0
 
+// EEPROM emulation - stores settings in flash
+
 bool nvsRead (uint8_t *dest)
 {
 // assert size ? E2END
@@ -947,14 +949,25 @@ bool nvsWrite (uint8_t *source)
     return true; //?;
 }
 
+// End EEPROM emulation
+
+#endif
+
+#if KEYPAD_ENABLE || USB_SERIAL_GRBL == 1
+static void execute_realtime (uint_fast16_t state)
+{
+#if USB_SERIAL_GRBL == 1
+    usb_execute_realtime(state);
+#endif
+#if KEYPAD_ENABLE
+    keypad_process_keypress(state);
+#endif
+}
 #endif
 
 #ifdef DEBUGOUT
 void debugOut (bool on)
 {
-//    pinModeOutput(&dirZ, Z_DIRECTION_PIN);
-static bool l = false;
-l = !l;
     digitalWrite(13, on); // LED
 }
 #endif
@@ -963,6 +976,8 @@ l = !l;
 // NOTE: Grbl is not yet configured (from EEPROM data), driver_setup() will be called when done.
 bool driver_init (void)
 {
+    static char options[30];
+
     // Chain our systick isr to the Arduino handler
 
     if(systick_isr_org == NULL) 
@@ -973,8 +988,26 @@ bool driver_init (void)
 
  //   FPU->FPCCR = (FPU->FPCCR & ~FPU_FPCCR_LSPEN_Msk) | FPU_FPCCR_ASPEN_Msk;  // enable lazy stacking
 
+    options[0] = '\0';
+
+#if USB_SERIAL_GRBL == 1
+    strcat(options, "USB.1 ");
+#endif
+#if USB_SERIAL_GRBL == 2
+    strcat(options, "USB.2 ");
+#endif#
+#if KEYPAD
+    strcat(options, "KEYPAD ");
+#endif
+#if IOPORTS_ENABLE
+    strcat(options, "IOPORTS ");
+#endif
+    if(*options != '\0')
+        options[strlen(options) - 1] = '\0';
+
     hal.info = "Teensy 4.0"; // Typically set to MCU or board name
-    hal.driver_version = "200303";
+    hal.driver_version = "200310";
+    hal.driver_options = *options == '\0' ? NULL : options;
     hal.driver_setup = driver_setup;
     hal.f_step_timer = 24000000;
     hal.rx_buffer_size = RX_BUFFER_SIZE;
@@ -1045,8 +1078,8 @@ bool driver_init (void)
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
 
-#if KEYPAD_ENABLE
-    hal.execute_realtime = keypad_process_keypress;
+#if KEYPAD_ENABLE || USB_SERIAL_GRBL == 1
+    hal.execute_realtime = execute_realtime;
 #endif
 
 #ifdef DEBUGOUT
@@ -1230,12 +1263,8 @@ static void gpio_isr (void)
 // Interrupt handler for 1 ms interval timer
 static void systick_isr (void)
 {
-
 #if USB_SERIAL_GRBL == 2
     systick_isr_org();
-#endif
-
-#if USB_SERIAL_GRBL
     usb_serial_poll();
 #endif
 

@@ -71,35 +71,91 @@ static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to
 
 #if STEP_OUTMODE == GPIO_MAP
 
-    static const uint32_t c_step_outmap[8] = {
-        0,
-        X_STEP_BIT,
-        Y_STEP_BIT,
-        X_STEP_BIT|Y_STEP_BIT,
-        Z_STEP_BIT,
-        X_STEP_BIT|Z_STEP_BIT,
-        Y_STEP_BIT|Z_STEP_BIT,
-        X_STEP_BIT|Y_STEP_BIT|Z_STEP_BIT
-    };
+static const uint16_t c_step_outmap[] = {
+	0,
+	X_STEP_BIT,
+	Y_STEP_BIT,
+	Y_STEP_BIT | X_STEP_BIT,
+	Z_STEP_BIT,
+	Z_STEP_BIT | X_STEP_BIT,
+	Z_STEP_BIT | Y_STEP_BIT,
+	Z_STEP_BIT | Y_STEP_BIT | X_STEP_BIT,
+#if N_AXIS > 3
+	A_STEP_BIT,
+	A_STEP_BIT | X_STEP_BIT,
+	A_STEP_BIT | Y_STEP_BIT,
+	A_STEP_BIT | Y_STEP_BIT | X_STEP_BIT,
+	A_STEP_BIT | Z_STEP_BIT,
+	A_STEP_BIT | Z_STEP_BIT | X_STEP_BIT,
+	A_STEP_BIT | Z_STEP_BIT | Y_STEP_BIT,
+	A_STEP_BIT | Z_STEP_BIT | Y_STEP_BIT | X_STEP_BIT,
+#endif
+#if N_AXIS > 4
+	B_STEP_BIT,
+	B_STEP_BIT | X_STEP_BIT,
+	B_STEP_BIT | Y_STEP_BIT,
+	Y_STEP_BIT | X_STEP_BIT,
+	B_STEP_BIT | Z_STEP_BIT,
+	B_STEP_BIT | Z_STEP_BIT | X_STEP_BIT,
+	B_STEP_BIT | Z_STEP_BIT | Y_STEP_BIT,
+	B_STEP_BIT | Z_STEP_BIT | Y_STEP_BIT | X_STEP_BIT,
+	B_STEP_BIT | A_STEP_BIT,
+	B_STEP_BIT | A_STEP_BIT | X_STEP_BIT,
+	B_STEP_BIT | A_STEP_BIT | Y_STEP_BIT,
+	B_STEP_BIT | A_STEP_BIT | Y_STEP_BIT | X_STEP_BIT,
+	B_STEP_BIT | A_STEP_BIT | Z_STEP_BIT,
+	B_STEP_BIT | A_STEP_BIT | Z_STEP_BIT | X_STEP_BIT,
+	B_STEP_BIT | A_STEP_BIT | Z_STEP_BIT | Y_STEP_BIT,
+	B_STEP_BIT | A_STEP_BIT | Z_STEP_BIT | Y_STEP_BIT | X_STEP_BIT,
+#endif
+};
 
-    static uint32_t step_outmap[8];
+static uint32_t step_outmap[sizeof(c_step_outmap) / sizeof(uint16_t)];
 
 #endif
 
 #if DIRECTION_OUTMODE == GPIO_MAP
 
-    static const uint32_t c_dir_outmap[8] = {
-        0,
-        X_DIRECTION_BIT,
-        Y_DIRECTION_BIT,
-        X_DIRECTION_BIT|Y_DIRECTION_BIT,
-        Z_DIRECTION_BIT,
-        X_DIRECTION_BIT|Z_DIRECTION_BIT,
-        Y_DIRECTION_BIT|Z_DIRECTION_BIT,
-        X_DIRECTION_BIT|Y_DIRECTION_BIT|Z_DIRECTION_BIT
-    };
+static const uint16_t c_dir_outmap[] = {
+	0,
+	X_DIRECTION_BIT,
+	Y_DIRECTION_BIT,
+	Y_DIRECTION_BIT | X_DIRECTION_BIT,
+	Z_DIRECTION_BIT,
+	Z_DIRECTION_BIT | X_DIRECTION_BIT,
+	Z_DIRECTION_BIT | Y_DIRECTION_BIT,
+	Z_DIRECTION_BIT | Y_DIRECTION_BIT | X_DIRECTION_BIT,
+#if N_AXIS > 3
+	A_DIRECTION_BIT,
+	A_DIRECTION_BIT | X_DIRECTION_BIT,
+	A_DIRECTION_BIT | Y_DIRECTION_BIT,
+	A_DIRECTION_BIT | Y_DIRECTION_BIT | X_DIRECTION_BIT,
+	A_DIRECTION_BIT | Z_DIRECTION_BIT,
+	A_DIRECTION_BIT | Z_DIRECTION_BIT | X_DIRECTION_BIT,
+	A_DIRECTION_BIT | Z_DIRECTION_BIT | Y_DIRECTION_BIT,
+	A_DIRECTION_BIT | Z_DIRECTION_BIT | Y_DIRECTION_BIT | X_DIRECTION_BIT,
+#endif
+#if N_AXIS > 4
+	B_DIRECTION_BIT,
+	B_DIRECTION_BIT | X_DIRECTION_BIT,
+	B_DIRECTION_BIT | Y_DIRECTION_BIT,
+	Y_DIRECTION_BIT | X_DIRECTION_BIT,
+	B_DIRECTION_BIT | Z_DIRECTION_BIT,
+	B_DIRECTION_BIT | Z_DIRECTION_BIT | X_DIRECTION_BIT,
+	B_DIRECTION_BIT | Z_DIRECTION_BIT | Y_DIRECTION_BIT,
+	B_DIRECTION_BIT | Z_DIRECTION_BIT | Y_DIRECTION_BIT | X_DIRECTION_BIT,
+	B_DIRECTION_BIT | A_DIRECTION_BIT,
+	B_DIRECTION_BIT | A_DIRECTION_BIT | X_DIRECTION_BIT,
+	B_DIRECTION_BIT | A_DIRECTION_BIT | Y_DIRECTION_BIT,
+	B_DIRECTION_BIT | A_DIRECTION_BIT | Y_DIRECTION_BIT | X_DIRECTION_BIT,
+	B_DIRECTION_BIT | A_DIRECTION_BIT | Z_DIRECTION_BIT,
+	B_DIRECTION_BIT | A_DIRECTION_BIT | Z_DIRECTION_BIT | X_DIRECTION_BIT,
+	B_DIRECTION_BIT | A_DIRECTION_BIT | Z_DIRECTION_BIT | Y_DIRECTION_BIT,
+	B_DIRECTION_BIT | A_DIRECTION_BIT | Z_DIRECTION_BIT | Y_DIRECTION_BIT | X_DIRECTION_BIT,
+#endif
+};
 
-    static uint32_t dir_outmap[8];
+static uint32_t dir_outmap[sizeof(c_dir_outmap) / sizeof(uint16_t)];
 
 #endif
 
@@ -147,19 +203,14 @@ static void stepperGoIdle (bool clear_signals)
     STEPPER_TIMER->CNT = 0;
 }
 
-// Sets up stepper driver interrupt timeout, AMASS version
-static void stepperCyclesPerTick (uint32_t cycles_per_tick)
-{
-    STEPPER_TIMER->ARR = (uint16_t)(cycles_per_tick - 1);
-}
 
 // Sets up stepper driver interrupt timeout, "Normal" version
 static void stepperCyclesPerTickPrescaled (uint32_t cycles_per_tick)
 {
     // Set timer prescaling for normal step generation
-    if (cycles_per_tick < (1UL << 16)) { // < 65536  (2.6ms @ 25MHz)
+    if (cycles_per_tick < (1UL << 16)) { // < 65536  (1.1ms @ 72MHz)
         STEPPER_TIMER->PSC = 0; // DIV 1
-    } else if (cycles_per_tick < (1UL << 19)) { // < 524288 (32.8ms@16MHz)
+    } else if (cycles_per_tick < (1UL << 19)) { // < 524288 (8.8ms @ 72MHz)
         STEPPER_TIMER->PSC = 7; // DIV 8
         cycles_per_tick = cycles_per_tick >> 3;
     } else {
@@ -173,14 +224,22 @@ static void stepperCyclesPerTickPrescaled (uint32_t cycles_per_tick)
 // NOTE: step_outbits are: bit0 -> X, bit1 -> Y, bit2 -> Z...
 inline static void stepperSetStepOutputs (axes_signals_t step_outbits)
 {
+#if STEP_OUTMODE == GPIO_MAP
+	STEP_PORT->ODR = (STEP_PORT->ODR & ~STEP_MASK) | step_outmap[step_outbits.value];
+#else
     STEP_PORT->ODR = (STEP_PORT->ODR & ~STEP_MASK) | ((step_outbits.mask ^ settings.steppers.step_invert.mask) << STEP_OUTMODE);
+#endif
 }
 
 // Set stepper direction output pins
 // NOTE: see note for stepperSetStepOutputs()
 inline static void stepperSetDirOutputs (axes_signals_t dir_outbits)
 {
+#if DIRECTION_OUTMODE == GPIO_MAP
+    DIRECTION_PORT->ODR = (DIRECTION_PORT->ODR & ~DIRECTION_MASK) | dir_outmap[dir_outbits.value];
+#else
     DIRECTION_PORT->ODR = (DIRECTION_PORT->ODR & ~DIRECTION_MASK) | ((dir_outbits.mask ^ settings.steppers.dir_invert.mask) << DIRECTION_OUTMODE);
+#endif
 }
 
 // Sets stepper direction and pulse pins and starts a step pulse
@@ -449,14 +508,24 @@ void settings_changed (settings_t *settings)
 #endif
 
 #if STEP_OUTMODE == GPIO_MAP
-    for(i = 0; i < sizeof(step_outmap) / sizeof(uint32_t); i++)
-        step_outmap[i] = c_step_outmap[i] ^ c_step_outmap[settings->steppers.step_invert.value];
+
+    i = sizeof(step_outmap) / sizeof(uint16_t);
+    do {
+        i--;
+        step_outmap[i] = c_step_outmap[i ^ settings->steppers.step_invert.value];
+    } while(i);
 #endif
 
 #if DIRECTION_OUTMODE == GPIO_MAP
-    for(i = 0; i < sizeof(dir_outmap) / sizeof(uint32_t); i++)
-        dir_outmap[i] = c_dir_outmap[i] ^ c_dir_outmap[settings->steppers.dir_invert.value];
+    i = sizeof(dir_outmap) / sizeof(uint16_t);
+    do {
+        i--;
+        dir_outmap[i] = c_dir_outmap[i ^ settings->steppers.dir_invert.value];
+    } while(i);
 #endif
+
+    stepperSetStepOutputs((axes_signals_t){0});
+    stepperSetDirOutputs((axes_signals_t){0});
 
     if(IOInitDone) {
 
@@ -635,6 +704,8 @@ void settings_changed (settings_t *settings)
     }
 }
 
+#if SDCARD_ENABLE
+
 status_code_t (*syscmd)(uint_fast16_t state, char *line, char *lcline);
 
 static status_code_t jtag_enable (uint_fast16_t state, char *line, char *lcline)
@@ -647,6 +718,8 @@ static status_code_t jtag_enable (uint_fast16_t state, char *line, char *lcline)
 
     return syscmd ? syscmd(state, line, lcline) : Status_Unhandled;
 }
+
+#endif
 
 // Initializes MCU peripherals for Grbl use
 static bool driver_setup (settings_t *settings)
@@ -759,11 +832,6 @@ static bool driver_setup (settings_t *settings)
 
 #endif
 
- // Set defaults
-
-    if(hal.driver_cap.amass_level == 0)
-        hal.stepper_cycles_per_tick = &stepperCyclesPerTickPrescaled;
-
 #if TRINAMIC_ENABLE
 
     trinamic_init();
@@ -847,7 +915,7 @@ bool driver_init (void)
 //  __HAL_AFIO_REMAP_SWJ_NOJTAG();
 
     hal.info = "STM32F103C8";
-    hal.driver_version = "200218";
+    hal.driver_version = "200329";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = SystemCoreClock;
     hal.rx_buffer_size = RX_BUFFER_SIZE;
@@ -857,7 +925,7 @@ bool driver_init (void)
     hal.stepper_wake_up = stepperWakeUp;
     hal.stepper_go_idle = stepperGoIdle;
     hal.stepper_enable = stepperEnable;
-    hal.stepper_cycles_per_tick = stepperCyclesPerTick;
+    hal.stepper_cycles_per_tick = stepperCyclesPerTickPrescaled;
     hal.stepper_pulse_start = stepperPulseStart;
 
     hal.limits_enable = limitsEnable;
@@ -1002,7 +1070,7 @@ void TIM3_IRQHandler(void)
         stepperSetStepOutputs(next_step_outbits);       // begin step pulse
     } else {
         PULSE_TIMER->SR &= ~TIM_SR_UIF;                 // Clear UIF flag and
-        stepperSetStepOutputs((axes_signals_t){0});     // begin step pulse
+        stepperSetStepOutputs((axes_signals_t){0});     // end step pulse
     }
 }
 

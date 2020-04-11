@@ -962,12 +962,12 @@ void settings_changed (settings_t *settings)
 
 #if STEP_OUTMODE == GPIO_MAP
     for(idx = 0; idx < sizeof(step_outmap); idx++)
-        step_outmap[idx] = c_step_outmap[idx] ^ c_step_outmap[settings->steppers.step_invert.mask];
+        step_outmap[idx] = c_step_outmap[idx ^ settings->steppers.step_invert.mask];
 #endif
 
 #if DIRECTION_OUTMODE == GPIO_MAP
     for(idx = 0; idx < sizeof(dir_outmap); idx++)
-        dir_outmap[idx] = c_dir_outmap[idx] ^ c_dir_outmap[settings->steppers.dir_invert.mask];
+        dir_outmap[idx] = c_dir_outmap[idx ^ settings->steppers.dir_invert.mask];
 #endif
 
     if(IOInitDone) {
@@ -1167,9 +1167,9 @@ static bool driver_setup (settings_t *settings)
     NVIC_EnableIRQ(PULSE_TIMER_INT0);   // step pulse interrupts
     NVIC_EnableIRQ(PULSE_TIMER_INTN);   // ...
 
-    NVIC_SetPriority(PULSE_TIMER_INT0, 0);
-    NVIC_SetPriority(PULSE_TIMER_INTN, 0);
-    NVIC_SetPriority(STEPPER_TIMER_INT, 1);
+    NVIC_SetPriority(PULSE_TIMER_INT0, 1);
+    NVIC_SetPriority(PULSE_TIMER_INTN, 1);
+    NVIC_SetPriority(STEPPER_TIMER_INT, 2);
 
  // Limit pins init
 #if CNC_BOOSTERPACK_SHORTS
@@ -1393,6 +1393,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "MSP432";
+    hal.driver_version = "200329";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = SystemCoreClock;
     hal.rx_buffer_size = RX_BUFFER_SIZE;
