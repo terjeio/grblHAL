@@ -431,6 +431,7 @@ bool protocol_exec_rt_system ()
             gc_state.tool_change = false;
             gc_state.modal.coolant.value = 0;
             gc_state.modal.spindle.value = 0;
+            gc_state.spindle.rpm = sys.spindle_rpm = 0.0f;
             gc_state.modal.spindle_rpm_mode = SpindleSpeedMode_RPM;
 
             // Kill spindle and coolant. TODO: Check Mach3 behaviour?
