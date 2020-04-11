@@ -420,7 +420,7 @@ void report_grbl_settings (void)
 #endif
 
     if(hal.driver_settings_report) {
-        for(idx = Setting_LinearSpindlePiece4 + 1; idx < Setting_SpindlePGain; idx++)
+        for(idx = Setting_NetworkServices; idx < Setting_SpindlePGain; idx++)
             hal.driver_settings_report((setting_type_t)idx);
     }
 
