@@ -298,6 +298,14 @@ void settings_restore (settings_restore_t restore) {
 
     if (restore.defaults) {
         memcpy(&settings, &defaults, sizeof(settings_t));
+
+        settings.control_invert.block_delete &= hal.driver_cap.block_delete;
+        settings.control_invert.e_stop &= hal.driver_cap.e_stop;
+        settings.control_invert.stop_disable &= hal.driver_cap.program_stop;
+        settings.control_disable_pullup.block_delete &= hal.driver_cap.block_delete;
+        settings.control_disable_pullup.e_stop &= hal.driver_cap.e_stop;
+        settings.control_disable_pullup.stop_disable &= hal.driver_cap.program_stop;
+
         write_global_settings();
     }
 
@@ -460,10 +468,13 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 break;
 
             case Setting_StatusReportMask:
-                settings.status_report.mask = int_value & 0xFF;
 #if COMPATIBILITY_LEVEL <= 1
+                settings.status_report.mask = int_value & 0xFF;
                 settings.flags.force_buffer_sync_on_wco_change = bit_istrue(int_value, bit(8));
                 settings.flags.report_alarm_substate = bit_istrue(int_value, bit(9));
+#else
+                int_value &= 0x03;
+                settings.status_report.mask = (settings.status_report.mask & ~0x03) | int_value;
 #endif
                 break;
 
@@ -485,6 +496,9 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
 
             case Setting_ControlInvertMask:
                 settings.control_invert.mask = int_value;
+                settings.control_invert.block_delete &= hal.driver_cap.block_delete;
+                settings.control_invert.e_stop &= hal.driver_cap.e_stop;
+                settings.control_invert.stop_disable &= hal.driver_cap.program_stop;
                 break;
 
             case Setting_CoolantInvertMask:
@@ -501,6 +515,9 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
 
             case Setting_ControlPullUpDisableMask:
                 settings.control_disable_pullup.mask = int_value & 0x0F;
+                settings.control_disable_pullup.block_delete &= hal.driver_cap.block_delete;
+                settings.control_disable_pullup.e_stop &= hal.driver_cap.e_stop;
+                settings.control_disable_pullup.stop_disable &= hal.driver_cap.program_stop;
                 break;
 
             case Setting_LimitPullUpDisableMask:

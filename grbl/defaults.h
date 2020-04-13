@@ -20,6 +20,17 @@
 
 #ifndef defaults_h
 
+// Control signals bit definitions and mask.
+// NOTE: these definitions are only referenced in this file.
+#define SIGNALS_RESET_BIT (1<<0)
+#define SIGNALS_FEEDHOLD_BIT (1<<1)
+#define SIGNALS_CYCLESTART_BIT (1<<2)
+#define SIGNALS_SAFETYDOOR_BIT (1<<3)
+#define SIGNALS_BLOCKDELETE_BIT (1<<4)
+#define SIGNALS_STOPDISABLE_BIT (1<<5)
+#define SIGNALS_ESTOP_BIT (1<<6)
+#define SIGNALS_BITMASK (SIGNALS_RESET_BIT|SIGNALS_FEEDHOLD_BIT|SIGNALS_CYCLESTART_BIT|SIGNALS_SAFETYDOOR_BIT|SIGNALS_BLOCKDELETE_BIT|SIGNALS_STOPDISABLE_BIT|SIGNALS_ESTOP_BIT)
+
 // By default, Grbl sets all input pins to normal-low operation with their internal pull-up resistors
 // enabled. This simplifies the wiring for users by requiring only a normally closed (NC) switch connected
 // to ground. It is not recommended to use normally-open (NO) switches as this increases the risk
@@ -31,8 +42,8 @@
 //          Please check driver code and/or documentation.
 // #define DISABLE_LIMIT_PINS_PULL_UP_MASK AXES_BITMASK
 // #define DISABLE_LIMIT_PINS_PULL_UP_MASK (X_AXIS_BIT|Y_AXIS_BIT)
-// #define DISABLE_CONTROL_PINS_PULL_UP_MASK SIGNAL_MASK
-// #define DISABLE_CONTROL_PINS_PULL_UP_MASK (SIGNAL_SAFETYDOOR|SIGNAL_RESET)
+// #define DISABLE_CONTROL_PINS_PULL_UP_MASK SIGNALS_BITMASK
+// #define DISABLE_CONTROL_PINS_PULL_UP_MASK (SIGNALS_SAFETYDOOR_BIT|SIGNALS_RESET_BIT)
 // #define DISABLE_PROBE_PIN_PULL_UP
 
 // By default, Grbl disables feed rate overrides for all G38.x probe cycle commands. Although this
@@ -54,9 +65,9 @@
 // Inverts logic of the input signals based on a mask. This essentially means you are using
 // normally-open (NO) switches on the specified pins, rather than the default normally-closed (NC) switches.
 // NOTE: The first option will invert all control pins. The second option is an example of
-// inverting only a few pins. See system.h and/or nuts_bolts.h for other signal definitions.
-// #define INVERT_CONTROL_PIN_MASK SIGNAL_MASK // Default disabled. Uncomment to enable.
-// #define INVERT_CONTROL_PIN_MASK (SIGNAL_SAFETYDOOR|SIGNAL_RESET) // Default disabled. Uncomment to enable.
+// inverting only a few pins. See the start of this file for other signal definitions.
+// #define INVERT_CONTROL_PIN_MASK SIGNALS_BITMASK // Default disabled. Uncomment to enable.
+// #define INVERT_CONTROL_PIN_MASK (SIGNALS_SAFETYDOOR_BIT|SIGNALS_RESET_BIT) // Default disabled. Uncomment to enable.
 // #define INVERT_LIMIT_PIN_MASK AXES_BITMASK // Default disabled. Uncomment to enable. Uncomment to enable.
 // #define INVERT_LIMIT_PIN_MASK (X_AXIS_BIT|Y_AXIS_BIT) // Default disabled. Uncomment to enable.
 // For inverting the probe pin use DEFAULT_INVERT_PROBE_PIN in defaults.h

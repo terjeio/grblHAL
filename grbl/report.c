@@ -331,9 +331,13 @@ void report_grbl_settings (void)
     report_uint_setting(Setting_LimitPinsInvertMask, settings.limits.invert.mask);
     if(hal.probe_configure_invert_mask)
         report_uint_setting(Setting_InvertProbePin, settings.flags.invert_probe_pin);
+#if COMPATIBILITY_LEVEL <= 1
     report_uint_setting(Setting_StatusReportMask, settings.status_report.mask |
                                                    (settings.flags.force_buffer_sync_on_wco_change ? bit(8) : 0) |
                                                     (settings.flags.report_alarm_substate ? bit(9) : 0));
+#else
+    report_uint_setting(Setting_StatusReportMask, settings.status_report.mask & 0x3);
+#endif
     report_float_setting(Setting_JunctionDeviation, settings.junction_deviation, N_DECIMAL_SETTINGVALUE);
     report_float_setting(Setting_ArcTolerance, settings.arc_tolerance, N_DECIMAL_SETTINGVALUE);
     report_uint_setting(Setting_ReportInches, settings.flags.report_inches);
@@ -796,6 +800,12 @@ void report_build_info (char *line)
 
     if(hal.driver_cap.program_stop)
         strcat(buf, "OS,");
+
+    if(hal.driver_cap.block_delete)
+        strcat(buf, "BD,");
+
+    if(hal.driver_cap.e_stop)
+        strcat(buf, "ES,");
 
     if(hal.driver_cap.sd_card)
         strcat(buf, "SD,");

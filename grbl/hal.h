@@ -50,6 +50,8 @@ typedef union {
                  probe_pull_up             :1,
                  amass_level               :2, // 0...3
                  program_stop              :1,
+                 block_delete              :1,
+                 e_stop                    :1,
                  spindle_at_speed          :1,
                  laser_ppi_mode            :1,
                  spindle_sync              :1,
@@ -64,7 +66,7 @@ typedef union {
                  axis_ganged_z             :1,
                  mpg_mode                  :1,
                  spindle_pwm_linearization :1,
-                 unassigned                :6;
+                 unassigned                :4;
     };
 } driver_cap_t;
 
