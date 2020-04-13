@@ -69,6 +69,7 @@ typedef enum {
     Input_FeedHold,
     Input_CycleStart,
     Input_SafetyDoor,
+    Input_EStop,
     Input_ModeSelect,
     Input_LimitX,
     Input_LimitX_Max,
@@ -145,7 +146,11 @@ static gpio_t ModeSelect;
 #endif
 
 static input_signal_t inputpin[] = {
+#if ESTOP_ENABLE
+    { .id = Input_EStop,        .port = &Reset,        .pin = RESET_PIN,       .group = INPUT_GROUP_CONTROL },
+#else
     { .id = Input_Reset,        .port = &Reset,        .pin = RESET_PIN,       .group = INPUT_GROUP_CONTROL },
+#endif
     { .id = Input_FeedHold,     .port = &FeedHold,     .pin = FEED_HOLD_PIN,   .group = INPUT_GROUP_CONTROL },
     { .id = Input_CycleStart,   .port = &CycleStart,   .pin = CYCLE_START_PIN, .group = INPUT_GROUP_CONTROL },
 #ifdef SAFETY_DOOR_PIN
@@ -665,13 +670,19 @@ static void settings_changed (settings_t *settings)
             signal->irq_mode = IRQ_Mode_None;
 
             switch(signal->id) {
-
+#if ESTOP_ENABLE
+                case Input_EStop:
+                    pullup = !settings->control_disable_pullup.e_stop;
+                    signal->debounce = hal.driver_cap.software_debounce;
+                    signal->irq_mode = control_fei.e_stop ? IRQ_Mode_Falling : IRQ_Mode_Rising;
+                    break;
+#else
                 case Input_Reset:
                     pullup = !settings->control_disable_pullup.reset;
                     signal->debounce = hal.driver_cap.software_debounce;
                     signal->irq_mode = control_fei.reset ? IRQ_Mode_Falling : IRQ_Mode_Rising;
                     break;
-
+#endif
                 case Input_FeedHold:
                     pullup = !settings->control_disable_pullup.feed_hold;
                     signal->debounce = hal.driver_cap.software_debounce;
@@ -995,7 +1006,7 @@ bool driver_init (void)
 #endif
 #if USB_SERIAL_GRBL == 2
     strcat(options, "USB.2 ");
-#endif#
+#endif
 #if KEYPAD
     strcat(options, "KEYPAD ");
 #endif
@@ -1006,7 +1017,7 @@ bool driver_init (void)
         options[strlen(options) - 1] = '\0';
 
     hal.info = "Teensy 4.0"; // Typically set to MCU or board name
-    hal.driver_version = "200310";
+    hal.driver_version = "200413";
     hal.driver_options = *options == '\0' ? NULL : options;
     hal.driver_setup = driver_setup;
     hal.f_step_timer = 24000000;
@@ -1095,6 +1106,9 @@ bool driver_init (void)
     hal.driver_cap.variable_spindle = On;
 #ifdef COOLANT_MIST_PIN
     hal.driver_cap.mist_control = On;
+#endif
+#if ESTOP_ENABLE
+    hal.driver_cap.e_stop = On;
 #endif
     hal.driver_cap.software_debounce = On;
     hal.driver_cap.step_pulse_delay = On;

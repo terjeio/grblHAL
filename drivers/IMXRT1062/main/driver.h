@@ -34,10 +34,14 @@
 // Configuration
 // Set value to 1 to enable, 0 to disable
 
-#define USB_SERIAL_GRBL    2 // Set to 1 for Arduino class library, 2 for PJRC C library
-#define USB_SERIAL_WAIT    0 // Wait for USB connection before starting grblHAL 
-#define ESTOP_ENABLE       1 // When enabled it only real-time report requests will be executed when the reset pin is asserted.
-#define CNC_BOOSTERPACK    0 // do not change!
+#define USB_SERIAL_GRBL    2 // Set to 1 for Arduino class library, 2 for PJRC C library.
+#define USB_SERIAL_WAIT    0 // Wait for USB connection before starting grblHAL.
+#if COMPATIBILITY_LEVEL <= 1
+#define ESTOP_ENABLE       1 // When enabled only real-time report requests will be executed when the reset pin is asserted.
+#else
+#define ESTOP_ENABLE       0 // Do not change!
+#endif
+#define CNC_BOOSTERPACK    1 // Do not change!
 
 // NOTE: none of these extensions are available, TBC!
 #if CNC_BOOSTERPACK

@@ -1480,7 +1480,7 @@ bool driver_init (void)
     NVIC_EnableIRQ(SysTick_IRQn);
 
     hal.info = "SAM3X8E";
-	hal.driver_version = "200316";
+	hal.driver_version = "200411";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = SystemCoreClock / 2; // 42 MHz
     hal.rx_buffer_size = RX_BUFFER_SIZE;
@@ -1600,6 +1600,9 @@ bool driver_init (void)
     hal.driver_cap.variable_spindle = On;
 #ifdef SAFETY_DOOR_PIN
     hal.driver_cap.safety_door = On;
+#endif
+#ifdef COOLANT_MIST_PIN
+    hal.driver_cap.mist_control = On;
 #endif
     hal.driver_cap.software_debounce = On;
     hal.driver_cap.step_pulse_delay = On;
