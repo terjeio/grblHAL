@@ -794,9 +794,8 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 break;
 
             default:;
-                status_code_t status;
-                if(hal.driver_setting && (status = hal.driver_setting(setting, value, svalue)) != Status_OK)
-                    return status == Status_Unhandled ? Status_InvalidStatement : status;
+                status_code_t status = hal.driver_setting ? hal.driver_setting(setting, value, svalue) : Status_Unhandled;
+                return status == Status_Unhandled ? Status_InvalidStatement : status;
         }
     }
 

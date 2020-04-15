@@ -432,13 +432,14 @@ bool system_check_travel_limits (float *target)
         do {
             idx--;
         // When homing forced set origin is enabled, soft limits checks need to account for directionality.
-            failed = bit_istrue(settings.homing.dir_mask.value, bit(idx))
-                      ? (target[idx] < 0.0f || target[idx] > -settings.max_travel[idx])
-                      : (target[idx] > 0.0f || target[idx] < settings.max_travel[idx]);
+            failed = settings.max_travel[idx] < -0.0f &&
+            		  (bit_istrue(settings.homing.dir_mask.value, bit(idx))
+                        ? (target[idx] < 0.0f || target[idx] > -settings.max_travel[idx])
+                        : (target[idx] > 0.0f || target[idx] < settings.max_travel[idx]));
         } while(!failed && idx);
     } else do {
         idx--;
-        failed = target[idx] > 0.0f || target[idx] < settings.max_travel[idx];
+        failed = settings.max_travel[idx] < -0.0f && (target[idx] > 0.0f || target[idx] < settings.max_travel[idx]);
     } while(!failed && idx);
 
     return !failed;
