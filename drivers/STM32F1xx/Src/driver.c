@@ -64,7 +64,7 @@ extern __IO uint32_t uwTick;
 
 static bool pwmEnabled = false, IOInitDone = false;
 // Inverts the probe pin state depending on user settings and probing cycle mode.
-static uint8_t probe_invert_mask;
+static bool probe_invert;
 static axes_signals_t next_step_outbits;
 static spindle_pwm_t spindle_pwm;
 static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
@@ -319,16 +319,16 @@ static control_signals_t systemGetState (void)
     control_signals_t signals = {0};
 
 #if CONTROL_INMODE == GPIO_BITBAND
-    signals.reset = BITBAND_PERI(CONTROL_PORT->IDR, RESET_PIN);
-    signals.safety_door_ajar = BITBAND_PERI(CONTROL_PORT->FIIDROPIN, SAFETY_DOOR_PIN);
-    signals.feed_hold = BITBAND_PERI(CONTROL_PORT->IDR, FEED_HOLD_PIN);
-    signals.cycle_start = BITBAND_PERI(CONTROL_PORT->IDR, CYCLE_START_PIN);
+    signals.reset = BITBAND_PERI(CONTROL_PORT->IDR, CONTROL_RESET_PIN);
+    signals.safety_door_ajar = BITBAND_PERI(CONTROL_PORT->IDR, CONTROL_SAFETY_DOOR_PIN);
+    signals.feed_hold = BITBAND_PERI(CONTROL_PORT->IDR, CONTROL_FEED_HOLD_PIN);
+    signals.cycle_start = BITBAND_PERI(CONTROL_PORT->IDR, CONTROL_CYCLE_START_PIN);
 #elif CONTROL_INMODE == GPIO_MAP
     uint32_t bits = CONTROL_PORT->IDR;
-    signals.reset = (bits & RESET_BIT) != 0;
-    signals.safety_door_ajar = (bits & SAFETY_DOOR_BIT) != 0;
-    signals.feed_hold = (bits & FEED_HOLD_BIT) != 0;
-    signals.cycle_start = (bits & CYCLE_START_BIT) != 0;
+    signals.reset = (bits & CONTROL_RESET_BIT) != 0;
+    signals.safety_door_ajar = (bits & CONTROL_SAFETY_DOOR_BIT) != 0;
+    signals.feed_hold = (bits & CONTROL_FEED_HOLD_BIT) != 0;
+    signals.cycle_start = (bits & CONTROL_CYCLE_START_BIT) != 0;
 #else
     signals.value = (uint8_t)((CONTROL_PORT->IDR & CONTROL_MASK) >> CONTROL_INMODE);
 #endif
@@ -344,16 +344,16 @@ static control_signals_t systemGetState (void)
 // and the probing cycle modes for toward-workpiece/away-from-workpiece.
 static void probeConfigureInvertMask(bool is_probe_away)
 {
-  probe_invert_mask = settings.flags.invert_probe_pin ? 0 : PROBE_BIT;
+  probe_invert = settings.flags.invert_probe_pin;
 
   if (is_probe_away)
-      probe_invert_mask ^= PROBE_BIT;
+	  probe_invert ^= PROBE_BIT;
 }
 
 // Returns the probe pin state. Triggered = true.
 bool probeGetState (void)
 {
-    return ((PROBE_PORT->IDR & PROBE_BIT) ^ probe_invert_mask) != 0;
+    return ((PROBE_PORT->IDR & PROBE_BIT) != 0)  ^ probe_invert;
 }
 
 // Static spindle (off, on cw & on ccw)
@@ -915,7 +915,7 @@ bool driver_init (void)
 //  __HAL_AFIO_REMAP_SWJ_NOJTAG();
 
     hal.info = "STM32F103C8";
-    hal.driver_version = "200329";
+    hal.driver_version = "200415";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = SystemCoreClock;
     hal.rx_buffer_size = RX_BUFFER_SIZE;
@@ -1012,6 +1012,9 @@ bool driver_init (void)
 
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
 
+#ifdef CONTROL_SAFETY_DOOR_PIN
+    hal.driver_cap.safety_door = On;
+#endif
     hal.driver_cap.spindle_dir = On;
     hal.driver_cap.variable_spindle = On;
     hal.driver_cap.spindle_pwm_invert = On;
