@@ -138,6 +138,12 @@ static gpio_t steppersEnableY;
 #ifdef STEPPERS_ENABLE_Z_PIN
 static gpio_t steppersEnableZ;
 #endif
+#ifdef STEPPERS_ENABLE_A_PIN
+static gpio_t steppersEnableA;
+#endif
+#ifdef STEPPERS_ENABLE_B_PIN
+static gpio_t steppersEnableB;
+#endif
 #if KEYPAD_ENABLE
 static gpio_t KeypadStrobe;
 #endif
@@ -243,7 +249,7 @@ inline static void set_dir_outputs (axes_signals_t dir_outbits)
 
     DIGITAL_OUT(dirX, dir_outbits.x);
     DIGITAL_OUT(dirY, dir_outbits.y);
-    DIGITAL_OUT(dirZ, dir_outbits.z);
+ //   DIGITAL_OUT(dirZ, dir_outbits.z);
 #ifdef A_AXIS
     DIGITAL_OUT(dirA, dir_outbits.a);
 #endif
@@ -307,7 +313,6 @@ static void stepperCyclesPerTick (uint32_t cycles_per_tick)
 {
     PIT_LDVAL0 = cycles_per_tick < (1UL << 20) ? cycles_per_tick : 0x000FFFFFUL;
 }
-
 
 // Start a stepper pulse, no delay version
 // stepper_t struct is defined in grbl/stepper.h
@@ -964,10 +969,10 @@ bool nvsWrite (uint8_t *source)
 
 #endif
 
-#if KEYPAD_ENABLE || USB_SERIAL_GRBL == 1
+#if KEYPAD_ENABLE || USB_SERIAL_GRBL > 0
 static void execute_realtime (uint_fast16_t state)
 {
-#if USB_SERIAL_GRBL == 1
+#if USB_SERIAL_GRBL > 0
     usb_execute_realtime(state);
 #endif
 #if KEYPAD_ENABLE
@@ -1089,7 +1094,7 @@ bool driver_init (void)
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
 
-#if KEYPAD_ENABLE || USB_SERIAL_GRBL == 1
+#if KEYPAD_ENABLE || USB_SERIAL_GRBL > 0
     hal.execute_realtime = execute_realtime;
 #endif
 
@@ -1109,6 +1114,9 @@ bool driver_init (void)
 #endif
 #if ESTOP_ENABLE
     hal.driver_cap.e_stop = On;
+#endif
+#ifdef SAFETY_DOOR_PIN
+    hal.driver_cap.safety_door = On;
 #endif
     hal.driver_cap.software_debounce = On;
     hal.driver_cap.step_pulse_delay = On;
@@ -1279,7 +1287,7 @@ static void systick_isr (void)
 {
 #if USB_SERIAL_GRBL == 2
     systick_isr_org();
-    usb_serial_poll();
+//    usb_serial_poll();
 #endif
 
     if(grbl_delay.ms && !(--grbl_delay.ms)) {

@@ -71,7 +71,7 @@ static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to
 
 #if STEP_OUTMODE == GPIO_MAP
 
-static const uint16_t c_step_outmap[] = {
+static const uint32_t c_step_outmap[] = {
 	0,
 	X_STEP_BIT,
 	Y_STEP_BIT,
@@ -94,7 +94,7 @@ static const uint16_t c_step_outmap[] = {
 	B_STEP_BIT,
 	B_STEP_BIT | X_STEP_BIT,
 	B_STEP_BIT | Y_STEP_BIT,
-	Y_STEP_BIT | X_STEP_BIT,
+	B_STEP_BIT | X_STEP_BIT,
 	B_STEP_BIT | Z_STEP_BIT,
 	B_STEP_BIT | Z_STEP_BIT | X_STEP_BIT,
 	B_STEP_BIT | Z_STEP_BIT | Y_STEP_BIT,
@@ -110,13 +110,13 @@ static const uint16_t c_step_outmap[] = {
 #endif
 };
 
-static uint32_t step_outmap[sizeof(c_step_outmap) / sizeof(uint16_t)];
+static uint32_t step_outmap[sizeof(c_step_outmap) / sizeof(uint32_t)];
 
 #endif
 
 #if DIRECTION_OUTMODE == GPIO_MAP
 
-static const uint16_t c_dir_outmap[] = {
+static const uint32_t c_dir_outmap[] = {
 	0,
 	X_DIRECTION_BIT,
 	Y_DIRECTION_BIT,
@@ -139,7 +139,7 @@ static const uint16_t c_dir_outmap[] = {
 	B_DIRECTION_BIT,
 	B_DIRECTION_BIT | X_DIRECTION_BIT,
 	B_DIRECTION_BIT | Y_DIRECTION_BIT,
-	Y_DIRECTION_BIT | X_DIRECTION_BIT,
+	B_DIRECTION_BIT | X_DIRECTION_BIT,
 	B_DIRECTION_BIT | Z_DIRECTION_BIT,
 	B_DIRECTION_BIT | Z_DIRECTION_BIT | X_DIRECTION_BIT,
 	B_DIRECTION_BIT | Z_DIRECTION_BIT | Y_DIRECTION_BIT,
@@ -155,7 +155,7 @@ static const uint16_t c_dir_outmap[] = {
 #endif
 };
 
-static uint32_t dir_outmap[sizeof(c_dir_outmap) / sizeof(uint16_t)];
+static uint32_t dir_outmap[sizeof(c_dir_outmap) / sizeof(uint32_t)];
 
 #endif
 
@@ -509,7 +509,7 @@ void settings_changed (settings_t *settings)
 
 #if STEP_OUTMODE == GPIO_MAP
 
-    i = sizeof(step_outmap) / sizeof(uint16_t);
+    i = sizeof(step_outmap) / sizeof(uint32_t);
     do {
         i--;
         step_outmap[i] = c_step_outmap[i ^ settings->steppers.step_invert.value];
@@ -517,7 +517,7 @@ void settings_changed (settings_t *settings)
 #endif
 
 #if DIRECTION_OUTMODE == GPIO_MAP
-    i = sizeof(dir_outmap) / sizeof(uint16_t);
+    i = sizeof(dir_outmap) / sizeof(uint32_t);
     do {
         i--;
         dir_outmap[i] = c_dir_outmap[i ^ settings->steppers.dir_invert.value];
@@ -915,7 +915,7 @@ bool driver_init (void)
 //  __HAL_AFIO_REMAP_SWJ_NOJTAG();
 
     hal.info = "STM32F103C8";
-    hal.driver_version = "200415";
+    hal.driver_version = "200417";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = SystemCoreClock;
     hal.rx_buffer_size = RX_BUFFER_SIZE;
@@ -959,6 +959,7 @@ bool driver_init (void)
     hal.stream.get_rx_buffer_available = usbRxFree;
     hal.stream.reset_read_buffer = usbRxFlush;
     hal.stream.cancel_read_buffer = usbRxCancel;
+    hal.stream.suspend_read = usbSuspendInput;
 #else
     hal.stream.read = serialGetC;
     hal.stream.write = serialWriteS;
@@ -966,6 +967,7 @@ bool driver_init (void)
     hal.stream.get_rx_buffer_available = serialRxFree;
     hal.stream.reset_read_buffer = serialRxFlush;
     hal.stream.cancel_read_buffer = serialRxCancel;
+    hal.stream.suspend_read = serialSuspendInput;
 #endif
 
 #if EEPROM_ENABLE

@@ -78,7 +78,7 @@ uint16_t usb_serialRxFree (void)
 void usb_serialRxFlush (void)
 {
     SerialUSB.flush();
-    usb_rxbuffer.head = usb_rxbuffer.tail = 0;
+    usb_rxbuffer.tail = usb_rxbuffer.head;
 }
 
 //
@@ -215,9 +215,8 @@ void usb_execute_realtime (uint_fast16_t state)
         dp = rxbuf;
         free = usb_serialRxFree();
         free = free > BLOCK_RX_BUFFER_SIZE ? BLOCK_RX_BUFFER_SIZE : free;
-        avail = avail > free ? free : avail;
 
-        SerialUSB.readBytes(rxbuf, avail);
+        avail = SerialUSB.readBytes(rxbuf, avail > free ? free : avail);
 
         while(avail--) {
             c = *dp++;
@@ -226,7 +225,7 @@ void usb_execute_realtime (uint_fast16_t state)
                 usb_rxbuffer.backup = true;
                 usb_rxbuffer.tail = usb_rxbuffer.head;
                 hal.stream.read = usb_serialGetC; // restore normal input
-            } else if(!hal.stream.enqueue_realtime_command(c)) {;
+            } else if(!hal.stream.enqueue_realtime_command(c)) {
                 uint32_t bptr = (usb_rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1); // Get next head pointer
                 if(bptr == usb_rxbuffer.tail)                                   // If buffer full
                     usb_rxbuffer.overflow = On;                                 // flag overflow,

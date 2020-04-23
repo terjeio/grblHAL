@@ -41,7 +41,7 @@
 #else
 #define ESTOP_ENABLE       0 // Do not change!
 #endif
-#define CNC_BOOSTERPACK    1 // Do not change!
+#define CNC_BOOSTERPACK    0 // Do not change!
 
 // NOTE: none of these extensions are available, TBC!
 #if CNC_BOOSTERPACK
