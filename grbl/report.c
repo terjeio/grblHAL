@@ -332,9 +332,10 @@ void report_grbl_settings (void)
     if(hal.probe_configure_invert_mask)
         report_uint_setting(Setting_InvertProbePin, settings.flags.invert_probe_pin);
 #if COMPATIBILITY_LEVEL <= 1
-    report_uint_setting(Setting_StatusReportMask, settings.status_report.mask |
+    report_uint_setting(Setting_StatusReportMask, (uint32_t)settings.status_report.mask |
                                                    (settings.flags.force_buffer_sync_on_wco_change ? bit(8) : 0) |
-                                                    (settings.flags.report_alarm_substate ? bit(9) : 0));
+                                                    (settings.flags.report_alarm_substate ? bit(9) : 0) |
+                                                     (settings.flags.report_parser_state ? bit(10) : 0));
 #else
     report_uint_setting(Setting_StatusReportMask, settings.status_report.mask & 0x3);
 #endif
@@ -356,7 +357,9 @@ void report_grbl_settings (void)
 
     report_uint_setting(Setting_SoftLimitsEnable, settings.limits.flags.soft_enabled);
     report_uint_setting(Setting_HardLimitsEnable, ((settings.limits.flags.hard_enabled & bit(0)) ? bit(0) | (settings.limits.flags.check_at_init ? bit(1) : 0) : 0));
-    report_uint_setting(Setting_HomingEnable, settings.homing.flags.value | (settings.limits.flags.two_switches ? bit(4) : 0));
+    report_uint_setting(Setting_HomingEnable, (settings.homing.flags.value & 0x0F) |
+                                               (settings.limits.flags.two_switches ? bit(4) : 0) |
+                                                (settings.homing.flags.manual ? bit(5) : 0));
     report_uint_setting(Setting_HomingDirMask, settings.homing.dir_mask.value);
     report_float_setting(Setting_HomingFeedRate, settings.homing.feed_rate, N_DECIMAL_SETTINGVALUE);
     report_float_setting(Setting_HomingSeekRate, settings.homing.seek_rate, N_DECIMAL_SETTINGVALUE);
@@ -1102,8 +1105,8 @@ void report_realtime_status (void)
         if(sys.report.mpg_mode && hal.driver_cap.mpg_mode)
             hal.stream.write_all(sys.mpg_mode ? "|MPG:1" : "|MPG:0");
 
-        if(sys.report.homed && sys.homing.mask)
-            hal.stream.write_all(sys.homing.mask == sys.homed.mask ? "|H:1" : "|H:0");
+        if(sys.report.homed && (sys.homing.mask || settings.homing.flags.manual))
+            hal.stream.write_all(appendbuf(2, "|H:", uitoa((uint32_t)(sys.homing.mask == 0 ? sys.homed.mask : (sys.homing.mask & sys.homed.mask) == sys.homed.mask))));
 
         if(sys.report.xmode && settings.flags.lathe_mode)
             hal.stream.write_all(gc_state.modal.diameter_mode ? "|D:1" : "|D:0");
@@ -1119,6 +1122,21 @@ void report_realtime_status (void)
     sys.report.wco = settings.status_report.work_coord_offset && wco_counter == 0; // Set to report on next request
 
     hal.stream.write_all(">\r\n");
+
+    if(settings.flags.report_parser_state) {
+
+        static uint8_t tool;
+        static float feed_rate, spindle_rpm;
+        static gc_modal_t last_state;
+
+        if (memcmp(&last_state, &gc_state.modal, sizeof(gc_modal_t)) || feed_rate != gc_state.feed_rate || spindle_rpm != gc_state.spindle.rpm || tool != gc_state.tool->tool) {
+            last_state = gc_state.modal;
+            feed_rate = gc_state.feed_rate;
+            tool = gc_state.tool->tool;
+            spindle_rpm = gc_state.spindle.rpm;
+            system_set_exec_state_flag(EXEC_GCODE_REPORT);
+        }
+    }
 }
 
 

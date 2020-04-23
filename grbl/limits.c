@@ -68,9 +68,10 @@ ISR_CODE void limit_interrupt_handler (axes_signals_t state) // DEFAULT: Limit p
 #ifndef KINEMATICS_API
 // Set machine positions for homed limit switches. Don't update non-homed axes.
 // NOTE: settings.max_travel[] is stored as a negative value.
-static void limits_set_machine_positions (axes_signals_t cycle)
+void limits_set_machine_positions (axes_signals_t cycle, bool add_pulloff)
 {
     uint_fast8_t idx = N_AXIS;
+    float pulloff = add_pulloff ? settings.homing.pulloff : 0.0f;
 
     if(settings.homing.flags.force_set_origin) {
         do {
@@ -80,8 +81,8 @@ static void limits_set_machine_positions (axes_signals_t cycle)
     } else do {
         if (cycle.mask & bit(--idx))
             sys_position[idx] = bit_istrue(settings.homing.dir_mask.value, bit(idx))
-                                 ? lroundf((settings.max_travel[idx] + settings.homing.pulloff) * settings.steps_per_mm[idx])
-                                 : lroundf(-settings.homing.pulloff * settings.steps_per_mm[idx]);
+                                 ? lroundf((settings.max_travel[idx] + pulloff) * settings.steps_per_mm[idx])
+                                 : lroundf(-pulloff * settings.steps_per_mm[idx]);
     } while(idx);
 }
 #endif
@@ -257,7 +258,7 @@ static bool limits_homing_cycle (axes_signals_t cycle)
 #ifdef KINEMATICS_API
     kinematics.limits_set_machine_positions(cycle);
 #else
-    limits_set_machine_positions(cycle);
+    limits_set_machine_positions(cycle, true);
 #endif
 
 #ifdef ENABLE_BACKLASH_COMPENSATION

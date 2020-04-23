@@ -725,47 +725,63 @@ void mc_dwell (float seconds)
 // executing the homing cycle. This prevents incorrect buffered plans after homing.
 status_code_t mc_homing_cycle (axes_signals_t cycle)
 {
-    // Check and abort homing cycle, if hard limits are already enabled. Helps prevent problems
-    // with machines with limits wired on both ends of travel to one limit pin.
-    // TODO: Move the pin-specific LIMIT_PIN call to limits.c as a function.
-    if (settings.limits.flags.two_switches && hal.limits_get_state().value) {
-        mc_reset(); // Issue system reset and ensure spindle and coolant are shutdown.
-        system_set_exec_alarm(Alarm_HardLimit);
-        return Status_Unhandled;
-    }
+    if(settings.homing.flags.manual && (sys.homing.mask == 0 || (cycle.mask ^ sys.homing.mask))) {
 
-    set_state(STATE_HOMING);                                // Set homing system state,
-    hal.stream.enqueue_realtime_command(CMD_STATUS_REPORT); // force a status report and
-    delay_sec(0.1f, DelayMode_Dwell);                       // delay a bit to get it sent (or perhaps wait a bit for a request?)
+        if(cycle.mask == 0)
+            cycle.mask = AXES_BITMASK;
 
-    hal.limits_enable(false, true); // Disable hard limits pin change register for cycle duration
+        sys.homed.mask |= cycle.mask;
+        limits_set_machine_positions(cycle, false);
 
-    // Turn off spindle and coolant (and update parser state)
-    gc_state.spindle.rpm = 0.0f;
-    gc_state.modal.spindle.on = gc_state.modal.spindle.ccw = Off;
-    spindle_set_state(gc_state.modal.spindle, 0.0f);
+    } else {
 
-    gc_state.modal.coolant.mask = 0;
-    coolant_set_state(gc_state.modal.coolant);
+        // Check and abort homing cycle, if hard limits are already enabled. Helps prevent problems
+        // with machines with limits wired on both ends of travel to one limit pin.
+        // TODO: Move the pin-specific LIMIT_PIN call to limits.c as a function.
+        if (settings.limits.flags.two_switches && hal.limits_get_state().value) {
+            mc_reset(); // Issue system reset and ensure spindle and coolant are shutdown.
+            system_set_exec_alarm(Alarm_HardLimit);
+            return Status_Unhandled;
+        }
 
-    // -------------------------------------------------------------------------------------
-    // Perform homing routine. NOTE: Special motion case. Only system reset works.
+        set_state(STATE_HOMING);                                // Set homing system state,
+        hal.stream.enqueue_realtime_command(CMD_STATUS_REPORT); // force a status report and
+        delay_sec(0.1f, DelayMode_Dwell);                       // delay a bit to get it sent (or perhaps wait a bit for a request?)
 
-    if (cycle.mask) // Perform homing cycle based on mask.
-        limits_go_home(cycle);
-    else {
+        hal.limits_enable(false, true); // Disable hard limits pin change register for cycle duration
 
-        uint_fast8_t idx = 0;
+        // Turn off spindle and coolant (and update parser state)
+        gc_state.spindle.rpm = 0.0f;
+        gc_state.modal.spindle.on = gc_state.modal.spindle.ccw = Off;
+        spindle_set_state(gc_state.modal.spindle, 0.0f);
 
-        sys.homed.mask = 0;
+        gc_state.modal.coolant.mask = 0;
+        coolant_set_state(gc_state.modal.coolant);
 
-        do {
-            if(settings.homing.cycle[idx].mask) {
-                cycle.mask = settings.homing.cycle[idx].mask;
-                if(!limits_go_home(cycle))
-                    break;
-            }
-        } while(++idx < N_AXIS);
+        // -------------------------------------------------------------------------------------
+        // Perform homing routine. NOTE: Special motion case. Only system reset works.
+
+        if (cycle.mask) // Perform homing cycle based on mask.
+            limits_go_home(cycle);
+        else {
+
+            uint_fast8_t idx = 0;
+
+            sys.homed.mask = 0;
+
+            do {
+                if(settings.homing.cycle[idx].mask) {
+                    cycle.mask = settings.homing.cycle[idx].mask;
+                    if(!limits_go_home(cycle))
+                        break;
+                }
+            } while(++idx < N_AXIS);
+        }
+
+        // If hard limits feature enabled, re-enable hard limits pin change register after homing cycle.
+        // NOTE: always call at end of homing regadless of setting, may be used to disable
+        // sensorless homing or switch back to limit switches input (if different from homing switches)
+        hal.limits_enable(settings.limits.flags.hard_enabled, false);
     }
 
     if(cycle.mask) {
@@ -782,11 +798,6 @@ status_code_t mc_homing_cycle (axes_signals_t cycle)
     }
 
     sys.report.homed = On;
-
-    // If hard limits feature enabled, re-enable hard limits pin change register after homing cycle.
-    // NOTE: always call at end of homing regadless of setting, may be used to disable
-    // sensorless homing or switch back to limit switches input (if different from homing switches)
-    hal.limits_enable(settings.limits.flags.hard_enabled, false);
 
     return settings.limits.flags.hard_enabled && settings.limits.flags.check_at_init && hal.limits_get_state().value
             ? Status_LimitsEngaged

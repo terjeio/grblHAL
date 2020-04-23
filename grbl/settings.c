@@ -472,6 +472,7 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 settings.status_report.mask = int_value & 0xFF;
                 settings.flags.force_buffer_sync_on_wco_change = bit_istrue(int_value, bit(8));
                 settings.flags.report_alarm_substate = bit_istrue(int_value, bit(9));
+                settings.flags.report_parser_state = bit_istrue(int_value, bit(10));
 #else
                 int_value &= 0x03;
                 settings.status_report.mask = (settings.status_report.mask & ~0x03) | int_value;
@@ -587,6 +588,7 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                     settings.homing.flags.enabled = On;
 #else
                     settings.homing.flags.value = int_value & 0x0F;
+                    settings.homing.flags.manual = bit_istrue(int_value, bit(5));
                     settings.limits.flags.two_switches = bit_istrue(int_value, bit(4));
 #endif
                 } else {

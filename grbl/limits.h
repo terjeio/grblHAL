@@ -33,6 +33,7 @@ void limits_soft_check(float *target);
 
 // Set axes to be homed from settings.
 void limits_set_homing_axes (void);
+void limits_set_machine_positions (axes_signals_t cycle, bool add_pulloff);
 
 void limit_interrupt_handler (axes_signals_t state);
 

@@ -49,8 +49,10 @@
 // Convert character to uppercase
 #define CAPS(c) ((c >= 'a' && c <= 'z') ? c & 0x5F : c)
 
+#ifndef STM32F103xB
 #ifndef UNUSED
 #define UNUSED(x) (void)(x)
+#endif
 #endif
 
 // Axis array index values. Must start with 0 and be continuous.

@@ -280,12 +280,12 @@ typedef union {
                 sleep_enable                    :1,
                 disable_laser_during_hold       :1,
                 force_initialization_alarm      :1,
-                unassigned0                     :1,
+                report_parser_state             :1, // TODO: move reportmask_t on next SETTINGS_VERSION change
                 allow_probing_feed_override     :1,
-                report_alarm_substate           :1,
+                report_alarm_substate           :1, // TODO: move reportmask_t on next SETTINGS_VERSION change
                 restore_after_feed_hold         :1,
                 unassigned1                     :1,
-                force_buffer_sync_on_wco_change :1,
+                force_buffer_sync_on_wco_change :1, // TODO: move reportmask_t on next SETTINGS_VERSION change
                 lathe_mode                      :1;
     };
 } settingflags_t;
@@ -301,6 +301,7 @@ typedef union {
                 work_coord_offset :1,
                 overrides         :1,
                 probe_coordinates :1;
+        // TODO: expand to 16 bit and move some report settings from settingflags_t here on next SETTINGS_VERSION change.
     };
 } reportmask_t;
 
@@ -360,7 +361,8 @@ typedef union {
                 single_axis_commands :1,
                 init_lock            :1,
                 force_set_origin     :1,
-                unassigned           :4;
+                manual               :1,
+                unassigned           :3;
     };
 } homing_settings_flags_t;
 
