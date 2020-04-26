@@ -95,6 +95,12 @@ void usbWriteS (const char *s)
                 if(!hal.stream_blocking_callback())
                     return;
             }
+            if(length % 64 == 0) {
+            	while(CDC_Transmit_FS((uint8_t *)txbuf.data, 0) == USBD_BUSY) {
+                    if(!hal.stream_blocking_callback())
+                        return;
+                }
+            }
         }
     }
 //  while(CDC_Transmit_FS((uint8_t*)s, strlen(s)) == USBD_BUSY);
