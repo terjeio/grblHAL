@@ -249,7 +249,7 @@ inline static void set_dir_outputs (axes_signals_t dir_outbits)
 
     DIGITAL_OUT(dirX, dir_outbits.x);
     DIGITAL_OUT(dirY, dir_outbits.y);
- //   DIGITAL_OUT(dirZ, dir_outbits.z);
+    DIGITAL_OUT(dirZ, dir_outbits.z);
 #ifdef A_AXIS
     DIGITAL_OUT(dirA, dir_outbits.a);
 #endif
@@ -311,7 +311,10 @@ static void stepperGoIdle (bool clear_signals)
 //       to cover the needed range. Refer to actual drivers for code examples.
 static void stepperCyclesPerTick (uint32_t cycles_per_tick)
 {
+    PIT_TCTRL0 &= ~PIT_TCTRL_TEN;
     PIT_LDVAL0 = cycles_per_tick < (1UL << 20) ? cycles_per_tick : 0x000FFFFFUL;
+    PIT_TFLG0 |= PIT_TFLG_TIF;
+    PIT_TCTRL0 |= PIT_TCTRL_TEN;
 }
 
 // Start a stepper pulse, no delay version
@@ -1022,7 +1025,7 @@ bool driver_init (void)
         options[strlen(options) - 1] = '\0';
 
     hal.info = "Teensy 4.0"; // Typically set to MCU or board name
-    hal.driver_version = "200413";
+    hal.driver_version = "200502";
     hal.driver_options = *options == '\0' ? NULL : options;
     hal.driver_setup = driver_setup;
     hal.f_step_timer = 24000000;
@@ -1135,9 +1138,10 @@ bool driver_init (void)
 // Main stepper driver.
 static void stepper_driver_isr (void)
 {
-    PIT_TFLG0 |= PIT_TFLG_TIF;
-
-    hal.stepper_interrupt_callback();
+    if(PIT_TFLG0 & PIT_TFLG_TIF) {
+        PIT_TFLG0 |= PIT_TFLG_TIF;
+        hal.stepper_interrupt_callback();
+    }
 }
 
 /* The Stepper Port Reset Interrupt: This interrupt handles the falling edge of the step
