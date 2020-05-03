@@ -187,6 +187,12 @@
 // homing cycle while on the limit switch and not have to move the machine off of it.
 #define LIMITS_TWO_SWITCHES_ON_AXES 0 // Default 0 (disabled), set to 1 to enable
 
+// This option enables the safety door switch. A safety door, when triggered,
+// immediately forces a feed hold and then safely de-energizes the machine. Resuming is blocked until
+// the safety door is re-engaged. When it is, Grbl will re-energize the machine and then resume on the
+// previous tool path, as if nothing happened.
+// #define ENABLE_SAFETY_DOOR_INPUT_PIN // Default disabled. Uncomment to enable.
+
 // After the safety door switch has been toggled and restored, this setting sets the power-up delay
 // between restoring the spindle and coolant and resuming the cycle.
 #define SAFETY_DOOR_SPINDLE_DELAY 4.0f // Float (seconds)

@@ -182,6 +182,30 @@ static bool add_output_command (output_command_t *command)
     return add_cmd != NULL;
 }
 
+static status_code_t init_sync_motion (plan_line_data_t *pl_data, float pitch)
+{
+    pl_data->condition.inverse_time = Off;
+    pl_data->feed_rate = gc_state.distance_per_rev = pitch;
+    pl_data->condition.is_rpm_pos_adjusted = Off;   // Switch off CSS.
+    pl_data->overrides = sys.override.control;      // Use current override flags and
+    pl_data->overrides.sync = On;                   // set to sync overrides on execution of motion.
+
+    // Disable feed rate and spindle overrides for the duration of the cycle.
+    pl_data->overrides.spindle_rpm_disable = sys.override.control.spindle_rpm_disable = On;
+    pl_data->overrides.feed_rate_disable = sys.override.control.feed_rate_disable = On;
+    sys.override.spindle_rpm = DEFAULT_SPINDLE_RPM_OVERRIDE;
+    // TODO: need for gc_state.distance_per_rev to be reset on modal change?
+    float feed_rate = pl_data->feed_rate * hal.spindle_get_data(SpindleData_RPM).rpm;
+
+    if(feed_rate == 0.0f)
+        FAIL(Status_GcodeSpindleNotRunning); // [Spindle not running]
+
+    if(feed_rate > settings.max_rate[Z_AXIS])
+        FAIL(Status_GcodeMaxFeedRateExceeded); // [Feed rate too high]
+
+    return Status_OK;
+}
+
 // Executes one block (line) of 0-terminated G-Code. The block is assumed to contain only uppercase
 // characters and signed floating point values (no whitespace). Comments and block delete
 // characters have been removed. In this function, all units and positions are converted and
@@ -2308,26 +2332,11 @@ status_code_t gc_execute_block(char *block, char *message)
 
                     gc_override_flags_t overrides = sys.override.control; // Save current override disable status.
 
-                    plan_data.condition.inverse_time = Off;
-                    plan_data.feed_rate = gc_state.distance_per_rev = thread.pitch;
-                    plan_data.condition.is_rpm_pos_adjusted = Off;   // Switch off CSS.
-                    plan_data.overrides = overrides;                 // Use current override flags and
-                    plan_data.overrides.sync = On;                   // set to sync overrides on execution of motion.
+                    status_code_t status = init_sync_motion(&plan_data, gc_block.values.k);
+                    if(status != Status_OK)
+                        FAIL(status);
 
-                    // Disable feed rate and spindle overrides for the duration of the cycle.
-                    plan_data.overrides.feed_hold_disable = On;
-                    plan_data.overrides.spindle_rpm_disable = sys.override.control.spindle_rpm_disable = On;
-                    plan_data.overrides.feed_rate_disable = sys.override.control.feed_rate_disable = On;
-                    sys.override.spindle_rpm = DEFAULT_SPINDLE_RPM_OVERRIDE;
-                    // TODO: need for gc_state.distance_per_rev to be reset on modal change?
-                    gc_block.values.f = hal.spindle_get_data(SpindleData_RPM).rpm;
-                    gc_block.values.f = plan_data.feed_rate * gc_block.values.f;
-
-                    if(gc_block.values.f == 0.0f)
-                        FAIL(Status_GcodeSpindleNotRunning); // [Spindle not running]
-
-                    if(gc_block.values.f > settings.max_rate[Z_AXIS])
-                        FAIL(Status_GcodeMaxFeedRateExceeded); // [Feed rate too high]
+                    plan_data.condition.spindle.synchronized = On;
 
                     mc_dwell(0.01f); // Needed for now since initial spindle sync is done just before st_wake_up
 
@@ -2344,25 +2353,9 @@ status_code_t gc_execute_block(char *block, char *message)
 
                     gc_override_flags_t overrides = sys.override.control; // Save current override disable status.
 
-                    plan_data.condition.inverse_time = Off;
-                    plan_data.feed_rate = gc_state.distance_per_rev = thread.pitch;
-                    plan_data.condition.is_rpm_pos_adjusted = Off;   // Switch off CSS.
-                    plan_data.overrides = overrides;                 // Use current override flags and
-                    plan_data.overrides.sync = On;                   // set to sync overrides on execution of motion.
-
-                    // Disable feed rate and spindle overrides for the duration of the cycle.
-                    plan_data.overrides.spindle_rpm_disable = sys.override.control.spindle_rpm_disable = On;
-                    plan_data.overrides.feed_rate_disable = sys.override.control.feed_rate_disable = On;
-                    sys.override.spindle_rpm = DEFAULT_SPINDLE_RPM_OVERRIDE;
-                    // TODO: need for gc_state.distance_per_rev to be reset on modal change?
-                    gc_block.values.f = hal.spindle_get_data(SpindleData_RPM).rpm;
-                    gc_block.values.f = plan_data.feed_rate * gc_block.values.f;
-
-                    if(gc_block.values.f == 0.0f)
-                        FAIL(Status_GcodeSpindleNotRunning); // [Spindle not running]
-
-                    if(gc_block.values.f > settings.max_rate[Z_AXIS])
-                        FAIL(Status_GcodeMaxFeedRateExceeded); // [Feed rate too high]
+                    status_code_t status = init_sync_motion(&plan_data, thread.pitch);
+                    if(status != Status_OK)
+                        FAIL(status);
 
                     mc_thread(&plan_data, gc_state.position, &thread, overrides.feed_hold_disable);
 

@@ -100,12 +100,14 @@ bool protocol_main_loop(bool cold_start)
         set_state(STATE_ALARM); // Ensure alarm state is set.
         hal.report.feedback_message(Message_AlarmLock);
     } else {
-        // Check if the safety door is open.
         set_state(STATE_IDLE);
+#ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
+        // Check if the safety door is open.
         if (!settings.flags.safety_door_ignore_when_idle && hal.system_control_get_state().safety_door_ajar) {
             bit_true(sys_rt_exec_state, EXEC_SAFETY_DOOR);
             protocol_execute_realtime(); // Enter safety door mode. Should return as IDLE state.
         }
+#endif
         // All systems go!
         system_execute_startup(line); // Execute startup script.
     }

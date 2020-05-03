@@ -1,6 +1,10 @@
 ## GrblHAL ##
 ---
 
+Build 20200503: Added configuration flag for manual homing. \(Re\)added compile time option `ENABLE_SAFETY_DOOR_INPUT_PIN` for [safety door switch](https://github.com/terjeio/grblHAL/blob/master/grbl/config.h), default is now disabled. Some bug fixes and "hardening" of code.
+
+---
+
 Added some [template code](./templates/README.md) to aid customizations such as driver support for M62 - M68 M-codes mentioned below.
 
 ---

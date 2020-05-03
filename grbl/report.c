@@ -211,6 +211,10 @@ message_code_t report_feedback_message(message_code_t message_code)
 
     switch(message_code) {
 
+        case Message_None:
+            hal.stream.write_all("");
+            break;
+
         case Message_CriticalEvent:
             hal.stream.write_all("Reset to continue");
             break;
@@ -1007,7 +1011,7 @@ void report_realtime_status (void)
                 append = axis_signals_tostring(append, lim_pin_state);
 
             if (ctrl_pin_state.value) {
-                if (ctrl_pin_state.safety_door_ajar)
+                if (ctrl_pin_state.safety_door_ajar && hal.driver_cap.safety_door)
                     *append++ = 'D';
                 if (ctrl_pin_state.reset)
                     *append++ = 'R';
@@ -1105,8 +1109,12 @@ void report_realtime_status (void)
         if(sys.report.mpg_mode && hal.driver_cap.mpg_mode)
             hal.stream.write_all(sys.mpg_mode ? "|MPG:1" : "|MPG:0");
 
-        if(sys.report.homed && (sys.homing.mask || settings.homing.flags.manual))
-            hal.stream.write_all(appendbuf(2, "|H:", uitoa((uint32_t)(sys.homing.mask == 0 ? sys.homed.mask : (sys.homing.mask & sys.homed.mask) == sys.homed.mask))));
+        if(sys.report.homed && (sys.homing.mask || settings.homing.flags.single_axis_commands || settings.homing.flags.manual)) {
+            axes_signals_t homing = {sys.homing.mask ? sys.homing.mask : AXES_BITMASK};
+            hal.stream.write_all(appendbuf(2, "|H:", (homing.mask & sys.homed.mask) == homing.mask ? "1" : "0"));
+            if(settings.homing.flags.single_axis_commands)
+                hal.stream.write_all(appendbuf(2, ",", uitoa(sys.homed.mask)));
+        }
 
         if(sys.report.xmode && settings.flags.lathe_mode)
             hal.stream.write_all(gc_state.modal.diameter_mode ? "|D:1" : "|D:0");

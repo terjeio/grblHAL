@@ -725,9 +725,11 @@ void mc_dwell (float seconds)
 // executing the homing cycle. This prevents incorrect buffered plans after homing.
 status_code_t mc_homing_cycle (axes_signals_t cycle)
 {
-    if(settings.homing.flags.manual && (sys.homing.mask == 0 || (cycle.mask ^ sys.homing.mask))) {
+    bool home_all = cycle.mask == 0;
 
-        if(cycle.mask == 0)
+    if(settings.homing.flags.manual && (home_all ? sys.homing.mask : (cycle.mask & sys.homing.mask)) == 0) {
+
+        if(home_all)
             cycle.mask = AXES_BITMASK;
 
         sys.homed.mask |= cycle.mask;
@@ -761,13 +763,13 @@ status_code_t mc_homing_cycle (axes_signals_t cycle)
         // -------------------------------------------------------------------------------------
         // Perform homing routine. NOTE: Special motion case. Only system reset works.
 
-        if (cycle.mask) // Perform homing cycle based on mask.
+        if (!home_all) // Perform homing cycle based on mask.
             limits_go_home(cycle);
         else {
 
             uint_fast8_t idx = 0;
 
-            sys.homed.mask = 0;
+            sys.homed.mask &= ~sys.homing.mask;
 
             do {
                 if(settings.homing.cycle[idx].mask) {
@@ -788,6 +790,13 @@ status_code_t mc_homing_cycle (axes_signals_t cycle)
 
         if(!protocol_execute_realtime()) // Check for reset and set system abort.
             return Status_Unhandled;     // Did not complete. Alarm state set by mc_alarm.
+
+        if(home_all && settings.homing.flags.manual)
+        {
+            cycle.mask = AXES_BITMASK & ~sys.homing.mask;
+            sys.homed.mask = AXES_BITMASK;
+            limits_set_machine_positions(cycle, false);
+        }
 
         // Homing cycle complete! Setup system for normal operation.
         // -------------------------------------------------------------------------------------

@@ -129,6 +129,12 @@ int grbl_enter (void)
     hal.driver_settings_restore = NULL;
 #endif
 
+#ifndef ENABLE_SAFETY_DOOR_INPUT_PIN
+    hal.driver_cap.safety_door = false;
+#else
+    driver_ok &= hal.driver_cap.safety_door;
+#endif
+
   #ifdef EMULATE_EEPROM
     eeprom_emu_init();
   #endif

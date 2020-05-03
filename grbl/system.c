@@ -31,21 +31,23 @@ ISR_CODE void control_interrupt_handler (control_signals_t signals)
         if ((signals.reset || signals.e_stop) && sys.state != STATE_ESTOP)
             mc_reset();
         else {
+#ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
             if (signals.safety_door_ajar) {
                 if(settings.flags.safety_door_ignore_when_idle) {
                     // Only stop the spindle (laser off) when idle or jogging,
                     // this to allow positioning the controlled point (spindle) when door is open.
                     // NOTE: at least for lasers there should be an external interlock blocking laser power.
                     if(sys.state != STATE_IDLE && sys.state != STATE_JOG)
-                        bit_true(sys_rt_exec_state, EXEC_SAFETY_DOOR);
+                    	system_set_exec_state_flag(EXEC_SAFETY_DOOR);
                     hal.spindle_set_state((spindle_state_t){0}, 0.0f); // TODO: stop spindle in laser mode only?
                 } else
-                    bit_true(sys_rt_exec_state, EXEC_SAFETY_DOOR);
+                	system_set_exec_state_flag(EXEC_SAFETY_DOOR);
             }
+#endif
             if (signals.feed_hold)
-                bit_true(sys_rt_exec_state, EXEC_FEED_HOLD);
+            	system_set_exec_state_flag(EXEC_FEED_HOLD);
             else if (signals.cycle_start)
-                bit_true(sys_rt_exec_state, EXEC_CYCLE_START);
+            	system_set_exec_state_flag(EXEC_CYCLE_START);
         }
     }
 }

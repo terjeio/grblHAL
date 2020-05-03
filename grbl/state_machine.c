@@ -35,6 +35,7 @@ static void state_await_toolchanged (uint_fast16_t rt_exec);
 static void state_await_waypoint_retract (uint_fast16_t rt_exec);
 static void state_restore (uint_fast16_t rt_exec);
 static void state_await_resumed (uint_fast16_t rt_exec);
+static void state_await_restore (uint_fast16_t rt_exec);
 
 static void (* volatile stateHandler)(uint_fast16_t rt_exec) = state_idle;
 
@@ -458,18 +459,12 @@ static void state_await_resume (uint_fast16_t rt_exec)
                         gc_state.spindle.rpm = 0.0f;
                         gc_state.modal.spindle.on = gc_state.modal.spindle.ccw = Off;
                     }
+                    sys.override.spindle_stop.value = 0; // Clear spindle stop override states
                 } else {
-                    if (restore_condition.spindle.on != hal.spindle_get_state().on) {
-                        hal.report.feedback_message(Message_SpindleRestore);
-                        spindle_restore(restore_condition.spindle, restore_spindle_rpm);
-                    }
-                    if (gc_state.modal.coolant.value != hal.coolant_get_state().value) {
-                        // NOTE: Laser mode will honor this delay. An exhaust system is often controlled by this pin.
-                        coolant_set_state(restore_condition.coolant);
-                        delay_sec(SAFETY_DOOR_COOLANT_DELAY, DelayMode_SysSuspend);
-                    }
+                	handler_changed = true;
+                    stateHandler = state_await_restore;
+                    stateHandler(0);
                 }
-                sys.override.spindle_stop.value = 0; // Clear spindle stop override states
                 break;
         }
 
@@ -482,6 +477,42 @@ static void state_await_resume (uint_fast16_t rt_exec)
 
     if (rt_exec & EXEC_SLEEP)
         set_state(STATE_SLEEP);
+}
+
+static void state_await_restore (uint_fast16_t rt_exec)
+{
+    static bool restart = false;
+
+    if(rt_exec == 0) {
+
+        restart = true;
+
+        if (restore_condition.spindle.on != hal.spindle_get_state().on) {
+            hal.report.feedback_message(Message_SpindleRestore);
+            spindle_restore(restore_condition.spindle, restore_spindle_rpm);
+        }
+
+        if (restore_condition.coolant.value != hal.coolant_get_state().value) {
+            // NOTE: Laser mode will honor this delay. An exhaust system is often controlled by this pin.
+            coolant_set_state(restore_condition.coolant);
+            delay_sec(SAFETY_DOOR_COOLANT_DELAY, DelayMode_SysSuspend);
+        }
+
+        sys.override.spindle_stop.value = 0; // Clear spindle stop override states
+
+        hal.report.feedback_message(Message_None);
+
+        if(restart) {
+            set_state(STATE_IDLE);
+            set_state(STATE_CYCLE);
+        }
+    }
+
+    if(rt_exec & EXEC_FEED_HOLD) {
+    	restart = false;
+    	stateHandler = state_await_resume;
+    }
+
 }
 
 static void restart_retract (void)
