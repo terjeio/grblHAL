@@ -33,7 +33,7 @@
 
 // check - check if M-code is handled here.
 // parameters: mcode - M-code to check for (some are predefined in user_mcode_t in grbl/gcode.h), use a cast if not.
-// returns:    mcode if handles, UserMCode_Ignore otherwise (UserMCode_Ignore is defined in grbl/gcode.h).
+// returns:    mcode if handled, UserMCode_Ignore otherwise (UserMCode_Ignore is defined in grbl/gcode.h).
 static user_mcode_t check (user_mcode_t mcode)
 {
     return mcode == (user_mcode_t)100 ? mcode : UserMCode_Ignore;
@@ -84,7 +84,7 @@ static void execute (uint_fast16_t state, parser_block_t *gc_block) {
     }
 }
 
-// Set up HAL pointers for handling addtional M-codes.
+// Set up HAL pointers for handling additional M-codes.
 // Call this function on driver setup.
 void mcodes_init (void)
 {

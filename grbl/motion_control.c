@@ -733,8 +733,11 @@ status_code_t mc_homing_cycle (axes_signals_t cycle)
             cycle.mask = AXES_BITMASK;
 
         sys.homed.mask |= cycle.mask;
+#ifdef KINEMATICS_API
+        kinematics.limits_set_machine_positions(cycle);
+#else
         limits_set_machine_positions(cycle, false);
-
+#endif
     } else {
 
         // Check and abort homing cycle, if hard limits are already enabled. Helps prevent problems
@@ -795,7 +798,11 @@ status_code_t mc_homing_cycle (axes_signals_t cycle)
         {
             cycle.mask = AXES_BITMASK & ~sys.homing.mask;
             sys.homed.mask = AXES_BITMASK;
+#ifdef KINEMATICS_API
+            kinematics.limits_set_machine_positions(cycle);
+#else
             limits_set_machine_positions(cycle, false);
+#endif
         }
 
         // Homing cycle complete! Setup system for normal operation.

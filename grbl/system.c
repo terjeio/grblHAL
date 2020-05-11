@@ -250,6 +250,9 @@ status_code_t system_execute_line (char *line)
                 if (line[2] == '\0')
                     system_execute_startup(line); // TODO: only after all configured axes homed?
             }
+
+            if(retval != Status_InvalidStatement)
+                retval = Status_OK;
             break;
 
         case 'S': // Puts Grbl to sleep [IDLE/ALARM]
