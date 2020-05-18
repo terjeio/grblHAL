@@ -25,8 +25,8 @@
 #define Z_STEP_PIN      (26u)
 
 // Define step direction output pins.
-#define X_DIRECTION_PIN (33u)
-#define Y_DIRECTION_PIN (5u)
+#define X_DIRECTION_PIN (5u)
+#define Y_DIRECTION_PIN (33u)
 #define Z_DIRECTION_PIN (13u)
 
 // Define stepper driver enable/disable output pin(s).
@@ -41,7 +41,7 @@
 // Define spindle enable and spindle direction output pins.
 #define SPINDLE_ENABLE_PIN      (12u)
 #define SPINDLE_DIRECTION_PIN   (16u)
-#define SPINDLEPWMPIN           (12u)
+#define SPINDLEPWMPIN           (13u)
 
 // Define flood and mist coolant enable output pins.
 #define COOLANT_FLOOD_PIN   (4u)

@@ -38,9 +38,10 @@ static stream_rx_buffer_t usb_rxbuffer, usb_rxbackup;
 void usb_serialInit(void)
 {
 //    usb_serial_configure(); // Done somewhere already - do not call again
-
+    txbuf.s = txbuf.data;
     txbuf.max_length = usb_serial_write_buffer_free(); // 6144
     txbuf.max_length = (txbuf.max_length > BLOCK_TX_BUFFER_SIZE ? BLOCK_TX_BUFFER_SIZE : txbuf.max_length) - 20;
+
 }
 
 //

@@ -120,12 +120,15 @@ typedef struct {
 static debounce_queue_t debounce_queue = {0};
 
 // Standard inputs
-static gpio_t Reset, FeedHold, CycleStart, SafetyDoor, Probe, LimitX, LimitY, LimitZ;
+static gpio_t Reset, FeedHold, CycleStart, Probe, LimitX, LimitY, LimitZ;
 
 // Standard outputs
 static gpio_t spindleEnable, spindleDir, steppersEnable, Mist, Flood, stepX, stepY, stepZ, dirX, dirY, dirZ;
 
 // Optional I/O
+#ifdef SAFETY_DOOR_PIN
+static gpio_t SafetyDoor;
+#endif
 #ifdef A_AXIS
 static gpio_t stepA, dirA, LimitA;
 #endif
@@ -838,7 +841,7 @@ static bool driver_setup (settings_t *settings)
     TMR4_CTRL0 = TMR_CTRL_PCS(0b1000) | TMR_CTRL_ONCE | TMR_CTRL_LENGTH;
     TMR4_CSCTRL0 = TMR_CSCTRL_TCF1EN;
 
-	attachInterruptVector(IRQ_QTIMER2, stepper_pulse_isr);
+	attachInterruptVector(IRQ_QTIMER4, stepper_pulse_isr);
 	NVIC_SET_PRIORITY(IRQ_QTIMER4, 0);
 	NVIC_ENABLE_IRQ(IRQ_QTIMER4);
 
@@ -1025,7 +1028,7 @@ bool driver_init (void)
         options[strlen(options) - 1] = '\0';
 
     hal.info = "Teensy 4.0"; // Typically set to MCU or board name
-    hal.driver_version = "200502";
+    hal.driver_version = "200518";
     hal.driver_options = *options == '\0' ? NULL : options;
     hal.driver_setup = driver_setup;
     hal.f_step_timer = 24000000;
@@ -1202,6 +1205,7 @@ inline static input_signal_t *get_debounce (void)
 
 static void debounce_isr (void)
 {
+    uint8_t grp = 0;
     input_signal_t *signal;
 
     TMR3_CSCTRL0 &= ~TMR_CSCTRL_TCF1;
@@ -1211,17 +1215,14 @@ static void debounce_isr (void)
         signal->gpio.reg->IMR |= signal->gpio.bit;
 
         if(((signal->gpio.reg->DR & signal->gpio.bit) != 0) == (signal->irq_mode == IRQ_Mode_Falling ? 0 : 1))
-          switch(signal->group) {
-
-            case INPUT_GROUP_LIMIT:
-                hal.limit_interrupt_callback(limitsGetState());
-                break;
-
-            case INPUT_GROUP_CONTROL:
-                hal.control_interrupt_callback(systemGetState());
-                break;
-        }
+            grp |= signal->group;
     }
+
+    if(grp & INPUT_GROUP_LIMIT)
+        hal.limit_interrupt_callback(limitsGetState());
+
+    if(grp & INPUT_GROUP_CONTROL)
+        hal.control_interrupt_callback(systemGetState());
 }
 
   //GPIO intr process
