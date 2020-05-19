@@ -38,16 +38,16 @@ ISR_CODE void control_interrupt_handler (control_signals_t signals)
                     // this to allow positioning the controlled point (spindle) when door is open.
                     // NOTE: at least for lasers there should be an external interlock blocking laser power.
                     if(sys.state != STATE_IDLE && sys.state != STATE_JOG)
-                    	system_set_exec_state_flag(EXEC_SAFETY_DOOR);
+                        system_set_exec_state_flag(EXEC_SAFETY_DOOR);
                     hal.spindle_set_state((spindle_state_t){0}, 0.0f); // TODO: stop spindle in laser mode only?
                 } else
-                	system_set_exec_state_flag(EXEC_SAFETY_DOOR);
+                    system_set_exec_state_flag(EXEC_SAFETY_DOOR);
             }
 #endif
             if (signals.feed_hold)
-            	system_set_exec_state_flag(EXEC_FEED_HOLD);
+                system_set_exec_state_flag(EXEC_FEED_HOLD);
             else if (signals.cycle_start)
-            	system_set_exec_state_flag(EXEC_CYCLE_START);
+                system_set_exec_state_flag(EXEC_CYCLE_START);
         }
     }
 }
@@ -438,7 +438,7 @@ bool system_check_travel_limits (float *target)
             idx--;
         // When homing forced set origin is enabled, soft limits checks need to account for directionality.
             failed = settings.max_travel[idx] < -0.0f &&
-            		  (bit_istrue(settings.homing.dir_mask.value, bit(idx))
+                      (bit_istrue(settings.homing.dir_mask.value, bit(idx))
                         ? (target[idx] < 0.0f || target[idx] > -settings.max_travel[idx])
                         : (target[idx] > 0.0f || target[idx] < settings.max_travel[idx]));
         } while(!failed && idx);
@@ -455,12 +455,12 @@ bool system_check_travel_limits (float *target)
 // NOTE: max_travel is stored as negative
 void system_apply_jog_limits (float *target)
 {
-    float pulloff = settings.limits.flags.hard_enabled ? settings.homing.pulloff : 0.0f;
     uint_fast8_t idx = N_AXIS;
 
     if(sys.homed.mask) do {
         idx--;
-        if(bit_istrue(sys.homed.mask, bit(idx))) {
+        float pulloff = settings.limits.flags.hard_enabled && bit_istrue(sys.homing.mask, bit(idx)) ? settings.homing.pulloff : 0.0f;
+        if(bit_istrue(sys.homed.mask, bit(idx)) && settings.max_travel[idx] < -0.0f) {
             if(settings.homing.flags.force_set_origin) {
                 if(bit_isfalse(settings.homing.dir_mask.value, bit(idx))) {
                     if(target[idx] > 0.0f)
