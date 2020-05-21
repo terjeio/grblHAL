@@ -2,7 +2,7 @@
   settings.h - eeprom configuration handling
   Part of Grbl
 
-  Copyright (c) 2017-2019 Terje Io
+  Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -78,7 +78,11 @@ typedef enum {
 #define N_COORDINATE_SYSTEMS (SettingIndex_NCoord - 3)  // Number of supported work coordinate systems (from index 1)
 
 // Define Grbl axis settings numbering scheme. Starts at Setting_AxisSettingsBase, every INCREMENT, over N_SETTINGS.
+#ifdef ENABLE_BACKLASH_COMPENSATION
+#define AXIS_N_SETTINGS          6
+#else
 #define AXIS_N_SETTINGS          4
+#endif
 #define AXIS_SETTINGS_INCREMENT  10  // Must be greater than the number of axis settings TODO: change to 100 to allow for a logical wider range of parameters?
 
 typedef enum {

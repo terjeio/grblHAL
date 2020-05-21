@@ -613,6 +613,14 @@ void report_gcode_modes (void)
 
 #if COMPATIBILITY_LEVEL < 10
 
+    if(gc_state.modal.tool_offset_mode == ToolLengthOffset_Cancel)
+        hal.stream.write(" G49");
+    else {
+        hal.stream.write(" G43");
+        if(gc_state.modal.tool_offset_mode != ToolLengthOffset_Enable)
+            hal.stream.write(gc_state.modal.tool_offset_mode == ToolLengthOffset_EnableDynamic ? ".1" : ".2");
+    }
+
     hal.stream.write(gc_state.canned.retract_mode == CCRetractMode_RPos ? " G99" : " G98");
 
     hal.stream.write(gc_state.modal.scaling_active ? " G51" : " G50");
