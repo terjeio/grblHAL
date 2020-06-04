@@ -331,6 +331,11 @@ static void state_await_hold (uint_fast16_t rt_exec)
         plan_cycle_reinitialize();
         sys.step_control.flags = 0;
 
+        if(sys.alarm_pending) {
+            system_set_exec_alarm(sys.alarm_pending);
+            sys.alarm_pending = Alarm_None;
+        }
+
         switch (sys.state) {
 
             case STATE_TOOL_CHANGE:

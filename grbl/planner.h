@@ -2,7 +2,7 @@
   planner.h - buffers movement commands and manages the acceleration profile plan
   Part of Grbl
 
-  Copyright (c) 2019 Terje Io
+  Copyright (c) 2019-2020 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -48,7 +48,7 @@ typedef union {
 
 // This struct stores a linear movement of a g-code block motion with its critical "nominal" values
 // are as specified in the source g-code.
-typedef struct {
+typedef struct plan_block {
     // Fields used by the bresenham algorithm for tracing the line
     // NOTE: Used by stepper algorithm to execute the block correctly. Do not alter these values.
     uint32_t steps[N_AXIS];         // Step count along each axis
@@ -79,6 +79,7 @@ typedef struct {
 
     char *message;                // Message to be displayed when block is executed.
     output_command_t *output_commands;
+    struct plan_block *prev, *next; // Linked list pointers, DO NOT MOVE - these MUST be the last elements in the struct!
 } plan_block_t;
 
 

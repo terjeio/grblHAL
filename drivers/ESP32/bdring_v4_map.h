@@ -21,6 +21,8 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#define BOARD_NAME "BDRING v4"
+
 // timer definitions
 #define STEP_TIMER_GROUP TIMER_GROUP_0
 #define STEP_TIMER_INDEX TIMER_0
@@ -62,7 +64,7 @@
 // Define spindle enable and spindle direction output pins.
 #define SPINDLE_ENABLE_PIN      GPIO_NUM_22
 #define SPINDLE_MASK            (1ULL << SPINDLE_ENABLE_PIN)
-#define SPINDLEPWMPIN           GPIO_NUM_17
+#define SPINDLEPWMPIN           GPIO_NUM_2
 
 // Define flood and mist coolant enable output pins.
 

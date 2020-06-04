@@ -21,6 +21,8 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#define BOARD_NAME "BDRING v3.5"
+
 // timer definitions
 #define STEP_TIMER_GROUP TIMER_GROUP_0
 #define STEP_TIMER_INDEX TIMER_0

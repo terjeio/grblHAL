@@ -120,7 +120,7 @@ bool protocol_main_loop(bool cold_start)
     int16_t c;
     char eol = '\0';
     line_flags_t line_flags = {0};
-    bool nocaps = false, gcode_error = false;
+    bool nocaps = false;
 
     xcommand[0] = '\0';
     user_message.show = keep_rt_commands = false;
@@ -134,7 +134,7 @@ bool protocol_main_loop(bool cold_start)
             if(c == ASCII_CAN) {
 
                 eol = xcommand[0] = '\0';
-                keep_rt_commands = nocaps = gcode_error = user_message.show = false;
+                keep_rt_commands = nocaps = user_message.show = false;
                 char_counter = line_flags.value = 0;
                 gc_state.last_error = Status_OK;
 
@@ -166,22 +166,22 @@ bool protocol_main_loop(bool cold_start)
                 else if ((line[0] == '\0' || char_counter == 0) && !user_message.show) // Empty or comment line. For syncing purposes.
                     gc_state.last_error = Status_OK;
                 else if (line[0] == '$') {// Grbl '$' system command
-                    gcode_error = false;
                     if((gc_state.last_error = system_execute_line(line)) == Status_LimitsEngaged) {
                         set_state(STATE_ALARM); // Ensure alarm state is active.
                         report_alarm_message(Alarm_LimitsEngaged);
                         hal.report.feedback_message(Message_CheckLimits);
                     }
-                } else if (line[0] == '[' && hal.user_command_execute) {
-                    gcode_error = false;
+                } else if (line[0] == '[' && hal.user_command_execute)
                     gc_state.last_error = hal.user_command_execute(line);
-                } else if (sys.state & (STATE_ALARM|STATE_ESTOP|STATE_JOG)) // Everything else is gcode. Block if in alarm, eStop or jog mode.
+                else if (sys.state & (STATE_ALARM|STATE_ESTOP|STATE_JOG)) // Everything else is gcode. Block if in alarm, eStop or jog mode.
                     gc_state.last_error = Status_SystemGClock;
-                else if(!gcode_error) { // Parse and execute g-code block.
-                    gc_state.last_error = gc_execute_block(line, user_message.show ? user_message.message : NULL);
 #if COMPATIBILITY_LEVEL == 0
-                    gcode_error = gc_state.last_error != Status_OK;
+                else if(gc_state.last_error == Status_OK) { // Parse and execute g-code block.
+#else
+                else { // Parse and execute g-code block.
+
 #endif
+                    gc_state.last_error = gc_execute_block(line, user_message.show ? user_message.message : NULL);
                 }
 
                 // Add a short delay for each block processed in Check Mode to
@@ -461,11 +461,14 @@ bool protocol_exec_rt_system ()
         if(rt_exec & EXEC_GCODE_REPORT)
             report_gcode_modes();
 
+        if(rt_exec & EXEC_TLO_REPORT)
+            report_tool_offsets();
+
         // Execute and print PID log to output stream
         if (rt_exec & EXEC_PID_REPORT)
             report_pid_log();
 
-        rt_exec &= ~(EXEC_STOP|EXEC_STATUS_REPORT|EXEC_GCODE_REPORT|EXEC_PID_REPORT); // clear requests already processed
+        rt_exec &= ~(EXEC_STOP|EXEC_STATUS_REPORT|EXEC_GCODE_REPORT|EXEC_PID_REPORT|EXEC_TLO_REPORT); // clear requests already processed
 
         if(sys.flags.feed_hold_pending) {
             if(rt_exec & EXEC_CYCLE_START)
@@ -680,8 +683,12 @@ ISR_CODE bool protocol_enqueue_realtime_command (char c)
             drop = true;
             break;
 
-        case CMD_STATUS_REPORT_ALL: // Add all statuses to report
-            sys.report.value = (uint16_t)-1;
+        case CMD_STATUS_REPORT_ALL: // Add all statuses on to report
+            {
+                bool tlo = sys.report.tool_offset;
+                sys.report.value = (uint16_t)-1;
+                sys.report.tool_offset = tlo;
+            }
             // no break
 
         case CMD_STATUS_REPORT:

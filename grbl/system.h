@@ -2,7 +2,7 @@
   system.h - Header for system level commands and real-time processes
   Part of Grbl
 
-  Copyright (c) 2017-2019 Terje Io
+  Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2014-2016 Sungeun K. Jeon for Gnea Research LLC
 
   Grbl is free software: you can redistribute it and/or modify
@@ -23,6 +23,7 @@
 #define system_h
 
 #include "gcode.h"
+#include "probe.h"
 
 // Define system executor bit map. Used internally by realtime protocol as realtime command flags,
 // which notifies the main program to execute the specified realtime command asynchronously.
@@ -41,6 +42,7 @@
 #define EXEC_TOOL_CHANGE    bit(9)
 #define EXEC_PID_REPORT     bit(10)
 #define EXEC_GCODE_REPORT   bit(11)
+#define EXEC_TLO_REPORT     bit(12)
 
 // Define system state bit map. The state variable primarily tracks the individual functions
 // of Grbl to manage each without overlapping. It is also used as a messaging flag for
@@ -92,7 +94,8 @@ typedef enum {
     Alarm_HomingFailApproach = 9,
     Alarm_EStop = 10,
     Alarm_HomingRequried = 11,
-    Alarm_LimitsEngaged = 12
+    Alarm_LimitsEngaged = 12,
+    Alarm_ProbeProtect = 13
 } alarm_code_t;
 
 typedef enum {
@@ -109,13 +112,6 @@ typedef enum {
     Hold_Pending = 2
 } hold_state_t;
 
-// Values that define the probing state machine.
-
-typedef enum {
-    Probe_Off = 0,
-    Probe_Active
-} probe_state_t;
-
 // Define step segment generator state flags.
 typedef union {
     uint8_t flags;
@@ -128,20 +124,25 @@ typedef union {
     };
 } step_control_t;
 
+
 typedef union {
-    uint8_t value;
-    uint8_t mask;
+    uint16_t value;
+    uint16_t mask;
     struct {
-        uint8_t reset               :1,
-                feed_hold           :1,
-                cycle_start         :1,
-                safety_door_ajar    :1,
-                block_delete        :1,
-                stop_disable        :1, // M1
-                e_stop              :1,
-                deasserted          :1; // this flag is set if signals are deasserted. Note: do NOT pass on to Grbl control_interrupt_handler if set.
+        uint16_t reset              :1,
+                 feed_hold          :1,
+                 cycle_start        :1,
+                 safety_door_ajar   :1,
+                 block_delete       :1,
+                 stop_disable       :1, // M1
+                 e_stop             :1,
+                 probe_disconnected :1,
+                 unassigned         :6,
+                 probe_triggered    :1, // used for probe protection
+                 deasserted         :1; // this flag is set if signals are deasserted. Note: do NOT pass on to Grbl control_interrupt_handler if set.
     };
 } control_signals_t;
+
 
 // Define spindle stop override control states.
 typedef union {
@@ -170,19 +171,20 @@ typedef struct {
 typedef union {
     uint16_t value;
     struct {
-        uint16_t mpg_mode   :1, // MPG mode changed.
-                 scaling    :1, // Scaling (G50/G51) changed.
-                 homed      :1, // Homed state changed.
-                 xmode      :1, // Lathe radius/diameter mode changed.
-                 spindle    :1, // Spindle state changed.
-                 coolant    :1, // Coolant state changed.
-                 overrides  :1, // Overrides changed.
-                 tool       :1, // Tool changed.
-                 wco        :1, // Add work coordinates.
-                 gwco       :1, // Add work coordinate.
-                 pwm        :1, // Add PWM information (optional: to be added by driver).
-                 motor      :1, // Add motor information (optional: to be added by driver).
-                 unused     :4;
+        uint16_t mpg_mode    :1, // MPG mode changed.
+                 scaling     :1, // Scaling (G50/G51) changed.
+                 homed       :1, // Homed state changed.
+                 xmode       :1, // Lathe radius/diameter mode changed.
+                 spindle     :1, // Spindle state changed.
+                 coolant     :1, // Coolant state changed.
+                 overrides   :1, // Overrides changed.
+                 tool        :1, // Tool changed.
+                 wco         :1, // Add work coordinates.
+                 gwco        :1, // Add work coordinate.
+                 pwm         :1, // Add PWM information (optional: to be added by driver).
+                 motor       :1, // Add motor information (optional: to be added by driver).
+                 tool_offset :1, // Tool offsets changed.
+                 unused      :3;
     };
 } report_tracking_flags_t;
 
@@ -217,6 +219,7 @@ typedef struct {
     bool suspend;                       // System suspend state flag.
     volatile bool steppers_deenergize;  // Set to true to deenergize stepperes
     bool mpg_mode;                      // To be moved to system_flags_t
+    alarm_code_t alarm_pending;         // Delayed alarm, currently used for probe protection
     system_flags_t flags;               // Assorted state flags
     step_control_t step_control;        // Governs the step segment generator depending on system state.
     axes_signals_t homing_axis_lock;    // Locks axes when limits engage. Used as an axis motion mask in the stepper ISR.
@@ -239,7 +242,7 @@ extern system_t sys;
 extern int32_t sys_position[N_AXIS];      // Real-time machine (aka home) position vector in steps.
 extern int32_t sys_probe_position[N_AXIS]; // Last probe position in machine coordinates and steps.
 
-extern volatile probe_state_t sys_probe_state;     // Probing state value.  Used to coordinate the probing cycle with stepper ISR.
+extern volatile probing_state_t sys_probing_state; // Probing state value.  Used to coordinate the probing cycle with stepper ISR.
 extern volatile uint_fast16_t sys_rt_exec_state;   // Global realtime executor bitflag variable for state management. See EXEC bitmasks.
 extern volatile uint_fast16_t sys_rt_exec_alarm;   // Global realtimeate val executor bitflag variable for setting various alarms.
 

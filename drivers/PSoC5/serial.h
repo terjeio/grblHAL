@@ -5,7 +5,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2017 Terje Io
+  Copyright (c) 2017-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -24,9 +24,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define ASCII_EOL  "\r\n"
-
-#define RX_BUFFER_SIZE 1024     // must be a power of 2
 #define RX_BUFFER_HWM 900
 #define RX_BUFFER_LWM 300
 
@@ -42,3 +39,4 @@ uint16_t serialRxCount(void);
 uint16_t serialRxFree(void);
 void serialRxFlush(void);
 void serialRxCancel(void);
+bool serialSuspendInput (bool suspend);

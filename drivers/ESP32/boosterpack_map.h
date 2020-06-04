@@ -21,6 +21,8 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#define BOARD_NAME "CNC BoosterPack"
+
 #define IOEXPAND 0
 
 #if SDCARD_ENABLE

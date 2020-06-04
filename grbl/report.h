@@ -57,6 +57,9 @@ void report_realtime_status (void);
 // Prints recorded probe position.
 void report_probe_parameters (void);
 
+// Prints current tool offsets.
+void report_tool_offsets (void);
+
 // Prints Grbl NGC parameters (coordinate offsets, probe).
 void report_ngc_parameters (void);
 

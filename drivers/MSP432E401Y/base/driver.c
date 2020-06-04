@@ -879,10 +879,17 @@ static void probeConfigure(bool is_probe_away)
   GPIOIntEnable(PROBE_PORT, PROBE_PIN);
 }
 
-// Returns the probe pin state. Triggered = true.
-bool probeGetState (void)
-{   //return probeState; // TODO: check out using interrupt instead (we want to trap trigger and not risk losing it due to bouncing)
-    return (((uint8_t)GPIOPinRead(PROBE_PORT, PROBE_PIN)) ^ probe_invert) != 0;
+// Returns the probe connected and pin states.
+probe_state_t probeGetState (void)
+{
+    probe_state_t state = {
+        .connected = On
+    };
+
+    //state.triggered = probeState; // TODO: check out using interrupt instead (we want to trap trigger and not risk losing it due to bouncing)
+    state.triggered = (((uint8_t)GPIOPinRead(PROBE_PORT, PROBE_PIN)) ^ probe_invert) != 0;
+
+    return state;
 }
 
 // Static spindle (off, on cw & on ccw)
@@ -1167,15 +1174,15 @@ static void settings_changed (settings_t *settings)
 
 #if STEP_OUTMODE == GPIO_MAP
     for(i = 0; i < sizeof(step_outmap); i++)
-        step_outmap[i] = c_step_outmap[i] ^ c_step_outmap[settings->step_invert.mask];
+        step_outmap[i] = c_step_outmap[i ^ settings->step_invert.mask];
 #endif
 
 #if DIRECTION_OUTMODE == GPIO_MAP
     for(i = 0; i < sizeof(dir_outmap); i++)
-        dir_outmap[i] = c_dir_outmap[i] ^ c_dir_outmap[settings->steppers.dir_invert.mask & 0x07];
+        dir_outmap[i] = c_dir_outmap[i ^ settings->steppers.dir_invert.mask & 0x07];
 #if CNC_BOOSTERPACK2
     for(i = 0; i < sizeof(dir_outmap2); i++)
-        dir_outmap2[i] = c_dir_outmap2[i] ^ c_dir_outmap2[settings->steppers.dir_invert.mask >> 3];
+        dir_outmap2[i] = c_dir_outmap2[i ^ settings->steppers.dir_invert.mask >> 3];
 #endif
 #endif
 
@@ -1614,7 +1621,7 @@ static bool driver_setup (settings_t *settings)
 
   // Set defaults
 
-    IOInitDone = settings->version == 15;
+    IOInitDone = settings->version == 16;
 
     settings_changed(settings);
 
@@ -1744,8 +1751,13 @@ bool driver_init (void)
     hal.info = "TM4C1294NCPDT";
   #endif
 #endif
+#if CNC_BOOSTERPACK2
+    hal.board = "CNC BoosterPack x2";
+#else
+    hal.board = "CNC BoosterPack";
+#endif
+    hal.driver_version = "200528";
     hal.driver_setup = driver_setup;
-    hal.driver_version = "200115";
 #if !USE_32BIT_TIMER
     hal.f_step_timer = hal.f_step_timer / (STEPPER_DRIVER_PRESCALER + 1);
 #elif USE_PIOSC
@@ -1844,6 +1856,9 @@ bool driver_init (void)
 
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
 
+#ifdef SAFETY_DOOR_PIN
+    hal.driver_cap.safety_door = On;
+#endif
     hal.driver_cap.spindle_dir = On;
     hal.driver_cap.variable_spindle = On;
     hal.driver_cap.spindle_pwm_invert = On;

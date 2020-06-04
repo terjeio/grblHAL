@@ -223,10 +223,16 @@ static void probeConfigureInvertMask(bool is_probe_away)
     ProbeInvert_Write(is_probe_away);
 }
 
-// Returns the probe pin state. Triggered = true. Called by gcode parser and probe state monitor.
-bool probeGetState (void)
+// Returns the probe connected and triggered pin states.
+probe_state_t probeGetState (void)
 {
-    return ProbeSignal_Read() != 0;
+    probe_state_t state = {
+        .connected = On
+    };
+
+    state.triggered = ProbeSignal_Read() != 0;
+
+    return state;
 }
 
 // Start/stop coolant (and mist if enabled), called by coolant_run() and protocol_execute_realtime()
@@ -393,7 +399,7 @@ static bool driver_setup (settings_t *settings)
 
 #endif
 
-    return settings->version == 15;
+    return settings->version == 16;
 }
 
 // Initialize HAL pointers
@@ -404,7 +410,7 @@ bool driver_init (void)
     EEPROM_Start();
     
     hal.info = "PSoC 5";
-    hal.driver_version = "200303";
+    hal.driver_version = "200528";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = 24000000UL;
     hal.rx_buffer_size = RX_BUFFER_SIZE;
@@ -443,6 +449,7 @@ bool driver_init (void)
     hal.stream.get_rx_buffer_available = serialRxFree;
     hal.stream.reset_read_buffer = serialRxFlush;
     hal.stream.cancel_read_buffer = serialRxCancel;
+    hal.stream.suspend_read = serialSuspendInput;
 
     hal.eeprom.type = EEPROM_Physical;
     hal.eeprom.get_byte = (uint8_t (*)(uint32_t))&EEPROM_ReadByte;
@@ -463,6 +470,7 @@ bool driver_init (void)
 
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
 
+    hal.driver_cap.safety_door = On;
     hal.driver_cap.spindle_dir = On;
     hal.driver_cap.variable_spindle = On;
     hal.driver_cap.mist_control = On;

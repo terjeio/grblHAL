@@ -77,8 +77,8 @@ static amass_t amass;
 static float cycles_per_min;
 
 // Step segment ring buffer indices
-static volatile uint_fast8_t segment_buffer_tail;
-static uint_fast8_t segment_buffer_head, segment_next_head;
+static volatile segment_t *segment_buffer_tail;
+static segment_t *segment_buffer_head, *segment_next_head;
 
 // Pointers for the step segment being prepped from the planner buffer. Accessed only by the
 // main program. Pointers may be planning segments or planner blocks ahead of what being executed.
@@ -248,8 +248,13 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
 #endif
 
     // Start a step pulse when there is a block to execute.
-    if(st.exec_block)
+    if(st.exec_block) {
+
         hal.stepper_pulse_start(&st);
+
+        if (st.step_count == 0) // Segment is complete. Discard current segment.
+            st.exec_segment = NULL;
+    }
 
     // If there is no step segment, attempt to pop one from the stepper buffer
     if (st.exec_segment == NULL) {
@@ -257,7 +262,7 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
         if (segment_buffer_head != segment_buffer_tail) {
 
             // Initialize new step segment and load number of steps to execute
-            st.exec_segment = &segment_buffer[segment_buffer_tail];
+            st.exec_segment = (segment_t *)segment_buffer_tail;
 
             // Initialize step segment timing per step and load number of steps to execute.
             hal.stepper_cycles_per_tick(st.exec_segment->cycles_per_tick);
@@ -353,8 +358,8 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
     // Check probing state.
     // Monitors probe pin state and records the system position when detected.
     // NOTE: This function must be extremely efficient as to not bog down the stepper ISR.
-    if (sys_probe_state == Probe_Active && hal.probe_get_state()) {
-        sys_probe_state = Probe_Off;
+    if (sys_probing_state == Probing_Active && hal.probe_get_state().triggered) {
+        sys_probing_state = Probing_Off;
         memcpy(sys_probe_position, sys_position, sizeof(sys_position));
         bit_true(sys_rt_exec_state, EXEC_MOTION_CANCEL);
     }
@@ -436,16 +441,14 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
         st.step_outbits.value &= sys.homing_axis_lock.mask;
 
     if (st.step_count == 0 || --st.step_count == 0) {
-        // Segment is complete. Discard current segment and advance segment indexing.
-        st.exec_segment = NULL;
-        segment_buffer_tail = segment_buffer_tail == (SEGMENT_BUFFER_SIZE - 1) ? 0 : segment_buffer_tail + 1;
+        // Segment is complete. Advance segment tail pointer.
+        segment_buffer_tail = segment_buffer_tail->next;
     }
 }
 
 // Reset and clear stepper subsystem variables
 void st_reset ()
 {
-
     hal.probe_configure_invert_mask(false);
 
     // Initialize stepper driver idle state, clear step and direction port pins.
@@ -460,8 +463,9 @@ void st_reset ()
         st_block_buffer[idx].id = idx + 1;
     }
 
-    // Add id to segment buffer enteries
+    // Set up segments ringbuffer as circular linked list, add id and clear AMASS level
     for(idx = 0 ; idx <= SEGMENT_BUFFER_SIZE - 1 ; idx++) {
+        segment_buffer[idx].next = &segment_buffer[idx == SEGMENT_BUFFER_SIZE - 1 ? 0 : idx + 1];
         segment_buffer[idx].id = idx + 1;
         segment_buffer[idx].amass_level = 0;
     }
@@ -469,12 +473,12 @@ void st_reset ()
     st_prep_block = &st_block_buffer[0];
 
     // Initialize stepper algorithm variables.
+    pl_block = NULL;  // Planner block pointer used by segment buffer
+    segment_buffer_tail = segment_buffer_head = &segment_buffer[0]; // empty = tail
+    segment_next_head = segment_buffer_head->next;
+
     memset(&prep, 0, sizeof(st_prep_t));
     memset(&st, 0, sizeof(stepper_t));
-    st.exec_segment = NULL;
-    pl_block = NULL;  // Planner block pointer used by segment buffer
-    segment_buffer_tail = segment_buffer_head = 0; // empty = tail
-    segment_next_head = 1;
 
 #ifdef ADAPTIVE_MULTI_AXIS_STEP_SMOOTHING
     // TODO: move to driver?
@@ -736,7 +740,7 @@ void st_prep_buffer()
         }
 
         // Initialize new segment
-        segment_t *prep_segment = &segment_buffer[segment_buffer_head];
+        segment_t *prep_segment = segment_buffer_head;
 
         // Set new segment to point to the current segment data block.
         prep_segment->exec_block = st_prep_block;
@@ -940,9 +944,9 @@ void st_prep_buffer()
 
         prep_segment->cycles_per_tick = cycles;
 
-        // Segment complete! Increment segment buffer indices, so stepper ISR can immediately execute it.
+        // Segment complete! Increment segment pointers, so stepper ISR can immediately execute it.
         segment_buffer_head = segment_next_head;
-        segment_next_head = segment_next_head == (SEGMENT_BUFFER_SIZE - 1) ? 0 : segment_next_head + 1;
+        segment_next_head = segment_next_head->next;
 
         // Update the appropriate planner and segment data.
         pl_block->millimeters = mm_remaining;

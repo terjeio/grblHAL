@@ -32,6 +32,7 @@
 #include "stepper.h"
 #include "eeprom.h"
 #include "stream.h"
+#include "probe.h"
 
 #define HAL_VERSION 6
 
@@ -66,7 +67,8 @@ typedef union {
                  axis_ganged_z             :1,
                  mpg_mode                  :1,
                  spindle_pwm_linearization :1,
-                 unassigned                :4;
+                 probe_connected           :1,
+                 unassigned                :3;
     };
 } driver_cap_t;
 
@@ -122,6 +124,7 @@ typedef struct HAL {
     char *info;
     char *driver_version;
     char *driver_options;
+    char *board;
     uint32_t f_step_timer;
     uint32_t rx_buffer_size;
 
@@ -160,7 +163,7 @@ typedef struct HAL {
 
     // optional entry points, may be unassigned (null)
     bool (*driver_release)(void);
-    bool (*probe_get_state)(void);
+    probe_state_t (*probe_get_state)(void);
     void (*probe_configure_invert_mask)(bool is_probe_away);
     void (*execute_realtime)(uint_fast16_t state);
     user_mcode_t (*user_mcode_check)(user_mcode_t mcode);

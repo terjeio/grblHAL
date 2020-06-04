@@ -27,7 +27,9 @@
 // P0.27, P0.28 are dedicated I2C pins without pull up/down.
 // P0.29, P0.30 must have same direction as used for USB operation.
 
- // Define step pulse output pins.
+#define BOARD_NAME "Ramps 1.6"
+
+// Define step pulse output pins.
 
 #define X_STEP_PN           2
 #define X_STEP_PORT         port(X_STEP_PN)

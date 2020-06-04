@@ -473,10 +473,17 @@ static void probeConfigure(bool is_probe_away)
   probeState = (uint8_t)(GPIOPinRead(PROBE_PORT, PROBE_PIN)) ^ probe_invert != 0;
 }
 
-// Returns the probe pin state. Triggered = true.
-bool probeGetState (void)
-{   //return probeState; // TODO: check out using interrupt instead (we want to trap trigger and not risk losing it due to bouncing)
-    return (((uint8_t)GPIOPinRead(PROBE_PORT, PROBE_PIN)) ^ probe_invert) != 0;
+// Returns the probe connected and triggered pin states.
+probe_state_t probeGetState (void)
+{
+    probe_state_t state = {
+        .connected = On
+    };
+
+    //state.triggered = probeState; // TODO: check out using interrupt instead (we want to trap trigger and not risk losing it due to bouncing)
+    state.triggered = (((uint8_t)GPIOPinRead(PROBE_PORT, PROBE_PIN)) ^ probe_invert) != 0;
+
+    return state;
 }
 
 // Static spindle (off, on cw & on ccw)
@@ -1048,7 +1055,7 @@ static bool driver_setup (settings_t *settings)
 
   // Set defaults
 
-    IOInitDone = settings->version == 15;
+    IOInitDone = settings->version == 16;
 
     settings_changed(settings);
 
@@ -1133,7 +1140,10 @@ bool driver_init (void)
 #endif
 
     hal.info = "TM4C123HP6PM";
-    hal.driver_version = "200329";
+    hal.driver_version = "200528";
+#if CNC_BOOSTERPACK
+    hal.board = "CNC BoosterPack";
+#endif
     hal.driver_setup = driver_setup;
     hal.f_step_timer = SysCtlClockGet() / (STEPPER_DRIVER_PRESCALER + 1); // 20 MHz
     hal.rx_buffer_size = RX_BUFFER_SIZE;
@@ -1233,6 +1243,9 @@ bool driver_init (void)
 
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
 
+#ifdef SAFETY_DOOR_PIN
+    hal.driver_cap.safety_door = On;
+#endif
     hal.driver_cap.spindle_dir = On;
     hal.driver_cap.variable_spindle = On;
     hal.driver_cap.spindle_pwm_invert = On;

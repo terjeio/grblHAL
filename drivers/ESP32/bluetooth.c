@@ -31,7 +31,7 @@
 #include "nvs_flash.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "freertos/event_groups.h "
+#include "freertos/event_groups.h"
 #include "esp_log.h"
 #include "esp_bt.h"
 #include "esp_bt_main.h"

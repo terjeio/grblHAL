@@ -187,6 +187,11 @@
 // homing cycle while on the limit switch and not have to move the machine off of it.
 #define LIMITS_TWO_SWITCHES_ON_AXES 0 // Default 0 (disabled), set to 1 to enable
 
+// Upon a successful probe cycle, this option provides immediately feedback of the probe coordinates
+// through an automatically generated message. If disabled, users can still access the last probe
+// coordinates through Grbl '$#' print parameters.
+#define REPORT_PROBE_COORDINATES 1 // Default 1 (enabled), set to 0 to disable.
+
 // This option enables the safety door switch. A safety door, when triggered,
 // immediately forces a feed hold and then safely de-energizes the machine. Resuming is blocked until
 // the safety door is re-engaged. When it is, Grbl will re-energize the machine and then resume on the
@@ -294,6 +299,13 @@
 // performance. If absolutely needed for normal operation, the serial write buffer should be greatly increased
 // to help minimize transmission waiting within the serial write protocol.
 // #define REPORT_ECHO_LINE_RECEIVED // Default disabled. Uncomment to enable.
+
+// Sets which axis the tool length offset is applied. Assumes the spindle is always parallel with
+// the selected axis with the tool oriented toward the negative direction. In other words, a positive
+// tool length offset value is subtracted from the current location.
+#if COMPATIBILITY_LEVEL > 2
+#define TOOL_LENGTH_OFFSET_AXIS Z_AXIS // Default z-axis. Valid values are X_AXIS, Y_AXIS, or Z_AXIS.
+#endif
 
 // Minimum planner junction speed. Sets the default minimum junction speed the planner plans to at
 // every buffer block junction, except for starting from rest and end of the buffer, which are always

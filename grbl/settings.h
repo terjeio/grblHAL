@@ -28,7 +28,7 @@
 
 // Version of the persistent storage data. Will be used to migrate existing data from older versions of Grbl
 // when firmware is upgraded. Always stored in byte 0 of eeprom
-#define SETTINGS_VERSION 15  // NOTE: Check settings_reset() when moving to next version.
+#define SETTINGS_VERSION 16  // NOTE: Check settings_reset() when moving to next version.
 
 // Define persistent storage memory address location values for Grbl settings and parameters
 // NOTE: 1KB persistent storage is the minimum required. The upper half is reserved for parameters and
@@ -275,37 +275,40 @@ extern const settings_restore_t settings_all;
 typedef union {
     uint16_t value;
     struct {
-        uint16_t report_inches                  :1,
-                laser_mode                      :1,
-                invert_probe_pin                :1,
-                disable_probe_pullup            :1,
-                restore_overrides               :1,
-                safety_door_ignore_when_idle    :1,
-                sleep_enable                    :1,
-                disable_laser_during_hold       :1,
-                force_initialization_alarm      :1,
-                report_parser_state             :1, // TODO: move reportmask_t on next SETTINGS_VERSION change
-                allow_probing_feed_override     :1,
-                report_alarm_substate           :1, // TODO: move reportmask_t on next SETTINGS_VERSION change
-                restore_after_feed_hold         :1,
-                unassigned1                     :1,
-                force_buffer_sync_on_wco_change :1, // TODO: move reportmask_t on next SETTINGS_VERSION change
-                lathe_mode                      :1;
+        uint16_t report_inches                :1,
+                 laser_mode                   :1,
+                 invert_probe_pin             :1,
+                 disable_probe_pullup         :1,
+                 restore_overrides            :1,
+                 safety_door_ignore_when_idle :1,
+                 sleep_enable                 :1,
+                 disable_laser_during_hold    :1,
+                 force_initialization_alarm   :1,
+                 unassigned1                  :1,
+                 allow_probing_feed_override  :1,
+                 unassigned2                  :1,
+                 restore_after_feed_hold      :1,
+                 probe_detection_enabled      :1,
+                 unassigned3                  :1,
+                 lathe_mode                   :1;
     };
 } settingflags_t;
 
 typedef union {
-    uint8_t mask;
+    uint16_t mask;
     struct {
-        uint8_t machine_position  :1,
-                buffer_state      :1,
-                line_numbers      :1,
-                feed_speed        :1,
-                pin_state         :1,
-                work_coord_offset :1,
-                overrides         :1,
-                probe_coordinates :1;
-        // TODO: expand to 16 bit and move some report settings from settingflags_t here on next SETTINGS_VERSION change.
+        uint16_t machine_position   :1,
+                 buffer_state       :1,
+                 line_numbers       :1,
+                 feed_speed         :1,
+                 pin_state          :1,
+                 work_coord_offset  :1,
+                 overrides          :1,
+                 probe_coordinates  :1,
+                 sync_on_wco_change :1,
+                 parser_state       :1,
+                 alarm_substate     :1,
+                 unassigned         :5;
     };
 } reportmask_t;
 

@@ -36,7 +36,7 @@ int32_t sys_position[N_AXIS];               // Real-time machine (aka home) posi
 int32_t sys_probe_position[N_AXIS];         // Last probe position in machine coordinates and steps.
 bool prior_mpg_mode;                        // Enter MPG mode on startup?
 bool cold_start = true;
-volatile probe_state_t sys_probe_state;     // Probing state value.  Used to coordinate the probing cycle with stepper ISR.
+volatile probing_state_t sys_probing_state; // Probing state value. Used to coordinate the probing cycle with stepper ISR.
 volatile uint_fast16_t sys_rt_exec_state;   // Global realtime executor bitflag variable for state management. See EXEC bitmasks.
 volatile uint_fast16_t sys_rt_exec_alarm;   // Global realtime executor bitflag variable for setting various alarms.
 
@@ -212,7 +212,7 @@ int grbl_enter (void)
             sys.override.control.parking_disable = settings.parking.flags.deactivate_upon_init;
 
         memset(sys_probe_position, 0, sizeof(sys_probe_position)); // Clear probe position.
-        sys_probe_state = Probe_Off;
+        sys_probing_state = Probing_Off;
         sys_rt_exec_state = 0;
         sys_rt_exec_alarm = 0;
 

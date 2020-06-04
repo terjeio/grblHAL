@@ -68,6 +68,7 @@ static bool probe_invert;
 static axes_signals_t next_step_outbits;
 static spindle_pwm_t spindle_pwm;
 static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
+static status_code_t (*syscmd)(uint_fast16_t state, char *line, char *lcline);
 
 #if STEP_OUTMODE == GPIO_MAP
 
@@ -344,16 +345,22 @@ static control_signals_t systemGetState (void)
 // and the probing cycle modes for toward-workpiece/away-from-workpiece.
 static void probeConfigureInvertMask(bool is_probe_away)
 {
-  probe_invert = settings.flags.invert_probe_pin;
+    probe_invert = settings.flags.invert_probe_pin;
 
-  if (is_probe_away)
-	  probe_invert ^= PROBE_BIT;
+    if (is_probe_away)
+        probe_invert ^= PROBE_BIT;
 }
 
-// Returns the probe pin state. Triggered = true.
-bool probeGetState (void)
+// Returns the probe connected and triggered pin states.
+probe_state_t probeGetState (void)
 {
-    return ((PROBE_PORT->IDR & PROBE_BIT) != 0)  ^ probe_invert;
+    probe_state_t state = {
+        .connected = On
+    };
+
+    state.triggered = ((PROBE_PORT->IDR & PROBE_BIT) != 0)  ^ probe_invert;
+
+    return state;
 }
 
 // Static spindle (off, on cw & on ccw)
@@ -649,7 +656,7 @@ void settings_changed (settings_t *settings)
             GPIO_Init.Pull = settings->limits.disable_pullup.z ? GPIO_NOPULL : GPIO_PULLUP;
             HAL_GPIO_Init(LIMIT_PORT, &GPIO_Init);
 
-#ifdef A_AXIS
+#ifdef A_LIMIT_BIT
             GPIO_Init.Pin = A_LIMIT_BIT;
             GPIO_Init.Mode = limit_ire.a ? GPIO_MODE_IT_RISING : GPIO_MODE_IT_FALLING;
             GPIO_Init.Pull = settings->limits.disable_pullup.a ? GPIO_NOPULL : GPIO_PULLUP;
@@ -675,7 +682,7 @@ void settings_changed (settings_t *settings)
             GPIO_Init.Pull = settings->limits.disable_pullup.z ? GPIO_NOPULL : GPIO_PULLUP;
             HAL_GPIO_Init(LIMIT_PORT, &GPIO_Init);
 
-#ifdef A_AXIS
+#ifdef A_LIMIT_BIT
             GPIO_Init.Pin = A_LIMIT_BIT;
             GPIO_Init.Pull = settings->limits.disable_pullup.a ? GPIO_NOPULL : GPIO_PULLUP;
             HAL_GPIO_Init(LIMIT_PORT, &GPIO_Init);
@@ -704,10 +711,6 @@ void settings_changed (settings_t *settings)
     }
 }
 
-#if SDCARD_ENABLE
-
-status_code_t (*syscmd)(uint_fast16_t state, char *line, char *lcline);
-
 static status_code_t jtag_enable (uint_fast16_t state, char *line, char *lcline)
 {
     if(!strcmp(line, "$PGM")) {
@@ -718,8 +721,6 @@ static status_code_t jtag_enable (uint_fast16_t state, char *line, char *lcline)
 
     return syscmd ? syscmd(state, line, lcline) : Status_Unhandled;
 }
-
-#endif
 
 // Initializes MCU peripherals for Grbl use
 static bool driver_setup (settings_t *settings)
@@ -818,6 +819,12 @@ static bool driver_setup (settings_t *settings)
     GPIO_Init.Pin = COOLANT_MIST_BIT;
     HAL_GPIO_Init(COOLANT_MIST_PORT, &GPIO_Init);
 
+    BITBAND_PERI(COOLANT_FLOOD_PORT->ODR, COOLANT_FLOOD_PIN) = 1;
+    BITBAND_PERI(COOLANT_MIST_PORT->ODR, COOLANT_MIST_PIN) = 1;
+
+    BITBAND_PERI(COOLANT_FLOOD_PORT->ODR, COOLANT_FLOOD_PIN) = 0;
+    BITBAND_PERI(COOLANT_MIST_PORT->ODR, COOLANT_MIST_PIN) = 0;
+
 #if SDCARD_ENABLE
 
     GPIO_Init.Mode = GPIO_MODE_OUTPUT_PP;
@@ -827,10 +834,11 @@ static bool driver_setup (settings_t *settings)
     BITBAND_PERI(SD_CS_PORT->ODR, SD_CS_PIN) = 1;
 
     sdcard_init();
-    syscmd = hal.driver_sys_command_execute;
-    hal.driver_sys_command_execute = jtag_enable;
 
 #endif
+
+    syscmd = hal.driver_sys_command_execute;
+    hal.driver_sys_command_execute = jtag_enable;
 
 #if TRINAMIC_ENABLE
 
@@ -838,7 +846,7 @@ static bool driver_setup (settings_t *settings)
 
 #endif
 
-    IOInitDone = settings->version == 15;
+    IOInitDone = settings->version == 16;
 
     settings_changed(settings);
 
@@ -912,10 +920,13 @@ bool driver_init (void)
     i2c_init();
 #endif
 
-//  __HAL_AFIO_REMAP_SWJ_NOJTAG();
+    __HAL_AFIO_REMAP_SWJ_NOJTAG();
 
     hal.info = "STM32F103C8";
-    hal.driver_version = "200417";
+    hal.driver_version = "200528";
+#ifdef BOARD_NAME
+    hal.board = BOARD_NAME;
+#endif
     hal.driver_setup = driver_setup;
     hal.f_step_timer = SystemCoreClock;
     hal.rx_buffer_size = RX_BUFFER_SIZE;

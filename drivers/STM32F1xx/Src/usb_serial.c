@@ -31,7 +31,7 @@
 
 static stream_rx_buffer_t rxbuf = {0}, rxbackup;
 
-#define USB_TXLEN 128
+#define USB_TXLEN 200
 
 typedef struct {
     size_t length;
@@ -147,14 +147,14 @@ void usbBufferInput (uint8_t *data, uint32_t length)
         if(rxbuf.tail == next_head) {                                       // If buffer full
             rxbuf.overflow = 1;                                             // flag overflow
         } else {
-        	if(*data == CMD_TOOL_ACK && !rxbuf.backup) {
+            if(*data == CMD_TOOL_ACK && !rxbuf.backup) {
 
-				memcpy(&rxbackup, &rxbuf, sizeof(stream_rx_buffer_t));
-				rxbuf.backup = true;
-				rxbuf.tail = rxbuf.head;
-				hal.stream.read = usbGetC; // restore normal input
+                memcpy(&rxbackup, &rxbuf, sizeof(stream_rx_buffer_t));
+                rxbuf.backup = true;
+                rxbuf.tail = rxbuf.head;
+                hal.stream.read = usbGetC; // restore normal input
 
-			} else if(!hal.stream.enqueue_realtime_command(*data)) {        // Check and strip realtime commands,
+            } else if(!hal.stream.enqueue_realtime_command(*data)) {        // Check and strip realtime commands,
                 rxbuf.data[rxbuf.head] = *data;                             // if not add data to buffer
                 rxbuf.head = next_head;                                     // and update pointer
             }

@@ -336,10 +336,7 @@ void report_grbl_settings (void)
     if(hal.probe_configure_invert_mask)
         report_uint_setting(Setting_InvertProbePin, settings.flags.invert_probe_pin);
 #if COMPATIBILITY_LEVEL <= 1
-    report_uint_setting(Setting_StatusReportMask, (uint32_t)settings.status_report.mask |
-                                                   (settings.flags.force_buffer_sync_on_wco_change ? bit(8) : 0) |
-                                                    (settings.flags.report_alarm_substate ? bit(9) : 0) |
-                                                     (settings.flags.report_parser_state ? bit(10) : 0));
+    report_uint_setting(Setting_StatusReportMask, (uint32_t)settings.status_report.mask);
 #else
     report_uint_setting(Setting_StatusReportMask, settings.status_report.mask & 0x3);
 #endif
@@ -515,6 +512,17 @@ void report_probe_parameters (void)
     hal.stream.write("]\r\n");
 }
 
+// Prints current tool offsets.
+void report_tool_offsets (void)
+{
+    hal.stream.write("[TLO:");
+#ifdef TOOL_LENGTH_OFFSET_AXIS
+    hal.stream.write(ftoa(gc_state.tool_length_offset[Z_AXIS], settings.flags.report_inches ? N_DECIMAL_COORDVALUE_INCH : N_DECIMAL_COORDVALUE_INCH));
+#else
+    hal.stream.write(get_axis_values(gc_state.tool_length_offset));
+#endif
+    hal.stream.write("]\r\n");
+}
 
 // Prints Grbl NGC parameters (coordinate offsets, probing, tool table)
 void report_ngc_parameters (void)
@@ -574,12 +582,9 @@ void report_ngc_parameters (void)
         hal.stream.write("]\r\n");
     }
 #endif
-    // Print tool length offset value
-    hal.stream.write("[TLO:");
-    hal.stream.write(get_axis_values(gc_state.tool_length_offset));
-    hal.stream.write("]\r\n");
 
-    report_probe_parameters(); // Print probe parameters. Not persistent in memory.
+    report_tool_offsets();      // Print tool length offset value
+    report_probe_parameters();  // Print probe parameters. Not persistent in memory.
 }
 
 // Print current gcode parser mode state
@@ -594,6 +599,21 @@ void report_gcode_modes (void)
 
     hal.stream.write(" G");
     hal.stream.write(map_coord_system(gc_state.modal.coord_system.idx));
+
+#if COMPATIBILITY_LEVEL < 10
+
+    bool g92_active = false;
+    uint_fast32_t idx = N_AXIS;
+
+    do {
+        idx--;
+        g92_active = !(gc_state.g92_coord_offset[idx] == 0.0f || gc_state.g92_coord_offset[idx] == -0.0f);
+    } while(idx && !g92_active);
+
+    if(g92_active)
+        hal.stream.write(" G92");
+
+#endif
 
     if(settings.flags.lathe_mode)
         hal.stream.write(gc_state.modal.diameter_mode ? " G7" : " G8");
@@ -786,7 +806,7 @@ void report_build_info (char *line)
     *append++ = 'I';
   #endif
 
-    if(!settings.flags.force_buffer_sync_on_wco_change) // NOTE: Shown when disabled.
+    if(!settings.status_report.sync_on_wco_change) // NOTE: Shown when disabled.
         *append++ = 'W';
 
     *append++ = ',';
@@ -821,6 +841,9 @@ void report_build_info (char *line)
 
     if(hal.driver_cap.e_stop)
         strcat(buf, "ES,");
+
+    if(hal.driver_cap.probe_connected)
+        strcat(buf, "PC,");
 
     if(hal.driver_cap.sd_card)
         strcat(buf, "SD,");
@@ -873,6 +896,12 @@ void report_build_info (char *line)
     if(hal.driver_options) {
         hal.stream.write("[DRIVER OPTIONS:");
         hal.stream.write(hal.driver_options);
+        hal.stream.write("]"  ASCII_EOL);
+    }
+
+    if(hal.board) {
+        hal.stream.write("[BOARD:");
+        hal.stream.write(hal.board);
         hal.stream.write("]"  ASCII_EOL);
     }
 
@@ -935,7 +964,7 @@ void report_realtime_status (void)
 
         case STATE_ESTOP:
         case STATE_ALARM:
-            if(settings.flags.report_alarm_substate)
+            if(settings.status_report.alarm_substate)
                 hal.stream.write_all(appendbuf(2, "Alarm:", uitoa((uint32_t)current_alarm)));
             else
                 hal.stream.write_all("Alarm");
@@ -1002,17 +1031,17 @@ void report_realtime_status (void)
 
     if(settings.status_report.pin_state) {
 
-        axes_signals_t lim_pin_state = (axes_signals_t)hal.limits_get_state();
+        axes_signals_t lim_pin_state = hal.limits_get_state();
         control_signals_t ctrl_pin_state = hal.system_control_get_state();
-        bool prb_pin_state = hal.probe_get_state && hal.probe_get_state();
+        probe_state_t probe_pin_state = hal.probe_get_state();
 
-        if (lim_pin_state.value | ctrl_pin_state.value | prb_pin_state | sys.flags.block_delete_enabled) {
+        if (lim_pin_state.value | ctrl_pin_state.value | probe_pin_state.triggered | !probe_pin_state.connected | sys.flags.block_delete_enabled) {
 
             char *append = &buf[4];
 
             strcpy(buf, "|Pn:");
 
-            if (prb_pin_state)
+            if (probe_pin_state.triggered)
                 *append++ = 'P';
 
             if (lim_pin_state.value)
@@ -1033,6 +1062,8 @@ void report_realtime_status (void)
                     *append++ = 'B';
                 if (hal.driver_cap.program_stop ? ctrl_pin_state.stop_disable : sys.flags.optional_stop_disable)
                     *append++ = 'T';
+                if(!probe_pin_state.connected)
+                    *append++ = 'O';
             }
             *append = '\0';
             hal.stream.write_all(buf);
@@ -1134,25 +1165,41 @@ void report_realtime_status (void)
     if(hal.driver_rt_report)
         hal.driver_rt_report(hal.stream.write_all, sys.report);
 
-    sys.report.value = 0;
-    sys.report.wco = settings.status_report.work_coord_offset && wco_counter == 0; // Set to report on next request
-
     hal.stream.write_all(">\r\n");
 
-    if(settings.flags.report_parser_state) {
+    if(settings.status_report.parser_state) {
 
         static uint8_t tool;
         static float feed_rate, spindle_rpm;
         static gc_modal_t last_state;
+        static float g92_offset[N_AXIS];
 
-        if (memcmp(&last_state, &gc_state.modal, sizeof(gc_modal_t)) || feed_rate != gc_state.feed_rate || spindle_rpm != gc_state.spindle.rpm || tool != gc_state.tool->tool) {
-            last_state = gc_state.modal;
+        bool is_changed = feed_rate != gc_state.feed_rate || spindle_rpm != gc_state.spindle.rpm || tool != gc_state.tool->tool;
+
+        if(is_changed) {
             feed_rate = gc_state.feed_rate;
             tool = gc_state.tool->tool;
             spindle_rpm = gc_state.spindle.rpm;
-            system_set_exec_state_flag(EXEC_GCODE_REPORT);
+        } else if(memcmp(&last_state, &gc_state.modal, sizeof(gc_modal_t))) {
+            last_state = gc_state.modal;
+            is_changed = true;
         }
+
+        if(!is_changed && memcmp(&g92_offset, &gc_state.g92_coord_offset, sizeof(g92_offset)))
+        {
+            memcpy(g92_offset, gc_state.g92_coord_offset, sizeof(g92_offset));
+            is_changed = true;
+        }
+
+        if (is_changed)
+            system_set_exec_state_flag(EXEC_GCODE_REPORT);
+
+        if(sys.report.tool_offset)
+            system_set_exec_state_flag(EXEC_TLO_REPORT);
     }
+
+    sys.report.value = 0;
+    sys.report.wco = settings.status_report.work_coord_offset && wco_counter == 0; // Set to report on next request
 }
 
 

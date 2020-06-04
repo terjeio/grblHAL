@@ -439,10 +439,16 @@ static void probeConfigureInvertMask(bool is_probe_away)
       probe_invert_mask ^= PROBE_BIT;
 }
 
-// Returns the probe pin state. Triggered = true.
-bool probeGetState (void)
+// Returns the probe connected and triggered pin states.
+probe_state_t probeGetState (void)
 {
-    return ((PROBE_PORT->PIN & PROBE_BIT) ^ probe_invert_mask) != 0;
+    probe_state_t state = {
+        .connected = On
+    };
+
+    state.triggered = ((PROBE_PORT->PIN & PROBE_BIT) ^ probe_invert_mask) != 0;
+
+    return state;
 }
 
 // Static spindle (off, on cw & on ccw)
@@ -673,12 +679,12 @@ void settings_changed (settings_t *settings)
 
 #if STEP_OUTMODE == GPIO_MAP
     for(i = 0; i < sizeof(step_outmap) / sizeof(uint32_t); i++)
-        step_outmap[i] = c_step_outmap[i] ^ c_step_outmap[settings->steppers.step_invert.value];
+        step_outmap[i] = c_step_outmap[i ^ settings->steppers.step_invert.value];
 #endif
 
 #if DIRECTION_OUTMODE == GPIO_MAP
     for(i = 0; i < sizeof(dir_outmap) / sizeof(uint32_t); i++)
-        dir_outmap[i] = c_dir_outmap[i] ^ c_dir_outmap[settings->steppers.dir_invert.value];
+        dir_outmap[i] = c_dir_outmap[i ^ settings->steppers.dir_invert.value];
 #endif
 
     if(IOInitDone) {
@@ -984,7 +990,7 @@ static bool driver_setup (settings_t *settings)
 
  // Set defaults
 
-    IOInitDone = settings->version == 15;
+    IOInitDone = settings->version == 16;
 
     settings_changed(settings);
 
@@ -1022,8 +1028,11 @@ bool driver_init (void) {
 #endif
 
     hal.info = "LCP1769";
+    hal.driver_version = "200528";
     hal.driver_setup = driver_setup;
-    hal.driver_version = "200220";
+#ifdef BOARD_NAME
+    hal.board = BOARD_NAME;
+#endif
     hal.f_step_timer = SystemCoreClock / Chip_Clock_GetPCLKDiv(STEPPER_TIMER_PCLK);
     hal.rx_buffer_size = RX_BUFFER_SIZE;
     hal.delay_ms = &driver_delay;
@@ -1063,6 +1072,7 @@ bool driver_init (void) {
     hal.stream.get_rx_buffer_available = usbRxFree;
     hal.stream.reset_read_buffer = usbRxFlush;
     hal.stream.cancel_read_buffer = usbRxCancel;
+    hal.stream.suspend_read = usbSuspendInput;
 #else
     serialInit();
     hal.stream.read = serialGetC;
@@ -1098,6 +1108,9 @@ bool driver_init (void) {
 
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
 
+#ifdef SAFETY_DOOR_PIN
+    hal.driver_cap.safety_door = On;
+#endif
     hal.driver_cap.spindle_dir = On;
     hal.driver_cap.variable_spindle = On;
 #ifdef COOLANT_MIST_PORT

@@ -208,10 +208,16 @@ static void probeConfigureInvertMask(bool is_probe_away)
       probe_invert ^= PROBE_PIN;
 }
 
-// Returns the probe pin state. Triggered = true.
-bool probeGetState (void)
+// Returns the probe connected and pin states.
+probe_state_t probeGetState (void)
 {
-    return ((PROBE_PORT_IN & PROBE_PIN) ^ probe_invert) != 0;
+    probe_state_t state = {
+        .connected = On
+    };
+
+    state.triggered = ((PROBE_PORT_IN & PROBE_PIN) ^ probe_invert) != 0;
+
+    return state;
 }
 
 // Static spindle (off, on cw & on ccw)
@@ -617,7 +623,7 @@ static bool driver_setup (settings_t *settings)
 
   // Set defaults
 
-    IOInitDone = settings->version == 15;
+    IOInitDone = settings->version == 16;
 
     settings_changed(settings);
 
@@ -642,7 +648,7 @@ bool driver_init (void)
     serialInit();
 
     hal.info = "MSP430F5529";
-    hal.driver_version = "200218";
+    hal.driver_version = "200528";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = 24000000;
     hal.rx_buffer_size = RX_BUFFER_SIZE;
@@ -708,6 +714,10 @@ bool driver_init (void)
 #endif
 
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
+
+#ifdef SAFETY_DOOR_PIN
+    hal.driver_cap.safety_door = On;
+#endif
     hal.driver_cap.spindle_dir = On;
     hal.driver_cap.variable_spindle = On;
     hal.driver_cap.spindle_pwm_invert = On;

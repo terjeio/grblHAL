@@ -613,17 +613,22 @@ static void probeConfigure(bool is_probe_away)
     inputpin[INPUT_PROBE].active = false;
 #endif
 }
-
-// Returns the probe pin state. Triggered = true.
-bool probeGetState (void)
+// Returns the probe connected and triggered pin states.
+probe_state_t probeGetState (void)
 {
+    probe_state_t state = {
+        .connected = On
+    };
+
 #if PROBE_ISR
     // TODO: verify!
     inputpin[INPUT_PROBE].active = inputpin[INPUT_PROBE].active || ((uint8_t)gpio_get_level(PROBE_PIN) ^ probe_invert);
-    return inputpin[INPUT_PROBE].active;
+    state.triggered = inputpin[INPUT_PROBE].active;
 #else
-    return (uint8_t)gpio_get_level(PROBE_PIN) ^ probe_invert;
+    state.triggered = (uint8_t)gpio_get_level(PROBE_PIN) ^ probe_invert;
 #endif
+
+    return state;
 }
 
 // Static spindle (off, on cw & on ccw)
@@ -1260,7 +1265,7 @@ static bool driver_setup (settings_t *settings)
 
   // Set defaults
 
-    IOInitDone = settings->version == 15;
+    IOInitDone = settings->version == 16;
 
     settings_changed(settings);
 
@@ -1359,7 +1364,10 @@ bool driver_init (void)
 #endif
 
     hal.info = "ESP32";
-    hal.driver_version = "200211";
+    hal.driver_version = "200528";
+#ifdef BOARD_NAME
+    hal.board = BOARD_NAME;
+#endif
     hal.driver_setup = driver_setup;
     hal.f_step_timer = rtc_clk_apb_freq_get() / STEPPER_DRIVER_PRESCALER; // 20 MHz
     hal.rx_buffer_size = RX_BUFFER_SIZE;
@@ -1474,6 +1482,9 @@ bool driver_init (void)
     hal.driver_cap.control_pull_up = On;
     hal.driver_cap.limits_pull_up = On;
     hal.driver_cap.probe_pull_up = On;
+#ifdef SAFETY_DOOR_PIN
+    hal.driver_cap.safety_door = On;
+#endif
 #if MPG_MODE_ENABLE
     hal.driver_cap.mpg_mode = On;
 #endif

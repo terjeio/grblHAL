@@ -23,7 +23,9 @@
 // P0.27, P0.28 are dedicated I2C pins without pull up/down.
 // P0.29, P0.30 must have same direction as used for USB operation.
 
- // Define step pulse output pins.
+#define BOARD_NAME "Smoothieboard"
+
+// Define step pulse output pins.
 
 #define STEP_PN             2
 #define STEP_PORT           port(STEP_PN)

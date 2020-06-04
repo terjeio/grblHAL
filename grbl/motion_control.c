@@ -565,9 +565,10 @@ void mc_thread (plan_line_data_t *pl_data, float *position, gc_thread_data *thre
 {
     uint_fast16_t pass = 1, passes = 0;
     float doc = thread->initial_depth, inv_degression = 1.0f / thread->depth_degression, thread_length;
-    float end_taper_factor = thread->end_taper_type == Taper_None ? 0.0f : (thread->end_taper_type == Taper_Both ? 2.0f : 1.0f);
-    float infeed_factor = tanf(thread->infeed_angle * RADDEG), infeed_offset = 0.0f;
-    float target[N_AXIS], target_z = thread->z_final + thread->depth * infeed_factor;;
+    float entry_taper_length = thread->end_taper_type & Taper_Entry ? thread->end_taper_length : 0.0f;
+    float exit_taper_length = thread->end_taper_type & Taper_Exit ? thread->end_taper_length : 0.0f;
+    float infeed_factor = tanf(thread->infeed_angle * RADDEG);
+    float target[N_AXIS], start_z = position[Z_AXIS] + thread->depth * infeed_factor;
 
     memcpy(target, position, sizeof(float) * N_AXIS);
 
@@ -576,13 +577,17 @@ void mc_thread (plan_line_data_t *pl_data, float *position, gc_thread_data *thre
 
     passes += thread->spring_passes + 1;
 
-    if((thread_length = thread->z_final - position[Z_AXIS]) > 0.0f)
-        thread->end_taper_length = -thread->end_taper_length;
+    if((thread_length = thread->z_final - position[Z_AXIS]) > 0.0f) {
+        if(thread->end_taper_type & Taper_Entry)
+            entry_taper_length = -entry_taper_length;
+        if(thread->end_taper_type & Taper_Exit)
+            exit_taper_length = - exit_taper_length;
+    }
 
-    thread_length += thread->end_taper_length * end_taper_factor;
+    thread_length += entry_taper_length + exit_taper_length;
 
     if(thread->main_taper_height != 0.0f)
-        thread->main_taper_height = thread->main_taper_height * thread_length / (thread_length - thread->end_taper_length * end_taper_factor);
+        thread->main_taper_height = thread->main_taper_height * thread_length / (thread_length - (entry_taper_length + exit_taper_length));
 
     pl_data->condition.rapid_motion = On; // Set rapid motion condition flag.
 
@@ -594,61 +599,49 @@ void mc_thread (plan_line_data_t *pl_data, float *position, gc_thread_data *thre
 
     // Initial Z-move for compound slide angle offset.
     if(infeed_factor != 0.0f) {
-        infeed_offset = doc * infeed_factor;
-        target[X_AXIS] += (doc - thread->depth) * thread->cut_direction;
-        target[Z_AXIS] -= infeed_offset;
+        target[Z_AXIS] = start_z - doc * infeed_factor;
         if(!mc_line(target, pl_data))
             return;
     }
 
     while(--passes) {
 
-        if(thread->end_taper_type == Taper_None) {
-            target[X_AXIS] += (thread->peak + doc) * thread->cut_direction;
-            if(!mc_line(target, pl_data))
-                return;
-        }
+        if(thread->end_taper_type & Taper_Entry)
+            target[X_AXIS] = position[X_AXIS] + (thread->peak + doc - thread->depth) * thread->cut_direction;
+        else
+            target[X_AXIS] = position[X_AXIS] + (thread->peak + doc) * thread->cut_direction;
+
+        if(!mc_line(target, pl_data))
+            return;
+
+        if(!protocol_buffer_synchronize() && sys.state != STATE_IDLE) // Wait until any previous moves are finished.
+            return;
 
         pl_data->condition.rapid_motion = Off;          // Clear rapid motion condition flag,
         pl_data->condition.spindle.synchronized = On;   // enable spindle sync for cut
         pl_data->overrides.feed_hold_disable = On;      // and disable feed hold
-
-        mc_dwell(0.01f); // Needed for now since initial spindle sync is done just before st_wake_up
 
         // Cut thread pass
 
         // 1. Entry taper
         if(thread->end_taper_type & Taper_Entry) {
 
-            // TODO: move this segment outside of synced motion?
-            target[X_AXIS] = position[X_AXIS] + (thread->peak + doc - thread->depth) * thread->cut_direction;
-            if(!mc_line(target, pl_data))
-                return;
-
-            target[X_AXIS] = position[X_AXIS] + (thread->peak + doc) * thread->cut_direction;
-            target[Z_AXIS] -= thread->end_taper_length;
-            if(!mc_line(target, pl_data))
-                return;
-        } else {
-            // 2. Main part
-            target[X_AXIS] = position[X_AXIS] + (thread->peak + doc) * thread->cut_direction;
+            target[X_AXIS] += thread->depth * thread->cut_direction;
+            target[Z_AXIS] -= entry_taper_length;
             if(!mc_line(target, pl_data))
                 return;
         }
 
+        // 2. Main part
+        target[Z_AXIS] += thread_length;
+        if(!mc_line(target, pl_data))
+            return;
+
         // 3. Exit taper
         if(thread->end_taper_type & Taper_Exit) {
 
-            target[Z_AXIS] = target_z - infeed_offset + thread->end_taper_length;
-            if(!mc_line(target, pl_data))
-                return;
-
-            target[X_AXIS] = position[X_AXIS] + (thread->peak + doc - thread->depth) * thread->cut_direction;
-            target[Z_AXIS] -= thread->end_taper_length;
-            if(!mc_line(target, pl_data))
-                return;
-        } else {
-            target[Z_AXIS] = target_z - infeed_offset;
+            target[X_AXIS] -= thread->depth * thread->cut_direction;
+            target[Z_AXIS] -= exit_taper_length;
             if(!mc_line(target, pl_data))
                 return;
         }
@@ -661,7 +654,6 @@ void mc_thread (plan_line_data_t *pl_data, float *position, gc_thread_data *thre
             // Get DOC of next pass.
             doc = calc_thread_doc(++pass, thread->initial_depth, inv_degression);
             doc = min(doc, thread->depth);
-            infeed_offset = infeed_factor != 0.0f ? doc * infeed_factor : 0.0f;
 
             // 4. Retract
             target[X_AXIS] = position[X_AXIS] + (doc - thread->depth) * thread->cut_direction;
@@ -672,10 +664,12 @@ void mc_thread (plan_line_data_t *pl_data, float *position, gc_thread_data *thre
             pl_data->overrides.feed_hold_disable = feed_hold_disabled;
 
             // 5. Back to start, add compound slide angle offset when commanded.
-            target[Z_AXIS] = position[Z_AXIS] - infeed_offset;
+            target[Z_AXIS] = start_z - (infeed_factor != 0.0f ? doc * infeed_factor : 0.0f);
             if(!mc_line(target, pl_data))
                 return;
+
         } else {
+
             doc = thread->depth;
             target[X_AXIS] = position[X_AXIS];
             if(!mc_line(target, pl_data))
@@ -839,9 +833,10 @@ gc_probe_t mc_probe_cycle (float *target, plan_line_data_t *pl_data, gc_parser_f
     sys.flags.probe_succeeded = Off; // Re-initialize probe history before beginning cycle.
     hal.probe_configure_invert_mask(parser_flags.probe_is_away);
 
-    // After syncing, check if probe is already triggered. If so, halt and issue alarm.
+    // After syncing, check if probe is already triggered or not connected. If so, halt and issue alarm.
     // NOTE: This probe initialization error applies to all probing cycles.
-    if (hal.probe_get_state()) { // Check probe pin state.
+    probe_state_t probe = hal.probe_get_state();
+    if (probe.triggered || !probe.connected) { // Check probe state.
         system_set_exec_alarm(Alarm_ProbeFailInitial);
         protocol_execute_realtime();
         hal.probe_configure_invert_mask(false); // Re-initialize invert mask before returning.
@@ -852,7 +847,7 @@ gc_probe_t mc_probe_cycle (float *target, plan_line_data_t *pl_data, gc_parser_f
     mc_line(target, pl_data);
 
     // Activate the probing state monitor in the stepper module.
-    sys_probe_state = Probe_Active;
+    sys_probing_state = Probing_Active;
 
     // Perform probing cycle. Wait here until probe is triggered or motion completes.
     system_set_exec_state_flag(EXEC_CYCLE_START);
@@ -864,7 +859,7 @@ gc_probe_t mc_probe_cycle (float *target, plan_line_data_t *pl_data, gc_parser_f
     // Probing cycle complete!
 
     // Set state variables and error out, if the probe failed and cycle with error is enabled.
-    if (sys_probe_state == Probe_Active) {
+    if (sys_probing_state == Probing_Active) {
         if (parser_flags.probe_is_no_error)
             memcpy(sys_probe_position, sys_position, sizeof(sys_position));
         else
@@ -872,7 +867,7 @@ gc_probe_t mc_probe_cycle (float *target, plan_line_data_t *pl_data, gc_parser_f
     } else
         sys.flags.probe_succeeded = On; // Indicate to system the probing cycle completed successfully.
 
-    sys_probe_state = Probe_Off;            // Ensure probe state monitor is disabled.
+    sys_probing_state = Probing_Off;        // Ensure probe state monitor is disabled.
     hal.probe_configure_invert_mask(false); // Re-initialize invert mask.
     protocol_execute_realtime();            // Check and execute run-time commands
 

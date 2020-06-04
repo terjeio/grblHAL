@@ -43,6 +43,11 @@
 #define TRINAMIC_ENABLE        0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
 #define TRINAMIC_I2C           0 // Trinamic I2C - SPI bridge interface.
 #define TRINAMIC_DEV           0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
+#if COMPATIBILITY_LEVEL <= 1
+#define ESTOP_ENABLE           1 // When enabled only real-time report requests will be executed when the reset pin is asserted.
+#else
+#define ESTOP_ENABLE           0 // Do not change!
+#endif
 #define CNC_BOOSTERPACK        1 // do not change!
 
 #if CNC_BOOSTERPACK

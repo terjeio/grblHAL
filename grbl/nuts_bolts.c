@@ -2,7 +2,7 @@
   nuts_bolts.c - Shared functions
   Part of Grbl
 
-  Copyright (c) 2017-2019 Terje Io
+  Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -139,9 +139,9 @@ char *ftoa (float n, uint8_t decimal_places)
 // NOTE: Thanks to Radu-Eosif Mihailescu for identifying the issues with using strtod().
 bool read_float (char *line, uint_fast8_t *char_counter, float *float_ptr)
 {
-    char c, *ptr = line + *char_counter;
+    char *ptr = line + *char_counter;
     int_fast8_t exp = 0;
-    uint_fast8_t ndigit = 0;
+    uint_fast8_t ndigit = 0, c;
     uint32_t intval = 0;
     bool isnegative, isdecimal = false;
 
@@ -153,7 +153,7 @@ bool read_float (char *line, uint_fast8_t *char_counter, float *float_ptr)
         c = *ptr++;
 
     // Extract number into fast integer. Track decimal in terms of exponent value.
-    while(true) {
+    while(c) {
         c -= '0';
         if (c <= 9) {
             ndigit++;
@@ -163,7 +163,7 @@ bool read_float (char *line, uint_fast8_t *char_counter, float *float_ptr)
                 intval = (((intval << 2) + intval) << 1) + c; // intval*10 + c
             } else if (!isdecimal)
                 exp++;  // Drop overflow digits
-        } else if (c == (('.'-'0') & 0xff) && !isdecimal)
+        } else if (c == (uint_fast8_t)('.' - '0') && !isdecimal)
             isdecimal = true;
          else
             break;
@@ -173,7 +173,7 @@ bool read_float (char *line, uint_fast8_t *char_counter, float *float_ptr)
 
     // Return if no digits have been read.
     if (!ndigit)
-        return(false);
+        return false;
 
     // Convert integer into floating point.
     float fval = (float)intval;

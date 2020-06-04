@@ -392,7 +392,7 @@ typedef struct {
     feed_mode_t feed_mode;               // {G93,G94}
     bool units_imperial;                 // {G20,G21}
     bool distance_incremental;           // {G90,G91}
-    bool diameter_mode;                  // {G7,G8} Lathe diameter mode
+    bool diameter_mode;                  // {G7,G8} Lathe diameter mode.
     // uint8_t distance_arc;             // {G91.1} NOTE: Don't track. Only default supported.
     plane_select_t plane_select;         // {G17,G18,G19}
     // uint8_t cutter_comp;              // {G40} NOTE: Don't track. Only default supported.
@@ -497,11 +497,11 @@ typedef struct {
     bool is_rpm_rate_adjusted;
     bool tool_change;
     status_code_t last_error;           // last return value from parser
-    //
+    // The following variables are not cleared upon warm restart when COMPATIBILITY_LEVEL <= 1
     float g92_coord_offset[N_AXIS];     // Retains the G92 coordinate offset (work coordinates) relative to
-                                        // machine zero in mm. Non-persistent. Cleared upon reset and boot.
-    float tool_length_offset[N_AXIS];   // Tracks tool length offset value when enabled
-    tool_data_t *tool;                  // Tracks tool number and offset
+                                        // machine zero in mm. Persistent and loaded from EEPROM on boot when COMPATIBILITY_LEVEL <= 1
+    float tool_length_offset[N_AXIS];   // Tracks tool length offset when enabled
+    tool_data_t *tool;                  // Tracks tool number and tool offset
 } parser_state_t;
 
 typedef struct {

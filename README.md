@@ -1,6 +1,21 @@
 ## GrblHAL ##
 ---
 
+Build 20200603:
+* **Important:** settings version has been changed and settings will be restored to defaults after updating. Backup & restore! 
+* Optimizations for ring buffer handling in planner and step generator.
+* New optional input signal for probe connected status, driver support will be added later to selected drivers.
+* Automatic reporting of tool length offset \(`[TLO:...]`\) when changed.
+* `G43.x`, `G49` and `G92` added to parser state report.
+* `G76` [threading cycle](https://hackaday.io/project/165248-mini-lathe-emco-compact-5-cnc-conversion) refactored.
+* \(Re\)added `REPORT_PROBE_COORDINATES` and `TOOL_LENGTH_OFFSET_AXIS` [configuration](grbl/config.h) options, the latter available when `COMPATIBILITY_LEVEL` > 2.
+* Improved backwards compatibility with vanilla grbl, e.g. G92 and tool offset\(s\) will be lost on a soft reset. Dependent on `COMPATIBILITY_LEVEL` setting.
+* Board name added to `$I` report if provided by driver.
+* [Grbl-Sim](https://github.com/grbl/grbl-sim) ported to grblHAL as a [driver](drivers/Simulator). Added telnet support++. Can be used to test senders. Note: currently only compiled/tested for Linux.
+* Some minor bug fixes.
+
+---
+
 Build 20200503: Added configuration flag for manual homing. \(Re\)added compile time option `ENABLE_SAFETY_DOOR_INPUT_PIN` for [safety door switch](https://github.com/terjeio/grblHAL/blob/master/grbl/config.h), default is now disabled. Some bug fixes and "hardening" of code.
 
 ---

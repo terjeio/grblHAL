@@ -117,7 +117,7 @@ typedef struct {
 } usb_tx_buf;
 
 static usb_tx_buf txbuf = {0};
-static stream_rx_buffer_t rxbuf = {0};
+static stream_rx_buffer_t rxbuf = {0}, rxbackup;
 
 void usbInit (void)
 {
@@ -228,6 +228,22 @@ int16_t usbGetC (void)
     return (int16_t)data;
 }
 
+// "dummy" version of serialGetC
+static int16_t usbGetNull (void)
+{
+    return -1;
+}
+
+bool usbSuspendInput (bool suspend)
+{
+    if(suspend)
+        hal.stream.read = usbGetNull;
+    else if(rxbuf.backup)
+        memcpy(&rxbuf, &rxbackup, sizeof(stream_rx_buffer_t));
+
+    return rxbuf.tail != rxbuf.head;
+}
+
 void usbBufferInput (uint8_t *data, uint32_t length)
 {
     while(length--) {
@@ -237,7 +253,14 @@ void usbBufferInput (uint8_t *data, uint32_t length)
         if(rxbuf.tail == next_head) {                                       // If buffer full
             rxbuf.overflow = 1;                                             // flag overflow
         } else {
-            if(!hal.stream.enqueue_realtime_command(*data)) {               // Check and strip realtime commands,
+            if(*data == CMD_TOOL_ACK && !rxbuf.backup) {
+
+                memcpy(&rxbackup, &rxbuf, sizeof(stream_rx_buffer_t));
+                rxbuf.backup = true;
+                rxbuf.tail = rxbuf.head;
+                hal.stream.read = usbGetC; // restore normal input
+
+            } else if(!hal.stream.enqueue_realtime_command(*data)) {        // Check and strip realtime commands,
                 rxbuf.data[rxbuf.head] = *data;                             // if not add data to buffer
                 rxbuf.head = next_head;                                     // and update pointer
             }

@@ -27,6 +27,9 @@
 // directly from the incoming data stream.
 ISR_CODE void control_interrupt_handler (control_signals_t signals)
 {
+    if(signals.deasserted)
+        return; // for now...
+
     if (signals.value) {
         if ((signals.reset || signals.e_stop) && sys.state != STATE_ESTOP)
             mc_reset();
@@ -44,7 +47,13 @@ ISR_CODE void control_interrupt_handler (control_signals_t signals)
                     system_set_exec_state_flag(EXEC_SAFETY_DOOR);
             }
 #endif
-            if (signals.feed_hold)
+            if (signals.probe_triggered && sys_probing_state == Probing_Off && (sys.state & (STATE_CYCLE|STATE_JOG))) {
+                system_set_exec_state_flag(EXEC_FEED_HOLD);
+                sys.alarm_pending = Alarm_ProbeProtect;
+            } else if (signals.probe_disconnected && sys_probing_state == Probing_Active && sys.state == STATE_CYCLE) {
+                system_set_exec_state_flag(EXEC_FEED_HOLD);
+                sys.alarm_pending = Alarm_ProbeProtect;
+            } else if (signals.feed_hold)
                 system_set_exec_state_flag(EXEC_FEED_HOLD);
             else if (signals.cycle_start)
                 system_set_exec_state_flag(EXEC_CYCLE_START);
@@ -403,7 +412,7 @@ status_code_t system_execute_line (char *line)
 
 void system_flag_wco_change ()
 {
-    if(!settings.flags.force_buffer_sync_on_wco_change)
+    if(!settings.status_report.sync_on_wco_change)
         protocol_buffer_synchronize();
 
     sys.report.wco = On;

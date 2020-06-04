@@ -117,6 +117,11 @@ inline static float gc_get_block_offset (parser_block_t *gc_block, uint_fast8_t 
 
 void gc_init(bool cold_start)
 {
+
+#if COMPATIBILITY_LEVEL > 1
+    cold_start = true;
+#endif
+
     if(cold_start) {
         memset(&gc_state, 0, sizeof(parser_state_t));
       #ifdef N_TOOLS
@@ -147,6 +152,11 @@ void gc_init(bool cold_start)
     // Load default G54 coordinate system.
     if (!settings_read_coord_data(gc_state.modal.coord_system.idx, &gc_state.modal.coord_system.xyz))
         hal.report.status_message(Status_SettingReadFail);
+
+#if COMPATIBILITY_LEVEL <= 1
+    if (cold_start && !settings_read_coord_data(SETTING_INDEX_G92, &gc_state.g92_coord_offset))
+        hal.report.status_message(Status_SettingReadFail);
+#endif
 
 //    if(settings.flags.lathe_mode)
 //        gc_state.modal.plane_select = PlaneSelect_ZX;
@@ -753,7 +763,7 @@ status_code_t gc_execute_block(char *block, char *message)
 
                 // Check for invalid negative values for words F, H, N, P, T, and S.
                 // NOTE: Negative value check is done here simply for code-efficiency.
-                if ((bit(word_bit.parameter) & (bit(Word_D)|bit(Word_F)|bit(Word_H)|bit(Word_N)|bit(Word_P)|bit(Word_T)|bit(Word_S))) && value < 0.0f)
+                if ((bit(word_bit.parameter) & (bit(Word_D)|bit(Word_F)|bit(Word_H)|bit(Word_N)|bit(Word_T)|bit(Word_S))) && value < 0.0f)
                     FAIL(Status_NegativeValue); // [Word value cannot be negative]
 
                 value_words |= bit(word_bit.parameter); // Flag to indicate parameter assigned.
@@ -946,6 +956,8 @@ status_code_t gc_execute_block(char *block, char *message)
             case 65:
                 if(bit_isfalse(value_words, bit(Word_P)))
                     FAIL(Status_GcodeValueWordMissing);
+                if(gc_block.values.p < 0.0f)
+                    FAIL(Status_NegativeValue);
                 if((uint32_t)gc_block.values.p + 1 > hal.port.num_digital)
                     FAIL(Status_GcodeValueOutOfRange);
                 gc_block.output_command.is_digital = true;
@@ -968,6 +980,8 @@ status_code_t gc_execute_block(char *block, char *message)
                     FAIL(Status_GcodeValueOutOfRange);
 
                 if(bit_istrue(value_words, bit(Word_P))) {
+                    if(gc_block.values.p < 0.0f)
+                        FAIL(Status_NegativeValue);
                     if((uint32_t)gc_block.values.p + 1 > hal.port.num_digital)
                         FAIL(Status_GcodeValueOutOfRange);
 
@@ -1013,9 +1027,11 @@ status_code_t gc_execute_block(char *block, char *message)
 
         if(bit_isfalse(value_words, bit(Word_P)))
             gc_block.values.p = 1.0f;
-        else
+        else {
+            if(gc_block.values.p < 0.0f)
+                FAIL(Status_NegativeValue);
             bit_false(value_words, bit(Word_P));
-
+        }
         switch(gc_block.override_command) {
 
             case Override_FeedSpeed:
@@ -1052,10 +1068,12 @@ status_code_t gc_execute_block(char *block, char *message)
         axis_words = ijk_words = 0;
     }
 
-    // [10. Dwell ]: P value missing. P is negative (done.) NOTE: See below.
+    // [10. Dwell ]: P value missing. NOTE: See below.
     if (gc_block.non_modal_command == NonModal_Dwell) {
         if (bit_isfalse(value_words, bit(Word_P)))
             FAIL(Status_GcodeValueWordMissing); // [P word missing]
+        if(gc_block.values.p < 0.0f)
+            FAIL(Status_NegativeValue);
         bit_false(value_words, bit(Word_P));
     }
 
@@ -1186,6 +1204,13 @@ status_code_t gc_execute_block(char *block, char *message)
     //   is absent or if any of the other axis words are present.
     if (axis_command == AxisCommand_ToolLengthOffset) { // Indicates called in block.
 
+#ifdef TOOL_LENGTH_OFFSET_AXIS
+        if(gc_block.modal.tool_offset_mode == ToolLengthOffset_EnableDynamic) {
+            if (axis_words ^ bit(TOOL_LENGTH_OFFSET_AXIS))
+                FAIL(Status_GcodeG43DynamicAxisError);
+        }
+#endif
+
         switch(gc_block.modal.tool_offset_mode) {
 
             case ToolLengthOffset_EnableDynamic:
@@ -1256,6 +1281,9 @@ status_code_t gc_execute_block(char *block, char *message)
 
             if (bit_isfalse(value_words, bit(Word_P)|bit(Word_L)))
                 FAIL(Status_GcodeValueWordMissing); // [P/L word missing]
+
+            if(gc_block.values.p < 0.0f)
+                FAIL(Status_NegativeValue);
 
             uint8_t p_value;
 
@@ -2208,8 +2236,10 @@ status_code_t gc_execute_block(char *block, char *message)
             }
         } while(idx);
 
-        if(tlo_changed)
+        if(tlo_changed) {
+            sys.report.tool_offset = true;
             system_flag_wco_change();
+        }
     }
 
     // [15. Coordinate system selection ]:
@@ -2262,7 +2292,9 @@ status_code_t gc_execute_block(char *block, char *message)
 
         case NonModal_SetCoordinateOffset: // G92
             memcpy(gc_state.g92_coord_offset, gc_block.values.xyz, sizeof(gc_state.g92_coord_offset));
-// TODO: enable and load at startup?            settings_write_coord_data(SETTING_INDEX_G92, &gc_state.g92_coord_offset); // Save G92 offsets to EEPROM
+#if COMPATIBILITY_LEVEL <= 1
+            settings_write_coord_data(SETTING_INDEX_G92, &gc_state.g92_coord_offset); // Save G92 offsets to EEPROM
+#endif
             system_flag_wco_change();
             break;
 
@@ -2338,11 +2370,9 @@ status_code_t gc_execute_block(char *block, char *message)
 
                     plan_data.condition.spindle.synchronized = On;
 
-                    mc_dwell(0.01f); // Needed for now since initial spindle sync is done just before st_wake_up
-
                     mc_line(gc_block.values.xyz, &plan_data);
 
-                    protocol_buffer_synchronize();    // Wait until thread is finished,
+                    protocol_buffer_synchronize();    // Wait until synchronized move is finished,
                     sys.override.control = overrides; // then restore previous override disable status.
                 }
                 break;
@@ -2359,7 +2389,6 @@ status_code_t gc_execute_block(char *block, char *message)
 
                     mc_thread(&plan_data, gc_state.position, &thread, overrides.feed_hold_disable);
 
-                    protocol_buffer_synchronize();    // Wait until thread is finished,
                     sys.override.control = overrides; // then restore previous override disable status.
                 }
                 break;

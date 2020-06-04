@@ -17,6 +17,15 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#if N_AXIS == 5
+#define BOARD_NAME "CNC 3040 5-axis"
+#endif
+#if N_AXIS == 4
+#define BOARD_NAME "CNC 3040 4-axis"
+#else
+#define BOARD_NAME "CNC 3040"
+#endif
+
 // Define step pulse output pins.
 #define STEP_PORT       GPIOA
 #define X_STEP_PIN      0

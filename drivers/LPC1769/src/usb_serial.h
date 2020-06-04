@@ -4,7 +4,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2019 Terje Io
+  Copyright (c) 2019-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -31,3 +31,4 @@ uint16_t usbRxFree (void);
 void usbRxFlush(void);
 void usbRxCancel(void);
 void usbBufferInput (uint8_t *data, uint32_t length);
+bool usbSuspendInput (bool suspend);
