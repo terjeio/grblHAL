@@ -6,6 +6,7 @@ Build 20200603:
 * Optimizations for ring buffer handling in planner and step generator.
 * New optional input signal for probe connected status, driver support will be added later to selected drivers.
 * Automatic reporting of tool length offset \(`[TLO:...]`\) when changed.
+* Support for [G5](http://www.linuxcnc.org/docs/2.5/html/gcode/gcode.html#sec:G5-Cubic-Spline) \(cubic spline\) added.
 * `G43.x`, `G49` and `G92` added to parser state report.
 * `G76` [threading cycle](https://hackaday.io/project/165248-mini-lathe-emco-compact-5-cnc-conversion) refactored.
 * \(Re\)added `REPORT_PROBE_COORDINATES` and `TOOL_LENGTH_OFFSET_AXIS` [configuration](grbl/config.h) options, the latter available when `COMPATIBILITY_LEVEL` > 2.
@@ -73,7 +74,7 @@ I am currently running this version in three CNC machines, a CO2 laser \(TM4C123
 List of Supported G-Codes in GrblHAL v1.1:
   - Non-Modal Commands: G4, G10L2, G10L20, G28, G30, G28.1, G30.1, G53, G92, G92.1
   - Additional Non-Modal Commands: G10L1*, G10L10*, G10L11*
-  - Motion Modes: G0, G1, G2, G3, G38.2, G38.3, G38.4, G38.5, G80, G33*
+  - Motion Modes: G0, G1, G2, G3, G5, G38.2, G38.3, G38.4, G38.5, G80, G33*
   - Canned cycles: G73, G81, G82, G83, G85, G86, G89, G98, G99
   - Repetitive cycles: G76*
   - Feed Rate Modes: G93, G94, G95*, G96*, G97*
