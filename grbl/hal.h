@@ -33,6 +33,7 @@
 #include "eeprom.h"
 #include "stream.h"
 #include "probe.h"
+#include "plugins.h"
 
 #define HAL_VERSION 6
 
@@ -187,6 +188,7 @@ typedef struct HAL {
     spindle_data_t (*spindle_get_data)(spindle_data_request_t request);
     void (*spindle_reset_data)(void);
     void (*state_change_requested)(uint_fast16_t state);
+    void (*encoder_state_changed)(encoder_t *encoder);
 #ifdef DEBUGOUT
     void (*debug_out)(bool on);
 #endif

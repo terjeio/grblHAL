@@ -29,6 +29,41 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+// Quadrature encoder interface
+
+typedef enum {
+    Encoder_Universal = 0,
+    Encoder_FeedRate,
+    Encoder_Spindle_RPM,
+    Encoder_Spindle_Position,
+    Encoder_MPG,
+    Encoder_MPG_X,
+    Encoder_MPG_Y,
+    Encoder_MPG_Z,
+    Encoder_MPG_A,
+    Encoder_MPG_B,
+    Encoder_MPG_C
+} encoder_mode_t;
+
+typedef union {
+    uint_fast8_t signals;
+    struct {
+        uint_fast8_t position :1,
+                     select   :1,
+                     index    :1,
+                     home     :1;
+    };
+} encoder_signals_t;
+
+typedef struct {
+    encoder_mode_t mode;
+    int32_t position;
+    encoder_signals_t changed;
+    encoder_signals_t state;
+} encoder_t;
+
+// EEPROM/FRAM interface
+
 typedef struct {
     uint8_t address;
     uint8_t word_addr_bytes;
