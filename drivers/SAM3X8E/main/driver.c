@@ -607,18 +607,20 @@ static void probeConfigureInvertMask (bool is_probe_away)
       probe_invert = !probe_invert;
 }
 
-// Returns the probe pin state. Triggered = true.
+// Returns the probe connected and triggered pin states.
+probe_state_t probeGetState (void)
+{
+    probe_state_t state = {
+        .connected = On
+    };
+
 #ifdef PROBE_PIN
-bool probeGetState (void)
-{
-    return BITBAND_PERI(PROBE_PORT->PIO_PDSR, PROBE_PIN) ^ probe_invert;
-}
+    state.triggered = BITBAND_PERI(PROBE_PORT->PIO_PDSR, PROBE_PIN) ^ probe_invert;
 #else
-bool probeGetState (void)
-{
-    return false;
-}
+    state.triggered = false;
 #endif
+    return state;
+}
 
 // Static spindle (off, on cw & on ccw)
 
@@ -1300,7 +1302,7 @@ static bool driver_setup (settings_t *settings)
 
  // Set defaults
 
-    IOInitDone = settings->version == 15;
+    IOInitDone = settings->version == 16;
 
     settings_changed(settings);
 
@@ -1480,7 +1482,10 @@ bool driver_init (void)
     NVIC_EnableIRQ(SysTick_IRQn);
 
     hal.info = "SAM3X8E";
-	hal.driver_version = "200411";
+	hal.driver_version = "200528";
+#ifdef BOARD_NAME
+    hal.board = BOARD_NAME;
+#endif
     hal.driver_setup = driver_setup;
     hal.f_step_timer = SystemCoreClock / 2; // 42 MHz
     hal.rx_buffer_size = RX_BUFFER_SIZE;

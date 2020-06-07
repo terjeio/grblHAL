@@ -33,6 +33,10 @@
 #include "ioports.h"
 #endif
 
+#if QEI_ENABLE
+#include "src/encoder/encoder.h"
+#endif
+
 #if USB_SERIAL_GRBL == 1
 #include "usb_serial_ard.h"
 #elif USB_SERIAL_GRBL == 2
@@ -83,14 +87,20 @@ typedef enum {
     Input_LimitB_Max,
     Input_LimitC,
     Input_LimitC_Max,
-    Input_KeypadStrobe
+    Input_KeypadStrobe,
+    Input_QEI_A,
+    Input_QEI_B,
+    Input_QEI_Select,
+    Input_QEI_Index,
 } input_t;
 
-#define INPUT_GROUP_CONTROL (1 << 0)
-#define INPUT_GROUP_PROBE   (1 << 1)
-#define INPUT_GROUP_LIMIT   (1 << 2)
-#define INPUT_GROUP_KEYPAD  (1 << 3)
-#define INPUT_GROUP_MPG     (1 << 4)
+#define INPUT_GROUP_CONTROL    (1 << 0)
+#define INPUT_GROUP_PROBE      (1 << 1)
+#define INPUT_GROUP_LIMIT      (1 << 2)
+#define INPUT_GROUP_KEYPAD     (1 << 3)
+#define INPUT_GROUP_MPG        (1 << 4)
+#define INPUT_GROUP_QEI        (1 << 5)
+#define INPUT_GROUP_QEI_SELECT (1 << 6)
 
 typedef enum {
     IRQ_Mode_None    = 0b00,
@@ -117,6 +127,23 @@ typedef struct {
     input_signal_t *signal[DEBOUNCE_QUEUE];
 } debounce_queue_t;
 
+typedef union {
+    uint_fast8_t pins;
+    struct {
+        uint_fast8_t a :1,
+                     b :1;
+    };
+} qei_state_t;
+
+typedef struct {
+    encoder_t encoder;
+    qei_state_t state;
+    qei_state_t iflags;
+    bool initial_debounce;
+    volatile uint32_t debounce;
+} qei_t;
+
+static qei_t qei = {0};
 static debounce_queue_t debounce_queue = {0};
 
 // Standard inputs
@@ -153,6 +180,17 @@ static gpio_t KeypadStrobe;
 #if MPG_MODE_ENABLE
 static gpio_t ModeSelect;
 #endif
+#if QEI_ENABLE
+static gpio_t QEI_A, QEI_B;
+ #ifdef QEI_SELECT_PIN
+  #define QEI_SELECT_ENABLED 1
+  static gpio_t QEI_Select;
+ #endif
+ #ifdef QEI_INDEX_PIN
+  #define QEI_INDEX_ENABLED 1
+  static gpio_t QEI_Index;
+ #endif
+#endif
 
 static input_signal_t inputpin[] = {
 #if ESTOP_ENABLE
@@ -180,6 +218,16 @@ static input_signal_t inputpin[] = {
 #endif
 #if KEYPAD_ENABLE
   , { .id = Input_KeypadStrobe, .port = &KeypadStrobe, .pin = KEYPAD_PIN,      .group = INPUT_GROUP_KEYPAD }
+#endif
+#if QEI_ENABLE
+  , { .id = Input_QEI_A,        .port = &QEI_A,        .pin = QEI_A_PIN,       .group = INPUT_GROUP_QEI }
+  , { .id = Input_QEI_B,        .port = &QEI_B,        .pin = QEI_B_PIN,       .group = INPUT_GROUP_QEI }
+  #if QEI_SELECT_ENABLED
+  , { .id = Input_QEI_Select,   .port = &QEI_Select,   .pin = QEI_SELECT_PIN,  .group = INPUT_GROUP_QEI_SELECT }
+  #endif
+  #if QEI_INDEX_ENABLED
+  , { .id = Input_QEI_Index,    .port = &QEI_Index,    .pin = QEI_INDEX_PIN,   .group = INPUT_GROUP_QEI }
+  #endif
 #endif
 };
 
@@ -432,10 +480,16 @@ static void probeConfigure (bool is_probe_away)
         probe_invert = !probe_invert;
 }
 
-// Returns the probe pin state. Triggered = true.
-bool probeGetState (void)
+// Returns the probe connected and triggered pin states.
+probe_state_t probeGetState (void)
 {
-    return ((Probe.reg->DR & Probe.bit) != 0) ^ probe_invert;
+    probe_state_t state = {
+        .connected = On
+    };
+
+    state.triggered = ((Probe.reg->DR & Probe.bit) != 0) ^ probe_invert;
+
+    return state;
 }
 
 // Static spindle (off, on cw & on ccw)
@@ -745,13 +799,35 @@ static void settings_changed (settings_t *settings)
 #endif
 #if MPG_MODE_ENABLE
                 case Input_ModeSelect:
-                    irq_mode = IRQ_Mode_Change;
+                    signal->irq_mode = IRQ_Mode_Change;
                     break;
 #endif
 #if KEYPAD_ENABLE
                 case Input_KeypadStrobe:
-                    irq_mode = IRQ_Mode_Change;
+                    signal->irq_mode = IRQ_Mode_Change;
                     break;
+#endif
+#if QEI_ENABLE
+                case Input_QEI_A:
+                    signal->irq_mode = IRQ_Mode_Change;
+                    break;
+
+                case Input_QEI_B:
+                    signal->irq_mode = IRQ_Mode_Change;
+                    break;
+
+  #if QEI_INDEX_ENABLED
+                case Input_QEI_Index:
+                    signal->irq_mode = IRQ_Mode_None;
+                    break;
+  #endif
+
+  #if QEI_SELECT_ENABLED
+                case Input_QEI_Select:
+                    signal->debounce = hal.driver_cap.software_debounce;
+                    signal->irq_mode = IRQ_Mode_Falling;
+                    break;
+  #endif
 #endif
                 default:
                     break;
@@ -936,7 +1012,7 @@ static bool driver_setup (settings_t *settings)
 
   // Set defaults
 
-    IOInitDone = settings->version == 15;
+    IOInitDone = settings->version == 16;
 
     settings_changed(settings);
 
@@ -975,7 +1051,7 @@ bool nvsWrite (uint8_t *source)
 
 #endif
 
-#if KEYPAD_ENABLE || USB_SERIAL_GRBL > 0
+#if QEI_SELECT_ENABLED || KEYPAD_ENABLE || USB_SERIAL_GRBL > 0
 static void execute_realtime (uint_fast16_t state)
 {
 #if USB_SERIAL_GRBL > 0
@@ -983,6 +1059,9 @@ static void execute_realtime (uint_fast16_t state)
 #endif
 #if KEYPAD_ENABLE
     keypad_process_keypress(state);
+#endif
+#if QEI_SELECT_ENABLED
+    encoder_execute_realtime(state);
 #endif
 }
 #endif
@@ -1027,8 +1106,11 @@ bool driver_init (void)
     if(*options != '\0')
         options[strlen(options) - 1] = '\0';
 
-    hal.info = "Teensy 4.0"; // Typically set to MCU or board name
-    hal.driver_version = "200518";
+    hal.info = "IMXRT1062";
+    hal.driver_version = "200606";
+#ifdef BOARD_NAME
+    hal.board = BOARD_NAME;
+#endif
     hal.driver_options = *options == '\0' ? NULL : options;
     hal.driver_setup = driver_setup;
     hal.f_step_timer = 24000000;
@@ -1100,8 +1182,12 @@ bool driver_init (void)
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
 
-#if KEYPAD_ENABLE || USB_SERIAL_GRBL > 0
+#if QEI_SELECT_ENABLED || KEYPAD_ENABLE || USB_SERIAL_GRBL > 0
     hal.execute_realtime = execute_realtime;
+#endif
+
+#if QEI_ENABLE
+    hal.encoder_state_changed = encoder_changed;
 #endif
 
 #ifdef DEBUGOUT
@@ -1223,6 +1309,16 @@ static void debounce_isr (void)
 
     if(grp & INPUT_GROUP_CONTROL)
         hal.control_interrupt_callback(systemGetState());
+
+#if QEI_SELECT_ENABLED
+
+    if(grp & INPUT_GROUP_QEI_SELECT) {
+        qei.encoder.changed.select = On;
+        hal.encoder_state_changed(&qei.encoder);
+    }
+
+#endif
+
 }
 
   //GPIO intr process
@@ -1253,8 +1349,19 @@ static void gpio_isr (void)
                 if(inputpin[i].debounce && enqueue_debounce(&inputpin[i])) {
                     inputpin[i].gpio.reg->IMR &= ~inputpin[i].gpio.bit;
                     debounce = true;
-                } else
+                } else {
+#if QEI_ENABLE
+                    if(inputpin[i].group & INPUT_GROUP_QEI) {
+                        QEI_A.reg->IMR &= ~QEI_A.bit;       // Switch off
+                        QEI_B.reg->IMR &= ~QEI_B.bit;       // encoder interrupts.
+                        qei.iflags.a = inputpin[i].port == &QEI_A;
+                        qei.iflags.b = inputpin[i].port == &QEI_B;
+                        qei.debounce = 1;
+                        qei.initial_debounce = true;
+                    } else
+#endif
                     grp |= inputpin[i].group;
+                }
             }
         }
     } while(i);
@@ -1268,6 +1375,15 @@ static void gpio_isr (void)
 
     if(grp & INPUT_GROUP_CONTROL)
         hal.control_interrupt_callback(systemGetState());
+
+#if QEI_SELECT_ENABLED
+
+    if(grp & INPUT_GROUP_QEI_SELECT) {
+        qei.encoder.changed.select = On;
+        hal.encoder_state_changed(&qei.encoder);
+    }
+
+#endif
 
 #if MPG_MODE_ENABLE
 
@@ -1287,12 +1403,72 @@ static void gpio_isr (void)
 #endif
 }
 
+#if QEI_ENABLE
+
+void encoder_debounce (void)
+{
+    qei.debounce = 1;
+    qei.initial_debounce = false;
+    qei.state.a = (QEI_A.reg->DR & QEI_A.bit) != 0;
+    qei.state.b = (QEI_B.reg->DR & QEI_B.bit) != 0;
+}
+
+void encoder_update (void)
+{
+    qei_state_t state = {0};
+
+    state.a = (QEI_A.reg->DR & QEI_A.bit) != 0;
+    state.b = (QEI_B.reg->DR & QEI_B.bit) != 0;
+
+    if(state.pins == qei.state.pins) {
+
+        if(qei.iflags.a) {
+
+            if(qei.state.a)
+                qei.encoder.position = qei.encoder.position + (qei.state.b ? 1 : -1);
+            else
+                qei.encoder.position = qei.encoder.position + (qei.state.b ? -1 : 1);
+
+            qei.encoder.changed.position = hal.encoder_state_changed != NULL;
+        }
+
+        if(qei.iflags.b) {
+
+            if(qei.state.b)
+                qei.encoder.position = qei.encoder.position + (qei.state.a ? -1 : 1);
+            else
+                qei.encoder.position = qei.encoder.position + (qei.state.a ? 1 : -1);
+
+            qei.encoder.changed.position = hal.encoder_state_changed != NULL;
+        }
+
+        if(qei.encoder.changed.position)
+            hal.encoder_state_changed(&qei.encoder);
+    }
+
+    // Clear and reenable encoder interrupts
+    QEI_A.reg->ISR = QEI_A.bit;
+    QEI_B.reg->ISR = QEI_B.bit;
+    QEI_A.reg->IMR |= QEI_A.bit;
+    QEI_B.reg->IMR |= QEI_B.bit;
+}
+#endif
+
 // Interrupt handler for 1 ms interval timer
 static void systick_isr (void)
 {
 #if USB_SERIAL_GRBL == 2
     systick_isr_org();
 //    usb_serial_poll();
+#endif
+
+#if QEI_ENABLE
+    if(qei.debounce && !(--qei.debounce)) {
+        if(qei.initial_debounce)
+            encoder_debounce();
+        else
+            encoder_update();
+    }
 #endif
 
     if(grbl_delay.ms && !(--grbl_delay.ms)) {

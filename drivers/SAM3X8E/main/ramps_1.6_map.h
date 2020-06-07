@@ -23,6 +23,8 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#define BOARD_NAME "Ramps 1.6"
+
  // Define step pulse output pins.
 #define X_STEP_PORT         PIOA
 #define X_STEP_PIN          16  // Due Analog Pin 0

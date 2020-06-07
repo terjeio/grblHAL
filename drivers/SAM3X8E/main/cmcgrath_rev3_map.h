@@ -21,6 +21,8 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#define BOARD_NAME "cmcgrath v3"
+
 // Uncomment ONE line below to enable dual motors with auto squaring for axis
 // NOTE: if more than one is uncommented only the first will be honored.
 // NOTE: the max limit definitions for the enabled axis will be used as input for the second motor when homing.

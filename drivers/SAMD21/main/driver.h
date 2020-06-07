@@ -130,6 +130,8 @@ extern driver_settings_t driver_settings;
 
 #else // CNC Boosterpack pin assignments
 
+#define BOARD_NAME "CNC BoosterPack"
+
 // Define step pulse output pins.
 #define X_STEP_PIN      (19u)
 #define Y_STEP_PIN      (20u)

@@ -19,6 +19,10 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "driver.h"
+
+#define BOARD_NAME "CNC BoosterPack"
+
 // Define step pulse output pins.
 #define X_STEP_PIN      (32u)
 #define Y_STEP_PIN      (30u)
@@ -70,5 +74,12 @@
 #define GPIO1_PIN   (29u)
 #define GPIO2_PIN   (27u)
 #define GPIO3_PIN   (2u)
+
+#if QEI_ENABLE
+    #define QEI_A_PIN      GPIO0_PIN
+    #define QEI_B_PIN      GPIO3_PIN
+//    #define QEI_INDEX_PIN  GPIO2_PIN
+    #define QEI_SELECT_PIN GPIO1_PIN
+#endif
 
 /* EOF */
