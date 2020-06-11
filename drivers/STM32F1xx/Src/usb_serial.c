@@ -29,23 +29,17 @@
 #include "usbd_cdc_if.h"
 #include "usb_device.h"
 
+static char txdata2[BLOCK_TX_BUFFER_SIZE]; // Secondary TX buffer (for double buffering)
+static bool use_tx2data = false;
 static stream_rx_buffer_t rxbuf = {0}, rxbackup;
-
-#define USB_TXLEN 200
-
-typedef struct {
-    size_t length;
-    char *s;
-    char data[USB_TXLEN];
-} usb_tx_buf;
-
-usb_tx_buf txbuf = {0};
+static stream_block_tx_buffer_t txbuf = {0};
 
 void usbInit (void)
 {
     MX_USB_DEVICE_Init();
 
     txbuf.s = txbuf.data;
+    txbuf.max_length = BLOCK_TX_BUFFER_SIZE;
 }
 
 //
@@ -76,34 +70,55 @@ void usbRxCancel (void)
 }
 
 //
+// Writes current buffer to the USB output stream, swaps buffers
+//
+static inline bool usb_write (void)
+{
+    static uint8_t dummy = 0;
+
+    txbuf.s = use_tx2data ? txdata2 : txbuf.data;
+
+    while(CDC_Transmit_FS((uint8_t *)txbuf.s, txbuf.length) == USBD_BUSY) {
+        if(!hal.stream_blocking_callback())
+            return false;
+    }
+
+    if(txbuf.length % 64 == 0) {
+        while(CDC_Transmit_FS(&dummy, 0) == USBD_BUSY) {
+            if(!hal.stream_blocking_callback())
+                return false;
+        }
+    }
+
+    use_tx2data = !use_tx2data;
+    txbuf.s = use_tx2data ? txdata2 : txbuf.data;
+    txbuf.length = 0;
+
+    return true;
+}
+
+//
 // Writes a null terminated string to the USB output stream, blocks if buffer full
 // Buffers string up to EOL (LF) before transmitting
 //
+
 void usbWriteS (const char *s)
 {
     size_t length = strlen(s);
 
-    if(length + txbuf.length < USB_TXLEN) {
-        memcpy(txbuf.s, s, length);
-        txbuf.length += length;
-        txbuf.s += length;
-        if(s[length - 1] == '\n') {
-            length = txbuf.length;
-            txbuf.length = 0;
-            txbuf.s = txbuf.data;
-            while(CDC_Transmit_FS((uint8_t *)txbuf.data, length) == USBD_BUSY) {
-                if(!hal.stream_blocking_callback())
-                    return;
-            }
-            if(length % 64 == 0) {
-            	while(CDC_Transmit_FS((uint8_t *)txbuf.data, 0) == USBD_BUSY) {
-                    if(!hal.stream_blocking_callback())
-                        return;
-                }
-            }
-        }
+    if((length + txbuf.length) > txbuf.max_length) {
+        if(!usb_write())
+            return;
     }
-//  while(CDC_Transmit_FS((uint8_t*)s, strlen(s)) == USBD_BUSY);
+
+    memcpy(txbuf.s, s, length);
+    txbuf.length += length;
+    txbuf.s += length;
+
+    if(s[length - 1] == ASCII_LF) {
+        if(!usb_write())
+            return;
+    }
 }
 
 //
