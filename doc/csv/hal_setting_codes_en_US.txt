@@ -6,19 +6,19 @@ $-Code	 Setting	 Units	Datatype	Data format	Setting Description	Min	Max
 4	Invert step enable pin	boolean	bitfield	axes	Inverts the stepper driver enable signals  (active low). If the stepper drivers shares the same enable signal only X is used.		
 5	Invert limit pins	mask	bitfield	axes	Inverts the axis limit input signals. 		
 6	Invert probe pin	boolean	bool		Inverts the probe input pin signal.		
-10	Status report options	mask	bitfield	Position in machine coordinate,Buffer state,Line numbers,Feed & speed,Pin state,Work coordinate offset,Overrides,Probe coordinates,Buffer sync on WCO change,Alarm substatus	Specifies optional data included in status reports.		
+10	Status report options	mask	bitfield	Position in machine coordinate,Buffer state,Line numbers,Feed & speed,Pin state,Work coordinate offset,Overrides,Probe coordinates,Buffer sync on WCO change,Alarm substatus,Parser state	Specifies optional data included in status reports.\n\nNote that Parser state will be sent separately after the status report and only on changes.		
 11	Junction deviation	mm	float	#####0.000	Sets how fast Grbl travels through consecutive motions. Lower value slows it down.		
 12	Arc tolerance	mm	float	#####0.000	Sets the G2 and G3 arc tracing accuracy based on radial error. Beware: A very small value may effect performance.		
 13	Report in inches	boolean	bool		Enables inch units when returning any position and rate value that is not a settings value.		
-14	Invert control pins	mask	bitfield	Reset,Feed hold,Cycle start,Safety door	Inverts the control signals  (active low).		
+14	Invert control pins	mask	bitfield	Reset,Feed hold,Cycle start,Safety door,Block delete,Optional stop,EStop,Probe connected	Inverts the control signals  (active low).\nNOTE: Block delete, Optional stop and EStop are optional signals, availability is driver dependent.		
 15	Invert coolant pins	mask	bitfield	Flood,Mist	Inverts the coolant and mist signals  (active low).		
 16	Invert spindle signals	mask	bitfield	Spindle on,Spindle CCW,Invert PWM	Inverts the spindle on, counterclockwise and PWM signals (active low).		
-17	Pullup disable control pins	mask	bitfield	Reset,Feed hold,Cycle start,Safety door	Disable the control signals pullup resistors. Potentially enables pulldown resistor if available.		
+17	Pullup disable control pins	mask	bitfield	Reset,Feed hold,Cycle start,Safety door,Block delete,Optional stop,EStop,Probe connected	Disable the control signals pullup resistors. Potentially enables pulldown resistor if available.\nNOTE: Block delete, Optional stop and EStop are optional signals, availability is driver dependent.		
 18	Pullup disable limit pins	mask	bitfield	axes	Disable the limit signals pullup resistors. Potentially enables pulldown resistor if available.		
 19	Pullup disable probe pin	boolean	bool		Disable the probe signal pullup resistor. Potentially enables pulldown resistor if available.		
 20	Soft limits enable	boolean	bool		Enables soft limits checks within machine travel and sets alarm when exceeded. Requires homing.		
 21	Hard limits enable	mask	xbitfield	Enable,Strict mode	When enabled immediately halts motion and throws an alarm when a limit switch is triggered. In strict mode only homing is possible when a switch is engaged. 		
-22	Homing cycle	mask	xbitfield	Enable,Enable single axis commands,Homing on startup required,Set machine origin to 0,Two switches shares one input pin	Enables homing cycle. Requires limit switches on axes to be homed.		
+22	Homing cycle	mask	xbitfield	Enable,Enable single axis commands,Homing on startup required,Set machine origin to 0,Two switches shares one input pin,Allow manual	Enables homing cycle. Requires limit switches on axes to be automatically homed.\n\nWhen `Enable single axis commands` is checked, single axis homing can be performed by $H<axis letter> commands.\n\nWhen `Allow manual` is checked, axes not homed automatically may be homed manually by $H or $H<axis letter> commands.		
 23	Homing direction invert	mask	bitfield	axes	Homing searches for a switch in the positive direction. Set axis bit to search in negative direction.		
 24	Homing locate feed rate	mm/min	float	#####0.000	Feed rate to slowly engage limit switch to determine its location accurately.		
 25	Homing search seek rate	mm/min	float	#####0.000	Seek rate to quickly find the limit switch before the slower locating phase.		
@@ -62,12 +62,14 @@ $-Code	 Setting	 Units	Datatype	Data format	Setting Description	Min	Max
 63	Feed hold actions	mask	bitfield	Disable laser during hold,Restore spindle and coolant state on resume	Actions taken during feed hold and on resume from feed hold. 		
 64	Force init alarm	boolean	bool		Starts Grbl in alarm mode after a cold reset.		
 65	Probing feed override	boolean	bool		Allow feed override during probing. 
-70	Stream source	integer	radiobuttons	Serial,Bluetooth,Ethernet,WiFi	Input stream source.
-71	WiFi SSID		string	x(64)	WiFi SSID.
-72	WiFi Password		string	x(32)	WiFi Password.
-73	WiFi Port		integer	####0	WiFi Port Number listening for incoming connections.	1	65535
-74	Bluetooth device		string	x(32)	Bluetooth device name.
-75	Bluetooth service		string	x(32)	Bluetooth service name.
+70	Network Services	mask	bitfield	Telnet,Websocket,HTTP,DNS,MDNS,SSDP	Network services to enable. Consult driver documentation for availability.		
+71	Bluetooth device		string	x(32)	Bluetooth device name.
+72	Bluetooth service		string	x(32)	Bluetooth service name.
+73	WiFi Mode	integer	radiobuttons	Off,Station,Access Point,Access Point/Station	WiFi Mode.
+74	WiFi Station (STA) SSID		string	x(64)	WiFi Station (STA) SSID.
+75	WiFi Station (STA) Password		string	x(32)	WiFi Station (STA) Password.
+76	WiFi Access Point (AP) SSID		string	x(64)	WiFi Access Point (AP) SSID.
+77	WiFi Access Point (AP) Password		string	x(32)	WiFi Access Point (AP) Password.
 80	Spindle P-gain		float	###0.000			
 81	Spindle I-gain		float	###0.000			
 82	Spindle D-gain		float	###0.000			
@@ -121,3 +123,13 @@ $-Code	 Setting	 Units	Datatype	Data format	Setting Description	Min	Max
 165	C-axis backlash compensation	mm	float	#####0.000	B-axis backlash distance to compensate for.		
 256	Trinamic driver	mask	bitfield	axes	Enable SPI controlled Trinamic driver for axis.		
 257	Sensorless homing	mask	bitfield	axes	Enable sensorless homing for axis. Requires SPI controlled Trinamic driver.		
+300	Hostname		string	x(64)	Network hostname.
+301	IP Mode	integer	radiobuttons	AutoIP,Static,DHCP	IP Mode.		
+302	IP Address		ip4		Static IP address. Only available when IP Mode is set to Static.
+303	Gateway		ip4		Static gateway address. Only available when IP Mode is set to Static.
+304	Netmask		ip4		Static netmask. Only available when IP Mode is set to Static.
+305	Telnet Port		integer	####0	(Raw) Telnet port number listening for incoming connections.	1	65535
+306	HTTP Port		integer	####0	HTTP port number listening for incoming connections.	1	65535
+307	Websocket Port		integer	####0	Websocket port number listening for incoming connections.\nNOTE: WebUI requires this to be HTTP port number + 1.	1	65535
+330	Admin Password		string	x(32)	Administrator password.
+331	User Password		string	x(32)	User password.

@@ -8,3 +8,7 @@
 "7","Homing fail","Homing fail. Safety door was opened during homing cycle."
 "8","Homing fail","Homing fail. Pull off travel failed to clear limit switch. Try increasing pull-off setting or check wiring."
 "9","Homing fail","Homing fail. Could not find limit switch within search distances. Try increasing max travel, decreasing pull-off distance, or check wiring."
+"10","EStop","EStop asserted. Clear and reset"
+"11","Homing required","Homing required. Execute homing command ($H) to continue."
+"12","Limit switch engaged","Limit switch engaged. Clear before continuing."
+"13","Probe protection triggered","Probe protection triggered. Clear before continuing."

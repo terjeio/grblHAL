@@ -6,7 +6,7 @@ $-Code	 Setting	 Units	Datatype	Data format	Setting Description	Min	Max
 4	Invert step enable pin	boolean	bitfield	axes	Inverts the stepper driver enable signals  (active low). If the stepper drivers shares the same enable signal only X is used.		
 5	Invert limit pins	mask	bitfield	axes	Inverts the axis limit input signals. 		
 6	Invert probe pin	boolean	bool		Inverts the probe input pin signal.		
-10	Status report options	mask	bitfield	Position in machine coordinate,Buffer state,Line numbers,Feed & speed,Pin state,Work coordinate offset,Overrides,Probe coordinates,Buffer sync on WCO change	Specifies optional data included in status reports.		
+10	Status report options	mask	bitfield	Position in machine coordinate,Buffer state	Specifies optional data included in status reports.		
 11	Junction deviation	mm	float	#####0.000	Sets how fast Grbl travels through consecutive motions. Lower value slows it down.		
 12	Arc tolerance	mm	float	#####0.000	Sets the G2 and G3 arc tracing accuracy based on radial error. Beware: A very small value may effect performance.		
 13	Report in inches	boolean	bool		Enables inch units when returning any position and rate value that is not a settings value.		
