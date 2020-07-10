@@ -58,7 +58,11 @@ const settings_t defaults = {
     .flags.allow_probing_feed_override = ALLOW_FEED_OVERRIDE_DURING_PROBE_CYCLES,
 
     .steppers.pulse_microseconds = DEFAULT_STEP_PULSE_MICROSECONDS,
+#ifdef DEFAULT_STEP_PULSE_DELAY
     .steppers.pulse_delay_microseconds = DEFAULT_STEP_PULSE_DELAY,
+#else
+    .steppers.pulse_delay_microseconds = 0.0f,
+#endif
     .steppers.idle_lock_time = DEFAULT_STEPPER_IDLE_LOCK_TIME,
     .steppers.step_invert.mask = DEFAULT_STEPPING_INVERT_MASK,
     .steppers.dir_invert.mask = DEFAULT_DIRECTION_INVERT_MASK,
@@ -427,17 +431,17 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
         switch(setting) {
 
             case Setting_PulseMicroseconds:
-                if (int_value < 3)
+                if (value < 2.0f)
                     return Status_SettingStepPulseMin;
-                settings.steppers.pulse_microseconds = int_value;
+                settings.steppers.pulse_microseconds = value;
                 break;
 
 #if COMPATIBILITY_LEVEL <= 1
 
             case Setting_PulseDelayMicroseconds:
-                if(int_value > 0 && !hal.driver_cap.step_pulse_delay)
+                if(value > 0.0f && !hal.driver_cap.step_pulse_delay)
                     return Status_SettingDisabled;
-                settings.steppers.pulse_delay_microseconds = int_value;
+                settings.steppers.pulse_delay_microseconds = value;
                 break;
 
 #endif

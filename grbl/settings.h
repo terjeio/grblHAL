@@ -389,8 +389,8 @@ typedef struct {
     axes_signals_t dir_invert;
     axes_signals_t enable_invert;
     axes_signals_t deenergize;
-    uint8_t pulse_microseconds;
-    uint8_t pulse_delay_microseconds;
+    float pulse_microseconds;
+    float pulse_delay_microseconds;
     uint8_t idle_lock_time; // If max value 255, steppers do not disable.
 } stepper_settings_t;
 

@@ -554,21 +554,21 @@ status_code_t maslow_tuning (uint_fast16_t state, char *line, char *lcline)
 
         case 'X':
             selected_motor = A_MOTOR;
-            hal.stream.write("X-Axis Selected\r\n");
+            hal.stream.write("X-Axis Selected" ASCII_EOL);
             break;
 
         case 'Y':
             selected_motor = B_MOTOR;
-            hal.stream.write("Y-Axis Selected\r\n");
+            hal.stream.write("Y-Axis Selected" ASCII_EOL);
             break;
 
         case 'Z':
             selected_motor = Z_AXIS;
             if(maslow_hal.get_debug_data(selected_motor))
-                hal.stream.write("Z-Axis Selected\r\n");
+                hal.stream.write("Z-Axis Selected" ASCII_EOL);
             else {
                 selected_motor = A_MOTOR;
-                hal.stream.write("Z-Axis is not PID controlled, switched to A motor\r\n");
+                hal.stream.write("Z-Axis is not PID controlled, switched to A motor" ASCII_EOL);
             }
             break;
 
@@ -615,21 +615,21 @@ status_code_t maslow_tuning (uint_fast16_t state, char *line, char *lcline)
                         maslow_hal.settings->pid[selected_motor].Kp = parameter;
                         hal.stream.write("Kp == ");
                         hal.stream.write(ftoa(maslow_hal.settings->pid[selected_motor].Kp, 3));
-                        hal.stream.write("\r\n");
+                        hal.stream.write(ASCII_EOL);
                         break;
 
                     case 'D':
                         maslow_hal.settings->pid[selected_motor].Kd = parameter;
                         hal.stream.write("Kd == ");
                         hal.stream.write(ftoa(maslow_hal.settings->pid[selected_motor].Kd, 3));
-                        hal.stream.write("\r\n");
+                        hal.stream.write(ASCII_EOL);
                         break;
 
                     case 'I':
                         maslow_hal.settings->pid[selected_motor].Ki = parameter;
                         hal.stream.write("Ki == ");
                         hal.stream.write(ftoa(maslow_hal.settings->pid[selected_motor].Ki, 3));
-                        hal.stream.write("\r\n");
+                        hal.stream.write(ASCII_EOL);
                         maslow_hal.pid_settings_changed(selected_motor);
                         break;
 
@@ -637,7 +637,7 @@ status_code_t maslow_tuning (uint_fast16_t state, char *line, char *lcline)
                         maslow_hal.settings->pid[selected_motor].Imax = parameter;
                         hal.stream.write("Imax == ");
                         hal.stream.write(ftoa(maslow_hal.settings->pid[selected_motor].Imax, 3));
-                        hal.stream.write("\r\n");
+                        hal.stream.write(ASCII_EOL);
                         maslow_hal.pid_settings_changed(selected_motor);
                         break;
 
@@ -647,7 +647,7 @@ status_code_t maslow_tuning (uint_fast16_t state, char *line, char *lcline)
                             int32_t sz = maslow_hal.set_step_size(selected_motor, (int32_t)parameter);
                             hal.stream.write("S == ");
                             hal.stream.write(ftoa((float)sz, 0));
-                            hal.stream.write("\r\n");
+                            hal.stream.write(ASCII_EOL);
                         }
                         break;
 
@@ -680,7 +680,7 @@ status_code_t maslow_tuning (uint_fast16_t state, char *line, char *lcline)
                                 hal.stream.write(ftoa(xyz[X_AXIS], 3));
                                 hal.stream.write(",");
                                 hal.stream.write(ftoa(xyz[Y_AXIS], 3));
-                                hal.stream.write("]\r\n");
+                                hal.stream.write("]" ASCII_EOL);
                             }
                         }
                         break;
@@ -720,7 +720,7 @@ status_code_t maslow_tuning (uint_fast16_t state, char *line, char *lcline)
     //           hal.stream.write(uitoa(motor[Y_AXIS]->speed));
     //           hal.stream.write("\tzCMD=");
     //           hal.stream.write(uitoa(motor[Z_AXIS]->speed));
-               hal.stream.write("]\r\n");
+               hal.stream.write("]" ASCII_EOL);
             }
            break;
     } else

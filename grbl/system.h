@@ -95,7 +95,8 @@ typedef enum {
     Alarm_EStop = 10,
     Alarm_HomingRequried = 11,
     Alarm_LimitsEngaged = 12,
-    Alarm_ProbeProtect = 13
+    Alarm_ProbeProtect = 13,
+    Alarm_Spindle = 14
 } alarm_code_t;
 
 typedef enum {

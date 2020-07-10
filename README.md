@@ -1,4 +1,11 @@
 ## GrblHAL ##
+
+#### Development branch
+
+Spindle VFD control via RS485 added to ESP 32 driver for testing.
+
+_NOTE:_ Spindle speed overrides will crash the ESP32 since it dos not allow float access in ISRs. This can be fixed by changing the rpm value to an int, this might be done later.
+
 ---
 
 #### Sender compatibility

@@ -74,6 +74,14 @@
 #include "i2c.h"
 #endif
 
+#ifndef VFD_SPINDLE
+static uint32_t pwm_max_value;
+static bool pwmEnabled = false;
+static spindle_pwm_t spindle_pwm;
+#else
+#undef SPINDLE_RPM_CONTROLLED
+#endif
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/timers.h"
@@ -246,10 +254,8 @@ state_signal_t inputpin[] = {
 };
 
 static volatile uint32_t ms_count = 1; // NOTE: initial value 1 is for "resetting" systick timer
-static uint32_t pwm_max_value;
-static bool pwmEnabled = false, IOInitDone = false;
-static spindle_pwm_t spindle_pwm;
-
+static bool IOInitDone = false;
+static portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 // Inverts the probe pin state depending on user settings and probing cycle mode.
 static uint8_t probe_invert;
 
@@ -257,9 +263,9 @@ static uint8_t probe_invert;
 static ioexpand_t iopins = {0};
 #endif
 
-static void spindle_set_speed (uint_fast16_t pwm_value);
+#ifndef VFD_SPINDLE
 
-static portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
+static void spindle_set_speed (uint_fast16_t pwm_value);
 
 static ledc_timer_config_t ledTimerConfig = {
     .speed_mode = LEDC_HIGH_SPEED_MODE,
@@ -277,6 +283,14 @@ static ledc_channel_config_t ledConfig = {
     .duty = 0,  /*!< LEDC channel duty, the range of duty setting is [0, (2**duty_resolution)] */
     .hpoint = 0
 };
+
+#endif
+
+#if MODBUS_ENABLE
+static modbus_stream_t modbus_stream = {0};
+static TimerHandle_t xModBusTimer = NULL;
+#endif
+
 // Interrupt handler prototypes
 static void stepper_driver_isr (void *arg);
 static void gpio_isr (void *arg);
@@ -631,6 +645,8 @@ probe_state_t probeGetState (void)
     return state;
 }
 
+#ifndef VFD_SPINDLE
+
 // Static spindle (off, on cw & on ccw)
 IRAM_ATTR inline static void spindle_off (void)
 {
@@ -767,6 +783,8 @@ static spindle_state_t spindleGetState (void)
 }
 
 // end spindle code
+
+#endif
 
 // Start/stop coolant (and mist if enabled)
 IRAM_ATTR static void coolantSetState (coolant_state_t mode)
@@ -913,6 +931,9 @@ void debounceTimerCallback (TimerHandle_t xTimer)
 // Configures perhipherals when settings are initialized or changed
 static void settings_changed (settings_t *settings)
 {
+
+#ifndef VFD_SPINDLE
+
     if((hal.driver_cap.variable_spindle = settings->spindle.rpm_max > settings->spindle.rpm_min)) {
 
         if(ledTimerConfig.freq_hz != (uint32_t)settings->spindle.pwm_freq) {
@@ -946,13 +967,17 @@ static void settings_changed (settings_t *settings)
         ledc_set_freq(ledTimerConfig.speed_mode, ledTimerConfig.timer_num, ledTimerConfig.freq_hz);
     }
 
+#endif
+
     if(IOInitDone) {
 
       #if TRINAMIC_ENABLE
         trinamic_configure();
       #endif
 
+      #ifndef VFD_SPINDLE
         hal.spindle_set_state = hal.driver_cap.variable_spindle ? spindleSetStateVariable : spindleSetState;
+      #endif
 
 #if WIFI_ENABLE
 
@@ -1195,7 +1220,7 @@ static bool driver_setup (settings_t *settings)
     gpio_config(&gpioConfig);
     gpio_set_level(MPG_ENABLE_PIN, 0);
 
-    uart2Init();
+    uart2Init(BAUD_RATE);
 #endif
 
    /****************************
@@ -1211,7 +1236,9 @@ static bool driver_setup (settings_t *settings)
 
     gpio_isr_register(gpio_isr, NULL, (int)ESP_INTR_FLAG_IRAM, NULL);
 
-   /******************
+#ifndef VFD_SPINDLE
+
+    /******************
     *  Spindle init  *
     ******************/
 
@@ -1223,6 +1250,8 @@ static bool driver_setup (settings_t *settings)
     ledc_channel_config(&ledConfig);
 
     /**/
+
+#endif
 
 #if SDCARD_ENABLE
 
@@ -1270,8 +1299,6 @@ static bool driver_setup (settings_t *settings)
     settings_changed(settings);
 
     hal.stepper_go_idle(true);
-    hal.spindle_set_state((spindle_state_t){0}, 0.0f);
-    hal.coolant_set_state((coolant_state_t){0});
 
     return IOInitDone;
 }
@@ -1351,6 +1378,13 @@ static void driver_settings_restore (void)
 
 #endif
 
+#if MODBUS_ENABLE
+static void vModBusPollCallback (TimerHandle_t xTimer)
+{
+    modbus_poll();
+}
+#endif
+
 // Initialize HAL pointers, setup serial comms and enable EEPROM
 // NOTE: Grbl is not yet configured (from EEPROM data), driver_setup() will be called when done
 bool driver_init (void)
@@ -1364,7 +1398,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "ESP32";
-    hal.driver_version = "200528";
+    hal.driver_version = "200710";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1391,13 +1425,15 @@ bool driver_init (void)
     hal.probe_configure_invert_mask = probeConfigure;
 #endif
 
+#ifndef VFD_SPINDLE
     hal.spindle_set_state = spindleSetState;
     hal.spindle_get_state = spindleGetState;
-#ifdef SPINDLE_PWM_DIRECT
+  #ifdef SPINDLE_PWM_DIRECT
     hal.spindle_get_pwm = spindleGetPWM;
     hal.spindle_update_pwm = spindle_set_speed;
-#else
+  #else
     hal.spindle_update_rpm = spindleUpdateRPM; // NOTE: fails in laser mode as ESP32 does not handle FPU access in ISRs!
+  #endif
 #endif
 
     hal.system_control_get_state = systemGetState;
@@ -1465,16 +1501,18 @@ bool driver_init (void)
 
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
 
-#if IOEXPAND_ENABLE || defined(SPINDLE_DIRECTION_PIN)
+#ifndef VFD_SPINDLE
+  #if IOEXPAND_ENABLE || defined(SPINDLE_DIRECTION_PIN)
     hal.driver_cap.spindle_dir = On;
-#endif
+  #endif
     hal.driver_cap.variable_spindle = On;
     hal.driver_cap.spindle_pwm_invert = On;
-#if PWM_RAMPED
+  #if PWM_RAMPED
     hal.driver_cap.spindle_at_speed = On;
-#endif
-#if IOEXPAND_ENABLE || defined(COOLANT_MIST_PIN)
+  #endif
+  #if IOEXPAND_ENABLE || defined(COOLANT_MIST_PIN)
     hal.driver_cap.mist_control = On;
+  #endif
 #endif
     hal.driver_cap.software_debounce = On;
     hal.driver_cap.step_pulse_delay = On;
@@ -1496,6 +1534,28 @@ bool driver_init (void)
 #endif
 #if WIFI_ENABLE
     hal.driver_cap.wifi = On;
+#endif
+
+#if MODBUS_ENABLE
+    uart2Init(MODBUS_BAUD);
+    modbus_stream.rx_timeout = 50;
+    modbus_stream.write = uart2Write;
+    modbus_stream.read = uart2Read;
+    modbus_stream.flush_rx_buffer = uart2Flush;
+    modbus_stream.flush_tx_buffer = uart2Flush;
+    modbus_stream.get_rx_buffer_count = uart2Available;
+    modbus_stream.get_tx_buffer_count = uart2txCount;
+  #ifdef MODBUS_DIRECTION_PIN
+    modbus_stream.set_direction = uart2Direction;
+  #endif
+    modbus_init(&modbus_stream);
+
+    if((xModBusTimer = xTimerCreate("ModBusPoll", pdMS_TO_TICKS(10), pdTRUE, NULL, vModBusPollCallback)))
+        xTimerStart(xModBusTimer, 0);
+#endif
+
+#ifdef SPINDLE_HUANYANG
+    huanyang_init(&modbus_stream);
 #endif
 
    // no need to move version check before init - compiler will fail any mismatch for existing entries

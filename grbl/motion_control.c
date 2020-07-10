@@ -925,10 +925,6 @@ ISR_CODE void mc_reset ()
 
         system_set_exec_state_flag(EXEC_RESET);
 
-        // Kill spindle and coolant.
-        hal.spindle_set_state((spindle_state_t){0}, 0.0f);
-        hal.coolant_set_state((coolant_state_t){0});
-
         if(hal.stream.suspend_read)
             hal.stream.suspend_read(false);
 

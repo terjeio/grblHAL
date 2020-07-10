@@ -178,11 +178,11 @@ status_code_t report_status_message (status_code_t status_code)
     switch(status_code) {
 
         case Status_OK: // STATUS_OK
-            hal.stream.write("ok\r\n");
+            hal.stream.write("ok" ASCII_EOL);
             break;
 
         default:
-            hal.stream.write(appendbuf(3, "error:", uitoa((uint32_t)status_code), "\r\n"));
+            hal.stream.write(appendbuf(3, "error:", uitoa((uint32_t)status_code), ASCII_EOL));
             break;
     }
 
@@ -194,7 +194,7 @@ status_code_t report_status_message (status_code_t status_code)
 alarm_code_t report_alarm_message (alarm_code_t alarm_code)
 {
     current_alarm = alarm_code;
-    hal.stream.write_all(appendbuf(3, "ALARM:", uitoa((uint32_t)alarm_code), "\r\n"));
+    hal.stream.write_all(appendbuf(3, "ALARM:", uitoa((uint32_t)alarm_code), ASCII_EOL));
     hal.delay_ms(500, NULL); // Force delay to ensure message clears output stream buffer.
 
     return alarm_code;
@@ -277,7 +277,7 @@ message_code_t report_feedback_message(message_code_t message_code)
             break;
     }
 
-    hal.stream.write_all("]\r\n");
+    hal.stream.write_all("]" ASCII_EOL);
 
     return message_code;
 }
@@ -288,16 +288,16 @@ void report_init_message (void)
 {
     override_counter = wco_counter = 0;
 #if COMPATIBILITY_LEVEL == 0
-    hal.stream.write_all("\r\nGrblHAL " GRBL_VERSION " ['$' for help]\r\n");
+    hal.stream.write_all(ASCII_EOL "GrblHAL " GRBL_VERSION " ['$' for help]" ASCII_EOL);
 #else
-    hal.stream.write_all("\r\nGrbl " GRBL_VERSION " ['$' for help]\r\n");
+    hal.stream.write_all(ASCII_EOL "Grbl " GRBL_VERSION " ['$' for help]" ASCII_EOL);
 #endif
 }
 
 // Grbl help message
 void report_grbl_help (void)
 {
-    hal.stream.write("[HLP:$$ $# $G $I $N $x=val $Nx=line $J=line $SLP $C $X $H $B ~ ! ? ctrl-x]\r\n");
+    hal.stream.write("[HLP:$$ $# $G $I $N $x=val $Nx=line $J=line $SLP $C $X $H $B ~ ! ? ctrl-x]" ASCII_EOL);
 }
 
 
@@ -306,20 +306,20 @@ void report_grbl_help (void)
 void report_uint_setting (setting_type_t n, uint32_t val)
 {
     hal.stream.write(appendbuf(3, "$", uitoa((uint32_t)n), "="));
-    hal.stream.write(appendbuf(2, uitoa(val), "\r\n"));
+    hal.stream.write(appendbuf(2, uitoa(val), ASCII_EOL));
 }
 
 
 void report_float_setting (setting_type_t n, float val, uint8_t n_decimal)
 {
     hal.stream.write(appendbuf(3, "$", uitoa((uint32_t)n), "="));
-    hal.stream.write(appendbuf(2, ftoa(val, n_decimal), "\r\n"));
+    hal.stream.write(appendbuf(2, ftoa(val, n_decimal), ASCII_EOL));
 }
 
 void report_string_setting (setting_type_t n, char *val)
 {
     hal.stream.write(appendbuf(3, "$", uitoa((uint32_t)n), "="));
-    hal.stream.write(appendbuf(2, val, "\r\n"));
+    hal.stream.write(appendbuf(2, val, ASCII_EOL));
 }
 
 void report_grbl_settings (void)
@@ -327,7 +327,7 @@ void report_grbl_settings (void)
     uint_fast8_t idx;
 
     // Print Grbl settings.
-    report_uint_setting(Setting_PulseMicroseconds, settings.steppers.pulse_microseconds);
+    report_float_setting(Setting_PulseMicroseconds, settings.steppers.pulse_microseconds, 1);
     report_uint_setting(Setting_StepperIdleLockTime, settings.steppers.idle_lock_time);
     report_uint_setting(Setting_StepInvertMask, settings.steppers.step_invert.mask);
     report_uint_setting(Setting_DirInvertMask, settings.steppers.dir_invert.mask);
@@ -370,7 +370,7 @@ void report_grbl_settings (void)
 #if COMPATIBILITY_LEVEL <= 1
 
     report_float_setting(Setting_G73Retract, settings.g73_retract, N_DECIMAL_SETTINGVALUE);
-    report_uint_setting(Setting_PulseDelayMicroseconds, settings.steppers.pulse_delay_microseconds);
+    report_float_setting(Setting_PulseDelayMicroseconds, settings.steppers.pulse_delay_microseconds, 1);
 
 #endif
 
@@ -419,7 +419,7 @@ void report_grbl_settings (void)
         if(isnan(settings.spindle.pwm_piece[idx].rpm))
             report_float_setting((setting_type_t)(Setting_LinearSpindlePiece1 + idx), settings.spindle.pwm_piece[idx].rpm, N_DECIMAL_RPMVALUE);
         else {
-            sprintf(buf, "$%d=%f,%f,%f\r\n", (setting_type_t)(Setting_LinearSpindlePiece1 + idx), settings.spindle.pwm_piece[idx].rpm, settings.spindle.pwm_piece[idx].start, settings.spindle.pwm_piece[idx].end);
+            sprintf(buf, "$%d=%f,%f,%f" ASCII_EOL, (setting_type_t)(Setting_LinearSpindlePiece1 + idx), settings.spindle.pwm_piece[idx].rpm, settings.spindle.pwm_piece[idx].start, settings.spindle.pwm_piece[idx].end);
             hal.stream.write(buf);
         }
     }
@@ -509,7 +509,7 @@ void report_probe_parameters (void)
     hal.stream.write("[PRB:");
     hal.stream.write(get_axis_values(print_position));
     hal.stream.write(sys.flags.probe_succeeded ? ":1" : ":0");
-    hal.stream.write("]\r\n");
+    hal.stream.write("]" ASCII_EOL);
 }
 
 // Prints current tool offsets.
@@ -521,7 +521,7 @@ void report_tool_offsets (void)
 #else
     hal.stream.write(get_axis_values(gc_state.tool_length_offset));
 #endif
-    hal.stream.write("]\r\n");
+    hal.stream.write("]" ASCII_EOL);
 }
 
 // Prints Grbl NGC parameters (coordinate offsets, probing, tool table)
@@ -533,7 +533,7 @@ void report_ngc_parameters (void)
     if(gc_state.modal.scaling_active) {
         hal.stream.write("[G51:");
         hal.stream.write(get_axis_values(gc_get_scaling()));
-        hal.stream.write("]\r\n");
+        hal.stream.write("]" ASCII_EOL);
     }
 
     for (idx = 0; idx < SETTING_INDEX_NCOORD; idx++) {
@@ -561,13 +561,14 @@ void report_ngc_parameters (void)
         }
         hal.stream.write(":");
         hal.stream.write(get_axis_values(coord_data));
-        hal.stream.write("]\r\n");
+        hal.stream.write("]" ASCII_EOL);
     }
 
-    // Print G92,G92.1 which are not persistent in memory
+    // Print G92, G92.1 which are not persistent in memory
     hal.stream.write("[G92:");
     hal.stream.write(get_axis_values(gc_state.g92_coord_offset));
-    hal.stream.write("]\r\n");
+    hal.stream.write("]" ASCII_EOL);
+
 #ifdef N_TOOLS
     for (idx = 1; idx <= N_TOOLS; idx++) {
         hal.stream.write("[T:");
@@ -579,12 +580,25 @@ void report_ngc_parameters (void)
             hal.stream.write(ftoa(tool_table[idx].radius * INCH_PER_MM, N_DECIMAL_COORDVALUE_INCH));
         else
             hal.stream.write(ftoa(tool_table[idx].radius, N_DECIMAL_COORDVALUE_MM));
-        hal.stream.write("]\r\n");
+        hal.stream.write("]" ASCII_EOL);
     }
 #endif
 
     report_tool_offsets();      // Print tool length offset value
     report_probe_parameters();  // Print probe parameters. Not persistent in memory.
+}
+
+static inline bool is_g92_active (void)
+{
+    bool active = false;
+    uint_fast32_t idx = N_AXIS;
+
+    do {
+        idx--;
+        active = !(gc_state.g92_coord_offset[idx] == 0.0f || gc_state.g92_coord_offset[idx] == -0.0f);
+    } while(idx && !active);
+
+    return active;
 }
 
 // Print current gcode parser mode state
@@ -602,15 +616,7 @@ void report_gcode_modes (void)
 
 #if COMPATIBILITY_LEVEL < 10
 
-    bool g92_active = false;
-    uint_fast32_t idx = N_AXIS;
-
-    do {
-        idx--;
-        g92_active = !(gc_state.g92_coord_offset[idx] == 0.0f || gc_state.g92_coord_offset[idx] == -0.0f);
-    } while(idx && !g92_active);
-
-    if(g92_active)
+    if(is_g92_active())
         hal.stream.write(" G92");
 
 #endif
@@ -643,13 +649,12 @@ void report_gcode_modes (void)
 
     hal.stream.write(gc_state.canned.retract_mode == CCRetractMode_RPos ? " G99" : " G98");
 
-    hal.stream.write(gc_state.modal.scaling_active ? " G51" : " G50");
-
     if(gc_state.modal.scaling_active) {
+        hal.stream.write(" G51:");
         axis_signals_tostring(buf, gc_get_g51_state());
-        hal.stream.write(":");
         hal.stream.write(buf);
-    }
+    } else
+        hal.stream.write(" G50");
 
 #endif
 
@@ -713,7 +718,7 @@ void report_gcode_modes (void)
     if(hal.driver_cap.variable_spindle)
         hal.stream.write(appendbuf(2, " S", ftoa(gc_state.spindle.rpm, N_DECIMAL_RPMVALUE)));
 
-    hal.stream.write("]\r\n");
+    hal.stream.write("]" ASCII_EOL);
 }
 
 // Prints specified startup line
@@ -721,7 +726,7 @@ void report_startup_line (uint8_t n, char *line)
 {
     hal.stream.write(appendbuf(3, "$N", uitoa((uint32_t)n), "="));
     hal.stream.write(line);
-    hal.stream.write("\r\n");
+    hal.stream.write(ASCII_EOL);
 }
 
 void report_execute_startup_message (char *line, status_code_t status_code)
@@ -740,7 +745,7 @@ void report_build_info (char *line)
     hal.stream.write(hal.info ? hal.info : "HAL");
     hal.stream.write(")." GRBL_VERSION_BUILD ":");
     hal.stream.write(line);
-    hal.stream.write("]\r\n");
+    hal.stream.write("]" ASCII_EOL);
 
     // Generate compile-time build option list
 
@@ -827,7 +832,7 @@ void report_build_info (char *line)
     hal.stream.write("0");
   #endif
 #endif
-    hal.stream.write("]\r\n");
+    hal.stream.write("]" ASCII_EOL);
 
 #if COMPATIBILITY_LEVEL == 0
 
@@ -918,7 +923,7 @@ void report_echo_line_received (char *line)
 {
     hal.stream.write("[echo: ");
     hal.stream.write(line);
-    hal.stream.write("]\r\n");
+    hal.stream.write("]" ASCII_EOL);
 }
 
 
@@ -1165,14 +1170,14 @@ void report_realtime_status (void)
     if(hal.driver_rt_report)
         hal.driver_rt_report(hal.stream.write_all, sys.report);
 
-    hal.stream.write_all(">\r\n");
+    hal.stream.write_all(">" ASCII_EOL);
 
     if(settings.status_report.parser_state) {
 
-        static uint8_t tool;
-        static float feed_rate, spindle_rpm;
-        static gc_modal_t last_state;
-        static float g92_offset[N_AXIS];
+        static uint8_t tool = 0;
+        static float feed_rate = 0.0f, spindle_rpm = 0.0f;
+        static gc_modal_t last_state = {0};
+        static bool g92_active = false;
 
         bool is_changed = feed_rate != gc_state.feed_rate || spindle_rpm != gc_state.spindle.rpm || tool != gc_state.tool->tool;
 
@@ -1180,14 +1185,10 @@ void report_realtime_status (void)
             feed_rate = gc_state.feed_rate;
             tool = gc_state.tool->tool;
             spindle_rpm = gc_state.spindle.rpm;
-        } else if(memcmp(&last_state, &gc_state.modal, sizeof(gc_modal_t))) {
+        } else if ((is_changed = g92_active != is_g92_active()))
+            g92_active = !g92_active;
+        else if(memcmp(&last_state, &gc_state.modal, sizeof(gc_modal_t))) {
             last_state = gc_state.modal;
-            is_changed = true;
-        }
-
-        if(!is_changed && memcmp(&g92_offset, &gc_state.g92_coord_offset, sizeof(g92_offset)))
-        {
-            memcpy(g92_offset, gc_state.g92_coord_offset, sizeof(g92_offset));
             is_changed = true;
         }
 
@@ -1223,7 +1224,7 @@ void report_pid_log (void)
             hal.stream.write(",");
     } while(idx != sys.pid_log.idx);
 
-    hal.stream.write("]\r\n");
+    hal.stream.write("]" ASCII_EOL);
     hal.report.status_message(Status_OK);
 #else
     hal.report.status_message(Status_GcodeUnsupportedCommand);

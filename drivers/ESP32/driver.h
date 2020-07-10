@@ -207,6 +207,10 @@ static const DRAM_ATTR float FZERO = 0.0f;
 #include "tmc2130/trinamic.h"
 #endif
 
+#ifdef SPINDLE_HUANYANG
+#include "spindle/huanyang.h"
+#endif
+
 typedef struct
 {
     grbl_wifi_mode_t mode;
@@ -288,11 +292,13 @@ extern driver_settings_t driver_settings;
 #define Z_LIMIT_PIN     GPIO_NUM_15
 #define LIMIT_MASK      (1ULL << X_LIMIT_PIN|1ULL << Y_LIMIT_PIN|1ULL << Z_LIMIT_PIN) // All limit bits
 
+#ifndef VFD_SPINDLE
 // Define spindle enable and spindle direction output pins.
 #define SPINDLE_ENABLE_PIN      GPIO_NUM_18
 #define SPINDLE_DIRECTION_PIN   GPIO_NUM_5
 #define SPINDLE_MASK            (1ULL << SPINDLE_ENABLE_PIN|1ULL << SPINDLE_DIRECTION_PIN)
 #define SPINDLEPWMPIN           GPIO_NUM_17
+#endif
 
 // Define flood and mist coolant enable output pins.
 
@@ -353,12 +359,16 @@ extern SemaphoreHandle_t i2cBusy;
 #error "Add #define GRBL_ESP32 in grbl/config.h or update your CMakeLists.txt to the latest version!"
 #endif
 
+#if MPG_MODE_ENABLE || MODBUS_ENABLE
+#define SERIAL2_ENABLE 1
+#endif
+
 #if MPG_MODE_ENABLE
   #ifndef MPG_ENABLE_PIN
   #error "MPG_ENABLE_PIN must be defined when MPG mode is enabled!"
   #endif
-  #ifndef MPG_RX_PIN
-  #error "MPG_RX_PIN must be defined when MPG mode is enabled!"
+  #ifndef UART2_RX_PIN
+  #error "UART2_RX_PIN must be defined when MPG mode is enabled!"
   #endif
 #endif
 

@@ -151,7 +151,7 @@ int grbl_enter (void)
     hal.driver_cap.amass_level = 0;
 #endif
 
-#if DEFAULT_STEP_PULSE_DELAY > 0
+#ifdef DEFAULT_STEP_PULSE_DELAY
     driver_ok = driver_ok & hal.driver_cap.step_pulse_delay;
 #endif
 /*
@@ -173,7 +173,7 @@ int grbl_enter (void)
 #endif
 
     if(!driver_ok) {
-        hal.stream.write("GrblHAL: incompatible driver\r\n");
+        hal.stream.write("GrblHAL: incompatible driver" ASCII_EOL);
         while(true);
     }
 

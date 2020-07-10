@@ -112,6 +112,12 @@ bool protocol_main_loop(bool cold_start)
         system_execute_startup(line); // Execute startup script.
     }
 
+    // Ensure spindle and coolant is switched off on a cold start
+    if(cold_start) {
+        hal.spindle_set_state((spindle_state_t){0}, 0.0f);
+        hal.coolant_set_state((coolant_state_t){0});
+    }
+
     // ---------------------------------------------------------------------------------
     // Primary loop! Upon a system abort, this exits back to main() to reset the system.
     // This is also where Grbl idles while waiting for something to do.
@@ -414,6 +420,10 @@ bool protocol_exec_rt_system ()
 
         // Execute system abort.
         if (rt_exec & EXEC_RESET) {
+
+            // Kill spindle and coolant.
+            hal.spindle_set_state((spindle_state_t){0}, 0.0f);
+            hal.coolant_set_state((coolant_state_t){0});
 
             hal.driver_reset();
 
