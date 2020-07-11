@@ -5,7 +5,7 @@
   Part of GrblHAL
 
   Copyright (c) 2020 Terje Io
-  except modbus_CRC16x is Copyright (c) 2006 Christian Walter <wolti@sil.at>
+  except modbus_CRC16x which is Copyright (c) 2006 Christian Walter <wolti@sil.at>
   Lifted from his FreeModbus Libary
 
   Grbl is free software: you can redistribute it and/or modify
@@ -23,17 +23,29 @@
 
 */
 
+#ifdef ARDUINO
+#include "../grbl/grbl.h"
+#else
 #include "grbl/grbl.h"
+#endif
 
 #include "modbus.h"
+
+typedef struct queue_entry {
+    bool async;
+    bool sent;
+    modbus_message_t msg;
+    struct queue_entry *next;
+} queue_entry_t;
 
 static modbus_stream_t *stream;
 static uint16_t rx_timeout = 0;
 static int16_t exception_code = 0;
-static bool async_request = false;
-static modbus_message_t *packet = NULL;
-static volatile modbus_state_t state = ModBus_Idle;
 static driver_reset_ptr driver_reset = NULL;
+static queue_entry_t queue[MODBUS_QUEUE_LENGTH];
+static volatile bool spin_lock = false;
+static volatile queue_entry_t *tail, *head, *packet = NULL;
+static volatile modbus_state_t state = ModBus_Idle;
 
 // Compute the MODBUS RTU CRC
 static uint16_t modbus_CRC16x (char *buf, uint_fast16_t len)
@@ -65,25 +77,37 @@ static bool valid_crc (char *buf, uint_fast16_t len)
 
 bool modbus_send (modbus_message_t *msg, bool block)
 {
-    bool poll;
-    packet = msg;
+    static queue_entry_t sync_msg = {0};
 
-    if(stream->set_direction)
-        stream->set_direction(true);
+    uint_fast16_t crc = modbus_CRC16x(msg->adu, msg->tx_length - 2);
 
-    state = ModBus_TX;
-    rx_timeout = stream->rx_timeout;
+    msg->adu[msg->tx_length - 1] = crc >> 8;
+    msg->adu[msg->tx_length - 2] = crc & 0xFF;
 
-    uint_fast16_t crc = modbus_CRC16x(packet->adu, packet->tx_length - 2);
+    while(spin_lock);
 
-    packet->adu[packet->tx_length - 1] = crc >> 8;
-    packet->adu[packet->tx_length - 2] = crc & 0xFF;
+    if(block) {
 
-    stream->write(packet->adu, packet->tx_length);
+        bool poll = true;
 
-    async_request = !block;
+        while(state != ModBus_Idle) {
+            if(ABORTED)
+                return false;
+        }
 
-    if((poll = block)) {
+        if(stream->set_direction)
+            stream->set_direction(true);
+
+        state = ModBus_TX;
+        rx_timeout = stream->rx_timeout;
+
+        memcpy(&sync_msg.msg, msg, sizeof(modbus_message_t));
+
+        sync_msg.async = false;
+        stream->flush_rx_buffer();
+        stream->write(sync_msg.msg.adu, sync_msg.msg.tx_length);
+
+        packet = &sync_msg;
 
         while(poll) {
 
@@ -98,12 +122,13 @@ bool modbus_send (modbus_message_t *msg, bool block)
                     break;
 
                 case ModBus_Exception:
-                    stream->on_rx_exception(exception_code == -1 ? 0 : (uint8_t)(exception_code &0xFF));
+                    stream->on_rx_exception(exception_code == -1 ? 0 : (uint8_t)(exception_code & 0xFF));
                     poll = false;
                     break;
 
                 case ModBus_GotReply:
-                    stream->on_rx_packet(packet);
+                    if(packet)
+                        stream->on_rx_packet(&((queue_entry_t *)packet)->msg);
                     poll = block = false;
                     break;
 
@@ -113,6 +138,14 @@ bool modbus_send (modbus_message_t *msg, bool block)
         }
 
         state = ModBus_Idle;
+
+    } else if(packet != &sync_msg) {
+        if(head->next != tail) {
+            head->async = true;
+            head->sent = false;
+            memcpy((void *)&(head->msg), msg, sizeof(modbus_message_t));
+            head = head->next;
+        }
     }
 
     return !block;
@@ -125,7 +158,26 @@ modbus_state_t modbus_get_state (void)
 
 void modbus_poll (void)
 {
+    spin_lock = true;
+
     switch(state) {
+
+        case ModBus_Idle:
+            if(tail != head && !packet) {
+
+                packet = tail;
+                tail = tail->next;
+                state = ModBus_TX;
+                rx_timeout = stream->rx_timeout;
+
+                if(stream->set_direction)
+                    stream->set_direction(true);
+
+                packet->sent = true;
+                stream->flush_rx_buffer();
+                stream->write(((queue_entry_t *)packet)->msg.adu, ((queue_entry_t *)packet)->msg.tx_length);
+            }
+            break;
 
         case ModBus_TX:
             if(!stream->get_tx_buffer_count()) {
@@ -134,53 +186,72 @@ void modbus_poll (void)
 
                 if(stream->set_direction)
                     stream->set_direction(false);
-
-                stream->flush_rx_buffer();
             }
             break;
 
         case ModBus_AwaitReply:
-            if(--rx_timeout == 0) {
-                if(stream->read() == 1 && (stream->read() & 0x80)) {
+            if(rx_timeout && --rx_timeout == 0) {
+                if(packet->async)
+                    state = ModBus_Idle;
+                else if(stream->read() == 1 && (stream->read() & 0x80)) {
                     exception_code = stream->read();
                     state = ModBus_Exception;
                 } else
                     state = ModBus_Timeout;
+                packet = NULL;
+                spin_lock = false;
                 return;
             }
 
-            if(stream->get_rx_buffer_count() >= packet->rx_length) {
+            if(stream->get_rx_buffer_count() >= packet->msg.rx_length) {
 
-                char *buf = packet->adu;
+                char *buf = ((queue_entry_t *)packet)->msg.adu;
 
                 do {
                     *buf++ = stream->read();
-                } while(--packet->rx_length);
+                } while(--packet->msg.rx_length);
 
-                if((state = async_request ? ModBus_Idle : ModBus_GotReply) == ModBus_Idle)
-                    stream->on_rx_packet(packet);
+                if((state = packet->async ? ModBus_Idle : ModBus_GotReply) == ModBus_Idle)
+                    stream->on_rx_packet(&((queue_entry_t *)packet)->msg);
+
+                packet = NULL;
             }
             break;
 
         default:
             break;
     }
+
+    spin_lock = false;
 }
 
 static void modbus_reset (void)
 {
+    while(spin_lock);
+
+    packet = NULL;
+    tail = head;
     state = ModBus_Idle;
+
     stream->flush_tx_buffer();
     stream->flush_rx_buffer();
+
     driver_reset();
 }
 
 void modbus_init (modbus_stream_t *mstream)
 {
+    uint_fast8_t idx;
+
     stream = mstream;
 
     if(driver_reset == NULL) {
         driver_reset = hal.driver_reset;
         hal.driver_reset = modbus_reset;
     }
+
+    head = tail = &queue[0];
+
+    for(idx = 0; idx < MODBUS_QUEUE_LENGTH; idx++)
+        queue[idx].next = idx == MODBUS_QUEUE_LENGTH - 1 ? &queue[0] : &queue[idx + 1];
 }

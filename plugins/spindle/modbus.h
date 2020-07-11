@@ -26,6 +26,7 @@
 
 #define MODBUS_ENABLE 1
 #define MODBUS_MAX_ADU_SIZE 10
+#define MODBUS_QUEUE_LENGTH 8
 
 typedef enum {
     ModBus_Idle,
@@ -47,10 +48,10 @@ typedef enum {
     ModBus_Diagnostics = 8
 } modbus_function_t;
 
-// communication task and queue stuff
 typedef struct {
     uint8_t tx_length;
     uint8_t rx_length;
+    void *xx;
     char adu[MODBUS_MAX_ADU_SIZE];
 } modbus_message_t;
 

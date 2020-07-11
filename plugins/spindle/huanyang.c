@@ -21,12 +21,21 @@
 
 */
 
-#include "grbl/grbl.h"
+#ifdef ARDUINO
+#include "../../driver.h"
+#else
+#include "driver.h"
+#endif
 
 #include "modbus.h"
-#include "driver.h"
 
 #if SPINDLE_HUANYANG
+
+#ifdef ARDUINO
+#include "../grbl/grbl.h"
+#else
+#include "grbl/grbl.h"
+#endif
 
 #ifdef SPINDLE_PWM_DIRECT
 #error Not supported!
@@ -52,12 +61,11 @@ static spindle_state_t vfd_state = {0};
 
 static void spindleSetRPM (float rpm, bool block)
 {
-    static modbus_message_t rpm_cmd;
+    modbus_message_t rpm_cmd;
 
     if (rpm != rpm_programmed) {
 
-        query = VFD_SetRPM;
-
+        rpm_cmd.xx = VFD_SetRPM;
         rpm_cmd.adu[0] = VFD_ADDRESS;
 
 #if SPINDLE_HUANYANG == 2
@@ -103,10 +111,9 @@ static void spindleUpdateRPM (float rpm)
 // Start or stop spindle
 static void spindleSetState (spindle_state_t state, float rpm)
 {
-    static modbus_message_t mode_cmd;
+    modbus_message_t mode_cmd;
 
-    query = VFD_SetStatus;
-
+    mode_cmd.xx = VFD_SetStatus;
     mode_cmd.adu[0] = VFD_ADDRESS;
 
 #if SPINDLE_HUANYANG == 2
@@ -132,17 +139,14 @@ static void spindleSetState (spindle_state_t state, float rpm)
 
     if(modbus_send(&mode_cmd, true))
         spindleSetRPM(rpm, true);
-
-    query = VFD_Idle;
 }
 
 // Returns spindle state in a spindle_state_t variable
 static spindle_state_t spindleGetState (void)
 {
-    static modbus_message_t mode_cmd;
+    modbus_message_t mode_cmd;
 
-    query = VFD_GetRPM;
-
+    mode_cmd.xx = VFD_GetRPM;
     mode_cmd.adu[0] = VFD_ADDRESS;
 
 #if SPINDLE_HUANYANG == 2
@@ -178,7 +182,7 @@ static void rx_packet (modbus_message_t *msg)
 {
     if(!(msg->adu[0] & 0x80)) {
 
-        switch(query) {
+        switch((vfd_response_t)msg->xx) {
 
             case VFD_GetRPM:
 #if SPINDLE_HUANYANG == 2
@@ -203,7 +207,6 @@ static void rx_packet (modbus_message_t *msg)
 
 static void rx_exception (uint8_t code)
 {
-    query = VFD_Idle;
     set_state(STATE_ALARM); // Ensure alarm state is active.
     report_alarm_message(Alarm_Spindle);
 }
@@ -224,10 +227,9 @@ void huanyang_init (modbus_stream_t *stream)
 
 #if SPINDLE_HUANYANG == 2
 
-    static modbus_message_t cmd;
+    modbus_message_t cmd;
 
-    query = VFD_GetMaxRPM;
-
+    cmd.xx = VFD_GetMaxRPM;
     cmd.adu[0] = VFD_ADDRESS;
     cmd.adu[1] = ModBus_ReadHoldingRegisters;
     cmd.adu[2] = 0xB0;
@@ -239,11 +241,8 @@ void huanyang_init (modbus_stream_t *stream)
 
     modbus_send(&cmd, true);
 
-    query = VFD_Idle;
-
 #endif
 
 }
 
 #endif
-
