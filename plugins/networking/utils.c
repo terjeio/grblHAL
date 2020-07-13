@@ -8,8 +8,13 @@
 #include <ctype.h>
 #include <stdarg.h>
 
-#include "utils.h"
+#ifdef ARDUINO
+#include "../grbl/grbl.h"
+#else
 #include "grbl/grbl.h"
+#endif
+
+#include "utils.h"
 
 char *btoa (uint64_t bytes)
 {

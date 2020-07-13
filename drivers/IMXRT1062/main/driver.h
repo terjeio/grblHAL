@@ -38,15 +38,17 @@
 
 #define USB_SERIAL_GRBL    2 // Set to 1 for Arduino class library, 2 for PJRC C library.
 #define USB_SERIAL_WAIT    0 // Wait for USB connection before starting grblHAL.
-#define SPINDLE_HUANYANG   1 // Set to 1 or 2 for Huanyang VFD spindle
-#define QEI_ENABLE         1 // Enable quadrature encoder interface. NOTE: requires encoder plugin.
+#define SPINDLE_HUANYANG   0 // Set to 1 or 2 for Huanyang VFD spindle
+#define QEI_ENABLE         0 // Enable quadrature encoder interface. NOTE: requires encoder plugin.
+#define ETHERNET_ENABLE    1 // Ethernet streaming.
+#define TELNET_ENABLE    1 // Ethernet streaming.
 
 #if COMPATIBILITY_LEVEL <= 1
 #define ESTOP_ENABLE       1 // When enabled only real-time report requests will be executed when the reset pin is asserted.
 #else
 #define ESTOP_ENABLE       0 // Do not change!
 #endif
-#define CNC_BOOSTERPACK    1 // Do not change!
+#define CNC_BOOSTERPACK    0 // Do not change!
 
 // NOTE: none of these extensions are available, TBC!
 #if CNC_BOOSTERPACK
@@ -68,6 +70,19 @@
 
 #if TRINAMIC_ENABLE
 #include "src/tmc2130/trinamic.h"
+#endif
+
+#if ETHERNET_ENABLE
+#define NETWORK_HOSTNAME        "GRBL"
+#define NETWORK_IPMODE_STATIC   0
+#if NETWORK_IPMODE_STATIC
+#define NETWORK_IP              "192.168.5.1"
+#define NETWORK_GATEWAY         "192.168.5.1"
+#define NETWORK_MASK            "255.255.255.0"
+#endif
+#define NETWORK_TELNET_PORT     23
+#define NETWORK_WEBSOCKET_PORT  80
+#define NETWORK_HTTP_PORT       80
 #endif
 
 #if SPINDLE_HUANYANG
@@ -189,5 +204,7 @@ typedef struct {
 //
 
 void selectStream (stream_type_t stream);
+
+uint32_t xTaskGetTickCount();
 
 #endif // __DRIVER_H__

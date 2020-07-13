@@ -1,7 +1,7 @@
 //
-// WsStream.c - lw-IP/FreeRTOS websocket stream implementation
+// WsStream.c - lwIP websocket stream implementation
 //
-// v1.0 / 2020-02-04 / Io Engineering / Terje
+// v1.1 / 2020-07-13 / Io Engineering / Terje
 //
 
 /*
@@ -42,7 +42,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdbool.h>
 #include <assert.h>
 
-#include "driver.h"
 #include "networking.h"
 #include "WsStream.h"
 #include "base64.h"
@@ -50,7 +49,11 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "utils.h"
 #include "strutils.h"
 
+#ifdef ARDUINO
+#include "../grbl/grbl.h"
+#else
 #include "grbl/grbl.h"
+#endif
 
 //#define WSDEBUG
 

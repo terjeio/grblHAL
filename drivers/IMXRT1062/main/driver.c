@@ -38,12 +38,12 @@
 #endif
 
 #if ETHERNET_ENABLE
-  #include "ethernet/enet.h"
+  #include "enet.h"
   #if TELNET_ENABLE
-    #include "networking/TCPStream.h"
+    #include "src/networking/TCPStream.h"
   #endif
   #if WEBSOCKET_ENABLE
-    #include "networking/WsStream.h"
+    #include "src/networking/WsStream.h"
   #endif
 #endif
 
@@ -269,6 +269,7 @@ static modbus_stream_t modbus_stream = {0};
 
 #if ETHERNET_ENABLE
 
+static uint32_t tick_count = 0;
 static network_services_t services = {0};
 
 static void enetStreamWriteS (const char *data)
@@ -849,7 +850,7 @@ static void settings_changed (settings_t *settings)
 
         static bool enet_ok = false;
         if(!enet_ok)
-            enet_ok = enet_init(&driver_settings.network);
+            enet_ok = grbl_enet_init(&driver_settings.network);
 
 #endif
 
@@ -1288,11 +1289,14 @@ bool nvsWrite (uint8_t *source)
 
 #endif
 
-#if QEI_SELECT_ENABLED || KEYPAD_ENABLE || USB_SERIAL_GRBL > 0
+#if QEI_SELECT_ENABLED || KEYPAD_ENABLE || ETHERNET_ENABLE || USB_SERIAL_GRBL > 0
 static void execute_realtime (uint_fast16_t state)
 {
 #if USB_SERIAL_GRBL > 0
     usb_execute_realtime(state);
+#endif
+#if ETHERNET_ENABLE
+    enet_proc_input();
 #endif
 #if KEYPAD_ENABLE
     keypad_process_keypress(state);
@@ -1426,7 +1430,7 @@ bool driver_init (void)
 
     hal.show_message = showMessage;
 
-#if QEI_SELECT_ENABLED || KEYPAD_ENABLE || USB_SERIAL_GRBL > 0
+#if QEI_SELECT_ENABLED || KEYPAD_ENABLE || ETHERNET_ENABLE || USB_SERIAL_GRBL > 0
     hal.execute_realtime = execute_realtime;
 #endif
 
@@ -1722,6 +1726,11 @@ void encoder_update (void)
 }
 #endif
 
+uint32_t xTaskGetTickCount (void)
+{
+    return 0;
+}
+
 // Interrupt handler for 1 ms interval timer
 static void systick_isr (void)
 {
@@ -1732,6 +1741,17 @@ static void systick_isr (void)
 
 #if MODBUS_ENABLE
     modbus_poll();
+#endif
+
+#if ETHERNET_ENABLE
+    uint32_t delay_cs = 100;
+
+    tick_count++;
+    
+    if(!(--delay_cs)) {
+        delay_cs = 100;
+        grbl_enet_poll();
+    }
 #endif
 
 #if QEI_ENABLE

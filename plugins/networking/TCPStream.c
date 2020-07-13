@@ -1,7 +1,7 @@
 //
-// TCPStream.c - lw-IP/FreeRTOS stream implementation, raw "Telnet"
+// TCPStream.c - lwIP stream implementation, raw "Telnet"
 //
-// v1.0 / 2020-02-04 / Io Engineering / Terje
+// v1.1 / 2020-07-13 / Io Engineering / Terje
 //
 
 /*
@@ -42,14 +42,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdbool.h>
 #include <assert.h>
 
-//#include "driverlib/debug.h"
-
 #include "networking.h"
-
-//#include "FreeRTOS.h"
-//#include "task.h"
-
-#include "driver.h"
 #include "TCPStream.h"
 
 #define SOCKET_TIMEOUT 0

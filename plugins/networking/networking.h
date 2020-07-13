@@ -1,7 +1,11 @@
 #ifndef __NETWORKING_H__
 #define __NETWORKING_H__
 
+#ifdef ARDUINO
+#include "../../driver.h"
+#else
 #include "driver.h"
+#endif
 
 #if TELNET_ENABLE
 #include "TCPSTream.h"
@@ -16,7 +20,11 @@
 // lwIP Options
 //
 //*****************************************************************************
+#ifdef ARDUINO
 #include "lwip/opt.h"
+#else
+#include "lwipopts.h"
+#endif
 
 //*****************************************************************************
 //
@@ -43,5 +51,20 @@
 #include "lwip/def.h"
 //#include "lwip/tcp_impl.h"
 //#include "lwip/timers.h"
+
+#if NO_SYS
+#include "lwip/sys.h"
+typedef uint32_t TickType_t;
+#define configTICK_RATE_HZ 1000
+#define xTaskGetTickCount() sys_now()
+#endif
+
+#ifndef SYS_ARCH_PROTECT
+#define lev 1
+#define SYS_ARCH_PROTECT(lev)
+#define SYS_ARCH_UNPROTECT(lev)
+#define SYS_ARCH_DECL_PROTECT(lev)
+
+#endif
 
 #endif
