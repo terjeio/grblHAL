@@ -26,12 +26,16 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-void serialInit (void);
+void serialInit (uint32_t baud_rate);
 int16_t serialGetC (void);
+void serialWrite(const char *s, uint16_t length);
 void serialWriteS (const char *data);
 bool serialSuspendInput (bool suspend);
 uint16_t serialRxFree (void);
+uint16_t serialRxCount (void);
+uint16_t serialTxCount (void);
 void serialRxFlush (void);
+void serialTxFlush (void);
 void serialRxCancel (void);
 
 #endif

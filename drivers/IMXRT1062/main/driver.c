@@ -1,5 +1,5 @@
 /*
-  driver.h - driver code for IMXRT1062 processor (on Teensy 4.0 board)
+  driver.c - driver code for IMXRT1062 processor (on Teensy 4.0/4.1 board)
 
   Part of GrblHAL
 
@@ -35,6 +35,16 @@
 
 #if QEI_ENABLE
 #include "src/encoder/encoder.h"
+#endif
+
+#if ETHERNET_ENABLE
+  #include "ethernet/enet.h"
+  #if TELNET_ENABLE
+    #include "networking/TCPStream.h"
+  #endif
+  #if WEBSOCKET_ENABLE
+    #include "networking/WsStream.h"
+  #endif
 #endif
 
 #if USB_SERIAL_GRBL == 1
@@ -127,6 +137,8 @@ typedef struct {
     input_signal_t *signal[DEBOUNCE_QUEUE];
 } debounce_queue_t;
 
+#if QEI_ENABLE
+
 typedef union {
     uint_fast8_t pins;
     struct {
@@ -144,6 +156,9 @@ typedef struct {
 } qei_t;
 
 static qei_t qei = {0};
+
+#endif
+
 static debounce_queue_t debounce_queue = {0};
 
 // Standard inputs
@@ -233,12 +248,113 @@ static input_signal_t inputpin[] = {
 
 #define DIGITAL_OUT(gpio, on) { if(on) gpio.reg->DR_SET = gpio.bit; else gpio.reg->DR_CLEAR = gpio.bit; } 
 
-static bool pwmEnabled = false, IOInitDone = false, probe_invert = false;
+static IOInitDone = false, probe_invert = false;
 static axes_signals_t next_step_outbits;
-static spindle_pwm_t spindle_pwm;
 static delay_t grbl_delay = { .ms = 0, .callback = NULL };
 
+#ifndef VFD_SPINDLE
+static bool pwmEnabled = false;
+static spindle_pwm_t spindle_pwm;
+
 static void spindle_set_speed (uint_fast16_t pwm_value);
+#endif
+
+#ifdef DRIVER_SETTINGS
+driver_settings_t driver_settings;
+#endif
+
+#if MODBUS_ENABLE
+static modbus_stream_t modbus_stream = {0};
+#endif
+
+#if ETHERNET_ENABLE
+
+static network_services_t services = {0};
+
+static void enetStreamWriteS (const char *data)
+{
+#if TELNET_ENABLE
+    if(services.telnet)
+        TCPStreamWriteS(data);
+#endif
+#if WEBSOCKET_ENABLE
+    if(services.websocket)
+        WsStreamWriteS(data);
+#endif
+    serialWriteS(data);
+}
+
+  #if TELNET_ENABLE
+    const io_stream_t ethernet_stream = {
+        .type = StreamType_Telnet,
+        .read = TCPStreamGetC,
+        .write = TCPStreamWriteS,
+        .write_all = enetStreamWriteS,
+        .get_rx_buffer_available = TCPStreamRxFree,
+        .reset_read_buffer = TCPStreamRxFlush,
+        .cancel_read_buffer = TCPStreamRxCancel,
+        .enqueue_realtime_command = protocol_enqueue_realtime_command,
+    #if M6_ENABLE
+        .suspend_read = NULL // for now...
+    #else
+        .suspend_read = NULL
+    #endif
+    };
+  #endif
+
+  #if WEBSOCKET_ENABLE
+    const io_stream_t websocket_stream = {
+        .type = StreamType_WebSocket,
+        .read = WsStreamGetC,
+        .write = WsStreamWriteS,
+        .write_all = enetStreamWriteS,
+        .get_rx_buffer_available = WsStreamRxFree,
+        .reset_read_buffer = WsStreamRxFlush,
+        .cancel_read_buffer = WsStreamRxCancel,
+        .enqueue_realtime_command = protocol_enqueue_realtime_command,
+    #if M6_ENABLE
+        .suspend_read = NULL // for now...
+    #else
+        .suspend_read = NULL
+    #endif
+    };
+  #endif
+
+#endif // ETHERNET_ENABLE
+
+#if USB_SERIAL_GRBL
+    const io_stream_t serial_stream = {
+        .type = StreamType_Serial,
+        .read = usb_serialGetC,
+        .write = usb_serialWriteS,
+    #if ETHERNET_ENABLE
+        .write_all = enetStreamWriteS,
+    #else
+        .write_all = usb_serialWriteS,
+    #endif
+        .get_rx_buffer_available = usb_serialRxFree,
+        .reset_read_buffer = usb_serialRxFlush,
+        .cancel_read_buffer = usb_serialRxCancel,
+        .suspend_read = usb_serialSuspendInput,
+        .enqueue_realtime_command = protocol_enqueue_realtime_command
+    };
+#else
+const io_stream_t serial_stream = {
+    .type = StreamType_Serial,
+    .read = serialGetC,
+    .write = serialWriteS,
+#if ETHERNET_ENABLE
+    .write_all = enetStreamWriteS,
+#else
+    .write_all = serialWriteS,
+#endif
+    .get_rx_buffer_available = serialRxFree,
+    .reset_read_buffer = serialRxFlush,
+    .cancel_read_buffer = serialRxCancel,
+    .suspend_read = serialSuspendInput,
+    .enqueue_realtime_command = protocol_enqueue_realtime_command
+}
+#endif
 
 // Interrupt handler prototypes
 // Interrupt handlers needs to be registered, possibly by modifying a system specific startup file.
@@ -270,6 +386,34 @@ static void driver_delay_ms (uint32_t ms, void (*callback)(void))
         }
         if(callback)
             callback();
+    }
+}
+
+void selectStream (stream_type_t stream)
+{
+    switch(stream) {
+
+#if TELNET_ENABLE
+        case StreamType_Telnet:
+            memcpy(&hal.stream, &ethernet_stream, sizeof(io_stream_t));
+            services.telnet = On;
+            break;
+#endif
+#if WEBSOCKET_ENABLE
+        case StreamType_WebSocket:
+            memcpy(&hal.stream, &websocket_stream, sizeof(io_stream_t));
+            services.websocket = On;
+            break;
+#endif
+        case StreamType_Serial:
+            memcpy(&hal.stream, &serial_stream, sizeof(io_stream_t));
+#if ETHERNET_ENABLE
+            services.mask = 0;
+#endif
+            break;
+
+        default:
+            break;
     }
 }
 
@@ -492,6 +636,8 @@ probe_state_t probeGetState (void)
     return state;
 }
 
+#ifndef VFD_SPINDLE
+
 // Static spindle (off, on cw & on ccw)
 
 inline static void spindle_off ()
@@ -622,6 +768,8 @@ static spindle_state_t spindleGetState (void)
 
 // end spindle code
 
+#endif
+
 // Start/stop coolant (and mist if enabled).
 // coolant_state_t is defined in grbl/coolant_control.h.
 static void coolantSetState (coolant_state_t mode)
@@ -645,6 +793,22 @@ static coolant_state_t coolantGetState (void)
 
     return state;
 }
+
+static void showMessage (const char *msg)
+{
+    hal.stream.write("[MSG:");
+    hal.stream.write(msg);
+    hal.stream.write("]\r\n");
+}
+
+#if ETHERNET_ENABLE
+static void reportIP (void)
+{
+    hal.stream.write("[IP:");
+    hal.stream.write(enet_ip_address());
+    hal.stream.write("]\r\n");
+}
+#endif
 
 // Helper functions for setting/clearing/inverting individual bits atomically (uninterruptable)
 static void bitsSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t bits)
@@ -681,6 +845,16 @@ static void settings_changed (settings_t *settings)
 
         stepperEnable(settings->steppers.deenergize);
 
+#if ETHERNET_ENABLE
+
+        static bool enet_ok = false;
+        if(!enet_ok)
+            enet_ok = enet_init(&driver_settings.network);
+
+#endif
+
+#ifndef VFD_SPINDLE
+
         if(hal.driver_cap.variable_spindle && spindle_precompute_pwm_values(&spindle_pwm, F_BUS_ACTUAL / 2)) {
 #if SPINDLEPWMPIN == 12
             TMR1_COMP11 = spindle_pwm.period;
@@ -692,6 +866,8 @@ static void settings_changed (settings_t *settings)
             hal.spindle_set_state = spindleSetStateVariable;
         } else
             hal.spindle_set_state = spindleSetState;
+
+#endif
 
         // Stepper pulse timeout setup.
         // When the stepper pulse is delayed either two timers or a timer that supports multiple
@@ -987,6 +1163,8 @@ static bool driver_setup (settings_t *settings)
     pinModeOutput(&Flood, COOLANT_FLOOD_PIN);
     pinModeOutput(&Mist, COOLANT_MIST_PIN);
 
+#ifndef VFD_SPINDLE
+
    /******************
     *  Spindle init  *
     ******************/
@@ -1010,6 +1188,8 @@ static bool driver_setup (settings_t *settings)
 
     *(portConfigRegister(SPINDLEPWMPIN)) = 1;
 
+#endif
+
   // Set defaults
 
     IOInitDone = settings->version == 16;
@@ -1017,8 +1197,6 @@ static bool driver_setup (settings_t *settings)
     settings_changed(settings);
 
     hal.stepper_go_idle(true);
-    hal.spindle_set_state((spindle_state_t){0}, 0.0f);
-    hal.coolant_set_state((coolant_state_t){0});
 
 #if IOPORTS_ENABLE
     ioports_init();
@@ -1026,6 +1204,65 @@ static bool driver_setup (settings_t *settings)
 
     return IOInitDone;
 }
+
+#ifdef DRIVER_SETTINGS
+
+static status_code_t driver_setting (setting_type_t param, float value, char *svalue)
+{
+    status_code_t status = Status_Unhandled;
+
+#if ETHERNET_ENABLE
+    status = ethernet_setting(param, value, svalue);
+#endif
+
+#if KEYPAD_ENABLE
+    if(status == Status_Unhandled)
+        status = keypad_setting(param, value, svalue);
+#endif
+
+#if TRINAMIC_ENABLE
+    if(status == Status_Unhandled)
+        status = trinamic_setting(param, value, svalue);
+#endif
+
+    if(status == Status_OK)
+        hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
+
+    return status;
+}
+
+static void driver_settings_report (setting_type_t setting)
+{
+#if ETHERNET_ENABLE
+    ethernet_settings_report(setting);
+#endif
+
+#if KEYPAD_ENABLE
+    keypad_settings_report(setting);
+#endif
+
+#if TRINAMIC_ENABLE
+    trinamic_settings_report(setting);
+#endif
+}
+
+static void driver_settings_restore (void)
+{
+#if ETHERNET_ENABLE
+    ethernet_settings_restore();
+#endif
+
+#if KEYPAD_ENABLE
+    keypad_settings_restore();
+#endif
+
+#if TRINAMIC_ENABLE
+    trinamic_settings_restore();
+#endif
+    hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
+}
+
+#endif
 
 #if EEPROM_ENABLE == 0
 
@@ -1103,11 +1340,14 @@ bool driver_init (void)
 #if IOPORTS_ENABLE
     strcat(options, "IOPORTS ");
 #endif
+#ifdef SPINDLE_HUANYANG
+    strcat(options, "HUANYANG ");
+#endif
     if(*options != '\0')
         options[strlen(options) - 1] = '\0';
 
     hal.info = "IMXRT1062";
-    hal.driver_version = "200606";
+    hal.driver_version = "200710";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1133,36 +1373,29 @@ bool driver_init (void)
     hal.probe_get_state = probeGetState;
     hal.probe_configure_invert_mask = probeConfigure;
 
+#ifndef VFD_SPINDLE
     hal.spindle_set_state = spindleSetState;
     hal.spindle_get_state = spindleGetState;
-#ifdef SPINDLE_PWM_DIRECT
+  #ifdef SPINDLE_PWM_DIRECT
     hal.spindle_get_pwm = spindleGetPWM;
     hal.spindle_update_pwm = spindle_set_speed;
-#else
+  #else
     hal.spindle_update_rpm = spindleUpdateRPM;
+  #endif
 #endif
-
     hal.system_control_get_state = systemGetState;
+
+#if ETHERNET_ENABLE
+    hal.report_options = reportIP;
+#endif
 
 #if USB_SERIAL_GRBL
     usb_serialInit();
-    hal.stream.read = usb_serialGetC;
-    hal.stream.get_rx_buffer_available = usb_serialRxFree;
-    hal.stream.reset_read_buffer = usb_serialRxFlush;
-    hal.stream.cancel_read_buffer = usb_serialRxCancel;
-    hal.stream.write = usb_serialWriteS;
-    hal.stream.write_all = usb_serialWriteS;
-    hal.stream.suspend_read = usb_serialSuspendInput;
 #else
-    serialInit();
-    hal.stream.read = serialGetC;
-    hal.stream.write = serialWriteS;
-    hal.stream.write_all = serialWriteS;
-    hal.stream.get_rx_buffer_available = serialRxFree;
-    hal.stream.reset_read_buffer = serialRxFlush;
-    hal.stream.cancel_read_buffer = serialRxCancel;
-    hal.stream.suspend_read = serialSuspendInput;
+    serialInit(115200);
 #endif
+
+    selectStream(StreamType_Serial);
 
 #if EEPROM_ENABLE
     eepromInit(); 
@@ -1178,9 +1411,20 @@ bool driver_init (void)
     hal.eeprom.memcpy_to_flash = nvsWrite;
 #endif
 
+#ifdef DRIVER_SETTINGS
+    hal.eeprom.driver_area.address = GRBL_EEPROM_SIZE;
+    hal.eeprom.size = GRBL_EEPROM_SIZE + sizeof(driver_settings_t) + 1;
+    hal.eeprom.driver_area.size = sizeof(driver_settings_t);
+    hal.driver_setting = driver_setting;
+    hal.driver_settings_report = driver_settings_report;
+    hal.driver_settings_restore = driver_settings_restore;
+#endif
+
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
+
+    hal.show_message = showMessage;
 
 #if QEI_SELECT_ENABLED || KEYPAD_ENABLE || USB_SERIAL_GRBL > 0
     hal.execute_realtime = execute_realtime;
@@ -1190,6 +1434,25 @@ bool driver_init (void)
     hal.encoder_state_changed = encoder_changed;
 #endif
 
+#if MODBUS_ENABLE
+    serialInit(19200);
+
+    modbus_stream.rx_timeout = 500;
+    modbus_stream.write = serialWrite;
+    modbus_stream.read = serialGetC;
+    modbus_stream.flush_rx_buffer = serialRxFlush;
+    modbus_stream.flush_tx_buffer = serialTxFlush;
+    modbus_stream.get_rx_buffer_count = serialRxCount;
+    modbus_stream.get_tx_buffer_count = serialTxCount;
+
+    modbus_init(&modbus_stream);
+#endif
+strcat(options, uitoa(serialRxCount()));
+
+#if SPINDLE_HUANYANG
+    huanyang_init(&modbus_stream);
+#endif
+
 #ifdef DEBUGOUT
     hal.debug_out = debugOut;
 #endif
@@ -1197,10 +1460,12 @@ bool driver_init (void)
   // Driver capabilities, used for announcing and negotiating (with Grbl) driver functionality.
   // See driver_cap_t union i grbl/hal.h for available flags.
 
-#ifdef SPINDLE_DIRECTION_PIN
+#ifndef VFD_SPINDLE
+  #ifdef SPINDLE_DIRECTION_PIN
     hal.driver_cap.spindle_dir = On;
-#endif
+  #endif
     hal.driver_cap.variable_spindle = On;
+#endif
 #ifdef COOLANT_MIST_PIN
     hal.driver_cap.mist_control = On;
 #endif
@@ -1209,6 +1474,9 @@ bool driver_init (void)
 #endif
 #ifdef SAFETY_DOOR_PIN
     hal.driver_cap.safety_door = On;
+#endif
+#if ETHERNET_ENABLE
+    hal.driver_cap.ethernet = On;
 #endif
     hal.driver_cap.software_debounce = On;
     hal.driver_cap.step_pulse_delay = On;
@@ -1460,6 +1728,10 @@ static void systick_isr (void)
 #if USB_SERIAL_GRBL == 2
     systick_isr_org();
 //    usb_serial_poll();
+#endif
+
+#if MODBUS_ENABLE
+    modbus_poll();
 #endif
 
 #if QEI_ENABLE

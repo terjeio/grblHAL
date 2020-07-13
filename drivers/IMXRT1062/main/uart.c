@@ -137,12 +137,33 @@ void transmitterEnable(uint8_t pin)
 }
 */
 
+static uint16_t tx_fifo_size;
 static stream_tx_buffer_t txbuffer = {0};
 static stream_rx_buffer_t rxbuffer = {0}, rxbackup;
 
-void serialInit (void)
+void serialInit (uint32_t baud_rate)
 {
 //    uart_hardware_t *hardware = &UART;
+	float base = (float)UART_CLOCK / (float)baud_rate;
+	float besterr = 1e20;
+	int bestdiv = 1;
+	int bestosr = 4;
+	for (int osr = 4; osr <= 32; osr++) {
+		float div = base / (float)osr;
+		int divint = (int)(div + 0.5f);
+		if (divint < 1)
+            divint = 1;
+		else if (divint > 8191)
+            divint = 8191;
+		float err = ((float)divint - div) / div;
+		if (err < 0.0f)
+            err = -err;
+		if (err <= besterr) {
+			besterr = err;
+			bestdiv = divint;
+			bestosr = osr;
+		}
+	}
 
     *UART.ccm_register |= UART.ccm_value;
 
@@ -156,7 +177,7 @@ void serialInit (void)
     if (UART.tx_pin.select_reg)
         *(UART.tx_pin.select_reg) = UART.tx_pin.select_val;        
 
-    UART.port->BAUD = 419430408UL; // 115200 @ UART CLOCK = 24 MHz
+	UART.port->BAUD = LPUART_BAUD_OSR(bestosr - 1) | LPUART_BAUD_SBR(bestdiv) | (bestosr <= 8 ? LPUART_BAUD_BOTHEDGE : 0);
     UART.port->PINCFG = 0;
 
     // Enable the transmitter, receiver and enable receiver interrupt
@@ -165,7 +186,9 @@ void serialInit (void)
     NVIC_SET_PRIORITY(UART.irq, 0);
     NVIC_ENABLE_IRQ(UART.irq);
 
-    uint16_t tx_fifo_size = (((UART.port->FIFO >> 4) & 0x7) << 2);
+    tx_fifo_size = (UART.port->FIFO >> 4) & 0x7;
+    tx_fifo_size = tx_fifo_size ? (2 << tx_fifo_size) : 1;
+
     uint8_t tx_water = (tx_fifo_size < 16) ? tx_fifo_size >> 1 : 7;
     uint16_t rx_fifo_size = (((UART.port->FIFO >> 0) & 0x7) << 2);
     uint8_t rx_water = (rx_fifo_size < 16) ? rx_fifo_size >> 1 : 7;
@@ -225,7 +248,12 @@ int16_t serialGetC (void)
     return data;
 }
 
-inline static uint16_t serialRxCount (void)
+void serialTxFlush (void)
+{
+    txbuffer.tail = txbuffer.head;
+}
+
+uint16_t serialRxCount (void)
 {
     uint_fast16_t head = rxbuffer.head, tail = rxbuffer.tail;
 
@@ -258,7 +286,7 @@ bool serialPutC (const char c)
 
 //  if (transmit_pin_baseReg_) DIRECT_WRITE_HIGH(transmit_pin_baseReg_, transmit_pin_bitmask_);
 
-    if(txbuffer.head == txbuffer.tail && ((UART.port->WATER >> 8) & 0x7) < ((UART.port->FIFO >> 4) & 0x7)) {
+    if(txbuffer.head == txbuffer.tail && ((UART.port->WATER >> 8) & 0x7) < tx_fifo_size) {
         UART.port->DATA  = c;
         return true;
     } 
@@ -289,6 +317,14 @@ void serialWriteS (const char *data)
         serialPutC(c);
 }
 
+void serialWrite(const char *s, uint16_t length)
+{
+    char *ptr = (char *)s;
+
+    while(length--)
+        serialPutC(*ptr++);
+}
+
 // "dummy" version of serialGetC
 static int16_t serialGetNull (void)
 {
@@ -309,7 +345,7 @@ uint16_t serialTxCount(void) {
 
     uint_fast16_t head = txbuffer.head, tail = txbuffer.tail;
 
-    return BUFCOUNT(head, tail, TX_BUFFER_SIZE);
+    return BUFCOUNT(head, tail, TX_BUFFER_SIZE) + ((UART.port->WATER >> 8) & 0x7) + ((UART.port->STAT & LPUART_STAT_TC) ? 0 : 1);
 }
 
 static void uart_interrupt_handler (void)
@@ -330,7 +366,7 @@ static void uart_interrupt_handler (void)
             } else
                 break;
 
-        } while(((UART.port->WATER >> 8) & 0x7) < ((UART.port->FIFO >> 4) & 0x7));
+        } while(((UART.port->WATER >> 8) & 0x7) < tx_fifo_size);
 
         txbuffer.tail = bptr;                                       //  Update tail pinter
 
@@ -358,6 +394,10 @@ static void uart_interrupt_handler (void)
             if(bptr == rxbuffer.tail) {                         // If buffer full
                 rxbuffer.overflow = true;                       // flag overflow
             } else {
+#if MODBUS_ENABLE
+                rxbuffer.data[rxbuffer.head] = (char)data;  // Add data to buffer
+                rxbuffer.head = bptr;                       // and update pointer
+#else
                 if(data == CMD_TOOL_ACK && !rxbuffer.backup) {
                     memcpy(&rxbackup, &rxbuffer, sizeof(stream_rx_buffer_t));
                     rxbuffer.backup = true;
@@ -367,6 +407,7 @@ static void uart_interrupt_handler (void)
                     rxbuffer.data[rxbuffer.head] = (char)data;  // Add data to buffer
                     rxbuffer.head = bptr;                       // and update pointer
                 }
+#endif
             }
         }
 

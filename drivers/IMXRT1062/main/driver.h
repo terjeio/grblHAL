@@ -34,19 +34,23 @@
 // Configuration
 // Set value to 1 to enable, 0 to disable
 
+#define SPINDLE_HUANYANG 1
+
 #define USB_SERIAL_GRBL    2 // Set to 1 for Arduino class library, 2 for PJRC C library.
 #define USB_SERIAL_WAIT    0 // Wait for USB connection before starting grblHAL.
-#define QEI_ENABLE         0 // Enable quadrature encoder interface. NOTE: requires encoder plugin.
+#define SPINDLE_HUANYANG   1 // Set to 1 or 2 for Huanyang VFD spindle
+#define QEI_ENABLE         1 // Enable quadrature encoder interface. NOTE: requires encoder plugin.
 
 #if COMPATIBILITY_LEVEL <= 1
 #define ESTOP_ENABLE       1 // When enabled only real-time report requests will be executed when the reset pin is asserted.
 #else
 #define ESTOP_ENABLE       0 // Do not change!
 #endif
-#define CNC_BOOSTERPACK    0 // Do not change!
+#define CNC_BOOSTERPACK    1 // Do not change!
 
 // NOTE: none of these extensions are available, TBC!
 #if CNC_BOOSTERPACK
+#define UART_PORT 5
   #define KEYPAD_ENABLE    0 // I2C keypad for jogging etc.
   #define EEPROM_ENABLE    1 // I2C EEPROM support. Set to 1 for 24LC16(2K), 2 for larger sizes.
   #define TRINAMIC_ENABLE  0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
@@ -66,11 +70,21 @@
 #include "src/tmc2130/trinamic.h"
 #endif
 
-#if TRINAMIC_ENABLE || KEYPAD_ENABLE
+#if SPINDLE_HUANYANG
+#if USB_SERIAL_GRBL == 0
+#error "Huanyang VFD cannot be used with UART communications enabled!"
+#endif
+#include "src/spindle/huanyang.h"
+#endif
+
+#if TRINAMIC_ENABLE || KEYPAD_ENABLE || ETHERNET_ENABLE
 
 #define DRIVER_SETTINGS
 
 typedef struct {
+#if ETHERNET_ENABLE
+    network_settings_t network;
+#endif
 #if TRINAMIC_ENABLE
     trinamic_settings_t trinamic;
 #endif
@@ -171,5 +185,9 @@ typedef struct {
     volatile uint32_t *select_reg;  // Which register controls the selection
     const uint32_t select_val;      // Value for that selection
 } pin_info_t;
+
+//
+
+void selectStream (stream_type_t stream);
 
 #endif // __DRIVER_H__
