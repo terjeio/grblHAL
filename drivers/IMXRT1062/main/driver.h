@@ -34,14 +34,12 @@
 // Configuration
 // Set value to 1 to enable, 0 to disable
 
-#define SPINDLE_HUANYANG 1
-
 #define USB_SERIAL_GRBL    2 // Set to 1 for Arduino class library, 2 for PJRC C library.
 #define USB_SERIAL_WAIT    0 // Wait for USB connection before starting grblHAL.
 #define SPINDLE_HUANYANG   0 // Set to 1 or 2 for Huanyang VFD spindle
 #define QEI_ENABLE         0 // Enable quadrature encoder interface. NOTE: requires encoder plugin.
 #define ETHERNET_ENABLE    1 // Ethernet streaming.
-#define TELNET_ENABLE    1 // Ethernet streaming.
+#define TELNET_ENABLE    0 // Ethernet streaming.
 
 #if COMPATIBILITY_LEVEL <= 1
 #define ESTOP_ENABLE       1 // When enabled only real-time report requests will be executed when the reset pin is asserted.

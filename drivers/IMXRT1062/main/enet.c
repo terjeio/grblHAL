@@ -28,7 +28,7 @@
 #include <lwip_k6x.h>
 #include <lwip_t41.h>
 #include <lwip/netif.h>
-#include <lwip/ip_addr.h>
+#include "lwip/dhcp.h"
 
 #include "driver.h"
 #include "src/networking/TCPStream.h"
@@ -44,7 +44,7 @@ char *enet_ip_address (void)
     return IPAddress;
 }
 
-static void link_status_callback(struct netif *netif)
+static void link_status_callback (struct netif *netif)
 {
     bool isLinkUp = netif_is_link_up(netif);
 
@@ -54,7 +54,7 @@ static void link_status_callback(struct netif *netif)
     }
 }
 
-static void netif_status_callback(struct netif *netif)
+static void netif_status_callback (struct netif *netif)
 {
     ip4addr_ntoa_r(netif_ip_addr4(netif), IPAddress, IP4ADDR_STRLEN_MAX);
 
@@ -92,13 +92,10 @@ bool grbl_enet_init (network_settings_t *network)
 {
     *IPAddress = '\0';
 
-#if NETWORK_IPMODE_STATIC
-
     if(driver_settings.network.ip_mode == IpMode_Static)
         enet_init((ip_addr_t *)&driver_settings.network.ip, (ip_addr_t *)&driver_settings.network.mask, (ip_addr_t *)&driver_settings.network.gateway);
-    else 
-#endif
-    enet_init(NULL, NULL, NULL);
+    else
+        enet_init(NULL, NULL, NULL);
 
     netif_set_status_callback(netif_default, netif_status_callback);
     netif_set_link_callback(netif_default, link_status_callback);
@@ -106,6 +103,9 @@ bool grbl_enet_init (network_settings_t *network)
 #if LWIP_NETIF_HOSTNAME
     netif_set_hostname(netif_default, network->hostname);
 #endif
+
+    if(driver_settings.network.ip_mode == IpMode_DHCP)
+        dhcp_start(netif_default);
 
     return true;
 }
@@ -178,7 +178,7 @@ status_code_t ethernet_setting (setting_type_t param, float value, char *svalue)
 #endif
 
         case Setting_IpMode:
-          if(isintf(value) >= 0.0d && value <= 2.0f) {
+          if(isintf(value) >= 0.0f && value <= 2.0f) {
               status = Status_OK;
               driver_settings.network.ip_mode = (ip_mode_t)(uint8_t)value;
           }
@@ -199,7 +199,7 @@ status_code_t ethernet_setting (setting_type_t param, float value, char *svalue)
 
         case Setting_Gateway:
           {
-              ip_addr_t addr;
+              ip4_addr_t addr;
               if(ip4addr_aton(svalue, &addr) == 1) {
                   status = Status_OK;
                   *((ip4_addr_t *)driver_settings.network.gateway) = addr;
@@ -210,7 +210,7 @@ status_code_t ethernet_setting (setting_type_t param, float value, char *svalue)
 
         case Setting_NetMask:
           {
-              ip_addr_t addr;
+              ip4_addr_t addr;
               if(ip4addr_aton(svalue, &addr) == 1) {
                   status = Status_OK;
                   *((ip4_addr_t *)driver_settings.network.mask) = addr;
@@ -247,21 +247,21 @@ void ethernet_settings_report (setting_type_t setting)
         case Setting_IpAddress:
             if(driver_settings.network.ip_mode != IpMode_DHCP) {
                 char ip[IP4ADDR_STRLEN_MAX];
-                report_string_setting(setting, ip4addr_ntoa_r(&driver_settings.network.ip, ip, IP4ADDR_STRLEN_MAX));
+                report_string_setting(setting, ip4addr_ntoa_r((ip4_addr_t *)&driver_settings.network.ip, ip, IP4ADDR_STRLEN_MAX));
             }
             break;
 
         case Setting_Gateway:
             if(driver_settings.network.ip_mode != IpMode_DHCP) {
                 char ip[IP4ADDR_STRLEN_MAX];
-                report_string_setting(setting, ip4addr_ntoa_r(&driver_settings.network.gateway, ip, IP4ADDR_STRLEN_MAX));
+                report_string_setting(setting, ip4addr_ntoa_r((ip4_addr_t *)&driver_settings.network.gateway, ip, IP4ADDR_STRLEN_MAX));
             }
             break;
 
         case Setting_NetMask:
             if(driver_settings.network.ip_mode != IpMode_DHCP) {
                 char ip[IP4ADDR_STRLEN_MAX];
-                report_string_setting(setting, ip4addr_ntoa_r(&driver_settings.network.mask, ip, IP4ADDR_STRLEN_MAX));
+                report_string_setting(setting, ip4addr_ntoa_r((ip4_addr_t *)&driver_settings.network.mask, ip, IP4ADDR_STRLEN_MAX));
             }
             break;
 
@@ -270,11 +270,13 @@ void ethernet_settings_report (setting_type_t setting)
             report_uint_setting(setting, driver_settings.network.telnet_port);
             break;
 #endif
+
 #if WEBSOCKET_ENABLE
         case Setting_WebSocketPort:
             report_uint_setting(setting, driver_settings.network.websocket_port);
             break;
 #endif
+
         default:
             break;
     }
@@ -283,13 +285,15 @@ void ethernet_settings_report (setting_type_t setting)
 void ethernet_settings_restore (void)
 {
     strcpy(driver_settings.network.hostname, NETWORK_HOSTNAME);
+
+    ip4_addr_t addr;
+
 #if NETWORK_IPMODE_STATIC
     driver_settings.network.ip_mode = IpMode_Static;
 
-    ip_addr_t addr;
 
     if(ip4addr_aton(NETWORK_IP, &addr) == 1)
-        *((ip_addr_t *)driver_settings.network.ip) = addr;
+        *((ip4_addr_t *)driver_settings.network.ip) = addr;
 
     if(ip4addr_aton(NETWORK_GATEWAY, &addr) == 1)
         *((ip4_addr_t *)driver_settings.network.gateway) = addr;
@@ -299,6 +303,9 @@ void ethernet_settings_restore (void)
 
 #else
     driver_settings.network.ip_mode = IpMode_DHCP;
+
+    if(ip4addr_aton("255.255.255.0", &addr) == 1)
+        *((ip4_addr_t *)driver_settings.network.mask) = addr;
 #endif
 
     driver_settings.network.telnet_port = NETWORK_TELNET_PORT;

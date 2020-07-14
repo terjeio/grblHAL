@@ -268,8 +268,6 @@ static modbus_stream_t modbus_stream = {0};
 #endif
 
 #if ETHERNET_ENABLE
-
-static uint32_t tick_count = 0;
 static network_services_t services = {0};
 
 static void enetStreamWriteS (const char *data)
@@ -392,18 +390,22 @@ static void driver_delay_ms (uint32_t ms, void (*callback)(void))
 
 void selectStream (stream_type_t stream)
 {
+    static stream_type_t active_stream = StreamType_Serial;
+
     switch(stream) {
 
 #if TELNET_ENABLE
         case StreamType_Telnet:
             memcpy(&hal.stream, &ethernet_stream, sizeof(io_stream_t));
             services.telnet = On;
+            hal.stream.write_all("[MSG:TELNET STREAM ACTIVE]" ASCII_EOL);
             break;
 #endif
 #if WEBSOCKET_ENABLE
         case StreamType_WebSocket:
             memcpy(&hal.stream, &websocket_stream, sizeof(io_stream_t));
             services.websocket = On;
+            hal.stream.write_all("[MSG:WEBSOCKET STREAM ACTIVE]" ASCII_EOL);
             break;
 #endif
         case StreamType_Serial:
@@ -411,11 +413,15 @@ void selectStream (stream_type_t stream)
 #if ETHERNET_ENABLE
             services.mask = 0;
 #endif
+            if(active_stream != StreamType_Serial)
+                hal.stream.write_all("[MSG:SERIAL STREAM ACTIVE]" ASCII_EOL);
             break;
 
         default:
             break;
     }
+
+    active_stream = stream;
 }
 
 // Set stepper pulse output pins.
@@ -1296,7 +1302,17 @@ static void execute_realtime (uint_fast16_t state)
     usb_execute_realtime(state);
 #endif
 #if ETHERNET_ENABLE
+    static uint32_t last_ms;
+    uint32_t ms;
+
     enet_proc_input();
+
+    ms = millis();
+    if (ms - last_ms > 100)
+    {
+        last_ms = ms;
+        grbl_enet_poll();
+    }
 #endif
 #if KEYPAD_ENABLE
     keypad_process_keypress(state);
@@ -1344,7 +1360,7 @@ bool driver_init (void)
 #if IOPORTS_ENABLE
     strcat(options, "IOPORTS ");
 #endif
-#ifdef SPINDLE_HUANYANG
+#if SPINDLE_HUANYANG
     strcat(options, "HUANYANG ");
 #endif
     if(*options != '\0')
@@ -1726,19 +1742,9 @@ void encoder_update (void)
 }
 #endif
 
-uint32_t xTaskGetTickCount (void)
-{
-    return 0;
-}
-
 // Interrupt handler for 1 ms interval timer
 static void systick_isr (void)
 {
-#if USB_SERIAL_GRBL == 2
-    systick_isr_org();
-//    usb_serial_poll();
-#endif
-
 #if MODBUS_ENABLE
     modbus_poll();
 #endif
@@ -1746,8 +1752,8 @@ static void systick_isr (void)
 #if ETHERNET_ENABLE
     uint32_t delay_cs = 100;
 
-    tick_count++;
-    
+    systick_isr_org();
+
     if(!(--delay_cs)) {
         delay_cs = 100;
         grbl_enet_poll();
