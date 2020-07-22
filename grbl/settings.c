@@ -110,6 +110,7 @@ const settings_t defaults = {
     .spindle.pwm_off_value = DEFAULT_SPINDLE_PWM_OFF_VALUE,
     .spindle.pwm_min_value = DEFAULT_SPINDLE_PWM_MIN_VALUE,
     .spindle.pwm_max_value = DEFAULT_SPINDLE_PWM_MAX_VALUE,
+    .spindle.at_speed_tolerance = DEFAULT_SPINDLE_AT_SPEED_TOLERANCE,
     .spindle.ppr = DEFAULT_SPINDLE_PPR,
     .spindle.pid.p_gain = DEFAULT_SPINDLE_P_GAIN,
     .spindle.pid.i_gain = DEFAULT_SPINDLE_I_GAIN,
@@ -131,38 +132,38 @@ const settings_t defaults = {
     .coolant_invert.flood = INVERT_COOLANT_FLOOD_PIN,
     .coolant_invert.mist = INVERT_COOLANT_MIST_PIN,
 
-    .steps_per_mm[X_AXIS] = DEFAULT_X_STEPS_PER_MM,
-    .steps_per_mm[Y_AXIS] = DEFAULT_Y_STEPS_PER_MM,
-    .steps_per_mm[Z_AXIS] = DEFAULT_Z_STEPS_PER_MM,
-    .max_rate[X_AXIS] = DEFAULT_X_MAX_RATE,
-    .max_rate[Y_AXIS] = DEFAULT_Y_MAX_RATE,
-    .max_rate[Z_AXIS] = DEFAULT_Z_MAX_RATE,
-    .acceleration[X_AXIS] = DEFAULT_X_ACCELERATION,
-    .acceleration[Y_AXIS] = DEFAULT_Y_ACCELERATION,
-    .acceleration[Z_AXIS] = DEFAULT_Z_ACCELERATION,
-    .max_travel[X_AXIS] = (-DEFAULT_X_MAX_TRAVEL),
-    .max_travel[Y_AXIS] = (-DEFAULT_Y_MAX_TRAVEL),
-    .max_travel[Z_AXIS] = (-DEFAULT_Z_MAX_TRAVEL),
+    .axis[X_AXIS].steps_per_mm = DEFAULT_X_STEPS_PER_MM,
+    .axis[Y_AXIS].steps_per_mm = DEFAULT_Y_STEPS_PER_MM,
+    .axis[Z_AXIS].steps_per_mm = DEFAULT_Z_STEPS_PER_MM,
+    .axis[X_AXIS].max_rate = DEFAULT_X_MAX_RATE,
+    .axis[Y_AXIS].max_rate = DEFAULT_Y_MAX_RATE,
+    .axis[Z_AXIS].max_rate = DEFAULT_Z_MAX_RATE,
+    .axis[X_AXIS].acceleration = DEFAULT_X_ACCELERATION,
+    .axis[Y_AXIS].acceleration = DEFAULT_Y_ACCELERATION,
+    .axis[Z_AXIS].acceleration = DEFAULT_Z_ACCELERATION,
+    .axis[X_AXIS].max_travel = (-DEFAULT_X_MAX_TRAVEL),
+    .axis[Y_AXIS].max_travel = (-DEFAULT_Y_MAX_TRAVEL),
+    .axis[Z_AXIS].max_travel = (-DEFAULT_Z_MAX_TRAVEL),
 
   #ifdef A_AXIS
-    .steps_per_mm[A_AXIS] = DEFAULT_A_STEPS_PER_MM,
-    .max_rate[A_AXIS] = DEFAULT_A_MAX_RATE,
-    .acceleration[A_AXIS] = DEFAULT_A_ACCELERATION,
-    .max_travel[A_AXIS] = (-DEFAULT_A_MAX_TRAVEL),
+    .axis[A_AXIS].steps_per_mm = DEFAULT_A_STEPS_PER_MM,
+    .axis[A_AXIS].max_rate = DEFAULT_A_MAX_RATE,
+    .axis[A_AXIS].acceleration = DEFAULT_A_ACCELERATION,
+    .axis[A_AXIS].max_travel = (-DEFAULT_A_MAX_TRAVEL),
     .homing.cycle[3].mask = HOMING_CYCLE_3,
   #endif
   #ifdef B_AXIS
-    .steps_per_mm[B_AXIS] = DEFAULT_B_STEPS_PER_MM,
-    .max_rate[B_AXIS] = DEFAULT_B_MAX_RATE,
-    .acceleration[B_AXIS] = DEFAULT_B_ACCELERATION,
-    .max_travel[B_AXIS] = (-DEFAULT_B_MAX_TRAVEL),
+    .axis[B_AXIS.steps_per_mm] = DEFAULT_B_STEPS_PER_MM,
+    .axis[B_AXIS].max_rate = DEFAULT_B_MAX_RATE,
+    .axis[B_AXIS].acceleration = DEFAULT_B_ACCELERATION,
+    .axis[B_AXIS].max_travel = (-DEFAULT_B_MAX_TRAVEL),
     .homing.cycle[4].mask = HOMING_CYCLE_4,
   #endif
   #ifdef C_AXIS
-    .steps_per_mm[C_AXIS] = DEFAULT_C_STEPS_PER_MM,
-    .acceleration[C_AXIS] = DEFAULT_C_ACCELERATION,
-    .max_rate[C_AXIS] = DEFAULT_C_MAX_RATE,
-    .max_travel[C_AXIS] = (-DEFAULT_C_MAX_TRAVEL),
+    .axis[C_AXIS].steps_per_mm = DEFAULT_C_STEPS_PER_MM,
+    .axis[C_AXIS].acceleration = DEFAULT_C_ACCELERATION,
+    .axis[C_AXIS].max_rate = DEFAULT_C_MAX_RATE,
+    .axis[C_AXIS].max_travel = (-DEFAULT_C_MAX_TRAVEL),
     .homing.cycle[5].mask = HOMING_CYCLE_5,
   #endif
 
@@ -265,7 +266,7 @@ bool settings_write_tool_data (tool_data_t *tool_data)
 }
 
 // Read selected tool data from persistent storage.
-bool settings_read_tool_data (uint8_t tool, tool_data_t *tool_data)
+bool settings_read_tool_data (uint32_t tool, tool_data_t *tool_data)
 {
 #ifdef N_TOOLS
     assert(tool > 0 && tool <= N_TOOLS); // NOTE: idx 0 is a non-persistent entry for tools not in tool table
@@ -385,36 +386,36 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
 
             case AxisSetting_StepsPerMM:
                 #ifdef MAX_STEP_RATE_HZ
-                if (value * settings.max_rate[axis_idx] > (MAX_STEP_RATE_HZ * 60.0f))
+                if (value * settings.axis[axis_idx].max_rate > (MAX_STEP_RATE_HZ * 60.0f))
                     return Status_MaxStepRateExceeded;
                 #endif
                 found = true;
-                settings.steps_per_mm[axis_idx] = value;
+                settings.axis[axis_idx].steps_per_mm = value;
                 break;
 
             case AxisSetting_MaxRate:
                 #ifdef MAX_STEP_RATE_HZ
-                if (value * settings.steps_per_mm[axis_idx] > (MAX_STEP_RATE_HZ * 60.0f))
+                if (value * settings.axis[axis_idx].steps_per_mm > (MAX_STEP_RATE_HZ * 60.0f))
                     return Status_MaxStepRateExceeded;
                 #endif
                 found = true;
-                settings.max_rate[axis_idx] = value;
+                settings.axis[axis_idx].max_rate = value;
                 break;
 
             case AxisSetting_Acceleration:
                 found = true;
-                settings.acceleration[axis_idx] = value * 60.0f * 60.0f; // Convert to mm/min^2 for grbl internal use.
+                settings.axis[axis_idx].acceleration = value * 60.0f * 60.0f; // Convert to mm/min^2 for grbl internal use.
                 break;
 
             case AxisSetting_MaxTravel:
                 found = true;
-                settings.max_travel[axis_idx] = -value; // Store as negative for grbl internal use.
+                settings.axis[axis_idx].max_travel = -value; // Store as negative for grbl internal use.
                 break;
 
 #ifdef ENABLE_BACKLASH_COMPENSATION
             case AxisSetting_Backlash:
                 found = true;
-                settings.backlash[axis_idx] = value;
+                settings.axis[axis_idx].backlash = value;
                 break;
 #endif
 
@@ -436,15 +437,11 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 settings.steppers.pulse_microseconds = value;
                 break;
 
-#if COMPATIBILITY_LEVEL <= 1
-
             case Setting_PulseDelayMicroseconds:
                 if(value > 0.0f && !hal.driver_cap.step_pulse_delay)
                     return Status_SettingDisabled;
                 settings.steppers.pulse_delay_microseconds = value;
                 break;
-
-#endif
 
             case Setting_StepperIdleLockTime:
                 settings.steppers.idle_lock_time = int_value;
@@ -496,8 +493,6 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 system_flag_wco_change(); // Make sure WCO is immediately updated.
                 break;
 
-#if COMPATIBILITY_LEVEL <= 1
-
             case Setting_ControlInvertMask:
                 settings.control_invert.mask = int_value;
                 settings.control_invert.block_delete &= hal.driver_cap.block_delete;
@@ -517,6 +512,10 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 }
                 break;
 
+            case Setting_SpindleAtSpeedTolerance:
+                settings.spindle.at_speed_tolerance = value;
+                break;
+
             case Setting_ControlPullUpDisableMask:
                 settings.control_disable_pullup.mask = int_value & 0x0F;
                 settings.control_disable_pullup.block_delete &= hal.driver_cap.block_delete;
@@ -534,8 +533,6 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 settings.flags.disable_probe_pullup = int_value != 0;
                 break;
 
-#endif
-
             case Setting_SoftLimitsEnable:
                 if (int_value && !settings.homing.flags.enabled)
                     return Status_SoftLimitError;
@@ -549,8 +546,6 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
 #endif
                 hal.limits_enable(settings.limits.flags.hard_enabled, false); // Change immediately. NOTE: Nice to have but could be problematic later.
                 break;
-
-#if COMPATIBILITY_LEVEL <= 1
 
             case Setting_JogSoftLimited:
                 if (int_value && !settings.homing.flags.enabled)
@@ -582,8 +577,6 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
             case Setting_ProbingFeedOverride:
                 settings.flags.allow_probing_feed_override = int_value != 0;
                 break;
-
-#endif
 
             case Setting_HomingEnable:
                 if (bit_istrue(int_value, bit(0))) {
@@ -621,8 +614,6 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 settings.homing.pulloff = value;
                 break;
 
-#if COMPATIBILITY_LEVEL <= 1
-
             case Setting_EnableLegacyRTCommands:
                 settings.legacy_rt_commands = value != 0;
                 break;
@@ -649,8 +640,6 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 settings.spindle.pwm_freq = value;
                 break;
 
-#endif
-
             case Setting_RpmMax:
                 settings.spindle.rpm_max = value;
                 break;
@@ -668,13 +657,10 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                         settings.flags.lathe_mode = Off;
                         break;
 
-#if COMPATIBILITY_LEVEL <= 1
-
                      case 2:
                         settings.flags.laser_mode = Off;
                         settings.flags.lathe_mode = On;
                         break;
-#endif
 
                      default:
                         settings.flags.laser_mode = Off;
@@ -684,8 +670,6 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 if(!settings.flags.lathe_mode)
                     gc_state.modal.diameter_mode = false;
                 break;
-
-#if COMPATIBILITY_LEVEL <= 1
 
             case Setting_ParkingEnable:
                 if (bit_istrue(int_value, bit(0)))
@@ -731,8 +715,6 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
             case Setting_SpindlePPR:
                 settings.spindle.ppr = int_value;
                 break;
-
-#endif
 
 #ifdef ENABLE_SPINDLE_LINEARIZATION
 
@@ -821,7 +803,11 @@ void settings_init() {
         hal.report.status_message(Status_SettingReadFail);
         settings_restore(settings); // Force restore all EEPROM data.
         report_init();
-        report_grbl_settings();
+#if COMPATIBILITY_LEVEL <= 1
+        report_grbl_settings(true);
+#else
+        report_grbl_settings(false);
+#endif
     } else {
         memset(&tool_table, 0, sizeof(tool_data_t)); // First entry is for tools not in tool table
 #ifdef N_TOOLS

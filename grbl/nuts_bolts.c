@@ -246,19 +246,6 @@ float convert_delta_vector_to_unit_vector (float *vector)
 }
 
 
-float limit_value_by_axis_maximum (float *max_value, float *unit_vec)
-{
-    uint_fast8_t idx = N_AXIS;
-    float limit_value = SOME_LARGE_VALUE;
-
-    do {
-        if (unit_vec[--idx] != 0.0f)  // Avoid divide by zero.
-            limit_value = min(limit_value, fabsf(max_value[idx] / unit_vec[idx]));
-    } while(idx);
-
-    return limit_value;
-}
-
 // calculate checksum byte for EEPROM data
 uint8_t calc_checksum (uint8_t *data, uint32_t size) {
 

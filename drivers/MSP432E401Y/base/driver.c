@@ -79,7 +79,7 @@ static uint16_t step_prescaler[3] = {
 };
 #endif
 
-#define STEPPER_PULSE_PRESCALER (120 - 1)
+#define STEPPER_PULSE_PRESCALER (12 - 1)
 
 #if ETHERNET_ENABLE
 
@@ -298,18 +298,22 @@ static uint8_t probe_invert;
 
 void selectStream (stream_type_t stream)
 {
+    static stream_type_t active_stream = StreamType_Serial;
+
     switch(stream) {
 
 #if TELNET_ENABLE
         case StreamType_Telnet:
             memcpy(&hal.stream, &ethernet_stream, sizeof(io_stream_t));
             services.telnet = On;
+            hal.stream.write_all("[MSG:TELNET STREAM ACTIVE]" ASCII_EOL);
             break;
 #endif
 #if WEBSOCKET_ENABLE
         case StreamType_WebSocket:
             memcpy(&hal.stream, &websocket_stream, sizeof(io_stream_t));
             services.websocket = On;
+            hal.stream.write_all("[MSG:WEBSOCKET STREAM ACTIVE]" ASCII_EOL);
             break;
 #endif
         case StreamType_Serial:
@@ -317,11 +321,15 @@ void selectStream (stream_type_t stream)
 #if ETHERNET_ENABLE
             services.mask = 0;
 #endif
+            if(active_stream != StreamType_Serial)
+                hal.stream.write_all("[MSG:SERIAL STREAM ACTIVE]" ASCII_EOL);
             break;
 
         default:
             break;
     }
+
+    active_stream = stream;
 }
 
 static void spindle_set_speed (uint_fast16_t pwm_value);
@@ -519,11 +527,11 @@ static void stepperEnable (axes_signals_t enable)
 // Starts stepper driver ISR timer and forces a stepper driver interrupt callback
 static void stepperWakeUp (void)
 {
-    if(settings.steppers.pulse_delay_microseconds) {
-        TimerMatchSet(PULSE_TIMER_BASE, TIMER_A, settings.steppers.pulse_delay_microseconds);
-        TimerLoadSet(PULSE_TIMER_BASE, TIMER_A, settings.steppers.pulse_microseconds + settings.steppers.pulse_delay_microseconds - 1);
+    if(settings.steppers.pulse_delay_microseconds > 0.0f) {
+        TimerMatchSet(PULSE_TIMER_BASE, TIMER_A, (uint32_t)(10.0f * settings.steppers.pulse_delay_microseconds) - 1);
+        TimerLoadSet(PULSE_TIMER_BASE, TIMER_A, (uint32_t)(10.0f * (settings.steppers.pulse_microseconds + settings.steppers.pulse_delay_microseconds - STEP_PULSE_LATENCY)) - 1);
     } else
-        TimerLoadSet(PULSE_TIMER_BASE, TIMER_A, settings.steppers.pulse_microseconds - 1);
+        TimerLoadSet(PULSE_TIMER_BASE, TIMER_A, (uint32_t)(10.0f * (settings.steppers.pulse_microseconds - STEP_PULSE_LATENCY)) - 1);
 
 #if LASER_PPI
     laser.next_pulse = 0;
@@ -838,7 +846,9 @@ inline static axes_signals_t limitsGetState()
 // Each bitfield bit indicates a control signal, where triggered is 1 and not triggered is 0.
 inline static control_signals_t systemGetState (void)
 {
-    control_signals_t signals = {0};
+    control_signals_t signals;
+
+    signals.value = settings.control_invert.value;
 
 #if CNC_BOOSTERPACK
     uint32_t flags = GPIOPinRead(CONTROL_PORT_FH_CS, HWCONTROL_MASK);
@@ -849,14 +859,18 @@ inline static control_signals_t systemGetState (void)
   #else
     signals.reset = GPIOPinRead(CONTROL_PORT_RST, RESET_PIN) != 0;
   #endif
+  #ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
     signals.safety_door_ajar = GPIOPinRead(CONTROL_PORT_SD, SAFETY_DOOR_PIN) != 0;
+  #endif
 #else
     uint32_t flags = GPIOPinRead(CONTROL_PORT, HWCONTROL_MASK);
 
     signals.reset = (flags & RESET_PIN) != 0;
     signals.feed_hold = (flags & FEED_HOLD_PIN) != 0;
     signals.cycle_start = (flags & CYCLE_START_PIN) != 0;
+  #ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
     signals.safety_door_ajar = (flags & SAFETY_DOOR_PIN) != 0;
+  #endif
 #endif
 
     if(settings.control_invert.value)
@@ -1209,7 +1223,7 @@ static void settings_changed (settings_t *settings)
         } else
             hal.spindle_set_state = spindleSetState;
 
-        if(settings->steppers.pulse_delay_microseconds) {
+        if(settings->steppers.pulse_delay_microseconds > 0.0f) {
             TimerIntRegister(PULSE_TIMER_BASE, TIMER_A, stepper_pulse_isr_delayed);
             TimerIntEnable(PULSE_TIMER_BASE, TIMER_TIMA_TIMEOUT|TIMER_TIMA_MATCH);
             hal.stepper_pulse_start = stepperPulseStartDelayed;
@@ -1434,7 +1448,7 @@ static bool driver_setup (settings_t *settings)
     TimerControlStall(PULSE_TIMER_BASE, TIMER_A, true); // timer will stall in debug mode
     TimerIntClear(PULSE_TIMER_BASE, 0xFFFF);
     IntPendClear(PULSE_TIMER_INT);
-    TimerPrescaleSet(PULSE_TIMER_BASE, TIMER_A, STEPPER_PULSE_PRESCALER); // for 1uS per count
+    TimerPrescaleSet(PULSE_TIMER_BASE, TIMER_A, STEPPER_PULSE_PRESCALER); // for 0.1uS per count
 
 #if CNC_BOOSTERPACK_A4998
     GPIOPinTypeGPIOOutput(STEPPERS_VDD_PORT, STEPPERS_VDD_PIN);
@@ -1621,7 +1635,7 @@ static bool driver_setup (settings_t *settings)
 
   // Set defaults
 
-    IOInitDone = settings->version == 16;
+    IOInitDone = settings->version == 17;
 
     settings_changed(settings);
 
@@ -1756,7 +1770,7 @@ bool driver_init (void)
 #else
     hal.board = "CNC BoosterPack";
 #endif
-    hal.driver_version = "200528";
+    hal.driver_version = "200721";
     hal.driver_setup = driver_setup;
 #if !USE_32BIT_TIMER
     hal.f_step_timer = hal.f_step_timer / (STEPPER_DRIVER_PRESCALER + 1);
@@ -1934,7 +1948,7 @@ void laser_ppi_mode (bool on)
     if(on)
         hal.stepper_pulse_start = stepperPulseStartPPI;
     else
-        hal.stepper_pulse_start = settings.pulse_delay_microseconds ? stepperPulseStartDelayed : stepperPulseStart;
+        hal.stepper_pulse_start = settings.pulse_delay_microseconds > 0.0f ? stepperPulseStartDelayed : stepperPulseStart;
     gc_set_laser_ppimode(on);
 }
 

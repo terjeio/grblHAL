@@ -29,7 +29,7 @@
 #ifdef N_TOOLS
 #define MAX_TOOL_NUMBER N_TOOLS // Limited by max unsigned 8-bit value
 #else
-#define MAX_TOOL_NUMBER 255 // Limited by max unsigned 8-bit value
+#define MAX_TOOL_NUMBER 4294967295 // Limited by max unsigned 32-bit value
 #endif
 
 #define MACH3_SCALING
@@ -210,7 +210,7 @@ static status_code_t init_sync_motion (plan_line_data_t *pl_data, float pitch)
     if(feed_rate == 0.0f)
         FAIL(Status_GcodeSpindleNotRunning); // [Spindle not running]
 
-    if(feed_rate > settings.max_rate[Z_AXIS])
+    if(feed_rate > settings.axis[Z_AXIS].max_rate)
         FAIL(Status_GcodeMaxFeedRateExceeded); // [Feed rate too high]
 
     return Status_OK;

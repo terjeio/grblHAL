@@ -33,6 +33,8 @@
 
 #define NO_MSP_CLASSIC_DEFINES
 
+#define SPINDLE_HUANYANG 1
+
 // Configuration
 // Set value to 1 to enable, 0 to disable
 
@@ -48,17 +50,22 @@
 #else
 #define ESTOP_ENABLE           0 // Do not change!
 #endif
-#define CNC_BOOSTERPACK        1 // do not change!
+#define CNC_BOOSTERPACK        1 // Do not change!
 
 #if CNC_BOOSTERPACK
   #define EEPROM_ENABLE           1 // only change if BoosterPack does not have EEPROM mounted
   #define CNC_BOOSTERPACK_SHORTS  0 // shorts added to BoosterPack for some signals (for faster and simpler driver)
   #define CNC_BOOSTERPACK_A4998   1 // using Polulu A4998 drivers - for suppying VDD via GPIO (PE5)
 #else
-  #define EEPROM_ENABLE          0 // do not change!
-  #define CNC_BOOSTERPACK_SHORTS 0 // do not change!
-  #define CNC_BOOSTERPACK_A4998  0 // do not change!
+  #define EEPROM_ENABLE          0 // Do not change!
+  #define CNC_BOOSTERPACK_SHORTS 0 // Do not change!
+  #define CNC_BOOSTERPACK_A4998  0 // Do not change!
 #endif
+
+// Adjust STEP_PULSE_LATENCY to get accurate step pulse length when required, e.g if using high step rates.
+// The default value is calibrated for 10 microseconds length.
+// NOTE: step output mode, number of axes and compiler optimization settings may all affect this value.
+#define STEP_PULSE_LATENCY 1.6f // microseconds
 
 // End configuration
 
@@ -68,6 +75,10 @@
 #include "msp.h"
 
 #include "grbl/grbl.h"
+
+#ifdef SPINDLE_HUANYANG
+   #include "spindle/huanyang.h"
+#endif
 
 #if TRINAMIC_ENABLE
 #include "tmc2130/trinamic.h"

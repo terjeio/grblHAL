@@ -72,7 +72,7 @@ bool spindle_set_state (spindle_state_t state, float rpm)
 bool spindle_sync (spindle_state_t state, float rpm)
 {
     bool ok = true;
-    bool at_speed = sys.state == STATE_CHECK_MODE || !hal.driver_cap.spindle_at_speed;
+    bool at_speed = sys.state == STATE_CHECK_MODE || !state.on || !hal.driver_cap.spindle_at_speed || settings.spindle.at_speed_tolerance > 0.0f;
 
     if (sys.state != STATE_CHECK_MODE) {
         // Empty planner buffer to ensure spindle is set when programmed.
@@ -81,8 +81,13 @@ bool spindle_sync (spindle_state_t state, float rpm)
             while(!(at_speed = hal.spindle_get_state().at_speed)) {
                 delay_sec(0.1f, DelayMode_Dwell);
                 delay += 0.1f;
-                if(ABORTED || delay >= SAFETY_DOOR_SPINDLE_DELAY)
+                if(ABORTED)
                     break;
+                if(delay >= SAFETY_DOOR_SPINDLE_DELAY) {
+                    set_state(STATE_ALARM); // Ensure alarm state is active.
+                    report_alarm_message(Alarm_Spindle);
+                    break;
+                }
             }
         }
     }
@@ -99,15 +104,22 @@ bool spindle_restore (spindle_state_t state, float rpm)
         sys.step_control.update_spindle_rpm = On;
     else { // TODO: add check for current spindle state matches restore state?
         spindle_set_state(state, rpm);
-        if((ok = !hal.driver_cap.spindle_at_speed))
-            delay_sec(SAFETY_DOOR_SPINDLE_DELAY, DelayMode_SysSuspend);
-        else {
-            float delay = 0.0f;
-            while(!(ok = hal.spindle_get_state().at_speed)) {
-                delay_sec(0.1f, DelayMode_SysSuspend);
-                delay += 0.1f;
-                if(ABORTED || delay >= SAFETY_DOOR_SPINDLE_DELAY)
-                    break;
+        if(state.on) {
+            if((ok = !hal.driver_cap.spindle_at_speed))
+                delay_sec(SAFETY_DOOR_SPINDLE_DELAY, DelayMode_SysSuspend);
+            else if((ok == (settings.spindle.at_speed_tolerance <= 0.0f))) {
+                float delay = 0.0f;
+                while(!(ok = hal.spindle_get_state().at_speed)) {
+                    delay_sec(0.1f, DelayMode_SysSuspend);
+                    delay += 0.1f;
+                    if(ABORTED)
+                        break;
+                    if(delay >= SAFETY_DOOR_SPINDLE_DELAY) {
+                        set_state(STATE_ALARM); // Ensure alarm state is active.
+                        report_alarm_message(Alarm_Spindle);
+                        break;
+                    }
+                }
             }
         }
     }

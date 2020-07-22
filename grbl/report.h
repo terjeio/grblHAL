@@ -43,7 +43,7 @@ void report_init_message (void);
 void report_grbl_help();
 
 // Prints Grbl setting(s)
-void report_grbl_settings (void);
+void report_grbl_settings (bool all);
 void report_uint_setting (setting_type_t n, uint32_t val);
 void report_float_setting (setting_type_t n, float val, uint8_t n_decimal);
 void report_string_setting (setting_type_t n, char *val);

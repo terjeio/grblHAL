@@ -317,21 +317,30 @@ inline static axes_signals_t limitsGetState()
 // Each bitfield bit indicates a control signal, where triggered is 1 and not triggered is 0.
 static control_signals_t systemGetState (void)
 {
-    control_signals_t signals = {0};
+    control_signals_t signals;
+
+    signals.value = settings.control_invert.mask;
 
 #if CONTROL_INMODE == GPIO_BITBAND
     signals.reset = BITBAND_PERI(CONTROL_PORT->IDR, CONTROL_RESET_PIN);
-    signals.safety_door_ajar = BITBAND_PERI(CONTROL_PORT->IDR, CONTROL_SAFETY_DOOR_PIN);
     signals.feed_hold = BITBAND_PERI(CONTROL_PORT->IDR, CONTROL_FEED_HOLD_PIN);
     signals.cycle_start = BITBAND_PERI(CONTROL_PORT->IDR, CONTROL_CYCLE_START_PIN);
+ #ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
+    signals.safety_door_ajar = BITBAND_PERI(CONTROL_PORT->IDR, CONTROL_SAFETY_DOOR_PIN);
+ #endif
 #elif CONTROL_INMODE == GPIO_MAP
     uint32_t bits = CONTROL_PORT->IDR;
     signals.reset = (bits & CONTROL_RESET_BIT) != 0;
-    signals.safety_door_ajar = (bits & CONTROL_SAFETY_DOOR_BIT) != 0;
     signals.feed_hold = (bits & CONTROL_FEED_HOLD_BIT) != 0;
     signals.cycle_start = (bits & CONTROL_CYCLE_START_BIT) != 0;
+ #ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
+    signals.safety_door_ajar = (bits & CONTROL_SAFETY_DOOR_BIT) != 0;
+ #endif
 #else
     signals.value = (uint8_t)((CONTROL_PORT->IDR & CONTROL_MASK) >> CONTROL_INMODE);
+ #ifndef ENABLE_SAFETY_DOOR_INPUT_PIN
+ 	signals.safety_door_ajar = Off;
+ #endif
 #endif
 
     if(settings.control_invert.mask)
@@ -582,7 +591,7 @@ void settings_changed (settings_t *settings)
         } else
             hal.spindle_set_state = spindleSetState;
 
-        if(hal.driver_cap.step_pulse_delay && settings->steppers.pulse_delay_microseconds) {
+        if(hal.driver_cap.step_pulse_delay && settings->steppers.pulse_delay_microseconds > 0.0f) {
             hal.stepper_pulse_start = &stepperPulseStartDelayed;
             PULSE_TIMER->DIER |= TIM_DIER_CC1IE; // Enable CC1 interrupt
         } else {
@@ -590,8 +599,8 @@ void settings_changed (settings_t *settings)
             PULSE_TIMER->DIER &= ~TIM_DIER_CC1IE; // Disable CC1 interrupt
         }
 
-        PULSE_TIMER->ARR = settings->steppers.pulse_microseconds + settings->steppers.pulse_delay_microseconds - 1;
-        PULSE_TIMER->CCR1 = settings->steppers.pulse_delay_microseconds;
+        PULSE_TIMER->ARR = (uint32_t)(10.0f * (settings->steppers.pulse_microseconds + settings->steppers.pulse_delay_microseconds - STEP_PULSE_LATENCY)) - 1;
+        PULSE_TIMER->CCR1 = (uint32_t)(10.0f * settings->steppers.pulse_delay_microseconds);
         PULSE_TIMER->EGR = TIM_EGR_UG;
 
         /*************************
@@ -763,9 +772,9 @@ static bool driver_setup (settings_t *settings)
     STEPPER_TIMER->CNT = 0;
     STEPPER_TIMER->DIER |= TIM_DIER_UIE;
 
-    // Single-shot 1 us per tick
+    // Single-shot 0.1 us per tick
     PULSE_TIMER->CR1 |= TIM_CR1_OPM|TIM_CR1_DIR|TIM_CR1_CKD_1|TIM_CR1_ARPE|TIM_CR1_URS;
-    PULSE_TIMER->PSC = hal.f_step_timer / 1000000UL - 1;
+    PULSE_TIMER->PSC = hal.f_step_timer / 10000000UL - 1;
     PULSE_TIMER->SR &= ~(TIM_SR_UIF|TIM_SR_CC1IF);
     PULSE_TIMER->CNT = 0;
     PULSE_TIMER->DIER |= TIM_DIER_UIE;
@@ -846,7 +855,7 @@ static bool driver_setup (settings_t *settings)
 
 #endif
 
-    IOInitDone = settings->version == 16;
+    IOInitDone = settings->version == 17;
 
     settings_changed(settings);
 
@@ -923,7 +932,7 @@ bool driver_init (void)
     __HAL_AFIO_REMAP_SWJ_NOJTAG();
 
     hal.info = "STM32F103C8";
-    hal.driver_version = "200610";
+    hal.driver_version = "200721";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif

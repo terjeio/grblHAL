@@ -28,6 +28,8 @@
 
 #include "src/grbl/grbl.h"
 
+#define UART_DEBUG // For development only - enable only with USB_SERIAL_GRBL enabled and SPINDLE_HUANYANG disabled
+
 // NOTE: Only one board may be enabled! If none is enabled pin mappings from defaults below will be used
 //#define BOARD_SIMPLE_MACHINE // Do not use, to be added!
 
@@ -37,20 +39,24 @@
 #define USB_SERIAL_GRBL    2 // Set to 1 for Arduino class library, 2 for PJRC C library.
 #define USB_SERIAL_WAIT    0 // Wait for USB connection before starting grblHAL.
 #define SPINDLE_HUANYANG   0 // Set to 1 or 2 for Huanyang VFD spindle
-#define QEI_ENABLE         0 // Enable quadrature encoder interface. NOTE: requires encoder plugin.
-#define ETHERNET_ENABLE    1 // Ethernet streaming.
-#define TELNET_ENABLE    0 // Ethernet streaming.
-
+#define QEI_ENABLE         0 // Enable quadrature encoder interfaces. Max value is 1. NOTE: requires encoder plugin.
+#define ETHERNET_ENABLE    0 // Ethernet streaming.
+#if ETHERNET_ENABLE
+#define TELNET_ENABLE      1 // Telnet daemon - requires Ethernet streaming enabled.
+#define WEBSOCKET_ENABLE   0 // Websocket daemon - requires Ethernet streaming enabled.
+#else
+#define TELNET_ENABLE      0 // Do not change!
+#define WEBSOCKET_ENABLE   0 // Do not change!
+#endif
 #if COMPATIBILITY_LEVEL <= 1
 #define ESTOP_ENABLE       1 // When enabled only real-time report requests will be executed when the reset pin is asserted.
 #else
 #define ESTOP_ENABLE       0 // Do not change!
 #endif
-#define CNC_BOOSTERPACK    0 // Do not change!
+#define CNC_BOOSTERPACK    1 // Do not change!
 
 // NOTE: none of these extensions are available, TBC!
 #if CNC_BOOSTERPACK
-#define UART_PORT 5
   #define KEYPAD_ENABLE    0 // I2C keypad for jogging etc.
   #define EEPROM_ENABLE    1 // I2C EEPROM support. Set to 1 for 24LC16(2K), 2 for larger sizes.
   #define TRINAMIC_ENABLE  0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
@@ -64,11 +70,12 @@
   #define TRINAMIC_DEV     0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code.
 #endif
 
-// End configuration
+// Adjust STEP_PULSE_LATENCY to get accurate step pulse length when required, e.g if using high step rates.
+// The default value is calibrated for 10 microseconds length.
+// NOTE: step output mode, number of axes and compiler optimization settings may all affect this value.
+#define STEP_PULSE_LATENCY 0.2f // microseconds
 
-#if TRINAMIC_ENABLE
-#include "src/tmc2130/trinamic.h"
-#endif
+// End configuration
 
 #if ETHERNET_ENABLE
 #define NETWORK_HOSTNAME        "GRBL"
@@ -83,6 +90,14 @@
 #define NETWORK_HTTP_PORT       80
 #endif
 
+#if TRINAMIC_ENABLE
+#include "src/tmc2130/trinamic.h"
+#endif
+
+#if QEI_ENABLE
+#include "src/encoder/encoder.h"
+#endif
+
 #if SPINDLE_HUANYANG
 #if USB_SERIAL_GRBL == 0
 #error "Huanyang VFD cannot be used with UART communications enabled!"
@@ -90,7 +105,7 @@
 #include "src/spindle/huanyang.h"
 #endif
 
-#if TRINAMIC_ENABLE || KEYPAD_ENABLE || ETHERNET_ENABLE
+#if TRINAMIC_ENABLE || KEYPAD_ENABLE || ETHERNET_ENABLE || QEI_ENABLE
 
 #define DRIVER_SETTINGS
 
@@ -103,6 +118,9 @@ typedef struct {
 #endif
 #if KEYPAD_ENABLE
     jog_settings_t jog;
+#endif
+#if QEI_ENABLE
+    encoder_settings_t encoder[QEI_ENABLE];
 #endif
 } driver_settings_t;
 
@@ -186,7 +204,11 @@ extern driver_settings_t driver_settings;
   #error "SPINDLEPWMPIN can only be routed to pin 12 or 13!"
 #endif
 
-#if QEI_ENABLE && !(defined(QEI_A_PIN) && defined(QEI_B_PIN))
+#if QEI_ENABLE > 1
+  #error "Max number of quadrature interfaces is 1!"
+#endif
+
+#if QEI_ENABLE > 0 && !(defined(QEI_A_PIN) && defined(QEI_B_PIN))
   #error "QEI_ENABLE requires encoder input pins A and B to be defined!"
 #endif
 

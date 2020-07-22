@@ -38,7 +38,7 @@ void mc_backlash_init (void)
     backlash_enabled.mask = dir_negative.value = 0;
 
     do {
-        if(settings.backlash[--idx] > 0.0001f)
+        if(settings.axis[--idx].backlash > 0.0001f)
             backlash_enabled.mask |= bit(idx);
         dir_negative.value |= bit(idx);
     } while(idx);
@@ -102,12 +102,12 @@ bool mc_line (float *target, plan_line_data_t *pl_data)
                     if(target[idx] > target_prev[idx]) {
                         if (dir_negative.value & axismask) {
                             dir_negative.value &= ~axismask;
-                            target_prev[idx] += settings.backlash[idx];
+                            target_prev[idx] += settings.axis[idx].backlash;
                             backlash_comp = true;
                         }
                     } else if(target[idx] < target_prev[idx] && !(dir_negative.value & axismask)) {
                         dir_negative.value |= axismask;
-                        target_prev[idx] -= settings.backlash[idx];
+                        target_prev[idx] -= settings.axis[idx].backlash;
                         backlash_comp = true;
                     }
                 }
@@ -743,10 +743,11 @@ status_code_t mc_homing_cycle (axes_signals_t cycle)
             return Status_Unhandled;
         }
 
-        set_state(STATE_HOMING);                                // Set homing system state,
-        hal.stream.enqueue_realtime_command(CMD_STATUS_REPORT); // force a status report and
+        set_state(STATE_HOMING);                                // Set homing system state.
+#if COMPATIBILITY_LEVEL == 0
+        hal.stream.enqueue_realtime_command(CMD_STATUS_REPORT); // Force a status report and
         delay_sec(0.1f, DelayMode_Dwell);                       // delay a bit to get it sent (or perhaps wait a bit for a request?)
-
+#endif
         hal.limits_enable(false, true); // Disable hard limits pin change register for cycle duration
 
         // Turn off spindle and coolant (and update parser state)

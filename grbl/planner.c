@@ -304,6 +304,33 @@ void plan_update_velocity_profile_parameters ()
     pl.previous_nominal_speed = prev_nominal_speed; // Update prev nominal speed for next incoming block.
 }
 
+static inline float limit_acceleration_by_axis_maximum (float *unit_vec)
+{
+    uint_fast8_t idx = N_AXIS;
+    float limit_value = SOME_LARGE_VALUE;
+
+    do {
+        if (unit_vec[--idx] != 0.0f)  // Avoid divide by zero.
+            limit_value = min(limit_value, fabsf(settings.axis[idx].acceleration / unit_vec[idx]));
+    } while(idx);
+
+    return limit_value;
+}
+
+static inline float limit_max_rate_by_axis_maximum (float *unit_vec)
+{
+    uint_fast8_t idx = N_AXIS;
+    float limit_value = SOME_LARGE_VALUE;
+
+    do {
+        if (unit_vec[--idx] != 0.0f)  // Avoid divide by zero.
+            limit_value = min(limit_value, fabsf(settings.axis[idx].max_rate / unit_vec[idx]));
+    } while(idx);
+
+    return limit_value;
+}
+
+
 
 /* Add a new linear movement to the buffer. target[N_AXIS] is the signed, absolute target position
    in millimeters. Feed rate specifies the speed of the motion. If feed rate is inverted, the feed
@@ -353,12 +380,12 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
         // NOTE: Computes true distance from converted step values.
 
 #ifndef KINEMATICS_API
-        target_steps[idx] = lroundf(target[idx] * settings.steps_per_mm[idx]);
+        target_steps[idx] = lroundf(target[idx] * settings.axis[idx].steps_per_mm);
 #endif
         delta_steps = target_steps[idx] - position_steps[idx];
         block->steps[idx] = labs(delta_steps);
         block->step_event_count = max(block->step_event_count, block->steps[idx]);
-        unit_vec[idx] = (float)delta_steps / settings.steps_per_mm[idx]; // Store unit vector numerator
+        unit_vec[idx] = (float)delta_steps / settings.axis[idx].steps_per_mm; // Store unit vector numerator
 
         // Set direction bits. Bit enabled always means direction is negative.
         if (delta_steps < 0)
@@ -369,7 +396,7 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
     // Calculate RPMs to be used for Constant Surface Speed calculations
     if(block->condition.is_rpm_pos_adjusted) {
         float pos;
-        if((pos = (float)position_steps[block->spindle.css.axis] / settings.steps_per_mm[block->spindle.css.axis] - block->spindle.css.tool_offset) > 0.0f) {
+        if((pos = (float)position_steps[block->spindle.css.axis] / settings.axis[block->spindle.css.axis].steps_per_mm - block->spindle.css.tool_offset) > 0.0f) {
             block->spindle.rpm = block->spindle.css.surface_speed / (pos * (float)(2.0f * M_PI));
             if(block->spindle.rpm > block->spindle.css.max_rpm)
                 block->spindle.rpm = block->spindle.css.max_rpm;
@@ -395,8 +422,8 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
     // NOTE: This calculation assumes all axes are orthogonal (Cartesian) and works with ABC-axes,
     // if they are also orthogonal/independent. Operates on the absolute value of the unit vector.
     block->millimeters = convert_delta_vector_to_unit_vector(unit_vec);
-    block->acceleration = limit_value_by_axis_maximum(settings.acceleration, unit_vec);
-    block->rapid_rate = limit_value_by_axis_maximum(settings.max_rate, unit_vec);
+    block->acceleration = limit_acceleration_by_axis_maximum(unit_vec);
+    block->rapid_rate = limit_max_rate_by_axis_maximum(unit_vec);
 
     // Store programmed rate.
     if (block->condition.rapid_motion)
@@ -458,7 +485,7 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
             block->max_junction_speed_sqr = SOME_LARGE_VALUE;
         } else {
             convert_delta_vector_to_unit_vector(junction_unit_vec);
-            float junction_acceleration = limit_value_by_axis_maximum(settings.acceleration, junction_unit_vec);
+            float junction_acceleration = limit_acceleration_by_axis_maximum(junction_unit_vec);
             float sin_theta_d2 = sqrtf(0.5f * (1.0f - junction_cos_theta)); // Trig half angle identity. Always positive.
             block->max_junction_speed_sqr = max(MINIMUM_JUNCTION_SPEED * MINIMUM_JUNCTION_SPEED,
                                                   (junction_acceleration * settings.junction_deviation * sin_theta_d2) / (1.0f - sin_theta_d2));

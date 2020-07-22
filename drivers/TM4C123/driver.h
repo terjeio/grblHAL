@@ -49,6 +49,11 @@
   #define CNC_BOOSTERPACK_A4998  0 // do not change!
 #endif
 
+// Adjust STEP_PULSE_LATENCY to get accurate step pulse length when required, e.g if using high step rates.
+// The default value is calibrated for 10 microseconds length.
+// NOTE: step output mode, number of axes and compiler optimization settings may all affect this value.
+#define STEP_PULSE_LATENCY 1.3f // microseconds
+
 // End configuration
 
 #if TRINAMIC_ENABLE || KEYPAD_ENABLE

@@ -45,7 +45,7 @@
 // Define spindle enable and spindle direction output pins.
 #define SPINDLE_ENABLE_PIN      (12u)
 #define SPINDLE_DIRECTION_PIN   (16u)
-#define SPINDLEPWMPIN           (13u)
+#define SPINDLEPWMPIN           (12u)
 
 // Define flood and mist coolant enable output pins.
 #define COOLANT_FLOOD_PIN   (4u)

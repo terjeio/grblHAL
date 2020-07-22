@@ -188,7 +188,9 @@ typedef struct HAL {
     spindle_data_t (*spindle_get_data)(spindle_data_request_t request);
     void (*spindle_reset_data)(void);
     void (*state_change_requested)(uint_fast16_t state);
-    void (*encoder_state_changed)(encoder_t *encoder);
+    void (*encoder_event_handler)(encoder_t *encoder, int32_t position);
+    void (*encoder_reset)(uint_fast8_t id);
+    uint32_t (*get_elapsed_ticks)(void);
 #ifdef DEBUGOUT
     void (*debug_out)(bool on);
 #endif

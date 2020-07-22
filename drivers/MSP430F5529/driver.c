@@ -183,13 +183,17 @@ inline static axes_signals_t limitsGetState()
 // Each bitfield bit indicates a control signal, where triggered is 1 and not triggered is 0.
 inline static control_signals_t systemGetState (void)
 {
+    control_signals_t signals;
     uint8_t flags = CONTROL_PORT_IN;
-    control_signals_t signals = {0};
+
+    signals.value = settings.control_invert.value;
 
     signals.reset            = (flags & RESET_PIN) == RESET_PIN;
-    signals.safety_door_ajar = (flags & SAFETY_DOOR_PIN) == SAFETY_DOOR_PIN;
     signals.feed_hold        = (flags & FEED_HOLD_PIN) == FEED_HOLD_PIN;
     signals.cycle_start      = (flags & CYCLE_START_PIN) == CYCLE_START_PIN;
+#ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
+    signals.safety_door_ajar = (flags & SAFETY_DOOR_PIN) == SAFETY_DOOR_PIN;
+#endif
 
     if(settings.control_invert.value)
         signals.value ^= settings.control_invert.value;
@@ -401,10 +405,10 @@ static void settings_changed (settings_t *settings)
 
         stepperEnable(settings->steppers.deenergize);
 
-        step_pulse_ticks = settings->steppers.pulse_microseconds * 5 - 1;
+        step_pulse_ticks = (uint16_t)(5.0f * (settings->steppers.pulse_microseconds - STEP_PULSE_LATENCY)) - 1;
         if(settings->steppers.pulse_delay_microseconds) {
             hal.stepper_pulse_start = stepperPulseStartDelayed;
-            PULSE_TIMER_CCR1 = settings->steppers.pulse_delay_microseconds * 5;
+            PULSE_TIMER_CCR1 = (uint16_t)(5.0f * settings->steppers.pulse_delay_microseconds);
             PULSE_TIMER_CCR0 = step_pulse_ticks + PULSE_TIMER_CCR1;
             PULSE_TIMER_CCTL1 |= CCIE;                   // Enable CCR1 interrupt
         } else {
@@ -623,7 +627,7 @@ static bool driver_setup (settings_t *settings)
 
   // Set defaults
 
-    IOInitDone = settings->version == 16;
+    IOInitDone = settings->version == 17;
 
     settings_changed(settings);
 
@@ -648,7 +652,7 @@ bool driver_init (void)
     serialInit();
 
     hal.info = "MSP430F5529";
-    hal.driver_version = "200528";
+    hal.driver_version = "200721";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = 24000000;
     hal.rx_buffer_size = RX_BUFFER_SIZE;

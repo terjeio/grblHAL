@@ -34,32 +34,53 @@
 typedef enum {
     Encoder_Universal = 0,
     Encoder_FeedRate,
+    Encoder_RapidRate,
     Encoder_Spindle_RPM,
-    Encoder_Spindle_Position,
     Encoder_MPG,
     Encoder_MPG_X,
     Encoder_MPG_Y,
     Encoder_MPG_Z,
     Encoder_MPG_A,
     Encoder_MPG_B,
-    Encoder_MPG_C
+    Encoder_MPG_C,
+    Encoder_Spindle_Position
 } encoder_mode_t;
 
 typedef union {
-    uint_fast8_t signals;
+    uint8_t events;
     struct {
-        uint_fast8_t position :1,
-                     select   :1,
-                     index    :1,
-                     home     :1;
+        uint8_t position_changed :1,
+                click            :1,
+                dbl_click        :1,
+                long_click       :1,
+                index_pulse      :1;
     };
-} encoder_signals_t;
+} encoder_event_t;
+
+typedef union {
+    uint8_t flags;
+    uint8_t value;
+    struct {
+        uint8_t single_count_per_detent :1;
+    };
+} encoder_flags_t;
 
 typedef struct {
     encoder_mode_t mode;
+    uint32_t cpr; // count per revolution
+    uint32_t cpd; // count per detent
+    uint32_t dbl_click_window; // ms
+    encoder_flags_t flags;
+} encoder_settings_t;
+
+typedef struct {
+    encoder_mode_t mode;
+    uint_fast8_t id;
+    uint_fast8_t axis; // axis index for MPG encoders, 0xFF for others
     int32_t position;
-    encoder_signals_t changed;
-    encoder_signals_t state;
+    uint32_t velocity;
+    encoder_event_t event;
+    encoder_settings_t *settings;
 } encoder_t;
 
 // EEPROM/FRAM interface

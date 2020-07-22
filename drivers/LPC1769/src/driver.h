@@ -31,7 +31,7 @@
 
 // NOTE: Only one board may be enabled!
 //#define SMOOTHIEBOARD
-//#define BOARD_RAMPS_16
+#define BOARD_RAMPS_16
 
 // Configuration
 // Set value to 1 to enable, 0 to disable
@@ -40,13 +40,18 @@
 #define USB_ENABLE    1
 #define EEPROM_ENABLE 0 // I2C EEPROM (24LC64) support. - Do not enable, NOT yet implemented
 
+// Adjust STEP_PULSE_LATENCY to get accurate step pulse length when required, e.g if using high step rates.
+// The default value is calibrated for 10 microseconds length.
+// NOTE: step output mode, number of axes and compiler optimization settings may all affect this value.
+#define STEP_PULSE_LATENCY 1.6f // microseconds
+
+// End configuration
+
 #if EEPROM_ENABLE == 0
 #define FLASH_ENABLE 1
 #else
 #define FLASH_ENABLE 0
 #endif
-
-// End configuration
 
 // Define GPIO output mode options
 

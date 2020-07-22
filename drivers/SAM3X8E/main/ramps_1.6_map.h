@@ -110,6 +110,8 @@
 #define Z_LIMIT_PIN_MAX     10  // Due Digital Pin 19
 #define Z_LIMIT_BIT_MAX     (1<<Z_LIMIT_PIN_MAX)
 
+#ifndef MODBUS_ENABLE
+
 // Define spindle enable and spindle direction output pins.
 #define SPINDLE_ENABLE_PORT     PIOC
 #define SPINDLE_ENABLE_PIN      26  // Due Digital Pin 4
@@ -124,6 +126,8 @@
 #define SPINDLE_PWM_PORT    PIOC
 #define SPINDLE_PWM_PIN     22  // Due Digital Pin 8 // PWML5
 #define SPINDLE_PWM_BIT     (1<<SPINDLE_PWM_PIN)
+
+#endif
 
 // Define flood and mist coolant enable output pins.
 #define COOLANT_FLOOD_PORT  PIOB

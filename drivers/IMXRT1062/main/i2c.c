@@ -180,7 +180,7 @@ typedef struct {
 
 static i2c_trans_t i2c;
 static uint8_t tx_fifo_size;
-static i2c_hardware_t *hardware;
+static const i2c_hardware_t *hardware;
 static IMXRT_LPI2C_t *port = NULL;
 
 static void I2C_interrupt_handler (void);

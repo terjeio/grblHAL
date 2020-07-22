@@ -34,6 +34,8 @@
 #include "src/networking/TCPStream.h"
 #include "src/networking/WsStream.h"
 
+#if ETHERNET_ENABLE
+
 static volatile bool linkUp = false;
 static char IPAddress[IP4ADDR_STRLEN_MAX];
 static network_settings_t *network;
@@ -65,6 +67,7 @@ static void netif_status_callback (struct netif *netif)
         services.telnet = On;
     }
 #endif
+
 #if WEBSOCKET_ENABLE
     if(network->services.websocket && !services.websocket) {
         WsStreamInit();
@@ -82,8 +85,9 @@ void grbl_enet_poll (void)
     if(services.telnet)
         TCPStreamPoll();
 #endif
+
 #if WEBSOCKET_ENABLE
-    if(services.telnet)
+    if(services.websocket)
         WsStreamPoll();
 #endif
 }
@@ -109,8 +113,6 @@ bool grbl_enet_init (network_settings_t *network)
 
     return true;
 }
-
-#if ETHERNET_ENABLE
 
 status_code_t ethernet_setting (setting_type_t param, float value, char *svalue)
 {

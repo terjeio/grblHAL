@@ -22,7 +22,28 @@
 #ifndef _ENCODER_H_
 #define _ENCODER_H_
 
-void encoder_changed (encoder_t *encoder);
-void encoder_execute_realtime (uint_fast16_t state);
+#ifdef ARDUINO
+#include "../../driver.h"
+#else
+#include "driver.h"
+#endif
 
+#if QEI_ENABLE
+
+#ifdef ARDUINO
+#include "../grbl/plugins.h"
+#else
+#include "grbl/plugins.h"
+#endif
+
+void encoder_init (encoder_t *encoder);
+void encoder_event (encoder_t *encoder, int32_t position);
+void encoder_execute_realtime (uint_fast16_t state);
+void encoder_rt_report (stream_write_ptr stream_write, report_tracking_flags_t report);
+
+status_code_t encoder_setting (setting_type_t setting, float value, char *svalue);
+void encoder_settings_restore (void);
+void encoder_settings_report (setting_type_t setting_type);
+
+#endif
 #endif

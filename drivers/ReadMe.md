@@ -11,6 +11,7 @@
 | Ramped spindle          | no       | yes         | yes    | yes     | no          | no     | yes   | no    | no      | no      | no      | no      | no      |
 | Inverted spindle PWM    | yes      | yes         | yes    | yes     | yes         | no     | yes   | no    | no      | yes     | no      | no      | no      |
 | RC Servo/ESC for spindle<sup>13</sup> | yes | yes | yes   | yes     | yes         | no     | yes   | yes   | yes     | yes     | yes     | yes     | ?       |
+| ModBus spindle<sup>14</sup> | yes  | no          | no     | no      | no          | no     | yes   | no    | no      | no      | no      | no      | yes     |
 | Spindle at speed        | yes      | no          | no     | no      | no          | no     | yes<sup>3</sup> | no    | no      | no      | no      | no      |
 | Spindle sync            | yes<sup>4</sup> | no   | no     | no      | no          | no     | no    | no    | no      | no      | no      | no      | no      |
 | Constant surface speed  | yes      | no          | no     | no      | no          | no     | no    | no    | no      | no      | no      | no      | no      |
@@ -45,10 +46,11 @@
 <br><sup>11</sup> Requires 128KB of flash \(STM32F103CB\), many STM32F1038B based Blue Pill boards has that too?
 <br><sup>12</sup> Luc's [ESP3D-WEBUI](https://github.com/luc-github/ESP3D-webui), backend partially implemented. Work in progress. 
 <br><sup>13</sup> Set `$33=50` (PWM frequency), `$34=5`, `$35=5` and `$36=10` to generate a "standard" PWM signal: 20ms repetition rate, 1 - 2ms pulse length range. 
+<br><sup>14</sup> Currently only for Huanyang VFDs. Defaults to 19200 baud, implicit spindle at speed. Not supported for all alternative board map files. 
 
 Please note that some of the capabilities should be fairly easy to port from one driver to another, but be aware some are dependent on MCU peripheral availability and thus not possible, or hard, to port.
 
-The fastest and most deterministic MCUs seems to be MSP432E401Y and TMC129x, ESP32 is not bad but it is a bit unstable - maybe due to outstanding [bugs](https://github.com/espressif/esp-idf/issues) in the [ESP-IDF](https://github.com/espressif/esp-idf) and the system architecture - program code is stored off chip in external serial flash.
+The fastest and most deterministic MCUs seems to be iMRXT1062, MSP432E401Y and TMC129x, ESP32 is not bad but it is a bit unstable - maybe due to outstanding [bugs](https://github.com/espressif/esp-idf/issues) in the [ESP-IDF](https://github.com/espressif/esp-idf) and the system architecture - program code is stored off chip in external serial flash.
 
 ---
-2020-06-18
+2020-07-22

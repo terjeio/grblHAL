@@ -337,14 +337,14 @@ void verifyValidTarget (float* xTarget, float* yTarget)
 // converts current position two-chain intersection (steps) into x / y cartesian in STEPS..
 static void maslow_convert_array_steps_to_mpos (float *position, int32_t *steps)
 {
-    float a_len = ((float)steps[A_MOTOR] / settings.steps_per_mm[A_MOTOR]);
-    float b_len = ((float)steps[B_MOTOR] / settings.steps_per_mm[B_MOTOR]);
+    float a_len = ((float)steps[A_MOTOR] / settings.axis[A_MOTOR].steps_per_mm);
+    float b_len = ((float)steps[B_MOTOR] / settings.axis[B_MOTOR].steps_per_mm);
 
     a_len = (machine.xCordOfMotor_x2_pow - powf(b_len, 2.0f) + powf(a_len, 2.0f)) / machine.xCordOfMotor_x4;
     position[X_AXIS] = a_len - machine.xCordOfMotor;
     a_len = maslow_hal.settings->distBetweenMotors - a_len;
     position[Y_AXIS] = machine.yCordOfMotor - sqrtf(powf(b_len, 2.0f) - powf(a_len, 2.0f));
-    position[Z_AXIS] = steps[Z_AXIS] / settings.steps_per_mm[Z_AXIS];
+    position[Z_AXIS] = steps[Z_AXIS] / settings.axis[Z_AXIS].steps_per_mm;
 
 // back out any correction factor
    position[X_AXIS] /= maslow_hal.settings->XcorrScaling;
@@ -365,8 +365,8 @@ inline static void triangularInverse (int32_t *target_steps, float *target)
     double yyp = pow((double)machine.yCordOfMotor - yyy, 2.0);
 
     //Calculate motor axes length to the bit
-    target_steps[A_MOTOR] = (int32_t)lround(sqrt(pow((double)machine.xCordOfMotor + xxx, 2.0f) + yyp) * settings.steps_per_mm[A_MOTOR]);
-    target_steps[B_MOTOR] = (int32_t)lround(sqrt(pow((double)machine.xCordOfMotor - xxx, 2.0f) + yyp) * settings.steps_per_mm[B_MOTOR]);
+    target_steps[A_MOTOR] = (int32_t)lround(sqrt(pow((double)machine.xCordOfMotor + xxx, 2.0f) + yyp) * settings.axis[A_MOTOR].steps_per_mm);
+    target_steps[B_MOTOR] = (int32_t)lround(sqrt(pow((double)machine.xCordOfMotor - xxx, 2.0f) + yyp) * settings.axis[B_MOTOR].steps_per_mm);
 }
 
 // Transform absolute position from cartesian coordinate system (mm) to maslow coordinate system (step)
@@ -375,7 +375,7 @@ static void maslow_target_to_steps (int32_t *target_steps, float *target)
     uint_fast8_t idx = N_AXIS - 1;
 
     do {
-        target_steps[idx] = lroundf(target[idx] * settings.steps_per_mm[idx]);
+        target_steps[idx] = lroundf(target[idx] * settings.axis[idx].steps_per_mm);
     } while(--idx > Y_AXIS);
 
     triangularInverse(target_steps, target);

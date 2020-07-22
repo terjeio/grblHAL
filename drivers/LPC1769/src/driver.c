@@ -403,7 +403,10 @@ inline static axes_signals_t limitsGetState()
 // Each bitfield bit indicates a control signal, where triggered is 1 and not triggered is 0.
 static control_signals_t systemGetState (void)
 {
-    control_signals_t signals = {0};
+    control_signals_t signals;
+
+    signals.value = settings.control_invert.mask;
+
 #if CONTROL_INMODE == GPIO_BITBAND
     signals.reset = BITBAND_GPIO(RESET_PORT->PIN, RESET_PIN);
     signals.feed_hold = BITBAND_GPIO(FEED_HOLD_PORT->PIN, FEED_HOLD_PIN);
@@ -697,16 +700,20 @@ void settings_changed (settings_t *settings)
         } else
             hal.spindle_set_state = spindleSetState;
 
-        if(hal.driver_cap.step_pulse_delay && settings->steppers.pulse_delay_microseconds) {
+        if(hal.driver_cap.step_pulse_delay && settings->steppers.pulse_delay_microseconds > 0.0f) {
             hal.stepper_pulse_start = &stepperPulseStartDelayed;
             PULSE_TIMER->MCR |= MR0I;                   // Enable CCR1 interrupt
         } else {
             hal.stepper_pulse_start = &stepperPulseStart;
             PULSE_TIMER->MCR &= ~MR0I;                  // Disable CCR1 interrupt
         }
+
+        PULSE_TIMER->TCR = 0;
+        PULSE_TIMER->MR[0] = (uint32_t)(12.0f * settings->steppers.pulse_delay_microseconds);
+        PULSE_TIMER->MR[1] = (uint32_t)(12.0f * (settings->steppers.pulse_microseconds + settings->steppers.pulse_delay_microseconds - STEP_PULSE_LATENCY)) - 1;
         PULSE_TIMER->MCR |= (MR1I|MR1S|MR1R); // Enable interrupt for finish step pulse, reset and stop timer
-        PULSE_TIMER->MR[0] = settings->steppers.pulse_delay_microseconds;
-        PULSE_TIMER->MR[1] = settings->steppers.pulse_microseconds + settings->steppers.pulse_delay_microseconds;
+
+        stepperSetStepOutputs((axes_signals_t){0});
 
         NVIC_DisableIRQ(EINT3_IRQn);  // Disable GPIO interrupt
 
@@ -938,9 +945,11 @@ static bool driver_setup (settings_t *settings)
     STEPPER_TIMER->CCR = 0;            // no capture
     STEPPER_TIMER->EMR = 0;            // no external match
 
+    uint32_t xx = SystemCoreClock / 12000000UL / Chip_Clock_GetPCLKDiv(PULSE_TIMER_PCLK) - 1; // to 0.12 us
+
     PULSE_TIMER->TCR = 0b10;
     PULSE_TIMER->CTCR = 0;
-    PULSE_TIMER->PR = SystemCoreClock / 1000000 / Chip_Clock_GetPCLKDiv(PULSE_TIMER_PCLK); // to 1 us
+    PULSE_TIMER->PR = xx; // to 0.1 us;
     PULSE_TIMER->TCR = 0;
 
     NVIC_EnableIRQ(STEPPER_TIMER_INT0);   // Enable stepper interrupt
@@ -990,7 +999,7 @@ static bool driver_setup (settings_t *settings)
 
  // Set defaults
 
-    IOInitDone = settings->version == 16;
+    IOInitDone = settings->version == 17;
 
     settings_changed(settings);
 
@@ -1028,7 +1037,7 @@ bool driver_init (void) {
 #endif
 
     hal.info = "LCP1769";
-    hal.driver_version = "200528";
+    hal.driver_version = "200721";
     hal.driver_setup = driver_setup;
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;

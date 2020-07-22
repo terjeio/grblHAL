@@ -33,10 +33,6 @@
 #include "ioports.h"
 #endif
 
-#if QEI_ENABLE
-#include "src/encoder/encoder.h"
-#endif
-
 #if ETHERNET_ENABLE
   #include "enet.h"
   #if TELNET_ENABLE
@@ -139,6 +135,9 @@ typedef struct {
 
 #if QEI_ENABLE
 
+#define QEI_DEBOUNCE 3
+#define QEI_VELOCITY_TIMEOUT 100
+
 typedef union {
     uint_fast8_t pins;
     struct {
@@ -149,10 +148,12 @@ typedef union {
 
 typedef struct {
     encoder_t encoder;
-    qei_state_t state;
-    qei_state_t iflags;
-    bool initial_debounce;
-    volatile uint32_t debounce;
+    int32_t count;
+    int32_t vel_count;
+    uint_fast16_t state;
+    volatile uint32_t dbl_click_timeout;
+    volatile uint32_t vel_timeout;
+    uint32_t vel_timestamp;
 } qei_t;
 
 static qei_t qei = {0};
@@ -248,7 +249,7 @@ static input_signal_t inputpin[] = {
 
 #define DIGITAL_OUT(gpio, on) { if(on) gpio.reg->DR_SET = gpio.bit; else gpio.reg->DR_CLEAR = gpio.bit; } 
 
-static IOInitDone = false, probe_invert = false;
+static bool IOInitDone = false, probe_invert = false;
 static axes_signals_t next_step_outbits;
 static delay_t grbl_delay = { .ms = 0, .callback = NULL };
 
@@ -280,7 +281,11 @@ static void enetStreamWriteS (const char *data)
     if(services.websocket)
         WsStreamWriteS(data);
 #endif
+#if USB_SERIAL_GRBL
+    usb_serialWriteS(data);
+#else
     serialWriteS(data);
+#endif
 }
 
   #if TELNET_ENABLE
@@ -880,16 +885,16 @@ static void settings_changed (settings_t *settings)
         // When the stepper pulse is delayed either two timers or a timer that supports multiple
         // compare registers is required.
         TMR4_CSCTRL0 &= ~(TMR_CSCTRL_TCF1|TMR_CSCTRL_TCF2);
-        if(settings->steppers.pulse_delay_microseconds) {
-            TMR4_COMP10 = F_BUS_MHZ * settings->steppers.pulse_delay_microseconds;
-            TMR4_COMP20 = F_BUS_MHZ * settings->steppers.pulse_microseconds;
+        if(settings->steppers.pulse_delay_microseconds > 0.0f) {
+            TMR4_COMP10 = (uint16_t)((float)F_BUS_MHZ * settings->steppers.pulse_delay_microseconds);
+            TMR4_COMP20 = (uint16_t)((float)F_BUS_MHZ * settings->steppers.pulse_microseconds);
             TMR4_CSCTRL0 |= TMR_CSCTRL_TCF2EN;
             TMR4_CTRL0 |= TMR_CTRL_OUTMODE(0b100);
             hal.stepper_pulse_start = stepperPulseStartDelayed;
             attachInterruptVector(IRQ_QTIMER4, stepper_pulse_isr_delayed);
         } else {
             hal.stepper_pulse_start = stepperPulseStart;
-            TMR4_COMP10 = F_BUS_MHZ * settings->steppers.pulse_microseconds;
+            TMR4_COMP10 = (uint16_t)((float)F_BUS_MHZ * (settings->steppers.pulse_microseconds - STEP_PULSE_LATENCY));
             TMR4_CSCTRL0 &= ~TMR_CSCTRL_TCF2EN;
             TMR4_CTRL0 &= ~TMR_CTRL_OUTMODE(0b000);
             attachInterruptVector(IRQ_QTIMER4, stepper_pulse_isr);
@@ -1071,6 +1076,51 @@ void pinModeOutput (gpio_t *gpio, uint8_t pin)
     gpio->bit = digital_pin_to_info_PGM[pin].mask;
 }
 
+#if QEI_ENABLE
+
+void qei_update (void)
+{
+    const uint8_t encoder_valid_state[] = {0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0};
+
+    uint_fast8_t idx;
+    qei_state_t state = {0};
+
+    state.a = (QEI_A.reg->DR & QEI_A.bit) != 0;
+    state.b = (QEI_B.reg->DR & QEI_B.bit) != 0;
+
+    idx = (((qei.state << 2) & 0x0F) | state.pins);
+
+    if(encoder_valid_state[idx] ) {
+
+        qei.state = ((qei.state << 4) | idx) & 0xFF;
+
+        if (qei.state == 0x42 || qei.state == 0xD4 || qei.state == 0x2B || qei.state == 0xBD) {
+            qei.count--;
+            if(qei.vel_timeout == 0) {
+                qei.encoder.event.position_changed = hal.encoder_event_handler != NULL;
+                hal.encoder_event_handler(&qei.encoder, qei.count);
+            }
+        } else if(qei.state == 0x81 || qei.state == 0x17 || qei.state == 0xE8 || qei.state == 0x7E) {
+            qei.count++;
+            if(qei.vel_timeout == 0) {
+                qei.encoder.event.position_changed = hal.encoder_event_handler != NULL;
+                hal.encoder_event_handler(&qei.encoder, qei.count);
+            }
+        }
+    }
+
+}
+
+void qei_reset (uint_fast8_t id)
+{
+    qei.vel_timeout = 0;
+    qei.count = qei.vel_count = 0;
+    qei.vel_timestamp = millis();
+    qei.vel_timeout = qei.encoder.axis != 0xFF ? QEI_VELOCITY_TIMEOUT : 0;
+}
+
+#endif
+
 // Initializes MCU peripherals for Grbl use
 static bool driver_setup (settings_t *settings)
 {
@@ -1089,20 +1139,20 @@ static bool driver_setup (settings_t *settings)
      ******************/
 
     PIT_MCR = 0x00;
-	CCM_CCGR1 |= CCM_CCGR1_PIT(CCM_CCGR_ON);
+    CCM_CCGR1 |= CCM_CCGR1_PIT(CCM_CCGR_ON);
 
-	attachInterruptVector(IRQ_PIT, stepper_driver_isr);
-	NVIC_SET_PRIORITY(IRQ_PIT, 2);
-	NVIC_ENABLE_IRQ(IRQ_PIT);
+    attachInterruptVector(IRQ_PIT, stepper_driver_isr);
+    NVIC_SET_PRIORITY(IRQ_PIT, 2);
+    NVIC_ENABLE_IRQ(IRQ_PIT);
 
     TMR4_ENBL = 0;
     TMR4_LOAD0 = 0;
     TMR4_CTRL0 = TMR_CTRL_PCS(0b1000) | TMR_CTRL_ONCE | TMR_CTRL_LENGTH;
     TMR4_CSCTRL0 = TMR_CSCTRL_TCF1EN;
 
-	attachInterruptVector(IRQ_QTIMER4, stepper_pulse_isr);
-	NVIC_SET_PRIORITY(IRQ_QTIMER4, 0);
-	NVIC_ENABLE_IRQ(IRQ_QTIMER4);
+    attachInterruptVector(IRQ_QTIMER4, stepper_pulse_isr);
+    NVIC_SET_PRIORITY(IRQ_QTIMER4, 0);
+    NVIC_ENABLE_IRQ(IRQ_QTIMER4);
 
     TMR4_ENBL = 1;
 
@@ -1161,7 +1211,7 @@ static bool driver_setup (settings_t *settings)
     *  Control pins init  *
     ***********************/
 
-	attachInterruptVector(IRQ_GPIO6789, gpio_isr);
+    attachInterruptVector(IRQ_GPIO6789, gpio_isr);
 
    /***********************
     *  Coolant pins init  *
@@ -1199,7 +1249,7 @@ static bool driver_setup (settings_t *settings)
 
   // Set defaults
 
-    IOInitDone = settings->version == 16;
+    IOInitDone = settings->version == 17;
 
     settings_changed(settings);
 
@@ -1207,6 +1257,10 @@ static bool driver_setup (settings_t *settings)
 
 #if IOPORTS_ENABLE
     ioports_init();
+#endif
+
+#if QEI_ENABLE
+    encoder_init(&qei.encoder);
 #endif
 
     return IOInitDone;
@@ -1232,6 +1286,13 @@ static status_code_t driver_setting (setting_type_t param, float value, char *sv
         status = trinamic_setting(param, value, svalue);
 #endif
 
+#if QEI_ENABLE
+    if(status == Status_Unhandled) {
+        if((status = encoder_setting(param, value, svalue)) != Status_Unhandled)
+            encoder_init(&qei.encoder); // Reinit encoders on setting changes
+    }
+#endif
+
     if(status == Status_OK)
         hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
 
@@ -1251,6 +1312,10 @@ static void driver_settings_report (setting_type_t setting)
 #if TRINAMIC_ENABLE
     trinamic_settings_report(setting);
 #endif
+
+#if QEI_ENABLE
+    encoder_settings_report(setting);
+#endif
 }
 
 static void driver_settings_restore (void)
@@ -1266,6 +1331,11 @@ static void driver_settings_restore (void)
 #if TRINAMIC_ENABLE
     trinamic_settings_restore();
 #endif
+
+#if QEI_ENABLE
+    encoder_settings_restore();
+#endif
+
     hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
 }
 
@@ -1367,7 +1437,7 @@ bool driver_init (void)
         options[strlen(options) - 1] = '\0';
 
     hal.info = "IMXRT1062";
-    hal.driver_version = "200710";
+    hal.driver_version = "200719";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1443,6 +1513,7 @@ bool driver_init (void)
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
+    hal.get_elapsed_ticks = millis;
 
     hal.show_message = showMessage;
 
@@ -1451,7 +1522,11 @@ bool driver_init (void)
 #endif
 
 #if QEI_ENABLE
-    hal.encoder_state_changed = encoder_changed;
+    hal.encoder_reset = qei_reset;
+    hal.encoder_event_handler = encoder_event;
+  #if COMPATIBILITY_LEVEL <= 1
+    hal.driver_rt_report = encoder_rt_report;
+  #endif
 #endif
 
 #if MODBUS_ENABLE
@@ -1467,7 +1542,6 @@ bool driver_init (void)
 
     modbus_init(&modbus_stream);
 #endif
-strcat(options, uitoa(serialRxCount()));
 
 #if SPINDLE_HUANYANG
     huanyang_init(&modbus_stream);
@@ -1475,6 +1549,11 @@ strcat(options, uitoa(serialRxCount()));
 
 #ifdef DEBUGOUT
     hal.debug_out = debugOut;
+#endif
+
+#ifdef UART_DEBUG
+    serialInit(115200);
+    serialWriteS(ASCII_EOL "UART Debug:" ASCII_EOL);
 #endif
 
   // Driver capabilities, used for announcing and negotiating (with Grbl) driver functionality.
@@ -1601,8 +1680,13 @@ static void debounce_isr (void)
 #if QEI_SELECT_ENABLED
 
     if(grp & INPUT_GROUP_QEI_SELECT) {
-        qei.encoder.changed.select = On;
-        hal.encoder_state_changed(&qei.encoder);
+        if(!qei.dbl_click_timeout)
+            qei.dbl_click_timeout = driver_settings.encoder[0].dbl_click_window;
+        else if(qei.dbl_click_timeout < driver_settings.encoder[0].dbl_click_window - 40) {
+            qei.dbl_click_timeout = 0;
+            qei.encoder.event.dbl_click = On;
+            hal.encoder_event_handler(&qei.encoder, qei.count);
+        }
     }
 
 #endif
@@ -1640,12 +1724,15 @@ static void gpio_isr (void)
                 } else {
 #if QEI_ENABLE
                     if(inputpin[i].group & INPUT_GROUP_QEI) {
+                        qei_update();
+                        /*
                         QEI_A.reg->IMR &= ~QEI_A.bit;       // Switch off
                         QEI_B.reg->IMR &= ~QEI_B.bit;       // encoder interrupts.
                         qei.iflags.a = inputpin[i].port == &QEI_A;
                         qei.iflags.b = inputpin[i].port == &QEI_B;
-                        qei.debounce = 1;
+                        qei.debounce = QEI_DEBOUNCE;
                         qei.initial_debounce = true;
+                        */
                     } else
 #endif
                     grp |= inputpin[i].group;
@@ -1667,8 +1754,13 @@ static void gpio_isr (void)
 #if QEI_SELECT_ENABLED
 
     if(grp & INPUT_GROUP_QEI_SELECT) {
-        qei.encoder.changed.select = On;
-        hal.encoder_state_changed(&qei.encoder);
+        if(!qei.dbl_click_timeout)
+            qei.dbl_click_timeout = driver_settings.encoder[0].dbl_click_window;
+        else if(qei.dbl_click_timeout < driver_settings.encoder[0].dbl_click_window - 40) {
+            qei.dbl_click_timeout = 0;
+            qei.encoder.event.dbl_click = On;
+            hal.encoder_event_handler(&qei.encoder, qei.count);
+        }
     }
 
 #endif
@@ -1691,82 +1783,33 @@ static void gpio_isr (void)
 #endif
 }
 
-#if QEI_ENABLE
-
-void encoder_debounce (void)
-{
-    qei.debounce = 1;
-    qei.initial_debounce = false;
-    qei.state.a = (QEI_A.reg->DR & QEI_A.bit) != 0;
-    qei.state.b = (QEI_B.reg->DR & QEI_B.bit) != 0;
-}
-
-void encoder_update (void)
-{
-    qei_state_t state = {0};
-
-    state.a = (QEI_A.reg->DR & QEI_A.bit) != 0;
-    state.b = (QEI_B.reg->DR & QEI_B.bit) != 0;
-
-    if(state.pins == qei.state.pins) {
-
-        if(qei.iflags.a) {
-
-            if(qei.state.a)
-                qei.encoder.position = qei.encoder.position + (qei.state.b ? 1 : -1);
-            else
-                qei.encoder.position = qei.encoder.position + (qei.state.b ? -1 : 1);
-
-            qei.encoder.changed.position = hal.encoder_state_changed != NULL;
-        }
-
-        if(qei.iflags.b) {
-
-            if(qei.state.b)
-                qei.encoder.position = qei.encoder.position + (qei.state.a ? -1 : 1);
-            else
-                qei.encoder.position = qei.encoder.position + (qei.state.a ? 1 : -1);
-
-            qei.encoder.changed.position = hal.encoder_state_changed != NULL;
-        }
-
-        if(qei.encoder.changed.position)
-            hal.encoder_state_changed(&qei.encoder);
-    }
-
-    // Clear and reenable encoder interrupts
-    QEI_A.reg->ISR = QEI_A.bit;
-    QEI_B.reg->ISR = QEI_B.bit;
-    QEI_A.reg->IMR |= QEI_A.bit;
-    QEI_B.reg->IMR |= QEI_B.bit;
-}
-#endif
-
 // Interrupt handler for 1 ms interval timer
 static void systick_isr (void)
 {
+#if USB_SERIAL_GRBL == 2 || ETHERNET_ENABLE
+    systick_isr_org();
+#endif
+
 #if MODBUS_ENABLE
     modbus_poll();
 #endif
 
-#if ETHERNET_ENABLE
-    uint32_t delay_cs = 100;
-
-    systick_isr_org();
-
-    if(!(--delay_cs)) {
-        delay_cs = 100;
-        grbl_enet_poll();
-    }
-#endif
-
 #if QEI_ENABLE
-    if(qei.debounce && !(--qei.debounce)) {
-        if(qei.initial_debounce)
-            encoder_debounce();
-        else
-            encoder_update();
+
+    if(qei.vel_timeout && !(--qei.vel_timeout)) {
+        qei.encoder.velocity = abs(qei.count - qei.vel_count) * 1000 / (millis() - qei.vel_timestamp);
+        qei.vel_timestamp = millis();
+        qei.vel_timeout = QEI_VELOCITY_TIMEOUT;
+        if((qei.encoder.event.position_changed = !qei.dbl_click_timeout || qei.encoder.velocity == 0))
+            hal.encoder_event_handler(&qei.encoder, qei.count);
+        qei.vel_count = qei.count;
     }
+
+    if(qei.dbl_click_timeout && !(--qei.dbl_click_timeout)) {
+        qei.encoder.event.click = On;
+        hal.encoder_event_handler(&qei.encoder, qei.count);
+    }
+
 #endif
 
     if(grbl_delay.ms && !(--grbl_delay.ms)) {

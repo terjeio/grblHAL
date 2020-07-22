@@ -3,7 +3,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2018-2019 Terje Io
+  Copyright (c) 2018-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -597,7 +597,7 @@ void trinamic_MCodeExecute (uint_fast16_t state, parser_block_t *gc_block)
             do {
                 idx--;
                 if(!isnan(gc_block->values.xyz[idx]))
-                    TMC2130_SetHybridThreshold(&stepper[idx], (uint32_t)gc_block->values.xyz[idx], settings.steps_per_mm[idx]);
+                    TMC2130_SetHybridThreshold(&stepper[idx], (uint32_t)gc_block->values.xyz[idx], settings.axis[idx].steps_per_mm);
             } while(idx);
             break;
 
@@ -799,7 +799,7 @@ static void write_debug_report (void)
         for(idx = 0; idx < N_AXIS; idx++) {
             if(bit_istrue(report.axes.mask, bit(idx))) {
                 if(stepper[idx].tpwmthrs.reg.tpwmthrs)
-                    sprintf(append(sbuf), "%8ld", TMC2130_GetTPWMTHRS(&stepper[idx], settings.steps_per_mm[idx]));
+                    sprintf(append(sbuf), "%8ld", TMC2130_GetTPWMTHRS(&stepper[idx], settings.axis[idx].steps_per_mm));
                 else
                     sprintf(append(sbuf), "%8s", "-");
             }

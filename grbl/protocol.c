@@ -687,11 +687,13 @@ ISR_CODE bool protocol_enqueue_realtime_command (char c)
             drop = true;
             break;
 
+#if COMPATIBILITY_LEVEL == 0
         case CMD_EXIT: // Call motion control reset routine.
             mc_reset();
             sys.flags.exit = On;
             drop = true;
             break;
+#endif
 
         case CMD_STATUS_REPORT_ALL: // Add all statuses on to report
             {

@@ -24,10 +24,20 @@
 #ifndef _HUANYANG_H_
 #define _HUANYANG_H_
 
+#ifdef ARDUINO
+#include "../../driver.h"
+#else
+#include "driver.h"
+#endif
+
+#if SPINDLE_HUANYANG
+
 #include "modbus.h"
 
 #define VFD_SPINDLE
 
 void huanyang_init (modbus_stream_t *stream);
+
+#endif // _HUANYANG_H_
 
 #endif

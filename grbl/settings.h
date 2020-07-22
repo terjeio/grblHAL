@@ -28,7 +28,7 @@
 
 // Version of the persistent storage data. Will be used to migrate existing data from older versions of Grbl
 // when firmware is upgraded. Always stored in byte 0 of eeprom
-#define SETTINGS_VERSION 16  // NOTE: Check settings_reset() when moving to next version.
+#define SETTINGS_VERSION 17  // NOTE: Check settings_reset() when moving to next version.
 
 // Define persistent storage memory address location values for Grbl settings and parameters
 // NOTE: 1KB persistent storage is the minimum required. The upper half is reserved for parameters and
@@ -77,13 +77,18 @@ typedef enum {
 
 #define N_COORDINATE_SYSTEMS (SettingIndex_NCoord - 3)  // Number of supported work coordinate systems (from index 1)
 
-// Define Grbl axis settings numbering scheme. Starts at Setting_AxisSettingsBase, every INCREMENT, over N_SETTINGS.
+// Define axis settings numbering scheme. Starts at Setting_AxisSettingsBase, every INCREMENT, over N_SETTINGS.
 #ifdef ENABLE_BACKLASH_COMPENSATION
 #define AXIS_N_SETTINGS          6
 #else
 #define AXIS_N_SETTINGS          4
 #endif
-#define AXIS_SETTINGS_INCREMENT  10  // Must be greater than the number of axis settings TODO: change to 100 to allow for a logical wider range of parameters?
+#define AXIS_SETTINGS_INCREMENT  10 // Must be greater than the number of axis settings TODO: change to 100 to allow for a logical wider range of parameters?
+
+// Define encoder settings numbering scheme. Starts at Setting_EncoderSettingsBase, every INCREMENT, over N_SETTINGS.
+// Not referenced by the core.
+#define ENCODER_N_SETTINGS_MAX 5 // NOTE: This is the maximum number of encoders allowed.
+#define ENCODER_SETTINGS_INCREMENT 10
 
 typedef enum {
     Setting_PulseMicroseconds = 0,
@@ -237,6 +242,11 @@ typedef enum {
     Setting_AdminPassword = 330,
     Setting_UserPassword = 331,
 
+    Setting_SpindleAtSpeedTolerance = 340,
+
+    Setting_EncoderSettingsBase = 400, // NOTE: Reserving settings values >= 400 for encoder settings. Up to 449.
+    Setting_EncoderSettingsMax = 449,
+
     Setting_SettingsMax
 //
 } setting_type_t;
@@ -256,6 +266,13 @@ typedef enum {
     AxisSetting_I_MaxError = 10
     */
 } axis_setting_type_t;
+
+typedef enum {
+    Setting_EncoderMode = 0,
+    Setting_EncoderCPR = 1, // Count Per Revolution
+    Setting_EncoderCPD = 2, // Count Per Detent
+    Setting_EncoderDblClickWindow = 3 // ms
+} encoder_setting_type_t;
 
 typedef union {
     uint8_t mask;
@@ -350,6 +367,7 @@ typedef struct {
     float pwm_off_value;
     float pwm_min_value;
     float pwm_max_value;
+    float at_speed_tolerance;
     pwm_piece_t pwm_piece[SPINDLE_NPWM_PIECES];
     pid_values_t pid;
     uint16_t ppr; // Spindle encoder pulses per revolution
@@ -394,6 +412,16 @@ typedef struct {
     uint8_t idle_lock_time; // If max value 255, steppers do not disable.
 } stepper_settings_t;
 
+typedef struct {
+    float steps_per_mm;
+    float max_rate;
+    float acceleration;
+    float max_travel;
+#ifdef ENABLE_BACKLASH_COMPENSATION
+    float backlash;
+#endif
+} axis_settings_t;
+
 typedef union {
     uint8_t value;
     struct {
@@ -416,18 +444,11 @@ typedef struct {
 typedef struct {
     // Settings struct version
     uint32_t version;
-    // Axis settings
-    float steps_per_mm[N_AXIS];
-    float max_rate[N_AXIS];
-    float acceleration[N_AXIS];
-    float max_travel[N_AXIS];
-#ifdef ENABLE_BACKLASH_COMPENSATION
-    float backlash[N_AXIS];
-#endif
     float junction_deviation;
     float arc_tolerance;
     float g73_retract;
     bool legacy_rt_commands;
+    axis_settings_t axis[N_AXIS];
     control_signals_t control_invert;
     control_signals_t control_disable_pullup;
     coolant_state_t coolant_invert;
@@ -548,6 +569,6 @@ bool settings_read_coord_data(uint8_t idx, float (*coord_data)[N_AXIS]);
 bool settings_write_tool_data (tool_data_t *tool_data);
 
 // Read selected tool data from persistent storage
-bool settings_read_tool_data (uint8_t tool, tool_data_t *tool_data);
+bool settings_read_tool_data (uint32_t tool, tool_data_t *tool_data);
 
 #endif

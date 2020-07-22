@@ -322,7 +322,7 @@ void report_string_setting (setting_type_t n, char *val)
     hal.stream.write(appendbuf(2, val, ASCII_EOL));
 }
 
-void report_grbl_settings (void)
+void report_grbl_settings (bool all)
 {
     uint_fast8_t idx;
 
@@ -335,26 +335,23 @@ void report_grbl_settings (void)
     report_uint_setting(Setting_LimitPinsInvertMask, settings.limits.invert.mask);
     if(hal.probe_configure_invert_mask)
         report_uint_setting(Setting_InvertProbePin, settings.flags.invert_probe_pin);
-#if COMPATIBILITY_LEVEL <= 1
-    report_uint_setting(Setting_StatusReportMask, (uint32_t)settings.status_report.mask);
-#else
-    report_uint_setting(Setting_StatusReportMask, settings.status_report.mask & 0x3);
-#endif
+    if(all)
+        report_uint_setting(Setting_StatusReportMask, (uint32_t)settings.status_report.mask);
+    else
+        report_uint_setting(Setting_StatusReportMask, settings.status_report.mask & 0x3);
     report_float_setting(Setting_JunctionDeviation, settings.junction_deviation, N_DECIMAL_SETTINGVALUE);
     report_float_setting(Setting_ArcTolerance, settings.arc_tolerance, N_DECIMAL_SETTINGVALUE);
     report_uint_setting(Setting_ReportInches, settings.flags.report_inches);
 
-#if COMPATIBILITY_LEVEL <= 1
-
-    report_uint_setting(Setting_ControlInvertMask, settings.control_invert.mask);
-    report_uint_setting(Setting_CoolantInvertMask, settings.coolant_invert.mask);
-    report_uint_setting(Setting_SpindleInvertMask, settings.spindle.invert.mask);
-    report_uint_setting(Setting_ControlPullUpDisableMask, settings.control_disable_pullup.mask);
-    report_uint_setting(Setting_LimitPullUpDisableMask, settings.limits.disable_pullup.mask);
-    if(hal.probe_configure_invert_mask)
-        report_uint_setting(Setting_ProbePullUpDisable, settings.flags.disable_probe_pullup);
-
-#endif
+    if(all) {
+        report_uint_setting(Setting_ControlInvertMask, settings.control_invert.mask);
+        report_uint_setting(Setting_CoolantInvertMask, settings.coolant_invert.mask);
+        report_uint_setting(Setting_SpindleInvertMask, settings.spindle.invert.mask);
+        report_uint_setting(Setting_ControlPullUpDisableMask, settings.control_disable_pullup.mask);
+        report_uint_setting(Setting_LimitPullUpDisableMask, settings.limits.disable_pullup.mask);
+        if(hal.probe_configure_invert_mask)
+            report_uint_setting(Setting_ProbePullUpDisable, settings.flags.disable_probe_pullup);
+    }
 
     report_uint_setting(Setting_SoftLimitsEnable, settings.limits.flags.soft_enabled);
     report_uint_setting(Setting_HardLimitsEnable, ((settings.limits.flags.hard_enabled & bit(0)) ? bit(0) | (settings.limits.flags.check_at_init ? bit(1) : 0) : 0));
@@ -367,65 +364,63 @@ void report_grbl_settings (void)
     report_uint_setting(Setting_HomingDebounceDelay, settings.homing.debounce_delay);
     report_float_setting(Setting_HomingPulloff, settings.homing.pulloff, N_DECIMAL_SETTINGVALUE);
 
-#if COMPATIBILITY_LEVEL <= 1
-
-    report_float_setting(Setting_G73Retract, settings.g73_retract, N_DECIMAL_SETTINGVALUE);
-    report_float_setting(Setting_PulseDelayMicroseconds, settings.steppers.pulse_delay_microseconds, 1);
-
-#endif
+    if(all) {
+        report_float_setting(Setting_G73Retract, settings.g73_retract, N_DECIMAL_SETTINGVALUE);
+        report_float_setting(Setting_PulseDelayMicroseconds, settings.steppers.pulse_delay_microseconds, 1);
+    }
 
     report_float_setting(Setting_RpmMax, settings.spindle.rpm_max, N_DECIMAL_RPMVALUE);
     report_float_setting(Setting_RpmMin, settings.spindle.rpm_min, N_DECIMAL_RPMVALUE);
     report_uint_setting(Setting_Mode, settings.flags.laser_mode ? 1 : (settings.flags.lathe_mode ? 2 : 0));
 
-#if COMPATIBILITY_LEVEL <= 1
+    if(all) {
 
-    report_float_setting(Setting_PWMFreq, settings.spindle.pwm_freq, N_DECIMAL_SETTINGVALUE);
-    report_float_setting(Setting_PWMOffValue, settings.spindle.pwm_off_value, N_DECIMAL_SETTINGVALUE);
-    report_float_setting(Setting_PWMMinValue, settings.spindle.pwm_min_value, N_DECIMAL_SETTINGVALUE);
-    report_float_setting(Setting_PWMMaxValue, settings.spindle.pwm_max_value, N_DECIMAL_SETTINGVALUE);
-    report_uint_setting(Setting_StepperDeenergizeMask, settings.steppers.deenergize.mask);
-    if(hal.driver_cap.spindle_sync || hal.driver_cap.spindle_pid)
-        report_uint_setting(Setting_SpindlePPR, settings.spindle.ppr);
+        report_float_setting(Setting_PWMFreq, settings.spindle.pwm_freq, N_DECIMAL_SETTINGVALUE);
+        report_float_setting(Setting_PWMOffValue, settings.spindle.pwm_off_value, N_DECIMAL_SETTINGVALUE);
+        report_float_setting(Setting_PWMMinValue, settings.spindle.pwm_min_value, N_DECIMAL_SETTINGVALUE);
+        report_float_setting(Setting_PWMMaxValue, settings.spindle.pwm_max_value, N_DECIMAL_SETTINGVALUE);
+        report_uint_setting(Setting_StepperDeenergizeMask, settings.steppers.deenergize.mask);
+        if(hal.driver_cap.spindle_sync || hal.driver_cap.spindle_pid)
+            report_uint_setting(Setting_SpindlePPR, settings.spindle.ppr);
 
-    report_uint_setting(Setting_EnableLegacyRTCommands, settings.legacy_rt_commands ? 1 : 0);
-    report_uint_setting(Setting_JogSoftLimited, settings.limits.flags.jog_soft_limited);
-    report_uint_setting(Setting_ParkingEnable, settings.parking.flags.value);
-    report_uint_setting(Setting_ParkingAxis, settings.parking.axis);
+        report_uint_setting(Setting_EnableLegacyRTCommands, settings.legacy_rt_commands ? 1 : 0);
+        report_uint_setting(Setting_JogSoftLimited, settings.limits.flags.jog_soft_limited);
+        report_uint_setting(Setting_ParkingEnable, settings.parking.flags.value);
+        report_uint_setting(Setting_ParkingAxis, settings.parking.axis);
 
-    report_uint_setting(Setting_HomingLocateCycles, settings.homing.locate_cycles);
+        report_uint_setting(Setting_HomingLocateCycles, settings.homing.locate_cycles);
 
-    for(idx = 0 ; idx < N_AXIS ; idx++)
-        report_uint_setting((setting_type_t)(Setting_HomingCycle_1 + idx), settings.homing.cycle[idx].mask);
+        for(idx = 0 ; idx < N_AXIS ; idx++)
+            report_uint_setting((setting_type_t)(Setting_HomingCycle_1 + idx), settings.homing.cycle[idx].mask);
 
-    if(hal.driver_settings_report) {
-        for(idx = Setting_JogStepSpeed; idx < Setting_ParkingPulloutIncrement; idx++)
-            hal.driver_settings_report((setting_type_t)idx);
-    }
-
-    report_float_setting(Setting_ParkingPulloutIncrement, settings.parking.pullout_increment, N_DECIMAL_SETTINGVALUE);
-    report_float_setting(Setting_ParkingPulloutRate, settings.parking.pullout_rate, N_DECIMAL_SETTINGVALUE);
-    report_float_setting(Setting_ParkingTarget, settings.parking.target, N_DECIMAL_SETTINGVALUE);
-    report_float_setting(Setting_ParkingFastRate, settings.parking.rate, N_DECIMAL_SETTINGVALUE);
-    report_uint_setting(Setting_RestoreOverrides, settings.flags.restore_overrides);
-    report_uint_setting(Setting_IgnoreDoorWhenIdle, settings.flags.safety_door_ignore_when_idle);
-    report_uint_setting(Setting_SleepEnable, settings.flags.sleep_enable);
-    report_uint_setting(Setting_HoldActions, (settings.flags.disable_laser_during_hold ? bit(0) : 0) | (settings.flags.restore_after_feed_hold ? bit(1) : 0));
-    report_uint_setting(Setting_ForceInitAlarm, settings.flags.force_initialization_alarm);
-    report_uint_setting(Setting_ProbingFeedOverride, settings.flags.allow_probing_feed_override);
-
-  #ifdef ENABLE_SPINDLE_LINEARIZATION
-    for(idx = 0 ; idx < SPINDLE_NPWM_PIECES ; idx++) {
-        if(isnan(settings.spindle.pwm_piece[idx].rpm))
-            report_float_setting((setting_type_t)(Setting_LinearSpindlePiece1 + idx), settings.spindle.pwm_piece[idx].rpm, N_DECIMAL_RPMVALUE);
-        else {
-            sprintf(buf, "$%d=%f,%f,%f" ASCII_EOL, (setting_type_t)(Setting_LinearSpindlePiece1 + idx), settings.spindle.pwm_piece[idx].rpm, settings.spindle.pwm_piece[idx].start, settings.spindle.pwm_piece[idx].end);
-            hal.stream.write(buf);
+        if(hal.driver_settings_report) {
+            for(idx = Setting_JogStepSpeed; idx < Setting_ParkingPulloutIncrement; idx++)
+                hal.driver_settings_report((setting_type_t)idx);
         }
-    }
-  #endif
 
-#endif
+        report_float_setting(Setting_ParkingPulloutIncrement, settings.parking.pullout_increment, N_DECIMAL_SETTINGVALUE);
+        report_float_setting(Setting_ParkingPulloutRate, settings.parking.pullout_rate, N_DECIMAL_SETTINGVALUE);
+        report_float_setting(Setting_ParkingTarget, settings.parking.target, N_DECIMAL_SETTINGVALUE);
+        report_float_setting(Setting_ParkingFastRate, settings.parking.rate, N_DECIMAL_SETTINGVALUE);
+        report_uint_setting(Setting_RestoreOverrides, settings.flags.restore_overrides);
+        report_uint_setting(Setting_IgnoreDoorWhenIdle, settings.flags.safety_door_ignore_when_idle);
+        report_uint_setting(Setting_SleepEnable, settings.flags.sleep_enable);
+        report_uint_setting(Setting_HoldActions, (settings.flags.disable_laser_during_hold ? bit(0) : 0) | (settings.flags.restore_after_feed_hold ? bit(1) : 0));
+        report_uint_setting(Setting_ForceInitAlarm, settings.flags.force_initialization_alarm);
+        report_uint_setting(Setting_ProbingFeedOverride, settings.flags.allow_probing_feed_override);
+
+      #ifdef ENABLE_SPINDLE_LINEARIZATION
+        for(idx = 0 ; idx < SPINDLE_NPWM_PIECES ; idx++) {
+            if(isnan(settings.spindle.pwm_piece[idx].rpm))
+                report_float_setting((setting_type_t)(Setting_LinearSpindlePiece1 + idx), settings.spindle.pwm_piece[idx].rpm, N_DECIMAL_RPMVALUE);
+            else {
+                sprintf(buf, "$%d=%f,%f,%f" ASCII_EOL, (setting_type_t)(Setting_LinearSpindlePiece1 + idx), settings.spindle.pwm_piece[idx].rpm, settings.spindle.pwm_piece[idx].start, settings.spindle.pwm_piece[idx].end);
+                hal.stream.write(buf);
+            }
+        }
+      #endif
+
+    }
 
     if(hal.driver_settings_report) {
         for(idx = Setting_NetworkServices; idx < Setting_SpindlePGain; idx++)
@@ -461,24 +456,24 @@ void report_grbl_settings (void)
             switch ((axis_setting_type_t)set_idx) {
 
                 case AxisSetting_StepsPerMM:
-                    report_float_setting((setting_type_t)(val + idx), settings.steps_per_mm[idx], N_DECIMAL_SETTINGVALUE);
+                    report_float_setting((setting_type_t)(val + idx), settings.axis[idx].steps_per_mm, N_DECIMAL_SETTINGVALUE);
                     break;
 
                 case AxisSetting_MaxRate:
-                    report_float_setting((setting_type_t)(val + idx), settings.max_rate[idx], N_DECIMAL_SETTINGVALUE);
+                    report_float_setting((setting_type_t)(val + idx), settings.axis[idx].max_rate, N_DECIMAL_SETTINGVALUE);
                     break;
 
                 case AxisSetting_Acceleration:
-                    report_float_setting((setting_type_t)(val + idx), settings.acceleration[idx] / (60.0f * 60.0f), N_DECIMAL_SETTINGVALUE);
+                    report_float_setting((setting_type_t)(val + idx), settings.axis[idx].acceleration / (60.0f * 60.0f), N_DECIMAL_SETTINGVALUE);
                     break;
 
                 case AxisSetting_MaxTravel:
-                    report_float_setting((setting_type_t)(val + idx), -settings.max_travel[idx], N_DECIMAL_SETTINGVALUE);
+                    report_float_setting((setting_type_t)(val + idx), -settings.axis[idx].max_travel, N_DECIMAL_SETTINGVALUE);
                     break;
 
 #ifdef ENABLE_BACKLASH_COMPENSATION
                 case AxisSetting_Backlash:
-                    report_float_setting((setting_type_t)(val + idx), settings.backlash[idx], N_DECIMAL_SETTINGVALUE);
+                    report_float_setting((setting_type_t)(val + idx), settings.axis[idx].backlash, N_DECIMAL_SETTINGVALUE);
                     break;
 #endif
 
@@ -491,9 +486,20 @@ void report_grbl_settings (void)
         val += AXIS_SETTINGS_INCREMENT;
     }
 
-    if(hal.driver_settings_report) {
-        for(idx = Setting_AxisSettingsMax + 1; idx <= Setting_SettingsMax; idx++)
-            hal.driver_settings_report((setting_type_t)idx);
+    for(idx = Setting_AxisSettingsMax + 1; idx <= Setting_SettingsMax; idx++) {
+
+        switch((setting_type_t)idx) {
+
+            case Setting_SpindleAtSpeedTolerance:
+                if(hal.driver_cap.spindle_at_speed)
+                    report_float_setting(Setting_SpindleAtSpeedTolerance, settings.spindle.at_speed_tolerance, 1);
+                break;
+
+            default:
+                if(hal.driver_settings_report)
+                    hal.driver_settings_report((setting_type_t)idx);
+                break;
+        }
     }
 }
 
@@ -1164,7 +1170,7 @@ void report_realtime_status (void)
             hal.stream.write_all(gc_state.modal.diameter_mode ? "|D:1" : "|D:0");
 
         if(sys.report.tool)
-            hal.stream.write_all(appendbuf(2, "|T:", uitoa((uint32_t)gc_state.tool->tool)));
+            hal.stream.write_all(appendbuf(2, "|T:", uitoa(gc_state.tool->tool)));
     }
 
     if(hal.driver_rt_report)
@@ -1174,7 +1180,7 @@ void report_realtime_status (void)
 
     if(settings.status_report.parser_state) {
 
-        static uint8_t tool = 0;
+        static uint32_t tool = 0;
         static float feed_rate = 0.0f, spindle_rpm = 0.0f;
         static gc_modal_t last_state = {0};
         static bool g92_active = false;

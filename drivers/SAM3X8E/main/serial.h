@@ -4,7 +4,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2017-2019 Terje Io
+  Copyright (c) 2019-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -39,6 +39,10 @@
 
 // Set SERIAL_DEVICE to -1 for communication over the programming port on Arduino Due
 #define SERIAL_DEVICE -1
+
+#if MODBUS_ENABLE
+#define SERIAL2_DEVICE 1
+#endif
 
 #if SERIAL_DEVICE == -1
 #define SERIAL_PERIPH UART
@@ -75,6 +79,38 @@
 #define SERIAL_RX PIO_PB21A_RXD2
 #define SERIAL_TX PIO_PB20A_TXD2
 #endif
+
+#ifdef SERIAL2_DEVICE
+
+#if SERIAL2_DEVICE == 0
+#define SERIAL2_PERIPH USART0
+#define SERIAL2_PORT PIOA
+#define SERIAL2_ID ID_USART0
+#define SERIAL2_IRQ USART0_IRQn
+#define SERIAL2_RX PIO_PA10A_RXD0
+#define SERIAL2_TX PIO_PA11A_TXD0
+#endif
+
+#if SERIAL2_DEVICE == 1
+#define SERIAL2_PERIPH USART1
+#define SERIAL2_PORT PIOA
+#define SERIAL2_ID ID_USART1
+#define SERIAL2_IRQ USART1_IRQn
+#define SERIAL2_RX PIO_PA12A_RXD1
+#define SERIAL2_TX PIO_PA13A_TXD1
+#endif
+
+#if SERIAL2_DEVICE == 2
+#define SERIAL2_PERIPH USART2
+#define SERIAL2_PORT PIOA
+#define SERIAL2_ID ID_USART2
+#define SERIAL2_IRQ USART2_IRQn
+#define SERIAL2_RX PIO_PB21A_RXD2
+#define SERIAL2_TX PIO_PB20A_TXD2
+#endif
+
+#endif // SERIAL2_DEVICE
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -92,6 +128,23 @@ uint16_t serialRxCount(void);
 uint16_t serialRxFree(void);
 void serialRxFlush(void);
 void serialRxCancel(void);
+
+#ifdef SERIAL2_DEVICE
+void serial2Init(uint32_t baud_rate);
+int16_t serial2GetC(void);
+bool serial2PutC(const char c);
+void serial2WriteS(const char *s);
+void serial2WriteLn(const char *s);
+void serial2Write(const char *s, uint16_t length);
+bool serial2SuspendInput (bool suspend);
+
+uint16_t serial2TxCount(void);
+void serial2TxFlush (void);
+uint16_t serial2RxCount(void);
+uint16_t serial2RxFree(void);
+void serial2RxFlush(void);
+void serial2RxCancel(void);
+#endif
 
 #ifdef __cplusplus
 }

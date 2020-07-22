@@ -104,16 +104,26 @@ typedef struct {
     input_signal_t *signal[DEBOUNCE_QUEUE];
 } debounce_queue_t;
 
-static bool pwmEnabled = false, IOInitDone = false;
+static bool IOInitDone = false;
 // Inverts the probe pin state depending on user settings and probing cycle mode.
 static bool probe_invert;
 static axes_signals_t next_step_outbits;
-static spindle_pwm_t spindle_pwm;
 static delay_t delay_ms = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
 static debounce_queue_t debounce_queue = {0};
 static input_signal_t a_signals[10] = {0}, b_signals[10] = {0}, c_signals[10] = {0}, d_signals[10] = {0};
 #ifdef SQUARING_ENABLED
 static axes_signals_t motors_1 = {AXES_BITMASK}, motors_2 = {AXES_BITMASK};
+#endif
+
+#ifndef VFD_SPINDLE
+static bool pwmEnabled = false;
+static spindle_pwm_t spindle_pwm;
+
+static void spindle_set_speed (uint_fast16_t pwm_value);
+#endif
+
+#if MODBUS_ENABLE
+static modbus_stream_t modbus_stream = {0};
 #endif
 
 static input_signal_t inputpin[] = {
@@ -577,7 +587,9 @@ static control_signals_t systemGetState (void)
 {
     control_signals_t signals = {0};
 
-  #ifdef RESET_PIN
+    signals.value = settings.control_invert.mask;
+
+    #ifdef RESET_PIN
     signals.reset = BITBAND_PERI(RESET_PORT->PIO_PDSR, RESET_PIN);
   #endif
   #ifdef FEED_HOLD_PIN
@@ -621,6 +633,8 @@ probe_state_t probeGetState (void)
 #endif
     return state;
 }
+
+#ifndef VFD_SPINDLE
 
 // Static spindle (off, on cw & on ccw)
 
@@ -727,6 +741,8 @@ static spindle_state_t spindleGetState (void)
 }
 
 // end spindle code
+
+#endif
 
 #ifdef DEBUGOUT
 void debug_out (bool on)
@@ -868,13 +884,17 @@ void settings_changed (settings_t *settings)
 
         stepperEnable(settings->steppers.deenergize);
 
+      #ifndef VFD_SPINDLE
+
         if(hal.driver_cap.variable_spindle && spindle_precompute_pwm_values(&spindle_pwm, hal.f_step_timer)) {
             SPINDLE_PWM_TIMER.TC_RC = spindle_pwm.period;
             hal.spindle_set_state = spindleSetStateVariable;
         } else
             hal.spindle_set_state = spindleSetState;
 
-        if(hal.driver_cap.step_pulse_delay && settings->steppers.pulse_delay_microseconds) {
+      #endif
+
+        if(hal.driver_cap.step_pulse_delay && settings->steppers.pulse_delay_microseconds > 0.0f) {
             hal.stepper_pulse_start = stepperPulseStartDelayed;
             IRQRegister(STEP_TIMER_IRQn, STEPDELAY_IRQHandler);
             STEP_TIMER.TC_IER = TC_IER_CPAS; // Enable step start interrupt
@@ -884,8 +904,8 @@ void settings_changed (settings_t *settings)
             STEP_TIMER.TC_IDR = TC_IDR_CPAS; // Disable step start interrupt
         }
 
-        STEP_TIMER.TC_RA = settings->steppers.pulse_delay_microseconds * 42;
-        STEP_TIMER.TC_RC = (settings->steppers.pulse_microseconds + settings->steppers.pulse_delay_microseconds - 1) * 42;
+        STEP_TIMER.TC_RA = (uint32_t)(42.0f * settings->steppers.pulse_delay_microseconds);
+        STEP_TIMER.TC_RC = (uint32_t)(42.0f * (settings->steppers.pulse_microseconds + settings->steppers.pulse_delay_microseconds - STEP_PULSE_LATENCY)) - 1;
 
         STEP_TIMER.TC_IER = TC_IER_CPCS; // Enable step end interrupt
 
@@ -1217,6 +1237,8 @@ static bool driver_setup (settings_t *settings)
         NVIC_EnableIRQ(DEBOUNCE_TIMER_IRQn);    // Enable debounce interrupt
     }
 
+#ifndef VFD_SPINDLE
+
  // Spindle init
 
     PIO_Mode(SPINDLE_ENABLE_PORT, SPINDLE_ENABLE_BIT, OUTPUT);
@@ -1231,6 +1253,8 @@ static bool driver_setup (settings_t *settings)
 
     SPINDLE_PWM_TIMER.TC_CCR = TC_CCR_CLKDIS;
     SPINDLE_PWM_TIMER.TC_CMR = TC_CMR_WAVE|TC_CMR_WAVSEL_UP_RC|TC_CMR_ASWTRG_CLEAR|TC_CMR_ACPA_SET|TC_CMR_ACPC_CLEAR; //|TC_CMR_EEVT_XC0;
+
+#endif
 
  // Coolant init
 
@@ -1302,7 +1326,7 @@ static bool driver_setup (settings_t *settings)
 
  // Set defaults
 
-    IOInitDone = settings->version == 16;
+    IOInitDone = settings->version == 17;
 
     settings_changed(settings);
 
@@ -1482,7 +1506,7 @@ bool driver_init (void)
     NVIC_EnableIRQ(SysTick_IRQn);
 
     hal.info = "SAM3X8E";
-	hal.driver_version = "200528";
+	hal.driver_version = "200721";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1511,13 +1535,15 @@ bool driver_init (void)
 //#endif
     hal.probe_configure_invert_mask = probeConfigureInvertMask;
 
+#ifndef VFD_SPINDLE
     hal.spindle_set_state = spindleSetState;
     hal.spindle_get_state = spindleGetState;
-#ifdef SPINDLE_PWM_DIRECT
+  #ifdef SPINDLE_PWM_DIRECT
     hal.spindle_get_pwm = spindleGetPWM;
     hal.spindle_update_pwm = spindle_set_speed;
-#else
+  #else
     hal.spindle_update_rpm = spindleUpdateRPM;
+  #endif
 #endif
     
     hal.system_control_get_state = systemGetState;
@@ -1599,10 +1625,12 @@ bool driver_init (void)
 #endif
 
  // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
-#ifdef SPINDLE_DIRECTION_PIN
+#ifndef VFD_SPINDLE
+  #ifdef SPINDLE_DIRECTION_PIN
     hal.driver_cap.spindle_dir = On;
-#endif
+  #endif
     hal.driver_cap.variable_spindle = On;
+#endif
 #ifdef SAFETY_DOOR_PIN
     hal.driver_cap.safety_door = On;
 #endif
@@ -1629,6 +1657,24 @@ bool driver_init (void)
 
 #if SDCARD_ENABLE
     hal.driver_cap.sd_card = On;
+#endif
+
+#if MODBUS_ENABLE
+    serial2Init(19200);
+
+    modbus_stream.rx_timeout = 500;
+    modbus_stream.write = serial2Write;
+    modbus_stream.read = serial2GetC;
+    modbus_stream.flush_rx_buffer = serial2RxFlush;
+    modbus_stream.flush_tx_buffer = serial2TxFlush;
+    modbus_stream.get_rx_buffer_count = serial2RxCount;
+    modbus_stream.get_tx_buffer_count = serial2TxCount;
+
+    modbus_init(&modbus_stream);
+#endif
+
+#if SPINDLE_HUANYANG
+    huanyang_init(&modbus_stream);
 #endif
 
     // No need to move version check before init.
@@ -1768,7 +1814,7 @@ static void PIOD_IRQHandler (void)
 static void SysTick_IRQHandler (void)
 {
 
-#if USB_SERIAL || SDCARD_ENABLE
+#if USB_SERIAL || SDCARD_ENABLE || MODBUS_ENABLE
 
 #if USB_SERIAL
     SysTick_Handler(); // SerialUSB needs the Arduino SysTick handler running
@@ -1780,6 +1826,10 @@ static void SysTick_IRQHandler (void)
         disk_timerproc();
         fatfs_ticks = 10;
     }
+#endif
+
+#if MODBUS_ENABLE
+    modbus_poll();
 #endif
 
     if(delay_ms.ms && !(--delay_ms.ms)) {

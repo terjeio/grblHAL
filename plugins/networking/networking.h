@@ -49,8 +49,7 @@
 #include "lwip/mem.h"
 #include "lwip/stats.h"
 #include "lwip/def.h"
-//#include "lwip/tcp_impl.h"
-//#include "lwip/timers.h"
+#include "lwip/ip_addr.h"
 
 #if NO_SYS
 #include "lwip/sys.h"

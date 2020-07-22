@@ -123,12 +123,17 @@ status_code_t system_execute_line (char *line)
             break;
 
         case '$': // Prints Grbl settings
+        case '+':
             if (line[2] != '\0' )
                 retval = Status_InvalidStatement;
             else if (sys.state & (STATE_CYCLE|STATE_HOLD))
                 retval =  Status_IdleError; // Block during cycle. Takes too long to print.
             else
-                report_grbl_settings();
+#if COMPATIBILITY_LEVEL <= 1
+            report_grbl_settings(true);
+#else
+            report_grbl_settings(line[1] == '+');
+#endif
             break;
 
         case 'G': // Prints gcode parser state
@@ -429,7 +434,7 @@ void system_convert_array_steps_to_mpos (float *position, int32_t *steps)
     uint_fast8_t idx = N_AXIS;
     do {
         idx--;
-        position[idx] = steps[idx] / settings.steps_per_mm[idx];
+        position[idx] = steps[idx] / settings.axis[idx].steps_per_mm;
     } while(idx);
 #endif
 }
@@ -446,14 +451,14 @@ bool system_check_travel_limits (float *target)
         do {
             idx--;
         // When homing forced set origin is enabled, soft limits checks need to account for directionality.
-            failed = settings.max_travel[idx] < -0.0f &&
+            failed = settings.axis[idx].max_travel < -0.0f &&
                       (bit_istrue(settings.homing.dir_mask.value, bit(idx))
-                        ? (target[idx] < 0.0f || target[idx] > -settings.max_travel[idx])
-                        : (target[idx] > 0.0f || target[idx] < settings.max_travel[idx]));
+                        ? (target[idx] < 0.0f || target[idx] > -settings.axis[idx].max_travel)
+                        : (target[idx] > 0.0f || target[idx] < settings.axis[idx].max_travel));
         } while(!failed && idx);
     } else do {
         idx--;
-        failed = settings.max_travel[idx] < -0.0f && (target[idx] > 0.0f || target[idx] < settings.max_travel[idx]);
+        failed = settings.axis[idx].max_travel < -0.0f && (target[idx] > 0.0f || target[idx] < settings.axis[idx].max_travel);
     } while(!failed && idx);
 
     return !failed;
@@ -469,24 +474,24 @@ void system_apply_jog_limits (float *target)
     if(sys.homed.mask) do {
         idx--;
         float pulloff = settings.limits.flags.hard_enabled && bit_istrue(sys.homing.mask, bit(idx)) ? settings.homing.pulloff : 0.0f;
-        if(bit_istrue(sys.homed.mask, bit(idx)) && settings.max_travel[idx] < -0.0f) {
+        if(bit_istrue(sys.homed.mask, bit(idx)) && settings.axis[idx].max_travel < -0.0f) {
             if(settings.homing.flags.force_set_origin) {
                 if(bit_isfalse(settings.homing.dir_mask.value, bit(idx))) {
                     if(target[idx] > 0.0f)
                         target[idx] = 0.0f;
-                    else if(target[idx] < (settings.max_travel[idx] + pulloff))
-                        target[idx] = (settings.max_travel[idx] + pulloff);
+                    else if(target[idx] < (settings.axis[idx].max_travel + pulloff))
+                        target[idx] = (settings.axis[idx].max_travel + pulloff);
                 } else {
                     if(target[idx] < 0.0f)
                         target[idx] = 0.0f;
-                    else if(target[idx] > -(settings.max_travel[idx] + pulloff))
-                        target[idx] = -(settings.max_travel[idx] + pulloff);
+                    else if(target[idx] > -(settings.axis[idx].max_travel + pulloff))
+                        target[idx] = -(settings.axis[idx].max_travel + pulloff);
                 }
             } else {
                 if(target[idx] > -pulloff)
                     target[idx] = -pulloff;
-                else if(target[idx] < (settings.max_travel[idx] + pulloff))
-                    target[idx] = (settings.max_travel[idx] + pulloff);
+                else if(target[idx] < (settings.axis[idx].max_travel + pulloff))
+                    target[idx] = (settings.axis[idx].max_travel + pulloff);
             }
         }
     } while(idx);

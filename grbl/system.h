@@ -182,10 +182,12 @@ typedef union {
                  tool        :1, // Tool changed.
                  wco         :1, // Add work coordinates.
                  gwco        :1, // Add work coordinate.
+                 tool_offset :1, // Tool offsets changed.
                  pwm         :1, // Add PWM information (optional: to be added by driver).
                  motor       :1, // Add motor information (optional: to be added by driver).
-                 tool_offset :1, // Tool offsets changed.
-                 unused      :3;
+                 encoder     :1, // Add encoder information (optional: to be added by driver).
+                 unused      :1,
+                 all         :1; // Set when CMD_STATUS_REPORT_ALL is requested, may be used by user code
     };
 } report_tracking_flags_t;
 

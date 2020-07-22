@@ -3,7 +3,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2019 Terje Io
+  Copyright (c) 2019-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -27,7 +27,7 @@
 
 // NOTE: Only one board may be enabled!
 //#define BOARD_TINYG2_DUE
-//#define BOARD_RAMPS_16
+#define BOARD_RAMPS_16
 //#define BOARD_MEGA256
 //#define BOARD_PROTONEER
 //#define BOARD_CMCGRATH
@@ -55,8 +55,10 @@ void IRQUnRegister(int32_t IRQnum);
 
 // Configuration
 // Set value to 1 to enable, 0 to disable
+
 #define USB_SERIAL       0
 #define USB_SERIAL_WAIT  0 // Wait for connection before starting grblHAL 
+#define SPINDLE_HUANYANG 0 // Set to 1 or 2 for Huanyang VFD spindle
 #define EEPROM_ENABLE    0 // I2C EEPROM (24LC16) support (using TWI0).
 // NOTE: none of the following options are ready. DO NOT ENABLE!
 #define SDCARD_ENABLE    0
@@ -65,10 +67,19 @@ void IRQUnRegister(int32_t IRQnum);
 #define TRINAMIC_I2C     0 // Trinamic I2C - SPI bridge interface.
 #define TRINAMIC_DEV     0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
 
+// Adjust STEP_PULSE_LATENCY to get accurate step pulse length when required, e.g if using high step rates.
+// The default value is calibrated for 10 microseconds length.
+// NOTE: step output mode, number of axes and compiler optimization settings may all affect this value.
+#define STEP_PULSE_LATENCY 1.0f // microseconds
+
 // End configuration
 
 #if TRINAMIC_ENABLE
 #include "src/tmc2130/trinamic.h"
+#endif
+
+#if SPINDLE_HUANYANG
+#include "src/spindle/huanyang.h"
 #endif
 
 #if TRINAMIC_ENABLE || KEYPAD_ENABLE

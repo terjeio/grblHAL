@@ -465,7 +465,7 @@ typedef struct {
 typedef struct {
     float offset[N_AXIS];
     float radius;
-    uint8_t tool;
+    uint32_t tool;
 } tool_data_t;
 
 // Data used for Constant Surface Speed Mode calculations
@@ -491,7 +491,7 @@ typedef struct {
     float distance_per_rev;             // Millimeters/rev
     float position[N_AXIS];             // Where the interpreter considers the tool to be at this point in the code
     int32_t line_number;                // Last line number sent
-    uint8_t tool_pending;               // Tool to be selected on next M6
+    uint32_t tool_pending;              // Tool to be selected on next M6
     bool file_run;                      // Tracks % command
     bool is_laser_ppi_mode;
     bool is_rpm_rate_adjusted;

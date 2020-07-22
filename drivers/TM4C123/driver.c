@@ -443,14 +443,17 @@ inline static axes_signals_t limitsGetState()
 // Each bitfield bit indicates a control signal, where triggered is 1 and not triggered is 0.
 inline static control_signals_t systemGetState (void)
 {
+    control_signals_t signals;
     uint32_t flags = GPIOPinRead(CONTROL_PORT, HWCONTROL_MASK);
-    control_signals_t signals = {0};
+
+    signals.value = settings.control_invert.value;
 
     signals.reset = (flags & RESET_PIN) != 0;
-    signals.safety_door_ajar = (flags & SAFETY_DOOR_PIN) != 0;
     signals.feed_hold = (flags & FEED_HOLD_PIN) != 0;
     signals.cycle_start = (flags & CYCLE_START_PIN) != 0;
-
+#ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
+    signals.safety_door_ajar = (flags & SAFETY_DOOR_PIN) != 0;
+#endif
     if(settings.control_invert.value)
         signals.value ^= settings.control_invert.value;
 
@@ -745,15 +748,15 @@ static void settings_changed (settings_t *settings)
         } else
             hal.spindle_set_state = spindleSetState;
 
-        if(settings->steppers.pulse_delay_microseconds) {
+        if(settings->steppers.pulse_delay_microseconds > 0.0f) {
             TimerIntRegister(PULSE_TIMER_BASE, TIMER_A, stepper_pulse_isr_delayed);
-            TimerMatchSet(PULSE_TIMER_BASE, TIMER_A, settings->steppers.pulse_microseconds);
-            TimerLoadSet(PULSE_TIMER_BASE, TIMER_A, settings->steppers.pulse_microseconds + settings->steppers.pulse_delay_microseconds - 1);
+            TimerMatchSet(PULSE_TIMER_BASE, TIMER_A, (uint32_t)(10.0f * settings->steppers.pulse_delay_microseconds) - 1);
+            TimerLoadSet(PULSE_TIMER_BASE, TIMER_A, (uint32_t)(10.0f * (settings->steppers.pulse_microseconds + settings->steppers.pulse_delay_microseconds - STEP_PULSE_LATENCY)) - 1);
             TimerIntEnable(PULSE_TIMER_BASE, TIMER_TIMA_TIMEOUT|TIMER_TIMA_MATCH);
             hal.stepper_pulse_start = stepperPulseStartDelayed;
         } else {
             TimerIntRegister(PULSE_TIMER_BASE, TIMER_A, stepper_pulse_isr);
-            TimerLoadSet(PULSE_TIMER_BASE, TIMER_A, settings->steppers.pulse_microseconds - 1);
+            TimerLoadSet(PULSE_TIMER_BASE, TIMER_A, (uint32_t)(10.0f * (settings->steppers.pulse_microseconds - STEP_PULSE_LATENCY)) - 1);
             TimerIntEnable(PULSE_TIMER_BASE, TIMER_TIMA_TIMEOUT);
             hal.stepper_pulse_start = stepperPulseStart;
         }
@@ -880,7 +883,7 @@ static bool driver_setup (settings_t *settings)
     TimerControlStall(PULSE_TIMER_BASE, TIMER_A, true); //timer2 will stall in debug mode
     TimerIntClear(PULSE_TIMER_BASE, 0xFFFF);
     IntPendClear(PULSE_TIMER_INT);
-    TimerPrescaleSet(PULSE_TIMER_BASE, TIMER_A, 79); // for 1uS per count
+    TimerPrescaleSet(PULSE_TIMER_BASE, TIMER_A, 7); // for 0.1 microsecond per count
 
 #if CNC_BOOSTERPACK_A4998
     GPIOPinTypeGPIOOutput(STEPPERS_VDD_PORT, STEPPERS_VDD_PIN);
@@ -1055,7 +1058,7 @@ static bool driver_setup (settings_t *settings)
 
   // Set defaults
 
-    IOInitDone = settings->version == 16;
+    IOInitDone = settings->version == 17;
 
     settings_changed(settings);
 
@@ -1140,7 +1143,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "TM4C123HP6PM";
-    hal.driver_version = "200528";
+    hal.driver_version = "200721";
 #if CNC_BOOSTERPACK
     hal.board = "CNC BoosterPack";
 #endif
@@ -1323,7 +1326,7 @@ void laser_ppi_mode (bool on)
     if(on)
         hal.stepper_pulse_start = stepperPulseStartPPI;
     else
-        hal.stepper_pulse_start = settings.steppers.pulse_delay_microseconds ? stepperPulseStartDelayed : stepperPulseStart;
+        hal.stepper_pulse_start = settings.steppers.pulse_delay_microseconds > 0.0f ? stepperPulseStartDelayed : stepperPulseStart;
     gc_set_laser_ppimode(on);
 }
 

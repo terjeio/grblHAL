@@ -1,18 +1,33 @@
 ## GrblHAL ##
-
-#### Development branch
-
-Spindle VFD control via RS485 added to ESP 32 driver for testing.
-
-_NOTE:_ Spindle speed overrides will crash the ESP32 since it dos not allow float access in ISRs. This can be fixed by changing the rpm value to an int, this might be done later.
-
 ---
 
-#### Sender compatibility
 
 GrblHAL has [many extensions](https://github.com/terjeio/grblHAL/wiki) that may cause issues with some senders. As a workaround for these a [compile time option](https://github.com/terjeio/grblHAL/wiki/Changes-from-grbl-1.1#workaround) has been added that disables extensions selectively. 
 
 Windows users may try [my sender](https://github.com/terjeio/Grbl-GCode-Sender), binary releases can be found [here](https://github.com/terjeio/Grbl-GCode-Sender/releases). It has been written to complement grblHAL and has features such as proper keyboard jogging, automatic reconfiguration of DRO display for up to 6 axes, lathe mode including conversational G-Code generation, 3D rendering, macro support etc. etc.
+
+---
+
+Build 20200722:
+* **Important:** settings version has been changed again and settings will be restored to defaults after updating. Backup & restore! 
+* Changed step pulse width and delay settings from int to float and reduced minimum allowed value to 2 microseconds<sup>1</sup>. Useful for very high step rates.
+* New plugin for [quadrature encoder input](https://github.com/terjeio/grblHAL/issues/73#issuecomment-659222664) for up to 5 encoders \(driver dependent\). Can be used to adjust overrides and has rudimentary support for MPG functionality. Work in progress and the iMXRT1062 \(Teensy 4\) driver is currently the only driver with low-level suport for this (one encoder).
+* New plugin for [ModBus VFD](https://github.com/terjeio/grblHAL/issues/68) spindle controllers. Untested and with limited driver support in this build.
+* Added setting, `$340` for spindle at speed tolerance \(percent\). If spindle fails to reach speed within limits in 4 seconds alarm 14 will be raised. Set to 0 to disable. Availability driver dependent.
+* All [new settings](https://github.com/terjeio/grblHAL/wiki/Additional-or-extended-settings) are now possibly to set independent of the [compatibility level](https://github.com/terjeio/grblHAL/wiki/Changes-from-grbl-1.1#workaround) except some settings that has flags added to them. The added flags will not be available at all compatibilty levels. A new command, `$+`, can be used to list all settings independent of compatibilty level.
+* Internal changes to settings data in order to simplify automatic migration on changes. Automatic migration is on the roadmap.
+
+<sup>1</sup> Note that several factors may affect the accuracy of these settings such as step output mode, number of axes defined and compiler optimization settings.
+A new #define, `STEP_PULSE_LATENCY`, has been added to driver.h for those drivers that requires it so that fine tuning can be done. I may move this to a setting later.
+In setups where very high step rates are used the actual step pulse width should be confirmed with an oscilloscope.
+
+The step pulse delay has not been fine tuned yet as setting this to a value > 0 is not normally needed as there seems to be a implicit delay on direction changes when AMASS is enabled.
+
+__Note:__ high step rates \(e.g. above 80 kHz\) cannot be achieved with the step pulse setting set to the default 10 microseconds. This has to be reduced so that both the on and off time is within specifications of the stepper driver. At 100 kHz the time available for a pulse \(on + off\) is 10 microseconds.
+
+__Note:__ The SAMD21 \(MKRZERO\) driver needs updating in for it to allow short step pulses. My mistake was to use some Arduino code so that the Arduino pin numbers could be used for pin mappings. This adds around 500 ns per axis of overhead... To be fixed later.
+
+For the curious: I have managed to achieve a 400 kHz step rate with the iMXRT1062 before everything breaks down, this with a command entered from MDI. I have not tested this with a running program, but I am pretty sure that a step rate at or above 200 kHz is sustainable.
 
 ---
 
@@ -21,6 +36,7 @@ Windows users may try [my sender](https://github.com/terjeio/Grbl-GCode-Sender),
 This driver is a candidate along with the IMXRT1062 \(Teensy 4.x\) driver to get spindle sync support. I have a [NucleoF411RE development board](https://www.st.com/en/evaluation-tools/nucleo-f411re.html) on order and will look into adding a pin mapping for that when it arrives. 
 
 ---
+
 
 Build 20200603:
 * **Important:** settings version has been changed and settings will be restored to defaults after updating. Backup & restore! 
@@ -121,3 +137,6 @@ List of Supported G-Codes in GrblHAL v1.1:
   ** requires compatible GCode sender due to protocol extensions, new state and RT command.
   *** number of outputs supported dependent on driver implementation.
 ```
+
+---
+2020-07-22

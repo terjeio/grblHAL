@@ -58,6 +58,13 @@
 #define EEPROM_ENABLE 0 // I2C EEPROM (24LC16) support.
 #endif
 
+// Adjust STEP_PULSE_LATENCY to get accurate step pulse length when required, e.g if using high step rates.
+// The default value is calibrated for 10 microseconds length.
+// NOTE: step output mode, number of axes and compiler optimization settings may all affect this value.
+#define STEP_PULSE_LATENCY 1.0f // microseconds
+
+// End configuration
+
 #if EEPROM_ENABLE == 0
 #define FLASH_ENABLE 1
 #else

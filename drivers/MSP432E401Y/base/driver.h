@@ -5,7 +5,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2018-2019 Terje Io
+  Copyright (c) 2018-2020 Terje Io
   Copyright (c) 2011-2015 Sungeun K. Jeon
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -75,7 +75,7 @@
 
 #if ETHERNET_ENABLE
 #define NETWORK_HOSTNAME        "GRBL"
-#define NETWORK_IPMODE_STATIC   0 // do not change!
+#define NETWORK_IPMODE_STATIC   0 // do not change! Cannot get static mode to work!
 #if NETWORK_IPMODE_STATIC
 #define NETWORK_IP              "192.168.5.1"
 #define NETWORK_GATEWAY         "192.168.5.1"
@@ -85,6 +85,11 @@
 #define NETWORK_WEBSOCKET_PORT  80
 #define NETWORK_HTTP_PORT       80
 #endif
+
+// Adjust STEP_PULSE_LATENCY to get accurate step pulse length when required, e.g if using high step rates.
+// The default value is calibrated for 10 microseconds length.
+// NOTE: step output mode, number of axes and compiler optimization settings may all affect this value.
+#define STEP_PULSE_LATENCY 1.2f // microseconds
 
 // End configuration
 

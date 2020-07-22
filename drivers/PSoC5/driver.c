@@ -212,7 +212,11 @@ inline static axes_signals_t limitsGetState()
 
 static control_signals_t systemGetState (void)
 {
-    return (control_signals_t)ControlSignals_Read();
+    control_signals_t signals;
+    
+    signals.value = ControlSignals_Read();
+    
+    return signals;
 }
 
 // Called by probe_init() and the mc_probe() routines. Sets up the probe pin invert mask to
@@ -307,7 +311,13 @@ void settings_changed (settings_t *settings)
     //TODO: disable interrupts while reconfigure?
     if(IOInitDone) {
     
-        StepPulseClock_SetDivider(hal.f_step_timer / 1000000UL * settings->steppers.pulse_microseconds);
+        if(hal.driver_cap.step_pulse_delay && settings->steppers.pulse_delay_microseconds > 0.0f) {
+      //    TimerIntRegister(TIMER2_BASE, TIMER_A, stepper_pulse_isr_delayed);
+      //    TimerIntEnable(TIMER2_BASE, TIMER_TIMA_TIMEOUT|TIMER_TIMA_MATCH);
+            hal.stepper_pulse_start = &stepperPulseStartDelayed;
+        }
+
+        StepPulseClock_SetDivider((uint32_t)(24.0f * settings->steppers.pulse_microseconds));
 
         DirInvert_Write(settings->steppers.dir_invert.mask);
         StepInvert_Write(settings->steppers.step_invert.mask);
@@ -358,12 +368,6 @@ static bool driver_setup (settings_t *settings)
     Stepper_Interrupt_SetPriority(1);
     Stepper_Interrupt_Enable();
 
-    if(hal.driver_cap.step_pulse_delay) {
-    //    TimerIntRegister(TIMER2_BASE, TIMER_A, stepper_pulse_isr_delayed);
-    //    TimerIntEnable(TIMER2_BASE, TIMER_TIMA_TIMEOUT|TIMER_TIMA_MATCH);
-        hal.stepper_pulse_start = &stepperPulseStartDelayed;
-    }
-    
     Control_Interrupt_StartEx(control_isr);
     ControlSignals_InterruptEnable();
     
@@ -383,7 +387,9 @@ static bool driver_setup (settings_t *settings)
     DelayTimer_Interrupt_Enable();
     DelayTimer_Start();
 
-    IOInitDone = true;
+    IOInitDone = settings->version == 17;
+
+    settings_changed(settings);
 
     hal.spindle_set_state((spindle_state_t){0}, 0.0f);
     hal.coolant_set_state((coolant_state_t){0});
@@ -399,7 +405,7 @@ static bool driver_setup (settings_t *settings)
 
 #endif
 
-    return settings->version == 16;
+    return IOInitDone;
 }
 
 // Initialize HAL pointers
@@ -408,9 +414,9 @@ bool driver_init (void)
 {
     serialInit();
     EEPROM_Start();
-    
+
     hal.info = "PSoC 5";
-    hal.driver_version = "200528";
+    hal.driver_version = "200721";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = 24000000UL;
     hal.rx_buffer_size = RX_BUFFER_SIZE;
@@ -475,7 +481,7 @@ bool driver_init (void)
     hal.driver_cap.variable_spindle = On;
     hal.driver_cap.mist_control = On;
     hal.driver_cap.software_debounce = On;
-    hal.driver_cap.step_pulse_delay = On;
+    hal.driver_cap.step_pulse_delay = Off;
     hal.driver_cap.amass_level = 3;
     hal.driver_cap.control_pull_up = On;
     hal.driver_cap.limits_pull_up = On;
@@ -514,7 +520,11 @@ static void limit_isr (void)
 
 static void control_isr (void)
 {
-    hal.control_interrupt_callback((control_signals_t)ControlSignals_Read());
+    control_signals_t signals;
+    
+    signals.value = ControlSignals_Read();
+    
+    hal.control_interrupt_callback(signals);
 }
 
 // Interrupt handler for 1 ms interval timer

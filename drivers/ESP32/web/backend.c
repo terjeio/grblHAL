@@ -5,7 +5,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2019 Terje Io
+  Copyright (c) 2019-2020 Terje Io
 
   Some parts of the code is based on example code by Espressif, in the public domain
 
@@ -528,7 +528,7 @@ static esp_err_t settings_get_handler(httpd_req_t *req)
 
         hal.stream.write = backendWriteS;
 
-        report_grbl_settings();
+        report_grbl_settings(false);
 
         hal.stream.write = org_stream;
 

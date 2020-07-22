@@ -21,13 +21,7 @@
 
 */
 
-#ifdef ARDUINO
-#include "../../driver.h"
-#else
-#include "driver.h"
-#endif
-
-#include "modbus.h"
+#include "huanyang.h"
 
 #if SPINDLE_HUANYANG
 
@@ -54,10 +48,11 @@ typedef enum {
     VFD_SetStatus
 } vfd_response_t;
 
-static vfd_response_t query = VFD_Idle;
 static float rpm, rpm_programmed = -1.0f, rpm_low_limit = 0.0f, rpm_high_limit = 0.0f;
-static uint32_t rpm_max = 0;
 static spindle_state_t vfd_state = {0};
+#if SPINDLE_HUANYANG == 2
+static uint32_t rpm_max = 0;
+#endif
 
 static void spindleSetRPM (float rpm, bool block)
 {
@@ -97,8 +92,10 @@ static void spindleSetRPM (float rpm, bool block)
 
         modbus_send(&rpm_cmd, block);
 
-        rpm_low_limit = rpm / 1.1f;
-        rpm_high_limit = rpm * 1.1f;
+        if(settings.spindle.at_speed_tolerance > 0.0f) {
+            rpm_low_limit = rpm / (1.0f + settings.spindle.at_speed_tolerance);
+            rpm_high_limit = rpm * (1.0f + settings.spindle.at_speed_tolerance);
+        }
         rpm_programmed = rpm;
     }
 }
@@ -190,19 +187,17 @@ static void rx_packet (modbus_message_t *msg)
 #else
                 rpm = (float)((msg->adu[4] << 8) | msg->adu[5]) * 60.0f / 100.0f;
 #endif
-                vfd_state.at_speed = rpm >= rpm_low_limit && rpm <= rpm_high_limit;
+                vfd_state.at_speed = settings.spindle.at_speed_tolerance <= 0.0f || (rpm >= rpm_low_limit && rpm <= rpm_high_limit);
                 break;
-
+#if SPINDLE_HUANYANG == 2
             case VFD_GetMaxRPM:
                 rpm_max = (msg->adu[4] << 8) | msg->adu[5];
                 break;
-
+#endif
             default:
                 break;
         }
     }
-
-    query = VFD_Idle;
 }
 
 static void rx_exception (uint8_t code)

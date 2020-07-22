@@ -116,7 +116,7 @@ static void lwIPHostTimerHandler (void *arg)
         TCPStreamPoll();
 #endif
 #if WEBSOCKET_ENABLE
-    if(services.telnet)
+    if(services.websocket)
         WsStreamPoll();
 #endif
     if(services.mask)
@@ -158,8 +158,8 @@ static void stop_services (void)
         TCPStreamClose();
 #endif
 #if WEBSOCKET_ENABLE
-    if(services.dns)
-        dns_server_stop();
+    if(services.websocket)
+        WsStreamClose();
 #endif
     if(services.dns)
         dns_server_stop();

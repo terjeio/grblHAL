@@ -26,12 +26,13 @@
 
 #include "serial.h"
 
-#define BUFCOUNT(head, tail, size) ((head >= tail) ? (head - tail) : (size - tail + head))
+#define TXBUSY(uart) ((uart->IE & EUSCI_A_IE_TXIE) || (uart->STATW & EUSCI_A_STATW_BUSY))
 
 static stream_tx_buffer_t txbuffer = {0};
 static stream_rx_buffer_t rxbuffer = {0}, rxbackup;
 
 #ifdef SERIAL2_MOD
+static stream_tx_buffer_t txbuffer2 = {0};
 static stream_rx_buffer_t rxbuffer2 = {0};
 #endif
 
@@ -48,23 +49,11 @@ void serialInit (void)
     SERIAL_MODULE->CTLW0 &= ~EUSCI_A_CTLW0_SWRST;
     SERIAL_MODULE->IE = EUSCI_A_IE_RXIE;
 
+    NVIC_SetPriority(SERIAL_MODULE_INT, 3);
     NVIC_EnableIRQ(SERIAL_MODULE_INT);
-    NVIC_SetPriority(SERIAL_MODULE_INT, 0);
 
     SERIAL_PORT->SEL0 = SERIAL_RX|SERIAL_TX;    // set 2-UART pins as second function
 
-#ifdef SERIAL2_MOD
-    SERIAL2_MODULE->CTLW0 = EUSCI_A_CTLW0_SWRST|EUSCI_A_CTLW0_SSEL__SMCLK;
-    SERIAL2_MODULE->BRW = 6;
-    SERIAL2_MODULE->MCTLW = (0x20 << 8) | (8 << 4) | 1;
-    SERIAL2_MODULE->IFG = ~EUSCI_A_IFG_RXIFG;
-    SERIAL2_MODULE->CTLW0 &= ~EUSCI_A_CTLW0_SWRST;
-
-    NVIC_EnableIRQ(SERIAL2_MODULE_INT);
-    NVIC_SetPriority(SERIAL2_MODULE_INT, 0);
-
-    SERIAL2_PORT->SEL0 = SERIAL_RX|SERIAL_TX;    // set 2-UART pins as second function
-#endif
     __enable_interrupts();
 
 #ifdef RTS_PORT
@@ -78,8 +67,9 @@ void serialInit (void)
 //
 uint16_t serialTxCount (void)
 {
-  uint16_t tail = txbuffer.tail;
-  return BUFCOUNT(txbuffer.head, tail, TX_BUFFER_SIZE);
+    uint16_t tail = txbuffer.tail;
+
+    return BUFCOUNT(txbuffer.head, tail, TX_BUFFER_SIZE);
 }
 
 //
@@ -87,8 +77,9 @@ uint16_t serialTxCount (void)
 //
 uint16_t serialRxCount (void)
 {
-  uint16_t tail = rxbuffer.tail, head = rxbuffer.head;
-  return BUFCOUNT(head, tail, RX_BUFFER_SIZE);
+    uint16_t tail = rxbuffer.tail, head = rxbuffer.head;
+
+    return BUFCOUNT(head, tail, RX_BUFFER_SIZE);
 }
 
 //
@@ -96,8 +87,9 @@ uint16_t serialRxCount (void)
 //
 uint16_t serialRxFree (void)
 {
-  unsigned int tail = rxbuffer.tail, head = rxbuffer.head;
-  return (RX_BUFFER_SIZE - 1) - BUFCOUNT(head, tail, RX_BUFFER_SIZE);
+    unsigned int tail = rxbuffer.tail, head = rxbuffer.head;
+
+    return (RX_BUFFER_SIZE - 1) - BUFCOUNT(head, tail, RX_BUFFER_SIZE);
 }
 
 //
@@ -106,6 +98,8 @@ uint16_t serialRxFree (void)
 void serialRxFlush (void)
 {
     rxbuffer.head = rxbuffer.tail = 0;
+    hal.stream.read = serialGetC; // restore normal input
+
 #ifdef RTS_PORT
     BITBAND_PERI(RTS_PORT->OUT, RTS_PIN) = 0;
 #endif
@@ -131,7 +125,7 @@ static inline bool serialPutCNonBlocking (const char c)
 {
     bool ok;
 
-    if((ok = !(SERIAL_MODULE->IE & EUSCI_A_IE_TXIE) && !(SERIAL_MODULE->STATW & EUSCI_A_STATW_BUSY)))
+    if((ok = !TXBUSY(SERIAL_MODULE)))
         SERIAL_MODULE->TXBUF = c;
 
     return ok;
@@ -146,18 +140,18 @@ bool serialPutC (const char c) {
 
     if(txbuffer.head != txbuffer.tail || !serialPutCNonBlocking(c)) {   // Try to send character without buffering...
 
-        next_head = (txbuffer.head + 1) & (TX_BUFFER_SIZE - 1);   // .. if not, set and update head pointer
+        next_head = (txbuffer.head + 1) & (TX_BUFFER_SIZE - 1);         // .. if not, set and update head pointer
 
-        while(txbuffer.tail == next_head) {                       // While TX buffer full
-            SERIAL_MODULE->IE |= EUSCI_A_IE_TXIE;           // Enable TX interrupts???
-            if(!hal.stream_blocking_callback())           // check if blocking for space,
-                return false;                               // exit if not (leaves TX buffer in an inconsistent state)
+        while(txbuffer.tail == next_head) {                             // While TX buffer full
+            SERIAL_MODULE->IE |= EUSCI_A_IE_TXIE;                       // Enable TX interrupts???
+            if(!hal.stream_blocking_callback())                         // check if blocking for space,
+                return false;                                           // exit if not (leaves TX buffer in an inconsistent state)
         }
 
-        txbuffer.data[txbuffer.head] = c;                                 // Add data to buffer
-        txbuffer.head = next_head;                                // and update head pointer
+        txbuffer.data[txbuffer.head] = c;                               // Add data to buffer
+        txbuffer.head = next_head;                                      // and update head pointer
 
-        SERIAL_MODULE->IE |= EUSCI_A_IE_TXIE;               // Enable TX interrupts
+        SERIAL_MODULE->IE |= EUSCI_A_IE_TXIE;                           // Enable TX interrupts
     }
 
     return true;
@@ -184,7 +178,7 @@ void serialWriteLn (const char *s)
 }
 
 //
-// Writes a number of characters from string to the serial output stream followed by EOL, blocks if buffer full
+// Writes a number of characters from a buffer to the serial output stream, blocks if buffer full
 //
 void serialWrite(const char *s, uint16_t length)
 {
@@ -199,13 +193,18 @@ void serialWrite(const char *s, uint16_t length)
 //
 int16_t serialGetC (void)
 {
+    __disable_interrupts();
+
     uint32_t bptr = rxbuffer.tail;
 
-    if(bptr == rxbuffer.head)
+    if(bptr == rxbuffer.head) {
+        __enable_interrupts();
         return -1; // no data available else EOF
+    }
 
-    char data = rxbuffer.data[bptr++];     // Get next character, increment tmp pointer
-    rxbuffer.tail = bptr & (RX_BUFFER_SIZE - 1);  // and update pointer
+    char data = rxbuffer.data[bptr++];              // Get next character, increment tmp pointer
+    rxbuffer.tail = bptr & (RX_BUFFER_SIZE - 1);    // and update pointer
+    __enable_interrupts();
 
 #ifdef RTS_PORT
     if (rts_state && BUFCOUNT(rxbuffer.head, rxbuffer.tail, RX_BUFFER_SIZE) < RX_BUFFER_LWM) // Clear RTS if below LWM
@@ -277,6 +276,36 @@ void SERIAL_IRQHandler (void)
 
 #ifdef SERIAL2_MOD
 
+void serial2Init (uint32_t baud_rate)
+{
+    SERIAL2_MODULE->CTLW0 = EUSCI_A_CTLW0_SWRST|EUSCI_A_CTLW0_SSEL__SMCLK;
+
+    switch(baud_rate)
+    {
+        case 19200:
+            SERIAL2_MODULE->BRW = 39;
+            SERIAL2_MODULE->MCTLW = (0x0 << 8) | (1 << 4) | 1;
+            break;
+
+        default: // 115200
+            SERIAL2_MODULE->BRW = 6;
+            SERIAL2_MODULE->MCTLW = (0x20 << 8) | (8 << 4) | 1;
+            break;
+    }
+
+    SERIAL2_MODULE->IFG = ~EUSCI_A_IFG_RXIFG;
+    SERIAL2_MODULE->CTLW0 &= ~EUSCI_A_CTLW0_SWRST;
+
+    NVIC_SetPriority(SERIAL2_MODULE_INT, 3);
+    NVIC_EnableIRQ(SERIAL2_MODULE_INT);
+
+    SERIAL2_PORT->SEL0 = SERIAL_RX|SERIAL_TX;    // set 2-UART pins as second function
+
+#if MODBUS_ENABLE
+    SERIAL2_MODULE->IE = EUSCI_A_IE_RXIE;
+#endif
+}
+
 void serialSelect (bool mpg)
 {
     if(mpg) {
@@ -293,8 +322,19 @@ void serialSelect (bool mpg)
 //
 uint16_t serial2RxFree (void)
 {
-  uint32_t tail = rxbuffer2.tail, head = rxbuffer2.head;
-  return (RX_BUFFER_SIZE - 1) - BUFCOUNT(head, tail, RX_BUFFER_SIZE);
+    uint32_t tail = rxbuffer2.tail, head = rxbuffer2.head;
+
+    return (RX_BUFFER_SIZE - 1) - BUFCOUNT(head, tail, RX_BUFFER_SIZE);
+}
+
+//
+// Returns number of characters in serial input buffer
+//
+uint16_t serial2RxCount (void)
+{
+    uint32_t tail = rxbuffer2.tail, head = rxbuffer2.head;
+
+    return BUFCOUNT(head, tail, RX_BUFFER_SIZE);
 }
 
 //
@@ -302,7 +342,7 @@ uint16_t serial2RxFree (void)
 //
 void serial2RxFlush (void)
 {
-    rxbuffer2.head = rxbuffer2.tail = 0;
+    rxbuffer2.tail = rxbuffer2.head;
 }
 
 //
@@ -313,6 +353,72 @@ void serial2RxCancel (void)
     rxbuffer2.data[rxbuffer2.head] = ASCII_CAN;
     rxbuffer2.tail = rxbuffer2.head;
     rxbuffer2.head = (rxbuffer2.tail + 1) & (RX_BUFFER_SIZE - 1);
+}
+
+//
+// Attempt to send a character bypassing buffering
+//
+static inline bool serial2PutCNonBlocking (const char c)
+{
+    bool ok;
+
+    if((ok = !TXBUSY(SERIAL2_MODULE)))
+        SERIAL2_MODULE->TXBUF = c;
+
+    return ok;
+}
+
+//
+// Writes a character to the serial output stream
+//
+bool serial2PutC (const char c) {
+
+    uint32_t next_head;
+
+    if(txbuffer2.head != txbuffer2.tail || !serial2PutCNonBlocking(c)) {    // Try to send character without buffering...
+
+        next_head = (txbuffer2.head + 1) & (TX_BUFFER_SIZE - 1);            // .. if not, set and update head pointer
+
+        while(txbuffer2.tail == next_head) {                                // While TX buffer full
+            SERIAL_MODULE->IE |= EUSCI_A_IE_TXIE;                           // Enable TX interrupts???
+        }
+
+        txbuffer2.data[txbuffer2.head] = c;                                 // Add data to buffer
+        txbuffer2.head = next_head;                                         // and update head pointer
+
+        SERIAL2_MODULE->IE |= EUSCI_A_IE_TXIE;                              // Enable TX interrupts
+    }
+
+    return true;
+}
+
+// Writes a number of characters from a buffer to the serial output stream, blocks if buffer full
+//
+void serial2Write(const char *s, uint16_t length)
+{
+    char *ptr = (char *)s;
+
+    while(length--)
+        serial2PutC(*ptr++);
+}
+
+//
+// Flushes the serial output buffer
+//
+void serial2TxFlush (void)
+{
+    SERIAL2_MODULE->IE &= ~EUSCI_A_IE_TXIE;
+    txbuffer2.tail = txbuffer2.head;
+}
+
+//
+// Returns number of characters pending transmission
+//
+uint16_t serial2TxCount (void)
+{
+    uint32_t tail = txbuffer2.tail, head = txbuffer2.head;
+
+    return BUFCOUNT(head, tail, TX_BUFFER_SIZE) + (TXBUSY(SERIAL2_MODULE) ? 1 : 0);
 }
 
 //
@@ -337,12 +443,25 @@ void SERIAL2_IRQHandler (void)
 
     switch(SERIAL2_MODULE->IV) {
 
+        case 0x04:
+            bptr = txbuffer2.tail;                          // Temp tail position (to avoid volatile overhead)
+            SERIAL2_MODULE->TXBUF = txbuffer2.data[bptr++]; // Send a byte from the buffer
+            bptr &= (TX_BUFFER_SIZE - 1);                   // and update
+            txbuffer2.tail = bptr;                          // tail position
+            if (bptr == txbuffer2.head)                     // Turn off TX interrupt
+                SERIAL2_MODULE->IE &= ~EUSCI_A_IE_TXIE;     // when buffer empty
+            break;
+
         case 0x02:
             data = SERIAL2_MODULE->RXBUF;                       // Read character received
             bptr = (rxbuffer2.head + 1) & (RX_BUFFER_SIZE - 1); // Temp head position (to avoid volatile overhead)
             if(bptr == rxbuffer2.tail) {                        // If buffer full
                 rxbuffer2.overflow = 1;                         // flag overflow
+#if MODBUS_ENABLE
+            } else {
+#else
             } else if(!hal.stream.enqueue_realtime_command((char)data)) {
+#endif
                 rxbuffer2.data[rxbuffer2.head] = data;          // Add data to buffer
                 rxbuffer2.head = bptr;                          // and update pointer
             }

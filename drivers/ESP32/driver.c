@@ -287,6 +287,9 @@ static ledc_channel_config_t ledConfig = {
 #endif
 
 #if MODBUS_ENABLE
+#ifndef MODBUS_BAUD
+#define MODBUS_BAUD 19200
+#endif
 static modbus_stream_t modbus_stream = {0};
 static TimerHandle_t xModBusTimer = NULL;
 #endif
@@ -371,8 +374,8 @@ void initRMT (settings_t *settings)
         .tx_config.idle_output_en = true
     };
 
-    rmtItem[0].duration0 = settings->steppers.pulse_delay_microseconds ? 4 * settings->steppers.pulse_delay_microseconds : 1;
-    rmtItem[0].duration1 = 4 * settings->steppers.pulse_microseconds;
+    rmtItem[0].duration0 = (uint32_t)(settings->steppers.pulse_delay_microseconds > 0.0f ? 4.0f * settings->steppers.pulse_delay_microseconds : 1.0f);
+    rmtItem[0].duration1 = (uint32_t)(4.0f * settings->steppers.pulse_microseconds);
     rmtItem[1].duration0 = 0;
     rmtItem[1].duration1 = 0;
 
@@ -600,12 +603,16 @@ inline IRAM_ATTR static axes_signals_t limitsGetState()
 // Each bitfield bit indicates a control signal, where triggered is 1 and not triggered is 0.
 inline IRAM_ATTR static control_signals_t systemGetState (void)
 {
-    control_signals_t signals = {0};
+    control_signals_t signals;
+
+    signals.value = settings.control_invert.value;
 
     signals.reset = gpio_get_level(RESET_PIN);
     signals.feed_hold = gpio_get_level(FEED_HOLD_PIN);
     signals.cycle_start = gpio_get_level(CYCLE_START_PIN);
+#ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
     signals.safety_door_ajar = gpio_get_level(SAFETY_DOOR_PIN);
+#endif
 
     if(settings.control_invert.value)
         signals.value ^= settings.control_invert.value;
@@ -1294,7 +1301,7 @@ static bool driver_setup (settings_t *settings)
 
   // Set defaults
 
-    IOInitDone = settings->version == 16;
+    IOInitDone = settings->version == 17;
 
     settings_changed(settings);
 
@@ -1398,7 +1405,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "ESP32";
-    hal.driver_version = "200710";
+    hal.driver_version = "200721";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif

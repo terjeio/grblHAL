@@ -42,9 +42,9 @@ inline static int32_t corexy_convert_to_b_motor_steps (int32_t *steps)
 // Returns machine position of axis 'idx'. Must be sent a 'step' array.
 static void corexy_convert_array_steps_to_mpos (float *position, int32_t *steps)
 {
-    position[X_AXIS] = corexy_convert_to_a_motor_steps(steps) / settings.steps_per_mm[X_AXIS];
-    position[Y_AXIS] = corexy_convert_to_b_motor_steps(steps) / settings.steps_per_mm[Y_AXIS];
-    position[Z_AXIS] = steps[Z_AXIS] / settings.steps_per_mm[Z_AXIS];
+    position[X_AXIS] = corexy_convert_to_a_motor_steps(steps) / settings.axis[X_AXIS].steps_per_mm;
+    position[Y_AXIS] = corexy_convert_to_b_motor_steps(steps) / settings.axis[Y_AXIS].steps_per_mm;
+    position[Z_AXIS] = steps[Z_AXIS] / settings.axis[Z_AXIS].steps_per_mm;
 }
 
 // Transform absolute position from cartesian coordinate system (mm) to corexy coordinate system (step)
@@ -56,15 +56,15 @@ static void corexy_target_to_steps (int32_t *target_steps, float *target)
     do {
         switch(--idx) {
             case X_AXIS:
-                a_steps = lroundf(target[idx] * settings.steps_per_mm[idx]);
+                a_steps = lroundf(target[idx] * settings.axis[idx].steps_per_mm);
                 break;
 
             case Y_AXIS:
-                b_steps = lroundf(target[idx] * settings.steps_per_mm[idx]);
+                b_steps = lroundf(target[idx] * settings.axis[idx].steps_per_mm);
                 break;
 
             default:
-                target_steps[idx] = lroundf(target[idx] * settings.steps_per_mm[idx]);
+                target_steps[idx] = lroundf(target[idx] * settings.axis[idx].steps_per_mm);
                 break;
         }
     } while(idx);
@@ -125,8 +125,8 @@ static void corexy_limits_set_machine_positions (axes_signals_t cycle)
          if (cycle.mask & bit(--idx)) {
              int32_t off_axis_position;
              int32_t set_axis_position = bit_istrue(settings.homing.dir_mask.value, bit(idx))
-                                          ? lroundf((settings.max_travel[idx] + settings.homing.pulloff) * settings.steps_per_mm[idx])
-                                          : lroundf(-settings.homing.pulloff * settings.steps_per_mm[idx]);
+                                          ? lroundf((settings.axis[idx].max_travel + settings.homing.pulloff) * settings.axis[idx].steps_per_mm)
+                                          : lroundf(-settings.homing.pulloff * settings.axis[idx].steps_per_mm);
              switch(idx) {
                  case X_AXIS:
                      off_axis_position = corexy_convert_to_b_motor_steps(sys_position);
