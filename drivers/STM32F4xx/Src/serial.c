@@ -35,26 +35,24 @@ static stream_tx_buffer_t txbuf = {0}, rxbackup;
 
 void serialInit (void)
 {
-    __HAL_RCC_USART1_CLK_ENABLE();
+    __HAL_RCC_USART2_CLK_ENABLE();
 
-    GPIO_InitTypeDef GPIO_InitStructure;
+    GPIO_InitTypeDef GPIO_InitStructure = {0};
 
-    GPIO_InitStructure.Pin = GPIO_PIN_9;
+//    GPIO_InitStruct.Pin = USART_TX_Pin|USART_RX_Pin;
+    GPIO_InitStructure.Pin = GPIO_PIN_2|GPIO_PIN_3;
     GPIO_InitStructure.Mode = GPIO_MODE_AF_PP;
-    GPIO_InitStructure.Speed = GPIO_SPEED_FREQ_HIGH;
-    HAL_GPIO_Init(GPIOA, &GPIO_InitStructure);
-
-    GPIO_InitStructure.Pin = GPIO_PIN_10;
-    GPIO_InitStructure.Mode = GPIO_MODE_INPUT;
     GPIO_InitStructure.Pull = GPIO_NOPULL;
+    GPIO_InitStructure.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+    GPIO_InitStructure.Alternate = GPIO_AF7_USART2;
     HAL_GPIO_Init(GPIOA, &GPIO_InitStructure);
 
-    USART1->CR1 |= (USART_CR1_RE|USART_CR1_TE);
-    USART1->BRR = UART_BRR_SAMPLING16(HAL_RCC_GetPCLK2Freq(), 115200);
-    USART1->CR1 |= (USART_CR1_UE|USART_CR1_RXNEIE);
+    USART2->CR1 = USART_CR1_RE|USART_CR1_TE;
+    USART2->BRR = UART_BRR_SAMPLING16(HAL_RCC_GetPCLK1Freq(), 115200);
+    USART2->CR1 |= (USART_CR1_UE|USART_CR1_RXNEIE);
 
-    HAL_NVIC_SetPriority(USART1_IRQn, 0, 0);
-    HAL_NVIC_EnableIRQ(USART1_IRQn);
+    HAL_NVIC_SetPriority(USART2_IRQn, 0, 0);
+    HAL_NVIC_EnableIRQ(USART2_IRQn);
 }
 
 //
@@ -91,8 +89,8 @@ inline static bool serialPutCNonBlocking (const char c)
 {
     bool ok;
 
-    if((ok = !(USART1->CR1 & USART_CR1_TXEIE) && !(USART1->SR & USART_SR_TXE)))
-        USART1->DR = c;
+    if((ok = !(USART2->CR1 & USART_CR1_TXEIE) && !(USART2->SR & USART_SR_TXE)))
+        USART2->DR = c;
 
     return ok;
 }
@@ -113,7 +111,7 @@ bool serialPutC (const char c)
 
         txbuf.data[txbuf.head] = c;                                     // Add data to buffer,
         txbuf.head = next_head;                                         // update head pointer and
-        USART1->CR1 |= USART_CR1_TXEIE;                                 // enable TX interrupts
+        USART2->CR1 |= USART_CR1_TXEIE;                                 // enable TX interrupts
 //    }
 
     return true;
@@ -173,17 +171,17 @@ bool serialSuspendInput (bool suspend)
     return rxbuf.tail != rxbuf.head;
 }
 
-void USART1_IRQHandler (void)
+void USART2_IRQHandler (void)
 {
-    if(USART1->SR & USART_SR_RXNE) {
+    if(USART2->SR & USART_SR_RXNE) {
 
         uint16_t next_head = (rxbuf.head + 1) & (RX_BUFFER_SIZE - 1);   // Get and increment buffer pointer
 
         if(rxbuf.tail == next_head) {                                   // If buffer full
             rxbuf.overflow = 1;                                         // flag overflow
-            next_head =  USART1->DR;                                    // and do dummy read to clear interrupt
+            next_head =  USART2->DR;                                    // and do dummy read to clear interrupt
         } else {
-            char data = USART1->DR;
+            char data = USART2->DR;
             if(data == CMD_TOOL_ACK && !rxbuf.backup) {
 
                 memcpy(&rxbackup, &rxbuf, sizeof(stream_rx_buffer_t));
@@ -198,11 +196,11 @@ void USART1_IRQHandler (void)
         }
     }
 
-    if((USART1->SR & USART_SR_TXE) && (USART1->CR1 & USART_CR1_TXEIE)) {
+    if((USART2->SR & USART_SR_TXE) && (USART2->CR1 & USART_CR1_TXEIE)) {
 
         uint16_t tail = txbuf.tail;             // Get buffer pointer
 
-        USART1->DR = txbuf.data[tail++];        // Send next character and increment pointer
+        USART2->DR = txbuf.data[tail++];        // Send next character and increment pointer
 
         if(tail == TX_BUFFER_SIZE)              // If at end
             tail = 0;                           // wrap pointer around
@@ -210,7 +208,7 @@ void USART1_IRQHandler (void)
         txbuf.tail = tail;                      // Update global pointer
 
         if(tail == txbuf.head)                  // If buffer empty then
-            USART1->CR1 &= ~USART_CR1_TXEIE;    // disable UART TX interrupt
+            USART2->CR1 &= ~USART_CR1_TXEIE;    // disable UART TX interrupt
    }
 }
 

@@ -160,6 +160,12 @@ static uint32_t dir_outmap[sizeof(c_dir_outmap) / sizeof(uint32_t)];
 
 #endif
 
+#if KEYPAD_ENABLE == 0
+#define KEYPAD_STROBE_BIT 0
+#endif
+
+#define DRIVER_IRQMASK (LIMIT_MASK|CONTROL_MASK|KEYPAD_STROBE_BIT)
+
 static void spindle_set_speed (uint_fast16_t pwm_value);
 
 static void driver_delay (uint32_t ms, void (*callback)(void))
@@ -603,6 +609,28 @@ void settings_changed (settings_t *settings)
         PULSE_TIMER->CCR1 = (uint32_t)(10.0f * settings->steppers.pulse_delay_microseconds);
         PULSE_TIMER->EGR = TIM_EGR_UG;
 
+#if DRIVER_IRQMASK & (1<<0)
+        HAL_NVIC_DisableIRQ(EXTI0_IRQn);
+#endif
+#if DRIVER_IRQMASK & (1<<1)
+        HAL_NVIC_DisableIRQ(EXTI1_IRQn);
+#endif
+#if DRIVER_IRQMASK & (1<<2)
+        HAL_NVIC_DisableIRQ(EXTI2_IRQn);
+#endif
+#if DRIVER_IRQMASK & (1<<3)
+        HAL_NVIC_DisableIRQ(EXTI3_IRQn);
+#endif
+#if DRIVER_IRQMASK & (1<<4)
+        HAL_NVIC_DisableIRQ(EXTI4_IRQn);
+#endif
+#if DRIVER_IRQMASK & 0x03F0
+        HAL_NVIC_DisableIRQ(EXTI9_5_IRQn);
+#endif
+#if DRIVER_IRQMASK & 0xFE00
+        HAL_NVIC_DisableIRQ(EXTI15_10_IRQn);
+#endif
+
         /*************************
          *  Control pins config  *
          *************************/
@@ -610,8 +638,6 @@ void settings_changed (settings_t *settings)
         control_signals_t control_ire;
 
         control_ire.mask = ~(settings->control_disable_pullup.mask ^ settings->control_invert.mask);
-
-        HAL_NVIC_DisableIRQ(EXTI9_5_IRQn);
 
         GPIO_Init.Pin = CONTROL_RESET_BIT;
         GPIO_Init.Mode = control_ire.reset ? GPIO_MODE_IT_RISING : GPIO_MODE_IT_FALLING;
@@ -633,11 +659,6 @@ void settings_changed (settings_t *settings)
         GPIO_Init.Pull = settings->control_disable_pullup.safety_door_ajar ? GPIO_NOPULL : GPIO_PULLUP;
         HAL_GPIO_Init(CONTROL_PORT, &GPIO_Init);
 
-        __HAL_GPIO_EXTI_CLEAR_IT(CONTROL_MASK);
-
-        HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 2);
-        HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
-
         /***********************
          *  Limit pins config  *
          ***********************/
@@ -647,8 +668,6 @@ void settings_changed (settings_t *settings)
             axes_signals_t limit_ire;
 
             limit_ire.mask = ~(settings->limits.disable_pullup.mask ^ settings->limits.invert.mask);
-
-            HAL_NVIC_DisableIRQ(EXTI15_10_IRQn);
 
             GPIO_Init.Pin = X_LIMIT_BIT;
             GPIO_Init.Mode = limit_ire.x ? GPIO_MODE_IT_RISING : GPIO_MODE_IT_FALLING;
@@ -671,9 +690,6 @@ void settings_changed (settings_t *settings)
             GPIO_Init.Pull = settings->limits.disable_pullup.a ? GPIO_NOPULL : GPIO_PULLUP;
             HAL_GPIO_Init(LIMIT_PORT, &GPIO_Init);
 #endif
-            __HAL_GPIO_EXTI_CLEAR_IT(LIMIT_MASK);
-
-            HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
         } else {
 
@@ -708,13 +724,40 @@ void settings_changed (settings_t *settings)
         HAL_GPIO_Init(PROBE_PORT, &GPIO_Init);
 
 #if KEYPAD_ENABLE
-        HAL_NVIC_DisableIRQ(EXTI15_10_IRQn);
-
         GPIO_Init.Pin = KEYPAD_STROBE_BIT;
         GPIO_Init.Mode = GPIO_MODE_IT_RISING_FALLING;
         GPIO_Init.Pull = GPIO_PULLUP;
         HAL_GPIO_Init(KEYPAD_PORT, &GPIO_Init);
+#endif
 
+        __HAL_GPIO_EXTI_CLEAR_IT(DRIVER_IRQMASK);
+
+#if DRIVER_IRQMASK & (1<<0)
+        HAL_NVIC_SetPriority(EXTI0_IRQn, 0, 2);
+        HAL_NVIC_EnableIRQ(EXTI0_IRQn);
+#endif
+#if DRIVER_IRQMASK & (1<<1)
+        HAL_NVIC_SetPriority(EXTI1_IRQn, 0, 2);
+        HAL_NVIC_EnableIRQ(EXTI1_IRQn);
+#endif
+#if DRIVER_IRQMASK & (1<<2)
+        HAL_NVIC_SetPriority(EXTI2_IRQn, 0, 2);
+        HAL_NVIC_EnableIRQ(EXTI2_IRQn);
+#endif
+#if DRIVER_IRQMASK & (1<<3)
+        HAL_NVIC_SetPriority(EXTI3_IRQn, 0, 2);
+        HAL_NVIC_EnableIRQ(EXTI3_IRQn);
+#endif
+#if DRIVER_IRQMASK & (1<<4)
+        HAL_NVIC_SetPriority(EXTI4_IRQn, 0, 2);
+        HAL_NVIC_EnableIRQ(EXTI4_IRQn);
+#endif
+#if DRIVER_IRQMASK & 0x03F0
+        HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 2);
+        HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
+#endif
+#if DRIVER_IRQMASK & 0xFE00
+        HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 2);
         HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 #endif
     }
@@ -932,7 +975,7 @@ bool driver_init (void)
     __HAL_AFIO_REMAP_SWJ_NOJTAG();
 
     hal.info = "STM32F103C8";
-    hal.driver_version = "200721";
+    hal.driver_version = "200730";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1110,46 +1153,169 @@ void TIM4_IRQHandler (void)
         hal.limit_interrupt_callback(state);
 }
 
-void EXTI15_10_IRQHandler(void)
+#if DRIVER_IRQMASK & (1<<0)
+
+void EXTI0_IRQHandler(void)
 {
-#if KEYPAD_ENABLE
-    uint32_t ifg = __HAL_GPIO_EXTI_GET_IT(LIMIT_MASK|KEYPAD_STROBE_BIT);
-#else
-    uint32_t ifg = __HAL_GPIO_EXTI_GET_IT(LIMIT_MASK);
-#endif
+    uint32_t ifg = __HAL_GPIO_EXTI_GET_IT(1<<0);
+
     if(ifg) {
-
         __HAL_GPIO_EXTI_CLEAR_IT(ifg);
-
-#if KEYPAD_ENABLE
-        if(ifg & KEYPAD_STROBE_BIT)
-            keypad_keyclick_handler(BITBAND_PERI(KEYPAD_PORT->IDR, KEYPAD_STROBE_PIN));
-        if(ifg & LIMIT_MASK) {
-#endif
-
+#if CONTROL_MASK & (1<<0)
+        hal.control_interrupt_callback(systemGetState());
+#else
         if(hal.driver_cap.software_debounce) {
             DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
             DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
         } else
             hal.limit_interrupt_callback(limitsGetState());
-
-#if KEYPAD_ENABLE
-        }
 #endif
     }
 }
 
-void EXTI9_5_IRQHandler(void)
+#endif
+
+#if DRIVER_IRQMASK & (1<<1)
+
+void EXTI1_IRQHandler(void)
 {
-    uint32_t ifg = __HAL_GPIO_EXTI_GET_IT(CONTROL_MASK);
+    uint32_t ifg = __HAL_GPIO_EXTI_GET_IT(1<<1);
 
     if(ifg) {
-
         __HAL_GPIO_EXTI_CLEAR_IT(ifg);
-
+#if CONTROL_MASK & (1<<1)
         hal.control_interrupt_callback(systemGetState());
+#else
+        if(hal.driver_cap.software_debounce) {
+            DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
+            DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
+        } else
+            hal.limit_interrupt_callback(limitsGetState());
+#endif
     }
 }
+
+#endif
+
+#if DRIVER_IRQMASK & (1<<2)
+
+void EXTI2_IRQHandler(void)
+{
+    uint32_t ifg = __HAL_GPIO_EXTI_GET_IT(1<<2);
+
+    if(ifg) {
+        __HAL_GPIO_EXTI_CLEAR_IT(ifg);
+#if CONTROL_MASK & (1<<2)
+        hal.control_interrupt_callback(systemGetState());
+#else
+        if(hal.driver_cap.software_debounce) {
+            DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
+            DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
+        } else
+            hal.limit_interrupt_callback(limitsGetState());
+#endif
+    }
+}
+
+#endif
+
+#if DRIVER_IRQMASK & (1<<3)
+
+void EXTI3_IRQHandler(void)
+{
+    uint32_t ifg = __HAL_GPIO_EXTI_GET_IT(1<<3);
+
+    if(ifg) {
+        __HAL_GPIO_EXTI_CLEAR_IT(ifg);
+#if CONTROL_MASK & (1<<3)
+        hal.control_interrupt_callback(systemGetState());
+#else
+        if(hal.driver_cap.software_debounce) {
+            DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
+            DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
+        } else
+            hal.limit_interrupt_callback(limitsGetState());
+#endif
+    }
+}
+
+#endif
+
+#if DRIVER_IRQMASK & (1<<4)
+
+void EXTI4_IRQHandler(void)
+{
+    uint32_t ifg = __HAL_GPIO_EXTI_GET_IT(1<<4);
+
+    if(ifg) {
+        __HAL_GPIO_EXTI_CLEAR_IT(ifg);
+#if CONTROL_MASK & (1<<4)
+        hal.control_interrupt_callback(systemGetState());
+#else
+        if(hal.driver_cap.software_debounce) {
+            DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
+            DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
+        } else
+            hal.limit_interrupt_callback(limitsGetState());
+#endif
+    }
+}
+
+#endif
+
+#if DRIVER_IRQMASK & (0x03F0)
+
+void EXTI9_5_IRQHandler(void)
+{
+    uint32_t ifg = __HAL_GPIO_EXTI_GET_IT(0x03F0);
+
+    if(ifg) {
+        __HAL_GPIO_EXTI_CLEAR_IT(ifg);
+
+        if(ifg & CONTROL_MASK)
+            hal.control_interrupt_callback(systemGetState());
+
+        if(ifg & LIMIT_MASK) {
+            if(hal.driver_cap.software_debounce) {
+                DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
+                DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
+            } else
+                hal.limit_interrupt_callback(limitsGetState());
+        }
+    }
+}
+
+#endif
+
+#if DRIVER_IRQMASK & (0xFE00)
+
+void EXTI15_10_IRQHandler(void)
+{
+    uint32_t ifg = __HAL_GPIO_EXTI_GET_IT(0xFE00);
+
+    if(ifg) {
+        __HAL_GPIO_EXTI_CLEAR_IT(ifg);
+
+        if(ifg & CONTROL_MASK)
+            hal.control_interrupt_callback(systemGetState());
+
+        if(ifg & LIMIT_MASK) {
+            if(hal.driver_cap.software_debounce) {
+                DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
+                DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
+            } else
+                hal.limit_interrupt_callback(limitsGetState());
+        }
+
+    #if KEYPAD_ENABLE
+        if(ifg & KEYPAD_STROBE_BIT)
+            keypad_keyclick_handler(BITBAND_PERI(KEYPAD_PORT->IDR, KEYPAD_STROBE_PIN));
+    #endif
+    }
+}
+
+#endif
+
 
 // Interrupt handler for 1 ms interval timer
 void HAL_IncTick(void)

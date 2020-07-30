@@ -1,6 +1,6 @@
 /*
 
-  driver.h - driver code for STM32F103C8 ARM processors
+  driver.h - driver code for STM32F4xx ARM processors
 
   Part of GrblHAL
 
@@ -35,12 +35,17 @@
 #define BITBAND_PERI(x, b) (*((__IO uint8_t *) (PERIPH_BB_BASE + (((uint32_t)(volatile const uint32_t *)&(x)) - PERIPH_BASE)*32 + (b)*4)))
 
 // NOTE: Only one board may be enabled!
-#define BOARD_CNC3040
+//#define BOARD_CNC3040
+#define BOARD_PROTONEER_3XX
 
 // Configuration
 // Set value to 1 to enable, 0 to disable
 
+#ifdef NUCLEO_F411
+#define USB_ENABLE      0 // Do not enable for Nucleo F411RE boards
+#else
 #define USB_ENABLE      1
+#endif
 #define KEYPAD_ENABLE   0 // I2C keypad for jogging etc.
 #define TRINAMIC_ENABLE 0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
 #define TRINAMIC_I2C    0 // Trinamic I2C - SPI bridge interface.
@@ -57,6 +62,13 @@
 #define SDCARD_ENABLE 0 // Run jobs from SD card.
 #define EEPROM_ENABLE 0 // I2C EEPROM (24LC16) support.
 #endif
+
+// Adjust STEP_PULSE_LATENCY to get accurate step pulse length when required, e.g if using high step rates.
+// The default value is calibrated for 10 microseconds length.
+// NOTE: step output mode, number of axes and compiler optimization settings may all affect this value.
+#define STEP_PULSE_LATENCY 1.0f // microseconds
+
+// End configuration
 
 #if EEPROM_ENABLE == 0
 #define FLASH_ENABLE 1
@@ -116,15 +128,19 @@ extern driver_settings_t driver_settings;
 #define PULSE_TIMER TIM3
 #define DEBOUNCE_TIMER TIM4
 
-#ifdef BOARD_CNC3040
-    #include "cnc3040_map.h"
+#if CNC_BOOSTERPACK
+  #include "cnc_boosterpack_map.h"
+#elif defined(BOARD_CNC3040)
+  #include "cnc3040_map.h"
+#elif defined(BOARD_PROTONEER_3XX)
+  #include "protoneer_3.xx_map.h"
 #else // default board
 
 // Define step pulse output pins.
 #define STEP_PORT       GPIOA
 #define X_STEP_PIN      0
 #define Y_STEP_PIN      1
-#define Z_STEP_PIN      2
+#define Z_STEP_PIN      10
 #define X_STEP_BIT      (1<<X_STEP_PIN)
 #define Y_STEP_BIT      (1<<Y_STEP_PIN)
 #define Z_STEP_BIT      (1<<Z_STEP_PIN)
@@ -191,37 +207,20 @@ extern driver_settings_t driver_settings;
 #define SPINDLE_PWM_BIT             (1<<SPINDLE_PWM_PIN)
 
 // Define flood and mist coolant enable output pins.
-#if CNC_BOOSTERPACK
-#define COOLANT_FLOOD_PORT          GPIOC
-#define COOLANT_FLOOD_PIN           15
-#define COOLANT_FLOOD_BIT           (1<<COOLANT_FLOOD_PIN)
-#define COOLANT_MIST_PORT           GPIOC
-#define COOLANT_MIST_PIN            14
-#define COOLANT_MIST_BIT            (1<<COOLANT_MIST_PIN)
-#else
 #define COOLANT_FLOOD_PORT          GPIOB
 #define COOLANT_FLOOD_PIN           4
 #define COOLANT_FLOOD_BIT           (1<<COOLANT_FLOOD_PIN)
 #define COOLANT_MIST_PORT           GPIOB
 #define COOLANT_MIST_PIN            3
 #define COOLANT_MIST_BIT            (1<<COOLANT_MIST_PIN)
-#endif
 
 // Define user-control controls (cycle start, reset, feed hold) input pins.
 #define CONTROL_PORT                GPIOB
-#if CNC_BOOSTERPACK
-#define CONTROL_RESET_PIN           6
-#define CONTROL_FEED_HOLD_PIN       7
-#define CONTROL_CYCLE_START_PIN     8
-#define CONTROL_SAFETY_DOOR_PIN     9
-#define CONTROL_INMODE GPIO_SHIFT6
-#else
 #define CONTROL_RESET_PIN           5
 #define CONTROL_FEED_HOLD_PIN       6
 #define CONTROL_CYCLE_START_PIN     7
 #define CONTROL_SAFETY_DOOR_PIN     8
 #define CONTROL_INMODE GPIO_SHIFT5
-#endif
 #define CONTROL_RESET_BIT           (1<<CONTROL_RESET_PIN)
 #define CONTROL_FEED_HOLD_BIT       (1<<CONTROL_FEED_HOLD_PIN)
 #define CONTROL_CYCLE_START_BIT     (1<<CONTROL_CYCLE_START_PIN)

@@ -1,6 +1,6 @@
 /*
 
-  driver.c - driver code for STM32F103C8 ARM processors
+  driver.c - driver code for STM32F4xx ARM processors
 
   Part of GrblHAL
 
@@ -113,6 +113,16 @@ static const uint32_t c_step_outmap[] = {
 
 static uint32_t step_outmap[sizeof(c_step_outmap) / sizeof(uint32_t)];
 
+#elif STEP_OUTMODE == GPIO_BITBAND
+  #ifndef X_STEP_PORT
+    #define X_STEP_PORT STEP_PORT
+  #endif
+  #ifndef Y_STEP_PORT
+    #define Y_STEP_PORT STEP_PORT
+  #endif
+  #ifndef Z_STEP_PORT
+    #define X_STEP_PORT STEP_PORT
+  #endif
 #endif
 
 #if DIRECTION_OUTMODE == GPIO_MAP
@@ -159,6 +169,22 @@ static const uint32_t c_dir_outmap[] = {
 static uint32_t dir_outmap[sizeof(c_dir_outmap) / sizeof(uint32_t)];
 
 #endif
+
+#ifndef X_LIMIT_PORT
+  #define X_LIMIT_PORT LIMIT_PORT
+#endif
+#ifndef Y_LIMIT_PORT
+  #define Y_LIMIT_PORT LIMIT_PORT
+#endif
+#ifndef Z_LIMIT_PORT
+  #define Z_LIMIT_PORT LIMIT_PORT
+#endif
+
+#if KEYPAD_ENABLE == 0
+#define KEYPAD_STROBE_BIT 0
+#endif
+
+#define DRIVER_IRQMASK (LIMIT_MASK|CONTROL_MASK|KEYPAD_STROBE_BIT)
 
 static void spindle_set_speed (uint_fast16_t pwm_value);
 
@@ -225,7 +251,12 @@ static void stepperCyclesPerTickPrescaled (uint32_t cycles_per_tick)
 // NOTE: step_outbits are: bit0 -> X, bit1 -> Y, bit2 -> Z...
 inline static void stepperSetStepOutputs (axes_signals_t step_outbits)
 {
-#if STEP_OUTMODE == GPIO_MAP
+#if STEP_OUTMODE == GPIO_BITBAND
+    step_outbits.mask ^= settings.steppers.step_invert.mask;
+    BITBAND_PERI(X_STEP_PORT->ODR, X_STEP_PIN) = step_outbits.x;
+    BITBAND_PERI(Y_STEP_PORT->ODR, Y_STEP_PIN) = step_outbits.y;
+    BITBAND_PERI(Z_STEP_PORT->ODR, Z_STEP_PIN) = step_outbits.z;
+#elif STEP_OUTMODE == GPIO_MAP
 	STEP_PORT->ODR = (STEP_PORT->ODR & ~STEP_MASK) | step_outmap[step_outbits.value];
 #else
     STEP_PORT->ODR = (STEP_PORT->ODR & ~STEP_MASK) | ((step_outbits.mask ^ settings.steppers.step_invert.mask) << STEP_OUTMODE);
@@ -236,7 +267,12 @@ inline static void stepperSetStepOutputs (axes_signals_t step_outbits)
 // NOTE: see note for stepperSetStepOutputs()
 inline static void stepperSetDirOutputs (axes_signals_t dir_outbits)
 {
-#if DIRECTION_OUTMODE == GPIO_MAP
+#if STEP_OUTMODE == GPIO_BITBAND
+    dir_outbits.mask ^= settings.steppers.dir_invert.mask;
+    BITBAND_PERI(X_DIRECTION_PORT->ODR, X_DIRECTION_PIN) = dir_outbits.x;
+    BITBAND_PERI(Y_DIRECTION_PORT->ODR, Y_DIRECTION_PIN) = dir_outbits.y;
+    BITBAND_PERI(Z_DIRECTION_PORT->ODR, Z_DIRECTION_PIN) = dir_outbits.z;
+#elif DIRECTION_OUTMODE == GPIO_MAP
     DIRECTION_PORT->ODR = (DIRECTION_PORT->ODR & ~DIRECTION_MASK) | dir_outmap[dir_outbits.value];
 #else
     DIRECTION_PORT->ODR = (DIRECTION_PORT->ODR & ~DIRECTION_MASK) | ((dir_outbits.mask ^ settings.steppers.dir_invert.mask) << DIRECTION_OUTMODE);
@@ -295,9 +331,9 @@ inline static axes_signals_t limitsGetState()
     axes_signals_t signals;
 
 #if LIMIT_INMODE == GPIO_BITBAND
-    signals.x = BITBAND_PERI(LIMIT_PORT->IDR, X_LIMIT_PIN);
-    signals.y = BITBAND_PERI(LIMIT_PORT->IDR, Y_LIMIT_PIN);
-    signals.z = BITBAND_PERI(LIMIT_PORT->IDR, Z_LIMIT_PIN);
+    signals.x = BITBAND_PERI(X_LIMIT_PORT->IDR, X_LIMIT_PIN);
+    signals.y = BITBAND_PERI(Y_LIMIT_PORT->IDR, Y_LIMIT_PIN);
+    signals.z = BITBAND_PERI(Z_LIMIT_PORT->IDR, Z_LIMIT_PIN);
 #elif LIMIT_INMODE == GPIO_MAP
     uint32_t bits = LIMIT_PORT->IDR;
     signals.x = (bits & X_LIMIT_BIT) != 0;
@@ -317,21 +353,30 @@ inline static axes_signals_t limitsGetState()
 // Each bitfield bit indicates a control signal, where triggered is 1 and not triggered is 0.
 static control_signals_t systemGetState (void)
 {
-    control_signals_t signals = {0};
+    control_signals_t signals;
+
+    signals.value = settings.control_invert.mask;
 
 #if CONTROL_INMODE == GPIO_BITBAND
     signals.reset = BITBAND_PERI(CONTROL_PORT->IDR, CONTROL_RESET_PIN);
-    signals.safety_door_ajar = BITBAND_PERI(CONTROL_PORT->IDR, CONTROL_SAFETY_DOOR_PIN);
     signals.feed_hold = BITBAND_PERI(CONTROL_PORT->IDR, CONTROL_FEED_HOLD_PIN);
     signals.cycle_start = BITBAND_PERI(CONTROL_PORT->IDR, CONTROL_CYCLE_START_PIN);
+  #ifdef CONTROL_SAFETY_DOOR_PIN
+    signals.safety_door_ajar = BITBAND_PERI(CONTROL_PORT->IDR, CONTROL_SAFETY_DOOR_PIN);
+  #endif
 #elif CONTROL_INMODE == GPIO_MAP
     uint32_t bits = CONTROL_PORT->IDR;
     signals.reset = (bits & CONTROL_RESET_BIT) != 0;
-    signals.safety_door_ajar = (bits & CONTROL_SAFETY_DOOR_BIT) != 0;
     signals.feed_hold = (bits & CONTROL_FEED_HOLD_BIT) != 0;
     signals.cycle_start = (bits & CONTROL_CYCLE_START_BIT) != 0;
+  #ifdef CONTROL_SAFETY_DOOR_PIN
+    signals.safety_door_ajar = (bits & CONTROL_SAFETY_DOOR_BIT) != 0;
+  #endif
 #else
     signals.value = (uint8_t)((CONTROL_PORT->IDR & CONTROL_MASK) >> CONTROL_INMODE);
+  #ifndef ENABLE_SAFETY_DOOR_INPUT_PIN
+    signals.safety_door_ajar = Off;
+  #endif
 #endif
 
     if(settings.control_invert.mask)
@@ -346,9 +391,10 @@ static control_signals_t systemGetState (void)
 static void probeConfigureInvertMask(bool is_probe_away)
 {
     probe_invert = settings.flags.invert_probe_pin;
-
+#ifdef PROBE_PIN
     if (is_probe_away)
         probe_invert ^= PROBE_BIT;
+#endif
 }
 
 // Returns the probe connected and triggered pin states.
@@ -358,7 +404,9 @@ probe_state_t probeGetState (void)
         .connected = On
     };
 
+#ifdef PROBE_PIN
     state.triggered = ((PROBE_PORT->IDR & PROBE_BIT) != 0)  ^ probe_invert;
+#endif
 
     return state;
 }
@@ -464,7 +512,9 @@ static void coolantSetState (coolant_state_t mode)
 {
     mode.value ^= settings.coolant_invert.mask;
     BITBAND_PERI(COOLANT_FLOOD_PORT->ODR, COOLANT_FLOOD_PIN) = mode.flood;
+#ifdef COOLANT_MIST_PIN
     BITBAND_PERI(COOLANT_MIST_PORT->ODR, COOLANT_MIST_PIN) = mode.mist;
+#endif
 }
 
 // Returns coolant state in a coolant_state_t variable
@@ -473,7 +523,9 @@ static coolant_state_t coolantGetState (void)
     coolant_state_t state = {0};
 
     state.flood = (COOLANT_FLOOD_PORT->IDR & COOLANT_FLOOD_BIT) != 0;
+#ifdef COOLANT_MIST_PIN
     state.mist  = (COOLANT_MIST_PORT->IDR & COOLANT_MIST_BIT) != 0;
+#endif
     state.value ^= settings.coolant_invert.mask;
 
     return state;
@@ -508,7 +560,10 @@ static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t 
 // Configures peripherals when settings are initialized or changed
 void settings_changed (settings_t *settings)
 {
+
+#ifdef SPINDLE_PWM_PIN
     hal.driver_cap.variable_spindle = settings->spindle.rpm_min < settings->spindle.rpm_max;
+#endif
 
 #if (STEP_OUTMODE == GPIO_MAP) || (DIRECTION_OUTMODE == GPIO_MAP)
     uint8_t i;
@@ -539,7 +594,6 @@ void settings_changed (settings_t *settings)
         GPIO_InitTypeDef GPIO_Init = {0};
 
         GPIO_Init.Speed = GPIO_SPEED_FREQ_HIGH;
-
 
       #if TRINAMIC_ENABLE
         trinamic_configure();
@@ -583,7 +637,7 @@ void settings_changed (settings_t *settings)
         } else
             hal.spindle_set_state = spindleSetState;
 
-        if(hal.driver_cap.step_pulse_delay && settings->steppers.pulse_delay_microseconds) {
+        if(hal.driver_cap.step_pulse_delay && settings->steppers.pulse_delay_microseconds > 0.0f) {
             hal.stepper_pulse_start = &stepperPulseStartDelayed;
             PULSE_TIMER->DIER |= TIM_DIER_CC1IE; // Enable CC1 interrupt
         } else {
@@ -591,8 +645,8 @@ void settings_changed (settings_t *settings)
             PULSE_TIMER->DIER &= ~TIM_DIER_CC1IE; // Disable CC1 interrupt
         }
 
-        PULSE_TIMER->ARR = settings->steppers.pulse_microseconds + settings->steppers.pulse_delay_microseconds - 1;
-        PULSE_TIMER->CCR1 = settings->steppers.pulse_delay_microseconds;
+        PULSE_TIMER->ARR = (uint32_t)(10.0f * (settings->steppers.pulse_microseconds + settings->steppers.pulse_delay_microseconds - STEP_PULSE_LATENCY)) - 1;
+        PULSE_TIMER->CCR1 = (uint32_t)(10.0f * settings->steppers.pulse_delay_microseconds);
         PULSE_TIMER->EGR = TIM_EGR_UG;
 
         /*************************
@@ -603,7 +657,27 @@ void settings_changed (settings_t *settings)
 
         control_ire.mask = ~(settings->control_disable_pullup.mask ^ settings->control_invert.mask);
 
+#if DRIVER_IRQMASK & (1<<0)
+        HAL_NVIC_DisableIRQ(EXTI0_IRQn);
+#endif
+#if DRIVER_IRQMASK & (1<<1)
+        HAL_NVIC_DisableIRQ(EXTI1_IRQn);
+#endif
+#if DRIVER_IRQMASK & (1<<2)
+        HAL_NVIC_DisableIRQ(EXTI2_IRQn);
+#endif
+#if DRIVER_IRQMASK & (1<<3)
+        HAL_NVIC_DisableIRQ(EXTI3_IRQn);
+#endif
+#if DRIVER_IRQMASK & (1<<4)
+        HAL_NVIC_DisableIRQ(EXTI4_IRQn);
+#endif
+#if DRIVER_IRQMASK & 0x03F0
         HAL_NVIC_DisableIRQ(EXTI9_5_IRQn);
+#endif
+#if DRIVER_IRQMASK & 0xFE00
+        HAL_NVIC_DisableIRQ(EXTI15_10_IRQn);
+#endif
 
         GPIO_Init.Pin = CONTROL_RESET_BIT;
         GPIO_Init.Mode = control_ire.reset ? GPIO_MODE_IT_RISING : GPIO_MODE_IT_FALLING;
@@ -620,15 +694,13 @@ void settings_changed (settings_t *settings)
         GPIO_Init.Pull = settings->control_disable_pullup.cycle_start ? GPIO_NOPULL : GPIO_PULLUP;
         HAL_GPIO_Init(CONTROL_PORT, &GPIO_Init);
 
+#ifdef CONTROL_SAFETY_DOOR_PIN
         GPIO_Init.Pin = CONTROL_SAFETY_DOOR_BIT;
         GPIO_Init.Mode = control_ire.safety_door_ajar ? GPIO_MODE_IT_RISING : GPIO_MODE_IT_FALLING;
         GPIO_Init.Pull = settings->control_disable_pullup.safety_door_ajar ? GPIO_NOPULL : GPIO_PULLUP;
         HAL_GPIO_Init(CONTROL_PORT, &GPIO_Init);
+#endif
 
-        __HAL_GPIO_EXTI_CLEAR_IT(CONTROL_MASK);
-
-        HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 2);
-        HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 
         /***********************
          *  Limit pins config  *
@@ -645,17 +717,17 @@ void settings_changed (settings_t *settings)
             GPIO_Init.Pin = X_LIMIT_BIT;
             GPIO_Init.Mode = limit_ire.x ? GPIO_MODE_IT_RISING : GPIO_MODE_IT_FALLING;
             GPIO_Init.Pull = settings->limits.disable_pullup.x ? GPIO_NOPULL : GPIO_PULLUP;
-            HAL_GPIO_Init(LIMIT_PORT, &GPIO_Init);
+            HAL_GPIO_Init(X_LIMIT_PORT, &GPIO_Init);
 
             GPIO_Init.Pin = Y_LIMIT_BIT;
             GPIO_Init.Mode = limit_ire.y ? GPIO_MODE_IT_RISING : GPIO_MODE_IT_FALLING;
             GPIO_Init.Pull = settings->limits.disable_pullup.y ? GPIO_NOPULL : GPIO_PULLUP;
-            HAL_GPIO_Init(LIMIT_PORT, &GPIO_Init);
+            HAL_GPIO_Init(Y_LIMIT_PORT, &GPIO_Init);
 
             GPIO_Init.Pin = Z_LIMIT_BIT;
             GPIO_Init.Mode = limit_ire.z ? GPIO_MODE_IT_RISING : GPIO_MODE_IT_FALLING;
             GPIO_Init.Pull = settings->limits.disable_pullup.z ? GPIO_NOPULL : GPIO_PULLUP;
-            HAL_GPIO_Init(LIMIT_PORT, &GPIO_Init);
+            HAL_GPIO_Init(Z_LIMIT_PORT, &GPIO_Init);
 
 #ifdef A_LIMIT_BIT
             GPIO_Init.Pin = A_LIMIT_BIT;
@@ -669,6 +741,7 @@ void settings_changed (settings_t *settings)
             GPIO_Init.Pull = settings->limits.disable_pullup.b ? GPIO_NOPULL : GPIO_PULLUP;
             HAL_GPIO_Init(LIMIT_PORT, &GPIO_Init);
 #endif
+
             __HAL_GPIO_EXTI_CLEAR_IT(LIMIT_MASK);
 
             HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
@@ -678,17 +751,17 @@ void settings_changed (settings_t *settings)
             GPIO_Init.Mode = GPIO_MODE_INPUT;
             GPIO_Init.Alternate = 0;
 
+            GPIO_Init.Pin = Z_LIMIT_BIT;
+            GPIO_Init.Pull = settings->limits.disable_pullup.z ? GPIO_NOPULL : GPIO_PULLUP;
+            HAL_GPIO_Init(Z_LIMIT_PORT, &GPIO_Init);
+
             GPIO_Init.Pin = X_LIMIT_BIT;
             GPIO_Init.Pull = settings->limits.disable_pullup.x ? GPIO_NOPULL : GPIO_PULLUP;
-            HAL_GPIO_Init(LIMIT_PORT, &GPIO_Init);
+            HAL_GPIO_Init(X_LIMIT_PORT, &GPIO_Init);
 
             GPIO_Init.Pin = Y_LIMIT_BIT;
             GPIO_Init.Pull = settings->limits.disable_pullup.y ? GPIO_NOPULL : GPIO_PULLUP;
-            HAL_GPIO_Init(LIMIT_PORT, &GPIO_Init);
-
-            GPIO_Init.Pin = Z_LIMIT_BIT;
-            GPIO_Init.Pull = settings->limits.disable_pullup.z ? GPIO_NOPULL : GPIO_PULLUP;
-            HAL_GPIO_Init(LIMIT_PORT, &GPIO_Init);
+            HAL_GPIO_Init(Y_LIMIT_PORT, &GPIO_Init);
 
 #ifdef A_LIMIT_BIT
             GPIO_Init.Pin = A_LIMIT_BIT;
@@ -702,6 +775,7 @@ void settings_changed (settings_t *settings)
 #endif
         }
 
+#ifdef PROBE_PIN
         /**********************
          *  Probe pin config  *
          **********************/
@@ -710,15 +784,43 @@ void settings_changed (settings_t *settings)
         GPIO_Init.Mode = GPIO_MODE_INPUT;
         GPIO_Init.Pull = settings->flags.disable_probe_pullup ? GPIO_NOPULL : GPIO_PULLUP;
         HAL_GPIO_Init(PROBE_PORT, &GPIO_Init);
+#endif
 
 #if KEYPAD_ENABLE
-        HAL_NVIC_DisableIRQ(EXTI15_10_IRQn);
-
         GPIO_Init.Pin = KEYPAD_STROBE_BIT;
         GPIO_Init.Mode = GPIO_MODE_IT_RISING_FALLING;
         GPIO_Init.Pull = GPIO_PULLUP;
         HAL_GPIO_Init(KEYPAD_PORT, &GPIO_Init);
+#endif
 
+        __HAL_GPIO_EXTI_CLEAR_IT(DRIVER_IRQMASK);
+
+#if DRIVER_IRQMASK & (1<<0)
+        HAL_NVIC_SetPriority(EXTI0_IRQn, 0, 2);
+        HAL_NVIC_EnableIRQ(EXTI0_IRQn);
+#endif
+#if DRIVER_IRQMASK & (1<<1)
+        HAL_NVIC_SetPriority(EXTI1_IRQn, 0, 2);
+        HAL_NVIC_EnableIRQ(EXTI1_IRQn);
+#endif
+#if DRIVER_IRQMASK & (1<<2)
+        HAL_NVIC_SetPriority(EXTI2_IRQn, 0, 2);
+        HAL_NVIC_EnableIRQ(EXTI2_IRQn);
+#endif
+#if DRIVER_IRQMASK & (1<<3)
+        HAL_NVIC_SetPriority(EXTI3_IRQn, 0, 2);
+        HAL_NVIC_EnableIRQ(EXTI3_IRQn);
+#endif
+#if DRIVER_IRQMASK & (1<<4)
+        HAL_NVIC_SetPriority(EXTI4_IRQn, 0, 2);
+        HAL_NVIC_EnableIRQ(EXTI4_IRQn);
+#endif
+#if DRIVER_IRQMASK & 0x03F0
+        HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 2);
+        HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
+#endif
+#if DRIVER_IRQMASK & 0xFE00
+        HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 2);
         HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 #endif
     }
@@ -765,11 +867,29 @@ static bool driver_setup (settings_t *settings)
     GPIO_Init.Pin = STEPPERS_DISABLE_MASK;
     HAL_GPIO_Init(STEPPERS_DISABLE_PORT, &GPIO_Init);
 
+#ifdef STEP_MASK
     GPIO_Init.Pin = STEP_MASK;
     HAL_GPIO_Init(STEP_PORT, &GPIO_Init);
+#else
+    GPIO_Init.Pin = X_STEP_BIT;
+    HAL_GPIO_Init(X_STEP_PORT, &GPIO_Init);
+    GPIO_Init.Pin = Y_STEP_BIT;
+    HAL_GPIO_Init(Y_STEP_PORT, &GPIO_Init);
+    GPIO_Init.Pin = Z_STEP_BIT;
+    HAL_GPIO_Init(Z_STEP_PORT, &GPIO_Init);
+#endif
 
+#ifdef DIRECTION_MASK
     GPIO_Init.Pin = DIRECTION_MASK;
     HAL_GPIO_Init(DIRECTION_PORT, &GPIO_Init);
+#else
+    GPIO_Init.Pin = X_DIRECTION_BIT;
+    HAL_GPIO_Init(X_DIRECTION_PORT, &GPIO_Init);
+    GPIO_Init.Pin = Y_DIRECTION_BIT;
+    HAL_GPIO_Init(Y_DIRECTION_PORT, &GPIO_Init);
+    GPIO_Init.Pin = Z_DIRECTION_BIT;
+    HAL_GPIO_Init(Z_DIRECTION_PORT, &GPIO_Init);
+#endif
 
     STEPPER_TIMER->CR1 &= ~TIM_CR1_CEN;
     STEPPER_TIMER->SR &= ~TIM_SR_UIF;
@@ -778,7 +898,7 @@ static bool driver_setup (settings_t *settings)
 
     // Single-shot 1 us per tick
     PULSE_TIMER->CR1 |= TIM_CR1_OPM|TIM_CR1_DIR|TIM_CR1_CKD_1|TIM_CR1_ARPE|TIM_CR1_URS;
-    PULSE_TIMER->PSC = hal.f_step_timer / 1000000UL - 1;
+    PULSE_TIMER->PSC = hal.f_step_timer / 10000000UL - 1;
     PULSE_TIMER->SR &= ~(TIM_SR_UIF|TIM_SR_CC1IF);
     PULSE_TIMER->CNT = 0;
     PULSE_TIMER->DIER |= TIM_DIER_UIE;
@@ -816,6 +936,8 @@ static bool driver_setup (settings_t *settings)
     GPIO_Init.Pin = SPINDLE_ENABLE_BIT;
     HAL_GPIO_Init(SPINDLE_ENABLE_PORT, &GPIO_Init);
 
+#ifdef SPINDLE_PWM_PIN
+
     if(hal.driver_cap.variable_spindle) {
         GPIO_Init.Pin = SPINDLE_PWM_BIT;
         GPIO_Init.Mode = GPIO_MODE_AF_PP;
@@ -825,21 +947,23 @@ static bool driver_setup (settings_t *settings)
         GPIO_Init.Alternate = 0;
     }
 
+#endif
+
  // Coolant init
 
     GPIO_Init.Mode = GPIO_MODE_OUTPUT_PP;
 
     GPIO_Init.Pin = COOLANT_FLOOD_BIT;
     HAL_GPIO_Init(COOLANT_FLOOD_PORT, &GPIO_Init);
+    BITBAND_PERI(COOLANT_FLOOD_PORT->ODR, COOLANT_FLOOD_PIN) = 1;
+    BITBAND_PERI(COOLANT_FLOOD_PORT->ODR, COOLANT_FLOOD_PIN) = 0;
 
+#ifdef COOLANT_MIST_PIN
     GPIO_Init.Pin = COOLANT_MIST_BIT;
     HAL_GPIO_Init(COOLANT_MIST_PORT, &GPIO_Init);
-
-    BITBAND_PERI(COOLANT_FLOOD_PORT->ODR, COOLANT_FLOOD_PIN) = 1;
     BITBAND_PERI(COOLANT_MIST_PORT->ODR, COOLANT_MIST_PIN) = 1;
-
-    BITBAND_PERI(COOLANT_FLOOD_PORT->ODR, COOLANT_FLOOD_PIN) = 0;
     BITBAND_PERI(COOLANT_MIST_PORT->ODR, COOLANT_MIST_PIN) = 0;
+#endif
 
 #if SDCARD_ENABLE
 
@@ -862,7 +986,7 @@ static bool driver_setup (settings_t *settings)
 
 #endif
 
-    IOInitDone = settings->version == 16;
+    IOInitDone = settings->version == 17;
 
     settings_changed(settings);
 
@@ -936,10 +1060,14 @@ bool driver_init (void)
     i2c_init();
 #endif
 
-    //__HAL_AFIO_REMAP_SWJ_NOJTAG();
+    // __HAL_AFIO_REMAP_SWJ_NOJTAG();
 
+#ifdef STM32F411xE
+    hal.info = "STM32F411";
+#else
     hal.info = "STM32F401CC";
-    hal.driver_version = "200528";
+#endif
+    hal.driver_version = "200730";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1045,15 +1173,21 @@ bool driver_init (void)
     hal.driver_cap.safety_door = On;
 #endif
     hal.driver_cap.spindle_dir = On;
+#ifdef SPINDLE_PWM_PIN
     hal.driver_cap.variable_spindle = On;
+#endif
     hal.driver_cap.spindle_pwm_invert = On;
+#ifdef COOLANT_MIST_PIN
     hal.driver_cap.mist_control = On;
+#endif
     hal.driver_cap.software_debounce = On;
     hal.driver_cap.step_pulse_delay = On;
     hal.driver_cap.amass_level = 3;
     hal.driver_cap.control_pull_up = On;
     hal.driver_cap.limits_pull_up = On;
+#ifdef PROBE_PIN
     hal.driver_cap.probe_pull_up = On;
+#endif
 #if SDCARD_ENABLE
     hal.driver_cap.sd_card = On;
 #endif
@@ -1117,46 +1251,169 @@ void TIM4_IRQHandler (void)
         hal.limit_interrupt_callback(state);
 }
 
-void EXTI15_10_IRQHandler(void)
+#if DRIVER_IRQMASK & (1<<0)
+
+void EXTI0_IRQHandler(void)
 {
-#if KEYPAD_ENABLE
-    uint32_t ifg = __HAL_GPIO_EXTI_GET_IT(LIMIT_MASK|KEYPAD_STROBE_BIT);
-#else
-    uint32_t ifg = __HAL_GPIO_EXTI_GET_IT(LIMIT_MASK);
-#endif
+    uint32_t ifg = __HAL_GPIO_EXTI_GET_IT(1<<0);
+
     if(ifg) {
-
         __HAL_GPIO_EXTI_CLEAR_IT(ifg);
-
-#if KEYPAD_ENABLE
-        if(ifg & KEYPAD_STROBE_BIT)
-            keypad_keyclick_handler(BITBAND_PERI(KEYPAD_PORT->IDR, KEYPAD_STROBE_PIN));
-        if(ifg & LIMIT_MASK) {
-#endif
-
+#if CONTROL_MASK & (1<<0)
+        hal.control_interrupt_callback(systemGetState());
+#else
         if(hal.driver_cap.software_debounce) {
             DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
             DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
         } else
             hal.limit_interrupt_callback(limitsGetState());
-
-#if KEYPAD_ENABLE
-        }
 #endif
     }
 }
 
-void EXTI9_5_IRQHandler(void)
+#endif
+
+#if DRIVER_IRQMASK & (1<<1)
+
+void EXTI1_IRQHandler(void)
 {
-    uint32_t ifg = __HAL_GPIO_EXTI_GET_IT(CONTROL_MASK);
+    uint32_t ifg = __HAL_GPIO_EXTI_GET_IT(1<<1);
 
     if(ifg) {
-
         __HAL_GPIO_EXTI_CLEAR_IT(ifg);
-
+#if CONTROL_MASK & (1<<1)
         hal.control_interrupt_callback(systemGetState());
+#else
+        if(hal.driver_cap.software_debounce) {
+            DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
+            DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
+        } else
+            hal.limit_interrupt_callback(limitsGetState());
+#endif
     }
 }
+
+#endif
+
+#if DRIVER_IRQMASK & (1<<2)
+
+void EXTI2_IRQHandler(void)
+{
+    uint32_t ifg = __HAL_GPIO_EXTI_GET_IT(1<<2);
+
+    if(ifg) {
+        __HAL_GPIO_EXTI_CLEAR_IT(ifg);
+#if CONTROL_MASK & (1<<2)
+        hal.control_interrupt_callback(systemGetState());
+#else
+        if(hal.driver_cap.software_debounce) {
+            DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
+            DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
+        } else
+            hal.limit_interrupt_callback(limitsGetState());
+#endif
+    }
+}
+
+#endif
+
+#if DRIVER_IRQMASK & (1<<3)
+
+void EXTI3_IRQHandler(void)
+{
+    uint32_t ifg = __HAL_GPIO_EXTI_GET_IT(1<<3);
+
+    if(ifg) {
+        __HAL_GPIO_EXTI_CLEAR_IT(ifg);
+#if CONTROL_MASK & (1<<3)
+        hal.control_interrupt_callback(systemGetState());
+#else
+        if(hal.driver_cap.software_debounce) {
+            DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
+            DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
+        } else
+            hal.limit_interrupt_callback(limitsGetState());
+#endif
+    }
+}
+
+#endif
+
+#if DRIVER_IRQMASK & (1<<4)
+
+void EXTI4_IRQHandler(void)
+{
+    uint32_t ifg = __HAL_GPIO_EXTI_GET_IT(1<<4);
+
+    if(ifg) {
+        __HAL_GPIO_EXTI_CLEAR_IT(ifg);
+#if CONTROL_MASK & (1<<4)
+        hal.control_interrupt_callback(systemGetState());
+#else
+        if(hal.driver_cap.software_debounce) {
+            DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
+            DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
+        } else
+            hal.limit_interrupt_callback(limitsGetState());
+#endif
+    }
+}
+
+#endif
+
+#if DRIVER_IRQMASK & (0x03F0)
+
+void EXTI9_5_IRQHandler(void)
+{
+    uint32_t ifg = __HAL_GPIO_EXTI_GET_IT(0x03F0);
+
+    if(ifg) {
+        __HAL_GPIO_EXTI_CLEAR_IT(ifg);
+
+        if(ifg & CONTROL_MASK)
+            hal.control_interrupt_callback(systemGetState());
+
+        if(ifg & LIMIT_MASK) {
+            if(hal.driver_cap.software_debounce) {
+                DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
+                DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
+            } else
+                hal.limit_interrupt_callback(limitsGetState());
+        }
+    }
+}
+
+#endif
+
+#if DRIVER_IRQMASK & (0xFE00)
+
+void EXTI15_10_IRQHandler(void)
+{
+    uint32_t ifg = __HAL_GPIO_EXTI_GET_IT(0xFE00);
+
+    if(ifg) {
+        __HAL_GPIO_EXTI_CLEAR_IT(ifg);
+
+        if(ifg & CONTROL_MASK)
+            hal.control_interrupt_callback(systemGetState());
+
+        if(ifg & LIMIT_MASK) {
+            if(hal.driver_cap.software_debounce) {
+                DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
+                DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
+            } else
+                hal.limit_interrupt_callback(limitsGetState());
+        }
+
+    #if KEYPAD_ENABLE
+        if(ifg & KEYPAD_STROBE_BIT)
+            keypad_keyclick_handler(BITBAND_PERI(KEYPAD_PORT->IDR, KEYPAD_STROBE_PIN));
+    #endif
+
+    }
+}
+
+#endif
 
 // Interrupt handler for 1 ms interval timer
 void HAL_IncTick(void)
