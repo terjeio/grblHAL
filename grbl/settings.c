@@ -68,11 +68,15 @@ const settings_t defaults = {
     .steppers.dir_invert.mask = DEFAULT_DIRECTION_INVERT_MASK,
     .steppers.enable_invert.mask = INVERT_ST_ENABLE_MASK,
     .steppers.deenergize.mask = ST_DEENERGIZE_MASK,
-
+#if DEFAULT_HOMING_ENABLE
     .homing.flags.enabled = DEFAULT_HOMING_ENABLE,
     .homing.flags.init_lock = DEFAULT_HOMING_INIT_LOCK,
     .homing.flags.single_axis_commands = HOMING_SINGLE_AXIS_COMMANDS,
     .homing.flags.force_set_origin = HOMING_FORCE_SET_ORIGIN,
+    .homing.flags.manual = DEFAULT_HOMING_ALLOW_MANUAL,
+#else
+    .homing.flags.value = 0,
+#endif
     .homing.dir_mask.value = DEFAULT_HOMING_DIR_MASK,
     .homing.feed_rate = DEFAULT_HOMING_FEED_RATE,
     .homing.seek_rate = DEFAULT_HOMING_SEEK_RATE,
@@ -83,17 +87,21 @@ const settings_t defaults = {
     .homing.cycle[1].mask = HOMING_CYCLE_1,
     .homing.cycle[2].mask = HOMING_CYCLE_2,
 
-    .status_report.buffer_state = REPORT_FIELD_BUFFER_STATE,
-    .status_report.line_numbers = REPORT_FIELD_LINE_NUMBERS,
-    .status_report.feed_speed = REPORT_FIELD_CURRENT_FEED_SPEED,
-    .status_report.pin_state = REPORT_FIELD_PIN_STATE,
-    .status_report.work_coord_offset = REPORT_FIELD_WORK_COORD_OFFSET,
-    .status_report.overrides = REPORT_FIELD_OVERRIDES,
-    .status_report.sync_on_wco_change = FORCE_BUFFER_SYNC_DURING_WCO_CHANGE,
-    .status_report.probe_coordinates = REPORT_PROBE_COORDINATES,
+    .status_report.machine_position = DEFAULT_REPORT_BUFFER_STATE,
+    .status_report.buffer_state = DEFAULT_REPORT_BUFFER_STATE,
+    .status_report.line_numbers = DEFAULT_REPORT_LINE_NUMBERS,
+    .status_report.feed_speed = DEFAULT_REPORT_CURRENT_FEED_SPEED,
+    .status_report.pin_state = DEFAULT_REPORT_PIN_STATE,
+    .status_report.work_coord_offset = DEFAULT_REPORT_WORK_COORD_OFFSET,
+    .status_report.overrides = DEFAULT_REPORT_OVERRIDES,
+    .status_report.probe_coordinates = DEFAULT_REPORT_PROBE_COORDINATES,
+    .status_report.sync_on_wco_change = DEFAULT_REPORT_SYNC_ON_WCO_CHANGE,
+    .status_report.parser_state = DEFAULT_REPORT_PARSER_STATE,
+    .status_report.alarm_substate = DEFAULT_REPORT_ALARM_SUBSTATE,
 
     .limits.flags.hard_enabled = DEFAULT_HARD_LIMIT_ENABLE,
     .limits.flags.soft_enabled = DEFAULT_SOFT_LIMIT_ENABLE,
+    .limits.flags.jog_soft_limited = DEFAULT_JOG_LIMIT_ENABLE,
     .limits.flags.check_at_init = DEFAULT_CHECK_LIMITS_AT_INIT,
     .limits.flags.two_switches = LIMITS_TWO_SWITCHES_ON_AXES,
     .limits.invert.mask = INVERT_LIMIT_PIN_MASK,
@@ -153,7 +161,7 @@ const settings_t defaults = {
     .homing.cycle[3].mask = HOMING_CYCLE_3,
   #endif
   #ifdef B_AXIS
-    .axis[B_AXIS.steps_per_mm] = DEFAULT_B_STEPS_PER_MM,
+    .axis[B_AXIS].steps_per_mm = DEFAULT_B_STEPS_PER_MM,
     .axis[B_AXIS].max_rate = DEFAULT_B_MAX_RATE,
     .axis[B_AXIS].acceleration = DEFAULT_B_ACCELERATION,
     .axis[B_AXIS].max_travel = (-DEFAULT_B_MAX_TRAVEL),
@@ -474,8 +482,8 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
 #if COMPATIBILITY_LEVEL <= 1
                 settings.status_report.mask = int_value;
 #else
-                int_value &= 0x03;
-                settings.status_report.mask = (settings.status_report.mask & ~0x03) | int_value;
+                int_value &= 0b111;
+                settings.status_report.mask = (settings.status_report.mask & ~0b111) | int_value;
 #endif
                 break;
 
@@ -498,7 +506,8 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 settings.control_invert.block_delete &= hal.driver_cap.block_delete;
                 settings.control_invert.e_stop &= hal.driver_cap.e_stop;
                 settings.control_invert.stop_disable &= hal.driver_cap.program_stop;
-                break;
+                settings.control_invert.probe_disconnected &= hal.driver_cap.probe_connected;
+               break;
 
             case Setting_CoolantInvertMask:
                 settings.coolant_invert.mask = int_value;
@@ -517,10 +526,11 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 break;
 
             case Setting_ControlPullUpDisableMask:
-                settings.control_disable_pullup.mask = int_value & 0x0F;
+                settings.control_disable_pullup.mask = int_value;
                 settings.control_disable_pullup.block_delete &= hal.driver_cap.block_delete;
                 settings.control_disable_pullup.e_stop &= hal.driver_cap.e_stop;
                 settings.control_disable_pullup.stop_disable &= hal.driver_cap.program_stop;
+                settings.control_invert.probe_disconnected &= hal.driver_cap.probe_connected;
                 break;
 
             case Setting_LimitPullUpDisableMask:

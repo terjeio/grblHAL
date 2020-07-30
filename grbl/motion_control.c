@@ -845,7 +845,8 @@ gc_probe_t mc_probe_cycle (float *target, plan_line_data_t *pl_data, gc_parser_f
     }
 
     // Setup and queue probing motion. Auto cycle-start should not start the cycle.
-    mc_line(target, pl_data);
+    if(!mc_line(target, pl_data))
+        return GCProbe_Abort;
 
     // Activate the probing state monitor in the stepper module.
     sys_probing_state = Probing_Active;

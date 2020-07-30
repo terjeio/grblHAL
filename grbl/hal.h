@@ -191,6 +191,7 @@ typedef struct HAL {
     void (*encoder_event_handler)(encoder_t *encoder, int32_t position);
     void (*encoder_reset)(uint_fast8_t id);
     uint32_t (*get_elapsed_ticks)(void);
+    void (*pallet_shuttle)(void);
 #ifdef DEBUGOUT
     void (*debug_out)(bool on);
 #endif

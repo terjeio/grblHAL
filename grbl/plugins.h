@@ -29,6 +29,80 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+// Jogging
+
+typedef struct {
+    float fast_speed;
+    float slow_speed;
+    float step_speed;
+    float fast_distance;
+    float slow_distance;
+    float step_distance;
+} jog_settings_t;
+
+// Networking
+
+typedef enum {
+    IpMode_Static = 0,
+    IpMode_DHCP,
+    IpMode_AutoIP
+} ip_mode_t;
+
+typedef union {
+    uint8_t mask;
+    struct {
+        uint8_t telnet     :1,
+                websocket  :1,
+                http       :1,
+                dns        :1,
+                mdns       :1,
+                ssdp       :1,
+                unassigned :2;
+    };
+} network_services_t;
+
+typedef char ssid_t[65];
+typedef char password_t[33];
+typedef char hostname_t[33];
+
+typedef struct {
+    char ip[16];
+    char gateway[16];
+    char mask[16];
+    hostname_t hostname;
+    uint16_t telnet_port;
+    uint16_t websocket_port;
+    uint16_t http_port;
+    ip_mode_t ip_mode;
+    network_services_t services;
+} network_settings_t;
+
+typedef enum {
+    WiFiMode_NULL = 0,
+    WiFiMode_STA,
+    WiFiMode_AP,
+    WiFiMode_APSTA
+} grbl_wifi_mode_t;
+
+typedef struct {
+    ssid_t ssid;
+    password_t password;
+    char country[4];
+    uint8_t channel;
+    network_settings_t network;
+} wifi_ap_settings_t;
+
+typedef struct {
+    ssid_t ssid;
+    password_t password;
+    network_settings_t network;
+} wifi_sta_settings_t;
+
+typedef struct {
+    char device_name[33];
+    char service_name[33];
+} bluetooth_settings_t;
+
 // Quadrature encoder interface
 
 typedef enum {
@@ -45,6 +119,13 @@ typedef enum {
     Encoder_MPG_C,
     Encoder_Spindle_Position
 } encoder_mode_t;
+
+typedef enum {
+    Setting_EncoderMode = 0,
+    Setting_EncoderCPR = 1, // Count Per Revolution
+    Setting_EncoderCPD = 2, // Count Per Detent
+    Setting_EncoderDblClickWindow = 3 // ms
+} encoder_setting_type_t;
 
 typedef union {
     uint8_t events;

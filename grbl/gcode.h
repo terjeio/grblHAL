@@ -228,7 +228,8 @@ typedef enum {
     ProgramFlow_Paused  = 3,        // M0
     ProgramFlow_OptionalStop = 1,   // M1
     ProgramFlow_CompletedM2 = 2,    // M2 (Do not alter value)
-    ProgramFlow_CompletedM30 = 30   // M30 (Do not alter value)
+    ProgramFlow_CompletedM30 = 30,  // M30 (Do not alter value)
+    ProgramFlow_CompletedM60 = 60   // M60 (Do not alter value)
 } program_flow_t;
 
 // Modal Group G5: Feed rate mode

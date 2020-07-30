@@ -72,7 +72,7 @@ bool spindle_set_state (spindle_state_t state, float rpm)
 bool spindle_sync (spindle_state_t state, float rpm)
 {
     bool ok = true;
-    bool at_speed = sys.state == STATE_CHECK_MODE || !state.on || !hal.driver_cap.spindle_at_speed || settings.spindle.at_speed_tolerance > 0.0f;
+    bool at_speed = sys.state == STATE_CHECK_MODE || !state.on || !hal.driver_cap.spindle_at_speed || settings.spindle.at_speed_tolerance <= 0.0f;
 
     if (sys.state != STATE_CHECK_MODE) {
         // Empty planner buffer to ensure spindle is set when programmed.

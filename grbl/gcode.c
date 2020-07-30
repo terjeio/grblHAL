@@ -514,7 +514,7 @@ status_code_t gc_execute_block(char *block, char *message)
 
                 switch(int_value) {
 
-                    case 0: case 1: case 2: case 30:
+                    case 0: case 1: case 2: case 30: case 60:
                         word_bit.group = ModalGroup_M4;
                         switch(int_value) {
 
@@ -527,7 +527,7 @@ status_code_t gc_execute_block(char *block, char *message)
                                     gc_block.modal.program_flow = ProgramFlow_OptionalStop;
                                 break;
 
-                            default: // M2, M30 - program end and reset
+                            default: // M2, M30, M60 - program end and reset
                                 gc_block.modal.program_flow = (program_flow_t)int_value;
                         }
                         break;
@@ -2441,7 +2441,7 @@ status_code_t gc_execute_block(char *block, char *message)
         protocol_message(plan_data.message);
 
     // [21. Program flow ]:
-    // M0,M1,M2,M30: Perform non-running program flow actions. During a program pause, the buffer may
+    // M0,M1,M2,M30,M60: Perform non-running program flow actions. During a program pause, the buffer may
     // refill and can only be resumed by the cycle start run-time command.
     gc_state.modal.program_flow = gc_block.modal.program_flow;
 
@@ -2449,8 +2449,10 @@ status_code_t gc_execute_block(char *block, char *message)
 
         protocol_buffer_synchronize(); // Sync and finish all remaining buffered motions before moving on.
 
-        if (gc_state.modal.program_flow == ProgramFlow_Paused || gc_block.modal.program_flow == ProgramFlow_OptionalStop) {
+        if (gc_state.modal.program_flow == ProgramFlow_Paused || gc_block.modal.program_flow == ProgramFlow_OptionalStop || gc_block.modal.program_flow == ProgramFlow_CompletedM60) {
             if (sys.state != STATE_CHECK_MODE) {
+                if(gc_block.modal.program_flow == ProgramFlow_CompletedM60 && hal.pallet_shuttle)
+                    hal.pallet_shuttle();
                 system_set_exec_state_flag(EXEC_FEED_HOLD); // Use feed hold for program pause.
                 protocol_execute_realtime(); // Execute suspend.
             }
@@ -2459,6 +2461,10 @@ status_code_t gc_execute_block(char *block, char *message)
             // LinuxCNC's program end descriptions and testing. Only modal groups [G-code 1,2,3,5,7,12]
             // and [M-code 7,8,9] reset to [G1,G17,G90,G94,G40,G54,M5,M9,M48]. The remaining modal groups
             // [G-code 4,6,8,10,13,14,15] and [M-code 4,5,6] and the modal words [F,S,T,H] do not reset.
+
+            if(sys.state != STATE_CHECK_MODE && gc_block.modal.program_flow == ProgramFlow_CompletedM30 && hal.pallet_shuttle)
+                hal.pallet_shuttle();
+
             gc_state.file_run = false;
             gc_state.modal.motion = MotionMode_Linear;
             gc_block.modal.canned_cycle_active = false;

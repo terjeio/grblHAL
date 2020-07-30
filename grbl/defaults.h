@@ -29,7 +29,8 @@
 #define SIGNALS_BLOCKDELETE_BIT (1<<4)
 #define SIGNALS_STOPDISABLE_BIT (1<<5)
 #define SIGNALS_ESTOP_BIT (1<<6)
-#define SIGNALS_BITMASK (SIGNALS_RESET_BIT|SIGNALS_FEEDHOLD_BIT|SIGNALS_CYCLESTART_BIT|SIGNALS_SAFETYDOOR_BIT|SIGNALS_BLOCKDELETE_BIT|SIGNALS_STOPDISABLE_BIT|SIGNALS_ESTOP_BIT)
+#define SIGNALS_PROBE_CONNECTED_BIT (1<<7)
+#define SIGNALS_BITMASK (SIGNALS_RESET_BIT|SIGNALS_FEEDHOLD_BIT|SIGNALS_CYCLESTART_BIT|SIGNALS_SAFETYDOOR_BIT|SIGNALS_BLOCKDELETE_BIT|SIGNALS_STOPDISABLE_BIT|SIGNALS_ESTOP_BIT|SIGNALS_PROBE_CONNECTED_BIT)
 
 // By default, Grbl sets all input pins to normal-low operation with their internal pull-up resistors
 // enabled. This simplifies the wiring for users by requiring only a normally closed (NC) switch connected
@@ -83,12 +84,51 @@
 // be sent without potential performance issues.
 // NOTE: The options below are here only provide a way to disable certain data fields if a unique
 // situation demands it, but be aware GUIs may depend on this data. If disabled, it may not be compatible.
-#define REPORT_FIELD_BUFFER_STATE       1 // Default enabled. Set to 0 disable.
-#define REPORT_FIELD_PIN_STATE          1 // Default enabled. Set to 0 disable.
-#define REPORT_FIELD_CURRENT_FEED_SPEED 1 // Default enabled. Set to 0 disable.
-#define REPORT_FIELD_WORK_COORD_OFFSET  1 // Default enabled. Set to 0 disable.
-#define REPORT_FIELD_OVERRIDES          1 // Default enabled. Set to 0 disable.
-#define REPORT_FIELD_LINE_NUMBERS       1 // Default enabled. Set to 0 disable.
+#define DEFAULT_REPORT_MACHINE_POSITION   0 // Default disabled. Set to 1 enable.
+#define DEFAULT_REPORT_BUFFER_STATE       1 // Default enabled. Set to 0 disable.
+#define DEFAULT_REPORT_LINE_NUMBERS       1 // Default enabled. Set to 0 disable.
+#define DEFAULT_REPORT_CURRENT_FEED_SPEED 1 // Default enabled. Set to 0 disable.
+#define DEFAULT_REPORT_PIN_STATE          1 // Default enabled. Set to 0 disable.
+#define DEFAULT_REPORT_WORK_COORD_OFFSET  1 // Default enabled. Set to 0 disable.
+#define DEFAULT_REPORT_OVERRIDES          1 // Default enabled. Set to 0 disable.
+#if REPORT_PROBE_COORDINATES
+#define DEFAULT_REPORT_PROBE_COORDINATES  1 // Default enabled.
+#else
+#define DEFAULT_REPORT_PROBE_COORDINATES  0 // Default disabled. Set to 1 enable.
+#endif
+#if FORCE_BUFFER_SYNC_DURING_WCO_CHANGE
+#define DEFAULT_REPORT_SYNC_ON_WCO_CHANGE 1 // Default enabled.
+#else
+#define DEFAULT_REPORT_SYNC_ON_WCO_CHANGE 0 // Default disabled. Set to 1 enable.
+#endif
+#define DEFAULT_REPORT_PARSER_STATE       0 // Default disabled. Set to 1 enable.
+#define DEFAULT_REPORT_ALARM_SUBSTATE     0 // Default disabled. Set to 1 enable.
+
+// Report mask bit definitions and mask.
+// NOTE: these definitions are only referenced in this file.
+#define REPORT_MACHINE_POSITION_BIT   (1<<0)
+#define REPORT_BUFFER_STATE_BIT       (1<<1)
+#define REPORT_LINE_NUMBERS_BIT       (1<<2)
+#define REPORT_CURRENT_FEED_SPEED_BIT (1<<3)
+#define REPORT_PINS_TATE_BIT          (1<<4)
+#define REPORT_WORK_COORD_OFFSET_BIT  (1<<5)
+#define REPORT_OVERRIDES_BIT          (1<<6)
+#define REPORT_PROBE_COORDINATES_BIT  (1<<7)
+#define REPORT_SYNC_ON_WCO_CHANGE_BIT (1<<8)
+#define REPORT_PARSER_STATE_BIT       (1<<9)
+#define REPORT_ALARM_SUBSTATE_BIT     (1<<10)
+
+#if FORCE_BUFFER_SYNC_DURING_WCO_CHANGE
+#undef FORCE_BUFFER_SYNC_DURING_WCO_CHANGE
+#define FORCE_BUFFER_SYNC_DURING_WCO_CHANGE REPORT_SYNC_ON_WCO_CHANGE_BIT
+#endif
+
+#if REPORT_PROBE_COORDINATES
+#undef REPORT_PROBE_COORDINATES
+#define REPORT_PROBE_COORDINATES REPORT_PROBE_COORDINATES_BIT
+#endif
+
+#define DEFAULT_STATUS_REPORT_MASK (REPORT_BUFFERSTATE_BIT|REPORT_PINSTATE_BIT|REPORT_CURRENTFEEDSPEED_BIT|REPORT_WORKCOORDOFFSET_BIT|REPORT_OVERRIDES_BIT|REPORT_LINE_NUMBERS)
 
 // Used by variable spindle output only. This forces the PWM output to a minimum duty cycle when enabled.
 // The PWM pin will still read 0V when the spindle is disabled. Most users will not need this option, but
@@ -137,6 +177,7 @@
 #define DEFAULT_REPORT_INCHES 0 // false
 #define DEFAULT_INVERT_LIMIT_PINS 0 // false
 #define DEFAULT_SOFT_LIMIT_ENABLE 0 // false
+#define DEFAULT_JOG_LIMIT_ENABLE 0 // false
 #define DEFAULT_HARD_LIMIT_ENABLE 0  // false
 #define DEFAULT_INVERT_PROBE_PIN 0 // false
 #define DEFAULT_LASER_MODE 0 // false
