@@ -36,7 +36,8 @@
 
 // NOTE: Only one board may be enabled!
 //#define BOARD_CNC3040
-#define BOARD_PROTONEER_3XX
+//#define BOARD_PROTONEER_3XX // For use with a Nucleo-F411RE board
+//#define BOARD_GENERIC_UNO // For use with a Nucleo-F411RE board
 
 // Configuration
 // Set value to 1 to enable, 0 to disable
@@ -134,6 +135,8 @@ extern driver_settings_t driver_settings;
   #include "cnc3040_map.h"
 #elif defined(BOARD_PROTONEER_3XX)
   #include "protoneer_3.xx_map.h"
+#elif defined(BOARD_GENERIC_UNO)
+  #include "uno_map.h"
 #else // default board
 
 // Define step pulse output pins.

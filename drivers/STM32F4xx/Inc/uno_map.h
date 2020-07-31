@@ -1,5 +1,5 @@
 /*
-  protoneer_3.xx_map.h - driver code for STM32F411 ARM processor on a Nucleo-F411RE board
+  uno_map.h - driver code for STM32F411 ARM processor on a Nucleo-F411RE board
 
   Part of GrblHAL
 
@@ -19,7 +19,9 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#define BOARD_NAME "Protoneer v3"
+#define BOARD_NAME "Generic Uno"
+
+#define VARIABLE_SPINDLE // Comment out to disable variable spindle
 
 // Define step pulse output pins.
 #define X_STEP_PORT         GPIOA // D2
@@ -58,28 +60,48 @@
 #define Y_LIMIT_PORT        GPIOB // D10
 #define Y_LIMIT_PIN         6
 #define Y_LIMIT_BIT         (1<<Y_LIMIT_PIN)
-#define Z_LIMIT_PORT        GPIOA // D11
-#define Z_LIMIT_PIN         7
+#ifdef VARIABLE_SPINDLE
+  #define Z_LIMIT_PORT      GPIOA // D12
+  #define Z_LIMIT_PIN       6
+#else
+  #define Z_LIMIT_PORT      GPIOA // D11
+  #define Z_LIMIT_PIN       7
+#endif
 #define Z_LIMIT_BIT         (1<<Z_LIMIT_PIN)
 #define LIMIT_MASK          (X_LIMIT_BIT|Y_LIMIT_BIT|Z_LIMIT_BIT) // All limit bits
 #define LIMIT_INMODE        GPIO_BITBAND
 
 // Define spindle enable and spindle direction output pins.
-#define SPINDLE_ENABLE_PORT     GPIOA // D12
-#define SPINDLE_ENABLE_PIN      6
+#ifdef VARIABLE_SPINDLE
+  #define SPINDLE_ENABLE_PORT   GPIOB // on morpho header
+  #define SPINDLE_ENABLE_PIN    7
+#else
+  #define SPINDLE_ENABLE_PORT   GPIOA // D12
+  #define SPINDLE_ENABLE_PIN    6
+#endif
 #define SPINDLE_ENABLE_BIT      (1<<SPINDLE_ENABLE_PIN)
 #define SPINDLE_DIRECTION_PORT  GPIOA // D13
 #define SPINDLE_DIRECTION_PIN   5
 #define SPINDLE_DIRECTION_BIT   (1<<SPINDLE_DIRECTION_PIN)
 
+// Define spindle PWM output pin.
+#ifdef VARIABLE_SPINDLE
+#define SPINDLE_PWM_PORT        GPIOA // D11
+#define SPINDLE_PWM_PIN         7
+#define SPINDLE_PWM_BIT         (1<<SPINDLE_PWM_PIN)
+#endif
+
 // Define flood and mist coolant enable output pins.
 #define COOLANT_FLOOD_PORT  GPIOB // A3
 #define COOLANT_FLOOD_PIN   0
 #define COOLANT_FLOOD_BIT   (1<<COOLANT_FLOOD_PIN)
+#define COOLANT_MIST_PORT   GPIOC // A4
+#define COOLANT_MIST_PIN    1
+#define COOLANT_MIST_BIT    (1<<COOLANT_MIST_PIN)
 
 // Define user-control CONTROLs (cycle start, reset, feed hold) input pins.
-#define CONTROL_PORT            GPIOA // A0
-#define CONTROL_RESET_PIN       0
+#define CONTROL_PORT            GPIOA
+#define CONTROL_RESET_PIN       0 // A0
 #define CONTROL_RESET_BIT       (1<<CONTROL_RESET_PIN)
 #define CONTROL_FEED_HOLD_PIN   1 // A1
 #define CONTROL_FEED_HOLD_BIT   (1<<CONTROL_FEED_HOLD_PIN)
@@ -87,5 +109,10 @@
 #define CONTROL_CYCLE_START_BIT (1<<CONTROL_CYCLE_START_PIN)
 #define CONTROL_MASK            (CONTROL_RESET_BIT|CONTROL_FEED_HOLD_BIT|CONTROL_CYCLE_START_BIT)
 #define CONTROL_INMODE          GPIO_MAP
+
+// Define probe switch input pin.
+#define PROBE_PORT  GPIOC // A5
+#define PROBE_PIN   0
+#define PROBE_BIT   (1<<PROBE_PIN)
 
 /**/

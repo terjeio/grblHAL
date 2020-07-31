@@ -623,15 +623,26 @@ void settings_changed (settings_t *settings)
             SPINDLE_PWM_TIMER->CCMR1 &= ~(TIM_CCMR1_OC1M|TIM_CCMR1_CC1S);
             SPINDLE_PWM_TIMER->CCMR1 |= TIM_CCMR1_OC1M_1|TIM_CCMR1_OC1M_2;
             SPINDLE_PWM_TIMER->CCR1 = 0;
+            SPINDLE_PWM_TIMER->BDTR |= TIM_BDTR_OSSR|TIM_BDTR_OSSI;
+#if defined(SPINDLE_PWM_PIN) && SPINDLE_PWM_PIN == 7
+            if(settings->spindle.invert.pwm) {
+                SPINDLE_PWM_TIMER->CCER |= TIM_CCER_CC1NP;
+            	SPINDLE_PWM_TIMER->CR2 |= TIM_CR2_OIS1N;
+            } else {
+                SPINDLE_PWM_TIMER->CCER &= ~TIM_CCER_CC1NP;
+            	SPINDLE_PWM_TIMER->CR2 &= ~TIM_CR2_OIS1N;
+            }
+            SPINDLE_PWM_TIMER->CCER |= TIM_CCER_CC1NE;
+#else
             if(settings->spindle.invert.pwm) {
                 SPINDLE_PWM_TIMER->CCER |= TIM_CCER_CC1P;
-            	SPINDLE_PWM_TIMER->CR2 |= TIM_CR2_OIS1;
+                SPINDLE_PWM_TIMER->CR2 |= TIM_CR2_OIS1;
             } else {
                 SPINDLE_PWM_TIMER->CCER &= ~TIM_CCER_CC1P;
-            	SPINDLE_PWM_TIMER->CR2 &= ~TIM_CR2_OIS1;
+                SPINDLE_PWM_TIMER->CR2 &= ~TIM_CR2_OIS1;
             }
-            SPINDLE_PWM_TIMER->BDTR |= TIM_BDTR_OSSR|TIM_BDTR_OSSI;
             SPINDLE_PWM_TIMER->CCER |= TIM_CCER_CC1E;
+#endif
             SPINDLE_PWM_TIMER->CR1 |= TIM_CR1_CEN;
 
         } else
@@ -1067,7 +1078,7 @@ bool driver_init (void)
 #else
     hal.info = "STM32F401CC";
 #endif
-    hal.driver_version = "200730";
+    hal.driver_version = "200731";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
