@@ -856,7 +856,7 @@ gc_probe_t mc_probe_cycle (float *target, plan_line_data_t *pl_data, gc_parser_f
     do {
         if(!protocol_execute_realtime()) // Check for system abort
             return GCProbe_Abort;
-    } while (sys.state != STATE_IDLE);
+    } while (!(sys.state == STATE_IDLE || sys.state == STATE_TOOL_CHANGE));
 
     // Probing cycle complete!
 
@@ -881,6 +881,9 @@ gc_probe_t mc_probe_cycle (float *target, plan_line_data_t *pl_data, gc_parser_f
     // All done! Output the probe position as message if configured.
     if(settings.status_report.probe_coordinates)
         report_probe_parameters();
+
+    if(hal.on_probe_completed)
+        hal.on_probe_completed();
 
     // Successful probe cycle or Failed to trigger probe within travel. With or without error.
     return sys.flags.probe_succeeded ? GCProbe_Found : GCProbe_FailEnd;

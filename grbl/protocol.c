@@ -182,7 +182,7 @@ bool protocol_main_loop(bool cold_start)
                 else if (sys.state & (STATE_ALARM|STATE_ESTOP|STATE_JOG)) // Everything else is gcode. Block if in alarm, eStop or jog mode.
                     gc_state.last_error = Status_SystemGClock;
 #if COMPATIBILITY_LEVEL == 0
-                else if(gc_state.last_error == Status_OK) { // Parse and execute g-code block.
+                else if(gc_state.last_error == Status_OK || gc_state.last_error == Status_GcodeToolChangePending) { // Parse and execute g-code block.
 #else
                 else { // Parse and execute g-code block.
 
@@ -790,14 +790,14 @@ ISR_CODE bool protocol_enqueue_realtime_command (char c)
     if(!drop) switch ((unsigned char)c) {
 
         case CMD_STATUS_REPORT_LEGACY:
-            if(!keep_rt_commands || settings.legacy_rt_commands) {
+            if(!keep_rt_commands || settings.flags.legacy_rt_commands) {
                 system_set_exec_state_flag(EXEC_STATUS_REPORT);
                 drop = true;
             }
             break;
 
         case CMD_CYCLE_START_LEGACY:
-            if(!keep_rt_commands || settings.legacy_rt_commands) {
+            if(!keep_rt_commands || settings.flags.legacy_rt_commands) {
                 system_set_exec_state_flag(EXEC_CYCLE_START);
                 // Cancel any pending tool change
                 gc_state.tool_change = false;
@@ -806,7 +806,7 @@ ISR_CODE bool protocol_enqueue_realtime_command (char c)
             break;
 
         case CMD_FEED_HOLD_LEGACY:
-            if(!keep_rt_commands || settings.legacy_rt_commands) {
+            if(!keep_rt_commands || settings.flags.legacy_rt_commands) {
                 system_set_exec_state_flag(EXEC_FEED_HOLD);
                 drop = true;
             }

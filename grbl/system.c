@@ -20,6 +20,7 @@
 */
 
 #include "grbl.h"
+#include "tool_change.h"
 
 // Pin change interrupt for pin-out commands, i.e. cycle start, feed hold, and reset. Sets
 // only the realtime command execute variable to have the main program execute these when
@@ -276,6 +277,17 @@ status_code_t system_execute_line (char *line)
                 retval = Status_IdleError;
             else
                 system_set_exec_state_flag(EXEC_SLEEP); // Set to execute sleep mode immediately
+            break;
+
+        case 'T':
+            if(sys.flags.probe_succeeded && line[2] == 'L' && line[3] == 'R') {
+                sys.tlo_reference = sys_probe_position[Z_AXIS];
+                sys.tlo_reference_set = true;
+                retval = Status_OK;
+            } else if(sys.flags.probe_succeeded && line[2] == 'P' && line[3] == 'W')
+                retval = tc_probe_workpiece();
+            else
+                retval = Status_InvalidStatement;
             break;
 
         case '#': // Print Grbl NGC parameters

@@ -291,14 +291,13 @@ static void state_cycle (uint_fast16_t rt_exec)
 
 static void state_await_toolchanged (uint_fast16_t rt_exec)
 {
-    if ((rt_exec & EXEC_CYCLE_START) && !gc_state.tool_change) {
-        // Tool change complete, restore "normal" stream input
-        if(hal.stream.suspend_read && hal.stream.suspend_read(false)) {
-            sys.state = STATE_CYCLE;    // Force a running state realtime report
-            report_realtime_status();   // to get streaming going again
+    if (rt_exec & EXEC_CYCLE_START) {
+        if(!gc_state.tool_change) {
+            if(hal.stream.suspend_read)
+                hal.stream.suspend_read(false); // Tool change complete, restore "normal" stream input
+            sys.report.tool = On;
         }
-        sys.report.tool = On;
-        pending_state = STATE_IDLE;
+        pending_state = gc_state.tool_change ? STATE_TOOL_CHANGE : STATE_IDLE;
         set_state(STATE_IDLE);
         set_state(STATE_CYCLE);
     }
@@ -319,6 +318,8 @@ static void state_await_motion_cancel (uint_fast16_t rt_exec)
             sys.suspend = false;
         }
         set_state(pending_state);
+        if(gc_state.tool_change)
+            set_state(STATE_TOOL_CHANGE);
     }
 }
 

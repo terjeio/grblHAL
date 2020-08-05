@@ -61,7 +61,7 @@
 #define EEPROM_ENABLE 1 // I2C EEPROM (24LC16) support.
 #else
 #define SDCARD_ENABLE 0 // Run jobs from SD card.
-#define EEPROM_ENABLE 0 // I2C EEPROM (24LC16) support.
+#define EEPROM_ENABLE 0 // I2C EEPROM: 1 = 2 Kb (24LC16), 2 = > 2 Kb (24LC256 etc).
 #endif
 
 // Adjust STEP_PULSE_LATENCY to get accurate step pulse length when required, e.g if using high step rates.
@@ -78,7 +78,11 @@
 #endif
 
 #if EEPROM_ENABLE|| KEYPAD_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
-#define I2C_PORT
+  #ifdef NUCLEO_F411
+    #define I2C_PORT 1
+  #else
+    #define I2C_PORT 2
+  #endif
 #endif
 
 #if TRINAMIC_ENABLE || KEYPAD_ENABLE
@@ -132,6 +136,9 @@ extern driver_settings_t driver_settings;
 #if CNC_BOOSTERPACK
   #include "cnc_boosterpack_map.h"
 #elif defined(BOARD_CNC3040)
+  #if EEPROM_ENABLE
+    #error "EEPROM plugin not supported!"
+  #endif
   #include "cnc3040_map.h"
 #elif defined(BOARD_PROTONEER_3XX)
   #include "protoneer_3.xx_map.h"
@@ -257,6 +264,18 @@ extern driver_settings_t driver_settings;
 #endif
 
 #endif // default board
+
+#if KEYPAD_ENABLE && !defined(KEYPAD_PORT)
+#error "Keypad plugin not supported!"
+#endif
+
+#if SDCARD_ENABLE && !defined(SD_CS_PORT)
+#error "SD card plugin not supported!"
+#endif
+
+#if TRINAMIC_ENABLE && CNC_BOOSTERPACK == 0
+#error "Trinamic plugin not supported!"
+#endif
 
 bool driver_init (void);
 

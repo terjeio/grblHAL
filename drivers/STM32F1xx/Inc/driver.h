@@ -55,7 +55,7 @@
 #define EEPROM_ENABLE 1 // I2C EEPROM (24LC16) support.
 #else
 #define SDCARD_ENABLE 0 // Run jobs from SD card.
-#define EEPROM_ENABLE 0 // I2C EEPROM (24LC16) support.
+#define EEPROM_ENABLE 0 // I2C EEPROM: 1 = 2 Kb (24LC16), 2 = > 2 Kb (24LC256 etc).
 #endif
 
 // Adjust STEP_PULSE_LATENCY to get accurate step pulse length when required, e.g if using high step rates.

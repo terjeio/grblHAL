@@ -69,7 +69,8 @@ typedef union {
                  mpg_mode                  :1,
                  spindle_pwm_linearization :1,
                  probe_connected           :1,
-                 unassigned                :3;
+                 atc                       :1,
+                 unassigned                :2;
     };
 } driver_cap_t;
 
@@ -188,6 +189,7 @@ typedef struct HAL {
     spindle_data_t (*spindle_get_data)(spindle_data_request_t request);
     void (*spindle_reset_data)(void);
     void (*state_change_requested)(uint_fast16_t state);
+    void (*on_probe_completed)(void);
     void (*encoder_event_handler)(encoder_t *encoder, int32_t position);
     void (*encoder_reset)(uint_fast8_t id);
     uint32_t (*get_elapsed_ticks)(void);

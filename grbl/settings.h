@@ -243,6 +243,10 @@ typedef enum {
     Setting_UserPassword = 331,
 
     Setting_SpindleAtSpeedTolerance = 340,
+    Setting_ToolChangeMode = 341,
+    Setting_ToolChangeProbingDistance = 342,
+    Setting_ToolChangeFeedRate = 343,
+    Setting_ToolChangeSeekRate = 344,
 
     Setting_EncoderSettingsBase = 400, // NOTE: Reserving settings values >= 400 for encoder settings. Up to 449.
     Setting_EncoderSettingsMax = 449,
@@ -294,7 +298,7 @@ typedef union {
                  sleep_enable                 :1,
                  disable_laser_during_hold    :1,
                  force_initialization_alarm   :1,
-                 unassigned1                  :1,
+                 legacy_rt_commands           :1,
                  allow_probing_feed_override  :1,
                  unassigned2                  :1,
                  restore_after_feed_hold      :1,
@@ -433,6 +437,20 @@ typedef struct {
     axes_signals_t disable_pullup;
 } limit_settings_t;
 
+typedef enum {
+    ToolChange_Disabled = 0,
+    ToolChange_Manual,
+    ToolChange_Manual_G59_3,
+    ToolChange_SemiAutomatic // Must be last
+} toolchange_mode_t;
+
+typedef struct {
+    float feed_rate;
+    float seek_rate;
+    float probing_distance;
+    toolchange_mode_t mode;
+} tool_change_settings_t;
+
 // Global persistent settings (Stored from byte persistent storage_ADDR_GLOBAL onwards)
 typedef struct {
     // Settings struct version
@@ -440,7 +458,7 @@ typedef struct {
     float junction_deviation;
     float arc_tolerance;
     float g73_retract;
-    bool legacy_rt_commands;
+    tool_change_settings_t tool_change;
     axis_settings_t axis[N_AXIS];
     control_signals_t control_invert;
     control_signals_t control_disable_pullup;

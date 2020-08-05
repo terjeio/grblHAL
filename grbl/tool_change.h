@@ -1,12 +1,11 @@
 /*
+  tool_change.h - An embedded CNC Controller with rs274/ngc (g-code) support
 
-  eeprom.h - driver code for STM32F103C8 ARM processors
-
-  for 2K EEPROM on CNC Boosterpack (Microchip 24LC16B)
+  Manual tool change with automatic touch off
 
   Part of GrblHAL
 
-  Copyright (c) 2019 Terje Io
+  Copyright (c) 2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -20,17 +19,12 @@
 
   You should have received a copy of the GNU General Public License
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
-
 */
 
-#ifndef __EEPROM_H__
-#define __EEPROM_H__
+#ifndef _TOOL_CHANGE_H_
+#define _TOOL_CHANGE_H_
 
-void eepromInit (void);
-uint8_t eepromGetByte (uint32_t addr);
-void eepromPutByte (uint32_t addr, uint8_t new_value);
-void eepromWriteBlockWithChecksum (uint32_t destination, uint8_t *source, uint32_t size);
-bool eepromReadBlockWithChecksum (uint8_t *destination, uint32_t source, uint32_t size);
+void tc_init (void);
+status_code_t tc_probe_workpiece (void);
 
 #endif
-

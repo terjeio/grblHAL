@@ -546,4 +546,6 @@ float *gc_get_scaling (void);
 // Get current axis offset.
 float gc_get_offset (uint_fast8_t idx);
 
+void gc_set_tool_offset (tool_offset_mode_t mode, uint_fast8_t idx, int32_t offset);
+
 #endif

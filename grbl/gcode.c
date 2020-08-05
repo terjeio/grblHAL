@@ -57,9 +57,22 @@ tool_data_t tool_table;
 
 #define FAIL(status) return(status);
 
-static scale_factor_t scale_factor;
 static gc_thread_data thread;
 static output_command_t *output_commands = NULL; // Linked list
+static scale_factor_t scale_factor = {
+    .ijk[X_AXIS] = 1.0f,
+    .ijk[Y_AXIS] = 1.0f,
+    .ijk[Z_AXIS] = 1.0f
+#ifdef A_AXIS
+  , .ijk[A_AXIS] = 1.0f
+#endif
+#ifdef B_AXIS
+  , .ijk[B_AXIS] = 1.0f
+#endif
+#ifdef C_AXIS
+  , .ijk[C_AXIS] = 1.0f
+#endif
+};
 
 // Simple hypotenuse computation function.
 inline static float hypot_f (float x, float y)
@@ -113,6 +126,43 @@ float gc_get_offset (uint_fast8_t idx)
 inline static float gc_get_block_offset (parser_block_t *gc_block, uint_fast8_t idx)
 {
     return gc_block->modal.coord_system.xyz[idx] + gc_state.g92_coord_offset[idx] + gc_state.tool_length_offset[idx];
+}
+
+void gc_set_tool_offset (tool_offset_mode_t mode, uint_fast8_t idx, int32_t offset)
+{
+    bool tlo_changed = false;
+
+    switch(mode) {
+
+        case ToolLengthOffset_Cancel:
+            idx = N_AXIS;
+            do {
+                idx--;
+                tlo_changed |= gc_state.tool_length_offset[idx] != 0.0f;
+                gc_state.tool_length_offset[idx] = 0.0f;
+                gc_state.tool->offset[idx] = 0;
+            } while(idx);
+            break;
+
+        case ToolLengthOffset_EnableDynamic:
+            {
+                float new_offset = offset / settings.axis[idx].steps_per_mm;
+                tlo_changed |= gc_state.tool_length_offset[idx] != new_offset;
+                gc_state.tool_length_offset[idx] = new_offset;
+                gc_state.tool->offset[idx] = offset;
+            }
+            break;
+
+        default:
+            break;
+    }
+
+    gc_state.modal.tool_offset_mode = mode;
+
+    if(tlo_changed) {
+        sys.report.tool_offset = true;
+        system_flag_wco_change();
+    }
 }
 
 void gc_init(bool cold_start)

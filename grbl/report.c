@@ -205,7 +205,7 @@ alarm_code_t report_alarm_message (alarm_code_t alarm_code)
 // messages such as setup warnings, switch toggling, and how to exit alarms.
 // NOTE: For interfaces, messages are always placed within brackets. And if silent mode
 // is installed, the message number codes are less than zero.
-message_code_t report_feedback_message(message_code_t message_code)
+message_code_t report_feedback_message (message_code_t message_code)
 {
     hal.stream.write_all("[MSG:");
 
@@ -269,6 +269,10 @@ message_code_t report_feedback_message(message_code_t message_code)
 
         case Message_CycleStartToRerun:
             hal.stream.write_all("Cycle start to rerun job");
+            break;
+
+        case Message_ReferenceTLOEstablished:
+            hal.stream.write_all("Reference tool length offset established");
             break;
 
         default:
@@ -383,7 +387,7 @@ void report_grbl_settings (bool all)
         if(hal.driver_cap.spindle_sync || hal.driver_cap.spindle_pid)
             report_uint_setting(Setting_SpindlePPR, settings.spindle.ppr);
 
-        report_uint_setting(Setting_EnableLegacyRTCommands, settings.legacy_rt_commands ? 1 : 0);
+        report_uint_setting(Setting_EnableLegacyRTCommands, settings.flags.legacy_rt_commands ? 1 : 0);
         report_uint_setting(Setting_JogSoftLimited, settings.limits.flags.jog_soft_limited);
         report_uint_setting(Setting_ParkingEnable, settings.parking.flags.value);
         report_uint_setting(Setting_ParkingAxis, settings.parking.axis);
@@ -486,13 +490,33 @@ void report_grbl_settings (bool all)
         val += AXIS_SETTINGS_INCREMENT;
     }
 
-    for(idx = Setting_AxisSettingsMax + 1; idx <= Setting_SettingsMax; idx++) {
+    if(all) for(idx = Setting_AxisSettingsMax + 1; idx <= Setting_SettingsMax; idx++) {
 
         switch((setting_type_t)idx) {
 
             case Setting_SpindleAtSpeedTolerance:
                 if(hal.driver_cap.spindle_at_speed)
                     report_float_setting(Setting_SpindleAtSpeedTolerance, settings.spindle.at_speed_tolerance, 1);
+                break;
+
+            case Setting_ToolChangeMode:
+                if(!hal.driver_cap.atc && hal.stream.suspend_read)
+                    report_uint_setting(Setting_ToolChangeMode, settings.tool_change.mode);
+                break;
+
+            case Setting_ToolChangeProbingDistance:
+                if(!hal.driver_cap.atc && hal.stream.suspend_read)
+                    report_float_setting(Setting_ToolChangeProbingDistance, settings.tool_change.probing_distance, 1);
+                break;
+
+            case Setting_ToolChangeFeedRate:
+                if(!hal.driver_cap.atc && hal.stream.suspend_read)
+                    report_float_setting(Setting_ToolChangeFeedRate, settings.tool_change.feed_rate, 1);
+                break;
+
+            case Setting_ToolChangeSeekRate:
+                if(!hal.driver_cap.atc && hal.stream.suspend_read)
+                    report_float_setting(Setting_ToolChangeSeekRate, settings.tool_change.seek_rate, 1);
                 break;
 
             default:
@@ -949,7 +973,7 @@ void report_realtime_status (void)
     // Report current machine state and sub-states
     hal.stream.write_all("<");
 
-    switch (sys.state) {
+    switch (gc_state.tool_change && sys.state == STATE_CYCLE ? STATE_TOOL_CHANGE : sys.state) {
 
         case STATE_IDLE:
             hal.stream.write_all("Idle");
@@ -1044,15 +1068,18 @@ void report_realtime_status (void)
 
         axes_signals_t lim_pin_state = hal.limits_get_state();
         control_signals_t ctrl_pin_state = hal.system_control_get_state();
-        probe_state_t probe_pin_state = hal.probe_get_state();
+        probe_state_t probe_state = {0};
 
-        if (lim_pin_state.value | ctrl_pin_state.value | probe_pin_state.triggered | !probe_pin_state.connected | sys.flags.block_delete_enabled) {
+        if(hal.probe_get_state)
+            probe_state = hal.probe_get_state();
+
+        if (lim_pin_state.value | ctrl_pin_state.value | probe_state.triggered | !probe_state.connected | sys.flags.block_delete_enabled) {
 
             char *append = &buf[4];
 
             strcpy(buf, "|Pn:");
 
-            if (probe_pin_state.triggered)
+            if (probe_state.triggered)
                 *append++ = 'P';
 
             if (lim_pin_state.value)
@@ -1073,7 +1100,7 @@ void report_realtime_status (void)
                     *append++ = 'B';
                 if (hal.driver_cap.program_stop ? ctrl_pin_state.stop_disable : sys.flags.optional_stop_disable)
                     *append++ = 'T';
-                if(!probe_pin_state.connected)
+                if(!probe_state.connected)
                     *append++ = 'O';
             }
             *append = '\0';

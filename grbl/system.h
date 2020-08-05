@@ -77,6 +77,7 @@ typedef enum {
     Message_EStop = 12,
     Message_HomingCycleRequired = 13,
     Message_CycleStartToRerun = 14,
+    Message_ReferenceTLOEstablished = 15,
     Message_NextMessage // Next unassigned message number
 } message_code_t;
 
@@ -222,6 +223,8 @@ typedef struct {
     bool suspend;                       // System suspend state flag.
     volatile bool steppers_deenergize;  // Set to true to deenergize stepperes
     bool mpg_mode;                      // To be moved to system_flags_t
+    bool tlo_reference_set;             // True when tool length reference offset is established
+    int32_t tlo_reference;              // Tool length reference offset
     alarm_code_t alarm_pending;         // Delayed alarm, currently used for probe protection
     system_flags_t flags;               // Assorted state flags
     step_control_t step_control;        // Governs the step segment generator depending on system state.

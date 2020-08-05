@@ -332,6 +332,12 @@
 //       allowing their use from manual input, eg. from a terminal or MDI.
 #define DEFAULT_LEGACY_RTCOMMANDS 1  // Default enabled. Set to 0 to disable.
 
+//
+#define DEFAULT_TOOLCHANGE_MODE 0               // 0 = Normal mode, 1 = Manual change, 2 = Manual change @ G59.3,  3 = Manual change and probe sensor @ G59.3 - sets TLO
+#define DEFAULT_TOOLCHANGE_PROBING_DISTANCE 30  // max probing distance in mm for mode 3
+#define DEFAULT_TOOLCHANGE_FEED_RATE 25.0f      // mm/min
+#define DEFAULT_TOOLCHANGE_SEEK_RATE 200.0f     // mm/min
+
 // Define some default values if not defined above
 
 #ifndef ST_DEENERGIZE_MASK

@@ -21,6 +21,7 @@
 */
 
 #include "grbl.h"
+#include "tool_change.h"
 
 #ifdef COREXY
 #include "corexy.h"
@@ -231,6 +232,9 @@ int grbl_enter (void)
         // Sync cleared gcode and planner positions to current system position.
         plan_sync_position();
         gc_sync_position();
+
+        if(!hal.driver_cap.atc)
+            tc_init();
 
         // Print welcome message. Indicates an initialization has occured at power-up or with a reset.
         report_init_message();

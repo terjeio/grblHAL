@@ -21,6 +21,7 @@
 */
 
 #include "grbl.h"
+#include "tool_change.h"
 
 #ifdef ENABLE_SPINDLE_LINEARIZATION
 #include <stdio.h>
@@ -44,8 +45,7 @@ const settings_t defaults = {
     .arc_tolerance = DEFAULT_ARC_TOLERANCE,
     .g73_retract = DEFAULT_G73_RETRACT,
 
-    .legacy_rt_commands = DEFAULT_LEGACY_RTCOMMANDS,
-
+    .flags.legacy_rt_commands = DEFAULT_LEGACY_RTCOMMANDS,
     .flags.report_inches = DEFAULT_REPORT_INCHES,
     .flags.laser_mode = DEFAULT_LASER_MODE,
     .flags.lathe_mode = DEFAULT_LATHE_MODE,
@@ -174,6 +174,11 @@ const settings_t defaults = {
     .axis[C_AXIS].max_travel = (-DEFAULT_C_MAX_TRAVEL),
     .homing.cycle[5].mask = HOMING_CYCLE_5,
   #endif
+
+    .tool_change.mode = (toolchange_mode_t)DEFAULT_TOOLCHANGE_MODE,
+    .tool_change.probing_distance = DEFAULT_TOOLCHANGE_PROBING_DISTANCE,
+    .tool_change.feed_rate = DEFAULT_TOOLCHANGE_FEED_RATE,
+    .tool_change.seek_rate = DEFAULT_TOOLCHANGE_SEEK_RATE,
 
     .parking.flags.enabled = DEFAULT_PARKING_ENABLE,
     .parking.flags.deactivate_upon_init = DEFAULT_DEACTIVATE_PARKING_UPON_INIT,
@@ -625,7 +630,7 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 break;
 
             case Setting_EnableLegacyRTCommands:
-                settings.legacy_rt_commands = value != 0;
+                settings.flags.legacy_rt_commands = value != 0;
                 break;
 
             case Setting_HomingLocateCycles:
@@ -788,6 +793,29 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
 
             case Setting_PositionIMaxError:
                 settings.position.pid.i_max_error = value;
+                break;
+
+            case Setting_ToolChangeMode:
+                if(!hal.driver_cap.atc && hal.stream.suspend_read && int_value <= ToolChange_SemiAutomatic) {
+                    settings.tool_change.mode = (toolchange_mode_t)int_value;
+                    tc_init();
+                } else
+                    return Status_InvalidStatement;
+                break;
+
+            case Setting_ToolChangeProbingDistance:
+                if(!hal.driver_cap.atc)
+                    settings.tool_change.probing_distance = value;
+                else
+                    return Status_InvalidStatement;
+                break;
+
+            case Setting_ToolChangeFeedRate:
+                settings.tool_change.feed_rate = value;
+                break;
+
+            case Setting_ToolChangeSeekRate:
+                settings.tool_change.seek_rate = value;
                 break;
 
             default:;

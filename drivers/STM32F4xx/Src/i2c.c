@@ -30,24 +30,52 @@
 
 #ifdef I2C_PORT
 
-extern I2C_HandleTypeDef hi2c2;
+#define I2Cport(p) I2CportI(p)
+#define I2CportI(p) I2C ## p
+
+#define I2CPORT I2Cport(I2C_PORT)
+
+static I2C_HandleTypeDef i2c_port = {
+    .Instance = I2CPORT,
+    .Init.ClockSpeed = 100000,
+    .Init.DutyCycle = I2C_DUTYCYCLE_2,
+    .Init.OwnAddress1 = 0,
+    .Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT,
+    .Init.DualAddressMode = I2C_DUALADDRESS_DISABLE,
+    .Init.OwnAddress2 = 0,
+    .Init.GeneralCallMode = I2C_GENERALCALL_DISABLE,
+    .Init.NoStretchMode = I2C_NOSTRETCH_DISABLE
+};
 
 void i2c_init (void)
 {
-    hi2c2.Instance = I2C2;
-    hi2c2.Init.ClockSpeed = 100000;
-    hi2c2.Init.DutyCycle = I2C_DUTYCYCLE_2;
-    hi2c2.Init.OwnAddress1 = 0;
-    hi2c2.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
-    hi2c2.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
-    hi2c2.Init.OwnAddress2 = 0;
-    hi2c2.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
-    hi2c2.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
-    HAL_I2C_Init(&hi2c2);
-    //  if (HAL_I2C_Init(&hi2c2) != HAL_OK)
-            //Error_Handler();
-    HAL_NVIC_EnableIRQ(I2C2_EV_IRQn);
-    HAL_NVIC_EnableIRQ(I2C2_ER_IRQn);
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+
+#if I2C_PORT == 1
+    GPIO_InitStruct.Pin = GPIO_PIN_8|GPIO_PIN_9;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_OD;
+    GPIO_InitStruct.Pull = GPIO_PULLUP;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+    GPIO_InitStruct.Alternate = GPIO_AF4_I2C1;
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+    __HAL_RCC_I2C1_CLK_ENABLE();
+
+    HAL_I2C_Init(&i2c_port);
+#endif
+
+#if I2C_PORT == 2
+    GPIO_InitStruct.Pin = GPIO_PIN_10|GPIO_PIN_11;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_OD;
+    GPIO_InitStruct.Pull = GPIO_PULLUP;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+    GPIO_InitStruct.Alternate = GPIO_AF4_I2C2;
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+    __HAL_RCC_I2C2_CLK_ENABLE();
+
+    HAL_I2C_Init(&i2c_port);
+endif
 }
 
 #endif
@@ -56,14 +84,14 @@ void i2c_init (void)
 
 void i2c_eeprom_transfer (i2c_eeprom_trans_t *i2c, bool read)
 {
-    while (HAL_I2C_GetState(&hi2c2) != HAL_I2C_STATE_READY);
+    while (HAL_I2C_GetState(&i2c_port) != HAL_I2C_STATE_READY);
 
-//    while (HAL_I2C_IsDeviceReady(&hi2c2, (uint16_t)(0xA0), 3, 100) != HAL_OK);
+//    while (HAL_I2C_IsDeviceReady(&i2c_port, (uint16_t)(0xA0), 3, 100) != HAL_OK);
 
     if(read)
-        HAL_I2C_Mem_Read(&hi2c2, i2c->address << 1, i2c->word_addr, I2C_MEMADD_SIZE_8BIT, i2c->data, i2c->count, 100);
+        HAL_I2C_Mem_Read(&i2c_port, i2c->address << 1, i2c->word_addr, i2c->word_addr_bytes == 2 ? I2C_MEMADD_SIZE_16BIT : I2C_MEMADD_SIZE_8BIT, i2c->data, i2c->count, 100);
     else {
-        HAL_I2C_Mem_Write(&hi2c2, i2c->address << 1, i2c->word_addr, I2C_MEMADD_SIZE_8BIT, i2c->data, i2c->count, 100);
+        HAL_I2C_Mem_Write(&i2c_port, i2c->address << 1, i2c->word_addr, i2c->word_addr_bytes == 2 ? I2C_MEMADD_SIZE_16BIT : I2C_MEMADD_SIZE_8BIT, i2c->data, i2c->count, 100);
         hal.delay_ms(5, NULL);
     }
     i2c->data += i2c->count;
@@ -81,10 +109,10 @@ void I2C_GetKeycode (uint32_t i2cAddr, keycode_callback_ptr callback)
     keycode = 0;
     keypad_callback = callback;
 
-    HAL_StatusTypeDef ret = HAL_I2C_Master_Receive_IT(&hi2c2, KEYPAD_I2CADDR << 1, &keycode, 1);
+    HAL_StatusTypeDef ret = HAL_I2C_Master_Receive_IT(&i2c_port, KEYPAD_I2CADDR << 1, &keycode, 1);
 
     if(!ret)
-        ret = HAL_I2C_Master_Receive_IT(&hi2c2, KEYPAD_I2CADDR << 1, &keycode, 1);
+        ret = HAL_I2C_Master_Receive_IT(&i2c_port, KEYPAD_I2CADDR << 1, &keycode, 1);
 }
 
 void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *hi2c)
@@ -110,7 +138,7 @@ static TMC2130_status_t TMC_I2C_ReadRegister (TMC2130_t *driver, TMC2130_datagra
         return status; // unsupported register
     }
 
-    HAL_I2C_Mem_Read(&hi2c2, tmc_addr, tmc_reg, I2C_MEMADD_SIZE_8BIT, buffer, 5, 100);
+    HAL_I2C_Mem_Read(&i2c_port, tmc_addr, tmc_reg, I2C_MEMADD_SIZE_8BIT, buffer, 5, 100);
 
     status.value = buffer[0];
     reg->payload.value = buffer[4];
@@ -137,7 +165,7 @@ static TMC2130_status_t TMC_I2C_WriteRegister (TMC2130_t *driver, TMC2130_datagr
         buffer[2] = (reg->payload.value >> 8) & 0xFF;
         buffer[3] = reg->payload.value & 0xFF;
 
-        HAL_I2C_Mem_Write(&hi2c2, tmc_addr, tmc_reg, I2C_MEMADD_SIZE_8BIT, buffer, 4, 100);
+        HAL_I2C_Mem_Write(&i2c_port, tmc_addr, tmc_reg, I2C_MEMADD_SIZE_8BIT, buffer, 4, 100);
     }
 
     return status;
