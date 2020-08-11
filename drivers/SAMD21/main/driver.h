@@ -30,7 +30,7 @@
 // Configuration
 // Set value to 1 to enable, 0 to disable
 
-#define USB_SERIAL         1
+#define USB_SERIAL         0
 #define SDCARD_ENABLE      0 // When enabled source files for FatFs R0.09b must be added to the main folder.
                              // These are: ccsbcs.c, conf_fatfs.h, diskio.h, ff.c, ff.h, ffconf.h and integer.h
 
@@ -53,7 +53,7 @@
 // Adjust STEP_PULSE_LATENCY to get accurate step pulse length when required, e.g if using high step rates.
 // The default value is calibrated for 10 microseconds length.
 // NOTE: step output mode, number of axes and compiler optimization settings may all affect this value.
-#define STEP_PULSE_LATENCY 1.0f // microseconds
+#define STEP_PULSE_LATENCY 3.5f // microseconds
 
 // End configuration
 

@@ -57,6 +57,9 @@ static gpio_t stepX, stepY, stepZ, dirX, dirY, dirZ;
 #if !IOEXPAND_ENABLE
 static gpio_t spindleEnable, spindleDir, steppersEnable, Mist, Flood;
 #endif
+#ifdef DEBUGOUT
+static gpio_t Led;
+#endif
 
 #define pinIn(p) ((PORT->Group[g_APinDescription[p].ulPort].IN.reg & (1 << g_APinDescription[p].ulPin)) != 0)
 #define pinOut(p, e) { if(e) PORT->Group[g_APinDescription[p].ulPort].OUTSET.reg = (1 << g_APinDescription[p].ulPin); else  PORT->Group[g_APinDescription[p].ulPort].OUTCLR.reg = (1 << g_APinDescription[p].ulPin); }
@@ -462,7 +465,7 @@ static spindle_state_t spindleGetState (void)
 void debug_out (bool on)
 {
 //hal.stream.write(on ? "#" : "!");
-    pinOut(LED_BUILTIN, on);
+    DIGITAL_OUT(Led, on);
 }
 #endif
 
@@ -583,13 +586,16 @@ void settings_changed (settings_t *settings)
             hal.stepper_pulse_start = stepperPulseStartDelayed;
             STEP_TIMER->COUNT16.INTENSET.bit.MC1 = 1; // Enable CC1 interrupt
         } else {
+            next_step_outbits.value = 0;
             hal.stepper_pulse_start = stepperPulseStart;
             STEP_TIMER->COUNT16.INTENCLR.bit.MC1 = 1; // Disable CC1 interrupt
         }
 
-        STEP_TIMER->COUNT16.CC[0].reg = (uint16_t)(24.0f * (settings->steppers.pulse_microseconds + settings->steppers.pulse_delay_microseconds - STEP_PULSE_LATENCY)) - 1;
+        int16_t ccval = (int16_t)(24.0f * (settings->steppers.pulse_microseconds + settings->steppers.pulse_delay_microseconds - STEP_PULSE_LATENCY)) - 1;
+        STEP_TIMER->COUNT16.CC[0].reg = ccval < 2 ? 2 : ccval;
         while(STEP_TIMER->COUNT16.STATUS.bit.SYNCBUSY);
-        STEP_TIMER->COUNT16.CC[1].reg = (uint16_t)(24.0f * settings->steppers.pulse_delay_microseconds) - 1;
+        ccval = (int16_t)(24.0f * (settings->steppers.pulse_delay_microseconds - STEP_PULSE_LATENCY)) - 1;
+        STEP_TIMER->COUNT16.CC[1].reg = ccval < 2 ? 2 : ccval;
         while(STEP_TIMER->COUNT16.STATUS.bit.SYNCBUSY);
 
         STEP_TIMER->COUNT16.INTENSET.bit.MC0 = 1; // Enable CC0 interrupt
@@ -692,6 +698,7 @@ void settings_changed (settings_t *settings)
 // Initializes MCU peripherals for Grbl use
 static bool driver_setup (settings_t *settings)
 {   
+    // Stepper timer clock - 16 MHz
     GCLK->GENDIV.reg = (uint32_t)(GCLK_GENDIV_ID(7)|GCLK_GENDIV_DIV(3));
     while(GCLK->STATUS.bit.SYNCBUSY);
     GCLK->GENCTRL.reg = (uint32_t)(GCLK_GENCTRL_ID(7)|GCLK_GENCTRL_SRC_DFLL48M|GCLK_GENCTRL_IDC|GCLK_GENCTRL_GENEN);
@@ -699,6 +706,7 @@ static bool driver_setup (settings_t *settings)
     GCLK->CLKCTRL.reg = (uint16_t)(GCLK_CLKCTRL_CLKEN | GCLK_CLKCTRL_GEN_GCLK7 | GCLK_CLKCTRL_ID_TC4_TC5);
     while(GCLK->STATUS.bit.SYNCBUSY);
 
+    // Step timer clock - 24 MHz
     GCLK->GENDIV.reg = (uint32_t)(GCLK_GENDIV_ID(6)|GCLK_GENDIV_DIV(2));
     while(GCLK->STATUS.bit.SYNCBUSY);
     GCLK->GENCTRL.reg = (uint32_t)(GCLK_GENCTRL_ID(6)|GCLK_GENCTRL_SRC_DFLL48M|GCLK_GENCTRL_IDC|GCLK_GENCTRL_GENEN);
@@ -842,7 +850,7 @@ static bool driver_setup (settings_t *settings)
 #endif
 
 #ifdef DEBUGOUT
-    pinMode(LED_BUILTIN, OUTPUT);
+    pinModeOutput(&Led, LED_BUILTIN);
 #endif
 
  // Set defaults
@@ -1178,7 +1186,7 @@ static void STEPPER_IRQHandler (void)
 
 // Step pulse handler
 static void STEPPULSE_IRQHandler (void)
-{   
+{
     if(STEP_TIMER->COUNT16.INTFLAG.bit.MC1) {
         STEP_TIMER->COUNT16.INTFLAG.bit.MC1 = 1;
         set_step_outputs(next_step_outbits); // Begin step pulse.
