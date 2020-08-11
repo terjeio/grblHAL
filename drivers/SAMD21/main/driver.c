@@ -48,8 +48,19 @@
 void KEYPAD_IRQHandler (void);
 #endif
 
+typedef struct {
+    PortGroup *port;
+    uint32_t bit;
+} gpio_t;
+
+static gpio_t stepX, stepY, stepZ, dirX, dirY, dirZ;
+#if !IOEXPAND_ENABLE
+static gpio_t spindleEnable, spindleDir, steppersEnable, Mist, Flood;
+#endif
+
 #define pinIn(p) ((PORT->Group[g_APinDescription[p].ulPort].IN.reg & (1 << g_APinDescription[p].ulPin)) != 0)
 #define pinOut(p, e) { if(e) PORT->Group[g_APinDescription[p].ulPort].OUTSET.reg = (1 << g_APinDescription[p].ulPin); else  PORT->Group[g_APinDescription[p].ulPort].OUTCLR.reg = (1 << g_APinDescription[p].ulPin); }
+#define DIGITAL_OUT(gpio, on) { if(on) gpio.port->OUTSET.reg = gpio.bit; else gpio.port->OUTCLR.reg = gpio.bit; }
 
 uint32_t vectorTable[sizeof(DeviceVectors) / sizeof(uint32_t)] __attribute__(( aligned (0x100ul) ));
 
@@ -108,9 +119,9 @@ inline static void set_step_outputs (axes_signals_t step_outbits)
 {
     step_outbits.value ^= settings.steppers.step_invert.mask;
 
-    pinOut(X_STEP_PIN, step_outbits.x);
-    pinOut(Y_STEP_PIN, step_outbits.y);
-    pinOut(Z_STEP_PIN, step_outbits.z);
+    DIGITAL_OUT(stepX, step_outbits.x);
+    DIGITAL_OUT(stepY, step_outbits.y);
+    DIGITAL_OUT(stepZ, step_outbits.z);
 }
 
 // Set stepper direction output pins
@@ -118,9 +129,9 @@ inline static void set_dir_outputs (axes_signals_t dir_outbits)
 {
     dir_outbits.value ^= settings.steppers.dir_invert.mask;
 
-    pinOut(X_DIRECTION_PIN, dir_outbits.x);
-    pinOut(Y_DIRECTION_PIN, dir_outbits.y);
-    pinOut(Z_DIRECTION_PIN, dir_outbits.z);
+    DIGITAL_OUT(dirX, dir_outbits.x);
+    DIGITAL_OUT(dirY, dir_outbits.y);
+    DIGITAL_OUT(dirZ, dir_outbits.z);
 }
 
 // Enable/disable stepper motors
@@ -135,7 +146,7 @@ static void stepperEnable (axes_signals_t enable)
     iopins.stepper_enable_z = enable.z;
     ioexpand_out(iopins);   
 #else
-    pinOut(STEPPERS_DISABLE_PIN, enable.x);
+    DIGITAL_OUT(steppersEnable, enable.x);
 #endif
 }
 
@@ -319,7 +330,7 @@ inline static void spindle_off (void)
         ioexpand_out(iopins);
     }
 #else
-    pinOut(SPINDLE_ENABLE_PIN, settings.spindle.invert.on);
+    DIGITAL_OUT(spindleEnable, settings.spindle.invert.on);
 #endif
 }
 
@@ -332,7 +343,7 @@ inline static void spindle_on (void)
         ioexpand_out(iopins);
     }
 #else
-    pinOut(SPINDLE_ENABLE_PIN, !settings.spindle.invert.on);
+    DIGITAL_OUT(spindleEnable, !settings.spindle.invert.on);
 #endif
 }
 
@@ -349,7 +360,7 @@ inline static void spindle_dir (bool ccw)
     }
 #else
     if(hal.driver_cap.spindle_dir)
-        pinOut(SPINDLE_DIRECTION_PIN, (ccw ^ settings.spindle.invert.ccw));
+        DIGITAL_OUT(spindleDir, (ccw ^ settings.spindle.invert.ccw));
 #endif
 #endif
 }
@@ -450,7 +461,7 @@ static spindle_state_t spindleGetState (void)
 #ifdef DEBUGOUT
 void debug_out (bool on)
 {
-hal.stream.write(on ? "#" : "!");
+//hal.stream.write(on ? "#" : "!");
     pinOut(LED_BUILTIN, on);
 }
 #endif
@@ -466,8 +477,8 @@ static void coolantSetState (coolant_state_t mode)
         ioexpand_out(iopins);
     }
 #else
-    pinOut(COOLANT_FLOOD_PIN, mode.flood);
-    pinOut(COOLANT_MIST_PIN, mode.mist);
+    DIGITAL_OUT(Flood, mode.flood);
+    DIGITAL_OUT(Mist, mode.mist);
 #endif
 }
 
@@ -522,11 +533,11 @@ static void showMessage (const char *msg)
     hal.stream.write("]\r\n");
 }
 
-void dbg (uint32_t val)
+void pinModeOutput (gpio_t *gpio, uint8_t pin)
 {
-hal.stream.write("[MSG:");
-hal.stream.write(uitoa(val));
-hal.stream.write("]" ASCII_EOL);
+    pinMode(pin, OUTPUT);
+    gpio->port = (PortGroup *)&PORT->Group[g_APinDescription[pin].ulPort].DIR.reg;
+    gpio->bit = 1 << g_APinDescription[pin].ulPin;
 }
 
 // Configures perhipherals when settings are initialized or changed
@@ -578,11 +589,8 @@ void settings_changed (settings_t *settings)
 
         STEP_TIMER->COUNT16.CC[0].reg = (uint16_t)(24.0f * (settings->steppers.pulse_microseconds + settings->steppers.pulse_delay_microseconds - STEP_PULSE_LATENCY)) - 1;
         while(STEP_TIMER->COUNT16.STATUS.bit.SYNCBUSY);
-        STEP_TIMER->COUNT16.CC[1].reg = (uint16_t)(20.0f * settings->steppers.pulse_delay_microseconds) - 1;
+        STEP_TIMER->COUNT16.CC[1].reg = (uint16_t)(24.0f * settings->steppers.pulse_delay_microseconds) - 1;
         while(STEP_TIMER->COUNT16.STATUS.bit.SYNCBUSY);
-
-        dbg(SystemCoreClock);
-        dbg(STEP_TIMER->COUNT16.CC[0].reg);
 
         STEP_TIMER->COUNT16.INTENSET.bit.MC0 = 1; // Enable CC0 interrupt
 
@@ -751,12 +759,13 @@ static bool driver_setup (settings_t *settings)
     NVIC_SetPriority(STEPPER_TIMER_IRQn, 2);
     NVIC_SetPriority(STEP_TIMER_IRQn, 1);
 
-    pinMode(X_STEP_PIN, OUTPUT);
-    pinMode(Y_STEP_PIN, OUTPUT);
-    pinMode(Z_STEP_PIN, OUTPUT);
-    pinMode(X_DIRECTION_PIN, OUTPUT);
-    pinMode(Y_DIRECTION_PIN, OUTPUT);
-    pinMode(Z_DIRECTION_PIN, OUTPUT);
+    pinModeOutput(&stepX, X_STEP_PIN);
+    pinModeOutput(&stepY, Y_STEP_PIN);
+    pinModeOutput(&stepZ, Z_STEP_PIN);
+
+    pinModeOutput(&dirX, X_DIRECTION_PIN);
+    pinModeOutput(&dirY, Y_DIRECTION_PIN);
+    pinModeOutput(&dirZ, Z_DIRECTION_PIN);
 
 // Enable GPIO interrupt (done by Arduino library for now)
 //  IRQRegister(EIC_IRQn, LIMIT_IRQHandler);
@@ -791,15 +800,15 @@ static bool driver_setup (settings_t *settings)
     }
 
  // Steppers disable init
-#if IOEXPAND_ENABLE == 0
-    pinMode(SPINDLE_ENABLE_PIN, OUTPUT);
+#if !IOEXPAND_ENABLE
+    pinModeOutput(&steppersEnable, STEPPERS_DISABLE_PIN);
 #endif
 
  // Spindle init
-#if IOEXPAND_ENABLE == 0
-    pinMode(SPINDLE_ENABLE_PIN, OUTPUT);
+#if !IOEXPAND_ENABLE
+    pinModeOutput(&spindleEnable, SPINDLE_ENABLE_PIN);
   #ifdef SPINDLE_DIRECTION_PIN
-    pinMode(SPINDLE_DIRECTION_PIN, OUTPUT);
+    pinModeOutput(&spindleDir, SPINDLE_DIRECTION_PIN);
   #endif
 #endif
     pinMode(SPINDLEPWMPIN, OUTPUT);
@@ -819,9 +828,9 @@ static bool driver_setup (settings_t *settings)
     SPINDLE_PWM_TIMER->CTRLA.bit.RESOLUTION = TCC_CTRLA_RESOLUTION_NONE_Val;
 
  // Coolant init
- #if IOEXPAND_ENABLE == 0
-    pinMode(COOLANT_FLOOD_PIN, OUTPUT);
-    pinMode(COOLANT_MIST_PIN, OUTPUT);
+#if !IOEXPAND_ENABLE
+    pinModeOutput(&Flood, COOLANT_FLOOD_PIN);
+    pinModeOutput(&Mist, COOLANT_MIST_PIN);
 #endif
 
 #if IOEXPAND_ENABLE
@@ -1022,7 +1031,7 @@ bool driver_init (void) {
     IRQRegister(SysTick_IRQn, SysTick_IRQHandler);
 
     hal.info = "SAMD21";
-    hal.driver_version = "200721";
+    hal.driver_version = "200812";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
