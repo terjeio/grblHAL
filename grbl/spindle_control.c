@@ -1,6 +1,7 @@
 /*
   spindle_control.c - spindle control methods
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2012-2015 Sungeun K. Jeon
@@ -20,7 +21,12 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "grbl.h"
+#include <math.h>
+
+#include "hal.h"
+#include "protocol.h"
+#include "report.h"
+#include "state_machine.h"
 
 // Set spindle speed override
 // NOTE: Unlike motion overrides, spindle overrides do not require a planner reinitialization.

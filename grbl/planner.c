@@ -1,6 +1,7 @@
 /*
   planner.c - buffers movement commands and manages the acceleration profile plan
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -21,7 +22,23 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "grbl.h"
+#include <math.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "hal.h"
+#include "nuts_bolts.h"
+#include "planner.h"
+#ifdef KINEMATICS_API
+#include "kinematics.h"
+#endif
+
+#ifndef MINIMUM_JUNCTION_SPEED
+#define MINIMUM_JUNCTION_SPEED 0.0f
+#endif
+#ifndef MINIMUM_FEED_RATE
+#define MINIMUM_FEED_RATE 1.0f
+#endif
 
 static plan_block_t block_buffer[BLOCK_BUFFER_SIZE];    // A ring buffer for motion instructions
 static plan_block_t *block_buffer_tail;                 // Pointer to the block to process now

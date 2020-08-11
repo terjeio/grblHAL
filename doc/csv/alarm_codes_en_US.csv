@@ -12,3 +12,4 @@
 "11","Homing required","Homing required. Execute homing command ($H) to continue."
 "12","Limit switch engaged","Limit switch engaged. Clear before continuing."
 "13","Probe protection triggered","Probe protection triggered. Clear before continuing."
+"14","Spindle at speed timeout","Spindle at speed timeout. Clear before continuing."

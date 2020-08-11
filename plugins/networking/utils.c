@@ -9,9 +9,11 @@
 #include <stdarg.h>
 
 #ifdef ARDUINO
-#include "../grbl/grbl.h"
+#include "../grbl/plugins.h"
+#include "../grbl/nuts_bolts.h"
 #else
-#include "grbl/grbl.h"
+#include "grbl/plugins.h"
+#include "grbl/nuts_bolts.h"
 #endif
 
 #include "utils.h"

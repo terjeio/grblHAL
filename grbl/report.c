@@ -1,6 +1,7 @@
 /*
   report.c - reporting and messaging methods
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2012-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -28,11 +29,41 @@
 */
 
 #include <stdarg.h>
+#include <string.h>
 
-#include "grbl.h"
+#include "hal.h"
+#include "report.h"
 
 #ifdef ENABLE_SPINDLE_LINEARIZATION
 #include <stdio.h>
+#endif
+
+#ifndef REPORT_OVERRIDE_REFRESH_BUSY_COUNT
+#define REPORT_OVERRIDE_REFRESH_BUSY_COUNT 20   // (1-255)
+#endif
+#ifndef REPORT_OVERRIDE_REFRESH_IDLE_COUNT
+#define REPORT_OVERRIDE_REFRESH_IDLE_COUNT 10   // (1-255) Must be less than or equal to the busy count
+#endif
+#ifndef REPORT_WCO_REFRESH_BUSY_COUNT
+#define REPORT_WCO_REFRESH_BUSY_COUNT 30        // (2-255)
+#endif
+#ifndef REPORT_WCO_REFRESH_IDLE_COUNT
+#define REPORT_WCO_REFRESH_IDLE_COUNT 10        // (2-255) Must be less than or equal to the busy count
+#endif
+
+// Compile-time sanity check of defines
+
+#if (REPORT_WCO_REFRESH_BUSY_COUNT < REPORT_WCO_REFRESH_IDLE_COUNT)
+  #error "WCO busy refresh is less than idle refresh."
+#endif
+#if (REPORT_OVERRIDE_REFRESH_BUSY_COUNT < REPORT_OVERRIDE_REFRESH_IDLE_COUNT)
+  #error "Override busy refresh is less than idle refresh."
+#endif
+#if (REPORT_WCO_REFRESH_IDLE_COUNT < 2)
+  #error "WCO refresh must be greater than one."
+#endif
+#if (REPORT_OVERRIDE_REFRESH_IDLE_COUNT < 1)
+  #error "Override refresh must be greater than zero."
 #endif
 
 static char buf[(STRLEN_COORDVALUE + 1) * N_AXIS];
@@ -825,19 +856,19 @@ void report_build_info (char *line)
     if(hal.driver_cap.safety_door)
         *append++ = '+';
 
-  #ifndef ENABLE_RESTORE_EEPROM_WIPE_ALL // NOTE: Shown when disabled.
+  #ifdef DISABLE_RESTORE_EEPROM_WIPE_ALL // NOTE: Shown when disabled.
     *append++ = '*';
   #endif
 
-  #ifndef ENABLE_RESTORE_EEPROM_DEFAULT_SETTINGS // NOTE: Shown when disabled.
+  #ifdef DISABLE_RESTORE_EEPROM_DEFAULT_SETTINGS // NOTE: Shown when disabled.
     *append++ = '$';
   #endif
 
-  #ifndef ENABLE_RESTORE_EEPROM_CLEAR_PARAMETERS // NOTE: Shown when disabled.
+  #ifdef DISABLE_RESTORE_EEPROM_CLEAR_PARAMETERS // NOTE: Shown when disabled.
     *append++ = '#';
   #endif
 
-  #ifndef ENABLE_BUILD_INFO_WRITE_COMMAND // NOTE: Shown when disabled.
+  #ifdef DISABLE_BUILD_INFO_WRITE_COMMAND // NOTE: Shown when disabled.
     *append++ = 'I';
   #endif
 
@@ -1207,10 +1238,10 @@ void report_realtime_status (void)
 
     if(settings.status_report.parser_state) {
 
-        static uint32_t tool = 0;
-        static float feed_rate = 0.0f, spindle_rpm = 0.0f;
-        static gc_modal_t last_state = {0};
-        static bool g92_active = false;
+        static uint32_t tool;
+        static float feed_rate, spindle_rpm;
+        static gc_modal_t last_state;
+        static bool g92_active;
 
         bool is_changed = feed_rate != gc_state.feed_rate || spindle_rpm != gc_state.spindle.rpm || tool != gc_state.tool->tool;
 

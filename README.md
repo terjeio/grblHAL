@@ -1,10 +1,29 @@
 ## GrblHAL ##
----
-
 
 GrblHAL has [many extensions](https://github.com/terjeio/grblHAL/wiki) that may cause issues with some senders. As a workaround for these a [compile time option](https://github.com/terjeio/grblHAL/wiki/Changes-from-grbl-1.1#workaround) has been added that disables extensions selectively. 
 
 Windows users may try [my sender](https://github.com/terjeio/Grbl-GCode-Sender), binary releases can be found [here](https://github.com/terjeio/Grbl-GCode-Sender/releases). It has been written to complement grblHAL and has features such as proper keyboard jogging, automatic reconfiguration of DRO display for up to 6 axes, lathe mode including conversational G-Code generation, 3D rendering, macro support etc. etc.
+
+---
+
+Build 20200811:
+
+* Part one of large overhaul of configuration system.
+This has been done to allow a global configuration file and/or setting compile time options as compiler symbols/macros with the `-D` compiler command line option.
+* Networking \(cabled ethernet\), SD Card and I2C keypad plugin support added to [Teensy 4.x driver.](drivers/IMXRT1062) A Teensy 4.1 is required for networking.
+* Tool number range changed from 8-bit \(0-255\) to 32-bit \(0-4294967295\). Note that if the optional tool table is enabled the max tool number is limited by number of entries in the tool table.
+* M60 and corresponding pallet shuttle HAL entry point added. No driver support for this yet.
+
+_Configuration system changes:_
+
+Symbols \(#define macros\) that are unlikely to be changed or is used for conditional compilation has been moved from [grbl/config.h](grbl/config.h) to [grbl/grbl.h](grbl/grbl.h).
+Symbols used for conditional compilation can be overridden by `-D` compiler command line options or by editing [grbl/config.h](grbl/config.h).
+
+[grbl/defaults.h](grbl/defaults.h) is now used for default values for settings that can be changed at run-time with the `$$` command. __Important:__ grbl/defaults.h should only be changed when adding new settings.
+
+[grbl/config.h](grbl/config.h) is now used for overriding default values in grbl/grbl.h or grbl/defaults.h. Out of the box all overridable symbols are commented out, uncomment and change as needed to override default definitions in grbl/grbl.h or grbl/defaults.h.
+
+These changes are part of a long term plan to create a user friendly front end for configuring and building grblHAL.
 
 ---
 
@@ -132,7 +151,7 @@ List of Supported G-Codes in GrblHAL v1.1:
   - Cutter Compensation Modes: G40
   - Coordinate System Modes: G54, G55, G56, G57, G58, G59, G59.1, G59.2, G59.3
   - Control Modes: G61
-  - Program Flow: M0, M1, M2, M30
+  - Program Flow: M0, M1, M2, M30, M60
   - Coolant Control: M7, M8, M9
   - Spindle Control: M3, M4, M5
   - Tool Change: M6* (Two modes possible: manual** - supports jogging, ATC), M61
@@ -146,4 +165,4 @@ List of Supported G-Codes in GrblHAL v1.1:
 ```
 
 ---
-2020-07-22
+2020-08-11

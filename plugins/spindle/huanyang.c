@@ -26,9 +26,11 @@
 #if SPINDLE_HUANYANG
 
 #ifdef ARDUINO
-#include "../grbl/grbl.h"
+#include "../grbl/hal.h"
 #else
-#include "grbl/grbl.h"
+#include "grbl/hal.h"
+#include "grbl/state_machine.h"
+#include "grbl/report.h"
 #endif
 
 #ifdef SPINDLE_PWM_DIRECT

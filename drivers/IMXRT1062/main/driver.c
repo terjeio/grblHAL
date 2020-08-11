@@ -19,9 +19,11 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <string.h>
+
 #include "uart.h"
 #include "driver.h"
-#include "src/grbl/grbl.h"
+#include "src/grbl/protocol.h"
 
 #if EEPROM_ENABLE
 #include "src/eeprom/eeprom.h"
@@ -33,6 +35,14 @@
 #include "ioports.h"
 #endif
 
+#if SDCARD_ENABLE
+#include "src/sdcard/sdcard.h"
+#endif
+
+#if KEYPAD_ENABLE
+#include "src/keypad/keypad.h"
+#endif
+
 #if ETHERNET_ENABLE
   #include "enet.h"
   #if TELNET_ENABLE
@@ -41,6 +51,8 @@
   #if WEBSOCKET_ENABLE
     #include "src/networking/WsStream.h"
   #endif
+        static bool enet_ok = false;
+
 #endif
 
 #if USB_SERIAL_GRBL == 1
@@ -210,39 +222,39 @@ static gpio_t QEI_A, QEI_B;
 
 static input_signal_t inputpin[] = {
 #if ESTOP_ENABLE
-    { .id = Input_EStop,        .port = &Reset,        .pin = RESET_PIN,       .group = INPUT_GROUP_CONTROL },
+    { .id = Input_EStop,        .port = &Reset,        .pin = RESET_PIN,         .group = INPUT_GROUP_CONTROL },
 #else
-    { .id = Input_Reset,        .port = &Reset,        .pin = RESET_PIN,       .group = INPUT_GROUP_CONTROL },
+    { .id = Input_Reset,        .port = &Reset,        .pin = RESET_PIN,         .group = INPUT_GROUP_CONTROL },
 #endif
-    { .id = Input_FeedHold,     .port = &FeedHold,     .pin = FEED_HOLD_PIN,   .group = INPUT_GROUP_CONTROL },
-    { .id = Input_CycleStart,   .port = &CycleStart,   .pin = CYCLE_START_PIN, .group = INPUT_GROUP_CONTROL },
+    { .id = Input_FeedHold,     .port = &FeedHold,     .pin = FEED_HOLD_PIN,     .group = INPUT_GROUP_CONTROL },
+    { .id = Input_CycleStart,   .port = &CycleStart,   .pin = CYCLE_START_PIN,   .group = INPUT_GROUP_CONTROL },
 #ifdef SAFETY_DOOR_PIN
-    { .id = Input_SafetyDoor,   .port = &SafetyDoor ,  .pin = SAFETY_DOOR_PIN, .group = INPUT_GROUP_CONTROL },
+    { .id = Input_SafetyDoor,   .port = &SafetyDoor ,  .pin = SAFETY_DOOR_PIN,   .group = INPUT_GROUP_CONTROL },
 #endif
-    { .id = Input_Probe,        .port = &Probe,        .pin = PROBE_PIN,       .group = INPUT_GROUP_PROBE },
-    { .id = Input_LimitX,       .port = &LimitX,       .pin = X_LIMIT_PIN,     .group = INPUT_GROUP_LIMIT },
-    { .id = Input_LimitY,       .port = &LimitY,       .pin = Y_LIMIT_PIN,     .group = INPUT_GROUP_LIMIT },
-    { .id = Input_LimitZ,       .port = &LimitZ,       .pin = Z_LIMIT_PIN,     .group = INPUT_GROUP_LIMIT }
+    { .id = Input_Probe,        .port = &Probe,        .pin = PROBE_PIN,         .group = INPUT_GROUP_PROBE },
+    { .id = Input_LimitX,       .port = &LimitX,       .pin = X_LIMIT_PIN,       .group = INPUT_GROUP_LIMIT },
+    { .id = Input_LimitY,       .port = &LimitY,       .pin = Y_LIMIT_PIN,       .group = INPUT_GROUP_LIMIT },
+    { .id = Input_LimitZ,       .port = &LimitZ,       .pin = Z_LIMIT_PIN,       .group = INPUT_GROUP_LIMIT }
 #ifdef A_LIMIT_PIN
-  , { .id = Input_LimitA,       .port = &LimitA,       .pin = A_LIMIT_PIN,     .group = INPUT_GROUP_LIMIT }
+  , { .id = Input_LimitA,       .port = &LimitA,       .pin = A_LIMIT_PIN,       .group = INPUT_GROUP_LIMIT }
 #endif
 #ifdef B_LIMIT_PIN
-  , { .id = Input_LimitB,       .port = &LimitB,       .pin = B_LIMIT_PIN,     .group = INPUT_GROUP_LIMIT }
+  , { .id = Input_LimitB,       .port = &LimitB,       .pin = B_LIMIT_PIN,       .group = INPUT_GROUP_LIMIT }
 #endif
 #if MPG_MODE_ENABLE
-  ,  { .id = Input_ModeSelect,  .port = &ModeSelect,   .pin = MODE_PIN,        .group = INPUT_GROUP_MPG }
+  ,  { .id = Input_ModeSelect,  .port = &ModeSelect,   .pin = MODE_PIN,          .group = INPUT_GROUP_MPG }
 #endif
-#if KEYPAD_ENABLE
-  , { .id = Input_KeypadStrobe, .port = &KeypadStrobe, .pin = KEYPAD_PIN,      .group = INPUT_GROUP_KEYPAD }
+#if KEYPAD_ENABLE && defined(KEYPAD_PIN)
+  , { .id = Input_KeypadStrobe, .port = &KeypadStrobe, .pin = KEYPAD_STROBE_PIN, .group = INPUT_GROUP_KEYPAD }
 #endif
 #if QEI_ENABLE
-  , { .id = Input_QEI_A,        .port = &QEI_A,        .pin = QEI_A_PIN,       .group = INPUT_GROUP_QEI }
-  , { .id = Input_QEI_B,        .port = &QEI_B,        .pin = QEI_B_PIN,       .group = INPUT_GROUP_QEI }
+  , { .id = Input_QEI_A,        .port = &QEI_A,        .pin = QEI_A_PIN,         .group = INPUT_GROUP_QEI }
+  , { .id = Input_QEI_B,        .port = &QEI_B,        .pin = QEI_B_PIN,         .group = INPUT_GROUP_QEI }
   #if QEI_SELECT_ENABLED
-  , { .id = Input_QEI_Select,   .port = &QEI_Select,   .pin = QEI_SELECT_PIN,  .group = INPUT_GROUP_QEI_SELECT }
+  , { .id = Input_QEI_Select,   .port = &QEI_Select,   .pin = QEI_SELECT_PIN,    .group = INPUT_GROUP_QEI_SELECT }
   #endif
   #if QEI_INDEX_ENABLED
-  , { .id = Input_QEI_Index,    .port = &QEI_Index,    .pin = QEI_INDEX_PIN,   .group = INPUT_GROUP_QEI }
+  , { .id = Input_QEI_Index,    .port = &QEI_Index,    .pin = QEI_INDEX_PIN,     .group = INPUT_GROUP_QEI }
   #endif
 #endif
 };
@@ -282,7 +294,8 @@ static void enetStreamWriteS (const char *data)
         WsStreamWriteS(data);
 #endif
 #if USB_SERIAL_GRBL
-    usb_serialWriteS(data);
+    if(!(services.telnet || services.websocket))
+        usb_serialWriteS(data);
 #else
     serialWriteS(data);
 #endif
@@ -357,7 +370,7 @@ const io_stream_t serial_stream = {
     .cancel_read_buffer = serialRxCancel,
     .suspend_read = serialSuspendInput,
     .enqueue_realtime_command = protocol_enqueue_realtime_command
-}
+};
 #endif
 
 // Interrupt handler prototypes
@@ -606,7 +619,9 @@ inline static axes_signals_t limitsGetState()
 // axes_signals_t is defined in grbl/system.h.
 inline static control_signals_t systemGetState (void)
 {
-    control_signals_t signals = {0};
+    control_signals_t signals;
+
+    signals.value = settings.control_invert.value;
 
 #if ESTOP_ENABLE
     signals.e_stop = (Reset.reg->DR & Reset.bit) != 0;
@@ -810,7 +825,7 @@ static void showMessage (const char *msg)
 {
     hal.stream.write("[MSG:");
     hal.stream.write(msg);
-    hal.stream.write("]\r\n");
+    hal.stream.write("]" ASCII_EOL);
 }
 
 #if ETHERNET_ENABLE
@@ -818,7 +833,12 @@ static void reportIP (void)
 {
     hal.stream.write("[IP:");
     hal.stream.write(enet_ip_address());
-    hal.stream.write("]\r\n");
+    hal.stream.write("]" ASCII_EOL);
+    if(services.telnet || services.websocket) {
+        hal.stream.write("[NETCON:");
+        hal.stream.write(services.telnet ? "Telnet" : "Websocket");
+        hal.stream.write("]" ASCII_EOL);
+    }
 }
 #endif
 
@@ -859,7 +879,6 @@ static void settings_changed (settings_t *settings)
 
 #if ETHERNET_ENABLE
 
-        static bool enet_ok = false;
         if(!enet_ok)
             enet_ok = grbl_enet_init(&driver_settings.network);
 
@@ -1128,7 +1147,7 @@ static bool driver_setup (settings_t *settings)
     if(hal.eeprom.driver_area.address != 0) {
         if(!hal.eeprom.memcpy_from_with_checksum((uint8_t *)&driver_settings, hal.eeprom.driver_area.address, sizeof(driver_settings)))
             hal.driver_settings_restore();
-      #if TRINAMIC_ENABLE && CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
+      #if TRINAMIC_ENABLE && defined(BOARD_CNC_BOOSTERPACK) // Trinamic BoosterPack does not support mixed drivers
         driver_settings.trinamic.driver_enable.mask = AXES_BITMASK;
       #endif
     }
@@ -1263,6 +1282,10 @@ static bool driver_setup (settings_t *settings)
     encoder_init(&qei.encoder);
 #endif
 
+#if SDCARD_ENABLE
+    sdcard_init();
+#endif
+
     return IOInitDone;
 }
 
@@ -1372,17 +1395,7 @@ static void execute_realtime (uint_fast16_t state)
     usb_execute_realtime(state);
 #endif
 #if ETHERNET_ENABLE
-    static uint32_t last_ms;
-    uint32_t ms;
-
-    enet_proc_input();
-
-    ms = millis();
-    if (ms - last_ms > 100)
-    {
-        last_ms = ms;
-        grbl_enet_poll();
-    }
+    grbl_enet_poll();
 #endif
 #if KEYPAD_ENABLE
     keypad_process_keypress(state);
@@ -1399,6 +1412,20 @@ void debugOut (bool on)
     digitalWrite(13, on); // LED
 }
 #endif
+
+#ifdef UART_DEBUG
+void uart_debug_write (char *s)
+{
+    serialWriteS(s);
+    while(serialTxCount()); // Wait until message is delivered
+}
+#endif
+
+// Cold restart (T4.x has no reset button)
+static void reboot (void)
+{
+    SCB_AIRCR = 0x05FA0004;
+}
 
 // Initialize HAL pointers, setup serial comms and enable EEPROM.
 // NOTE: Grbl is not yet configured (from EEPROM data), driver_setup() will be called when done.
@@ -1437,7 +1464,7 @@ bool driver_init (void)
         options[strlen(options) - 1] = '\0';
 
     hal.info = "IMXRT1062";
-    hal.driver_version = "200719";
+    hal.driver_version = "200807";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1510,6 +1537,7 @@ bool driver_init (void)
     hal.driver_settings_restore = driver_settings_restore;
 #endif
 
+    hal.reboot = reboot;
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
@@ -1553,7 +1581,7 @@ bool driver_init (void)
 
 #ifdef UART_DEBUG
     serialInit(115200);
-    serialWriteS(ASCII_EOL "UART Debug:" ASCII_EOL);
+    uart_debug_write(ASCII_EOL "UART Debug:" ASCII_EOL);
 #endif
 
   // Driver capabilities, used for announcing and negotiating (with Grbl) driver functionality.
@@ -1576,6 +1604,9 @@ bool driver_init (void)
 #endif
 #if ETHERNET_ENABLE
     hal.driver_cap.ethernet = On;
+#endif
+#if SDCARD_ENABLE
+    hal.driver_cap.sd_card = On;
 #endif
     hal.driver_cap.software_debounce = On;
     hal.driver_cap.step_pulse_delay = On;
@@ -1779,7 +1810,7 @@ static void gpio_isr (void)
 
 #if KEYPAD_ENABLE
     if(grp & INPUT_GROUP_KEYPAD)
-        keypad_keyclick_handler(gpio_get_level(KEYPAD_STROBE_PIN));
+        keypad_keyclick_handler(KeypadStrobe.reg->DR & KeypadStrobe.bit);
 #endif
 }
 

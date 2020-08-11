@@ -23,8 +23,10 @@
 
 */
 
+#include <string.h>
+
 #include "chip.h"
-#include "grbl/grbl.h"
+#include "grbl/hal.h"
 
 #define IAP_CMD_SUCCESS 0
 

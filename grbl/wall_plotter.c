@@ -1,6 +1,7 @@
 /*
   wall_plotter.c - wall plotter kinematics implementation
-  Part of Grbl
+
+  Part of GrblHAL
 
   Code lifted from Grbl_Esp32 pull request by user @ https://github.com/rognlien
 
@@ -26,6 +27,10 @@
 #include "grbl.h"
 
 #ifdef WALL_PLOTTER
+
+#include "settings.h"
+#include "planner.h"
+#include "kinematics.h"
 
 #define A_MOTOR X_AXIS // Must be X_AXIS
 #define B_MOTOR Y_AXIS // Must be Y_AXIS

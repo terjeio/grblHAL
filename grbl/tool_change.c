@@ -21,7 +21,13 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "grbl.h"
+#include <string.h>
+
+#include "hal.h"
+#include "motion_control.h"
+#include "protocol.h"
+#include "report.h"
+#include "tool_change.h"
 
 #ifndef LINEAR_AXIS_HOME_OFFSET
 #define LINEAR_AXIS_HOME_OFFSET -1.0f
@@ -248,26 +254,8 @@ static status_code_t tool_change (parser_state_t *gc_state)
     system_convert_array_steps_to_mpos(previous.values, sys_position);
 
     // Establish axis assignments.
-    // TODO: move this struct to gc_state? A plane change should invalidate current tool reference offset?
-    switch(gc_state->modal.plane_select) {
-
-        case PlaneSelect_XY:
-            plane.axis_0 = X_AXIS;
-            plane.axis_1 = Y_AXIS;
-            plane.axis_linear = Z_AXIS;
-            break;
-
-        case PlaneSelect_ZX:
-            plane.axis_0 = Z_AXIS;
-            plane.axis_1 = X_AXIS;
-            plane.axis_linear = Y_AXIS;
-            break;
-
-        default: // case PlaneSelect_YZ:
-            plane.axis_0 = Y_AXIS;
-            plane.axis_1 = Z_AXIS;
-            plane.axis_linear = X_AXIS;
-    }
+    // A plane change should invalidate current tool reference offset?
+    gc_get_plane_data(&plane, gc_state->modal.plane_select);
 
     previous.values[plane.axis_linear] -= gc_get_offset(plane.axis_linear);
 

@@ -20,10 +20,45 @@
 */
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "sdcard.h"
 
 #if SDCARD_ENABLE
+
+#if defined(ESP_PLATFORM) || defined(STM32F103xB) ||  defined(__LPC17XX__) ||  defined(__IMXRT1062__)
+#define NEW_FATFS
+#endif
+
+#ifdef ARDUINO
+  #include "../grbl/report.h"
+  #ifdef __IMXRT1062__
+    #include "uSDFS.h"
+    #define SDCARD_DEV "1:/"
+    static FATFS fs;
+  #endif
+#else
+  #include "grbl/report.h"
+#endif
+
+#ifdef __IMXRT1062__
+const char *dev = "1:/";
+#elif defined(NEW_FATFS)
+const char *dev = "";
+#endif
+
+#ifndef SDCARD_DEV
+#define SDCARD_DEV ""
+#endif
+
+#if defined(STM32F103xB) || defined(__LPC17XX__) ||  defined(__IMXRT1062__)
+#define UINT32FMT "%lu"
+#endif
+
+#ifndef UINT32FMT
+#define UINT32FMT "%u"
+#endif
 
 // https://e2e.ti.com/support/tools/ccs/f/81/t/428524?Linking-error-unresolved-symbols-rom-h-pinout-c-
 
@@ -174,7 +209,7 @@ static FRESULT scan_dir (char *path, uint_fast8_t depth, char *buf)
         subdirs |= fno.fattrib & AM_DIR;
 
         if(!(fno.fattrib & AM_DIR) && (status = allowed(get_name(&fno), true)) != Filename_Filtered) {
-            sprintf(buf, "[FILE:%s/%s|SIZE:%u%s]\r\n", path, get_name(&fno), (uint32_t)fno.fsize, status == Filename_Invalid ? "|UNUSABLE" : "");
+            sprintf(buf, "[FILE:%s/%s|SIZE:" UINT32FMT "%s]" ASCII_EOL, path, get_name(&fno), (uint32_t)fno.fsize, status == Filename_Invalid ? "|UNUSABLE" : "");
             hal.stream.write(buf);
         }
     }
@@ -199,7 +234,7 @@ static FRESULT scan_dir (char *path, uint_fast8_t depth, char *buf)
         }
     }
 
-#if defined(__MSP432E401Y__) || defined(ESP_PLATFORM)
+#ifdef NEW_FATFS
     f_closedir(&dir);
 #endif
 
@@ -257,16 +292,26 @@ static bool sdcard_mount (void)
     return SDFatFS_open(Board_SDFatFS0, 0) != NULL;
 #else
     if(file.fs == NULL)
+  #ifdef __IMXRT1062__
+        file.fs = &fs;
+  #else
         file.fs = malloc(sizeof(FATFS));
+  #endif
 
-#if defined(ESP_PLATFORM) || defined(STM32F103xB) ||  defined(__LPC17XX__)
-    if(file.fs && f_mount(file.fs, "", 1) != FR_OK) {
-#else
+  #ifdef NEW_FATFS
+    if(file.fs && f_mount(file.fs, dev, 1) != FR_OK) {
+  #else
     if(file.fs && f_mount(0, file.fs) != FR_OK) {
-#endif
+  #endif
+  #ifndef __IMXRT1062__
         free(file.fs);
+  #endif
         file.fs = NULL;
     }
+  #if defined(__IMXRT1062__)
+    else if(f_chdrive(dev) != FR_OK)
+        file.fs = NULL;
+  #endif
 
     return file.fs != NULL;
 #endif
@@ -341,7 +386,7 @@ static status_code_t trap_status_report (status_code_t status_code)
 {
     if(status_code != Status_OK) { // TODO: all errors should terminate job?
         char buf[50]; // TODO: check if extended error reports are permissible
-        sprintf(buf, "error:%d in SD file at line %u\r\n", (uint8_t)status_code, file.line);
+        sprintf(buf, "error:%d in SD file at line " UINT32FMT ASCII_EOL, (uint8_t)status_code, file.line);
         hal.stream.write(buf);
         sdcard_end_job();
     }
@@ -459,7 +504,7 @@ static void sdcard_reset (void)
     if(hal.stream.type == StreamType_SDCard) {
         if(file.line > 0) {
             char buf[70];
-            sprintf(buf, "[MSG:Reset during streaming of SD file at line: %u]\r\n", file.line);
+            sprintf(buf, "[MSG:Reset during streaming of SD file at line: " UINT32FMT "]" ASCII_EOL, file.line);
             hal.stream.write(buf);
         }
         sdcard_end_job();

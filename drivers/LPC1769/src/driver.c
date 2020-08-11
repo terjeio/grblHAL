@@ -22,8 +22,10 @@
 */
 
 #include <stdint.h>
+#include <string.h>
 
-#include "grbl/grbl.h"
+#include "grbl/hal.h"
+#include "grbl/nuts_bolts.h"
 
 #include "driver.h"
 #include "serial.h"
@@ -906,7 +908,7 @@ static bool driver_setup (settings_t *settings)
     BITBAND_GPIO(Y_STEP_PORT->DIR, Y_STEP_PIN) = 1;
     BITBAND_GPIO(Z_STEP_PORT->DIR, Z_STEP_PIN) = 1;
 #ifdef A_AXIS
-    BITBAND_GPIO(A_STEP_PORT->DIR, B_STEP_PIN) = 1;
+    BITBAND_GPIO(A_STEP_PORT->DIR, A_STEP_PIN) = 1;
 #endif
 #ifdef B_AXIS
     BITBAND_GPIO(B_STEP_PORT->DIR, B_STEP_PIN) = 1;
@@ -1037,7 +1039,7 @@ bool driver_init (void) {
 #endif
 
     hal.info = "LCP1769";
-    hal.driver_version = "200721";
+    hal.driver_version = "200729";
     hal.driver_setup = driver_setup;
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;

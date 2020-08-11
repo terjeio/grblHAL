@@ -157,7 +157,8 @@ static void stepperWakeUp (void)
 }
 
 // Disables stepper driver interrupts
-static void stepperGoIdle (bool clear_signals) {
+static void stepperGoIdle (bool clear_signals)
+{
     STEPPER_TIMER->COUNT32.CTRLBSET.reg = TC_CTRLBCLR_CMD_STOP;
     while(STEPPER_TIMER->COUNT32.STATUS.bit.SYNCBUSY);
 
@@ -263,7 +264,9 @@ inline static axes_signals_t limitsGetState()
 // Each bitfield bit indicates a control signal, where triggered is 1 and not triggered is 0.
 static control_signals_t systemGetState (void)
 {
-    control_signals_t signals = {0};
+    control_signals_t signals;
+
+    signals.value = settings.control_invert.mask;
 
     signals.reset = pinIn(RESET_PIN);
     signals.feed_hold = pinIn(FEED_HOLD_PIN);
@@ -519,6 +522,13 @@ static void showMessage (const char *msg)
     hal.stream.write("]\r\n");
 }
 
+void dbg (uint32_t val)
+{
+hal.stream.write("[MSG:");
+hal.stream.write(uitoa(val));
+hal.stream.write("]" ASCII_EOL);
+}
+
 // Configures perhipherals when settings are initialized or changed
 void settings_changed (settings_t *settings)
 {
@@ -566,10 +576,13 @@ void settings_changed (settings_t *settings)
             STEP_TIMER->COUNT16.INTENCLR.bit.MC1 = 1; // Disable CC1 interrupt
         }
 
-        STEP_TIMER->COUNT16.CC[0].reg = settings->steppers.pulse_microseconds + settings->steppers.pulse_delay_microseconds - 1;
+        STEP_TIMER->COUNT16.CC[0].reg = (uint16_t)(24.0f * (settings->steppers.pulse_microseconds + settings->steppers.pulse_delay_microseconds - STEP_PULSE_LATENCY)) - 1;
         while(STEP_TIMER->COUNT16.STATUS.bit.SYNCBUSY);
-        STEP_TIMER->COUNT16.CC[1].reg = settings->steppers.pulse_delay_microseconds - 1;
+        STEP_TIMER->COUNT16.CC[1].reg = (uint16_t)(20.0f * settings->steppers.pulse_delay_microseconds) - 1;
         while(STEP_TIMER->COUNT16.STATUS.bit.SYNCBUSY);
+
+        dbg(SystemCoreClock);
+        dbg(STEP_TIMER->COUNT16.CC[0].reg);
 
         STEP_TIMER->COUNT16.INTENSET.bit.MC0 = 1; // Enable CC0 interrupt
 
@@ -678,11 +691,11 @@ static bool driver_setup (settings_t *settings)
     GCLK->CLKCTRL.reg = (uint16_t)(GCLK_CLKCTRL_CLKEN | GCLK_CLKCTRL_GEN_GCLK7 | GCLK_CLKCTRL_ID_TC4_TC5);
     while(GCLK->STATUS.bit.SYNCBUSY);
 
-    GCLK->GENDIV.reg = (uint32_t)(GCLK_GENDIV_ID(6)|GCLK_GENDIV_DIV(1));
+    GCLK->GENDIV.reg = (uint32_t)(GCLK_GENDIV_ID(6)|GCLK_GENDIV_DIV(2));
     while(GCLK->STATUS.bit.SYNCBUSY);
-    GCLK->GENCTRL.reg = (uint32_t)(GCLK_GENCTRL_ID(6)|GCLK_GENCTRL_SRC_OSC8M|GCLK_GENCTRL_IDC|GCLK_GENCTRL_GENEN);
+    GCLK->GENCTRL.reg = (uint32_t)(GCLK_GENCTRL_ID(6)|GCLK_GENCTRL_SRC_DFLL48M|GCLK_GENCTRL_IDC|GCLK_GENCTRL_GENEN);
     while(GCLK->STATUS.bit.SYNCBUSY);
-    GCLK->CLKCTRL.reg = (uint16_t)(GCLK_CLKCTRL_CLKEN | GCLK_CLKCTRL_GEN_GCLK6 | 0x1B);
+    GCLK->CLKCTRL.reg = (uint16_t)(GCLK_CLKCTRL_CLKEN | GCLK_CLKCTRL_GEN_GCLK6 | GCLK_CLKCTRL_ID_TCC2_TC3);
     while(GCLK->STATUS.bit.SYNCBUSY);
 
 
@@ -725,7 +738,7 @@ static bool driver_setup (settings_t *settings)
 //  STEP_TIMER->COUNT16.CTRLBSET.reg = (uint8_t)(TC_CTRLBSET_DIR|TC_CTRLBSET_ONESHOT);
 //  while(STEP_TIMER->COUNT16.STATUS.bit.SYNCBUSY);
 //  STEP_TIMER->COUNT16.CTRLA.reg = TC_CTRLA_MODE_COUNT16|TC_CTRLA_PRESCALER_DIV2;
-    STEP_TIMER->COUNT16.CTRLA.reg = TC_CTRLA_MODE_COUNT16|TC_CTRLA_WAVEGEN_MPWM|TC_CTRLA_PRESCALER_DIV4;
+    STEP_TIMER->COUNT16.CTRLA.reg = TC_CTRLA_MODE_COUNT16|TC_CTRLA_WAVEGEN_MPWM;
     while(STEP_TIMER->COUNT16.STATUS.bit.SYNCBUSY);
     STEP_TIMER->COUNT16.INTENSET.bit.MC0 = 1; // Enable CC0 interrupt
 
@@ -825,7 +838,7 @@ static bool driver_setup (settings_t *settings)
 
  // Set defaults
 
-    IOInitDone = settings->version == 16;
+    IOInitDone = settings->version == 17;
 
     settings_changed(settings);
 
@@ -1009,7 +1022,7 @@ bool driver_init (void) {
     IRQRegister(SysTick_IRQn, SysTick_IRQHandler);
 
     hal.info = "SAMD21";
-    hal.driver_version = "200528";
+    hal.driver_version = "200721";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif

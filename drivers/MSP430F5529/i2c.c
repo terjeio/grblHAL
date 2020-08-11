@@ -23,7 +23,7 @@
 
 #include <msp430.h>
 
-#include "grbl/grbl.h"
+#include "grbl/hal.h"
 #include "grbl/plugins.h"
 
 #define SDA BIT1

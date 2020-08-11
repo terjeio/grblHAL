@@ -23,6 +23,8 @@
 
 #include "project.h"
 #include "i2c_keypad.h"
+#include "eeprom_emulate.h"
+#include "override.h"
 
 #define KEYBUF_SIZE 16
 

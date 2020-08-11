@@ -24,7 +24,7 @@
 #include "project.h"
 #include "serial.h"
 #include "i2c_keypad.h"
-#include "grbl.h"
+#include "hal.h"
 
 //#define HAS_KEYPAD //uncomment to enable I2C keypad for jogging etc.
 

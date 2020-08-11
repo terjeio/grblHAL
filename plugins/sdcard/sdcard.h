@@ -3,7 +3,7 @@
 
   Driver code for Texas Instruments Tiva C (TM4C123GH6PM) ARM processor
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2018-2020 Terje Io
 
@@ -26,10 +26,10 @@
 
 #ifdef ARDUINO
 #include "../../driver.h"
-#include "../grbl/grbl.h"
+#include "../grbl/hal.h"
 #else
 #include "driver.h"
-#include "grbl/grbl.h"
+#include "grbl/hal.h"
 #endif
 
 #if SDCARD_ENABLE
@@ -44,7 +44,10 @@
 #elif defined(__LPC176x__)
 #include "fatfs/ff.h"
 #include "fatfs/diskio.h"
-#elif defined(ARDUINO_SAMD_MKRZERO) || defined(STM32F103xB) || defined(__LPC17XX__)
+#elif defined(ARDUINO_SAMD_MKRZERO)
+#include "../../ff.h"
+#include "../../diskio.h"
+#elif defined(STM32F103xB) || defined(__LPC17XX__) || defined(__IMXRT1062__)
 #include "ff.h"
 #include "diskio.h"
 #else

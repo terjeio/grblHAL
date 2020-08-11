@@ -22,7 +22,8 @@
 */
 
 #include "main.h"
-#include "grbl.h"
+#include "grbl/hal.h"
+#include "grbl/nuts_bolts.h"
 
 #ifndef __DRIVER_H__
 #define __DRIVER_H__
@@ -36,6 +37,7 @@
 
 // NOTE: Only one board may be enabled!
 //#define BOARD_CNC3040
+//#define BOARD_CNC_BOOSTERPACK
 
 // Configuration
 // Set value to 1 to enable, 0 to disable
@@ -45,17 +47,14 @@
 #define TRINAMIC_ENABLE 0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
 #define TRINAMIC_I2C    0 // Trinamic I2C - SPI bridge interface.
 #define TRINAMIC_DEV    0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
-#define CNC_BOOSTERPACK 0
+#define CNC_BOOSTERPACK 1
 
-#if CNC_BOOSTERPACK
-#if N_AXIS > 3
-#error Max number of axes is 3!
-#endif
-#define SDCARD_ENABLE 1 // Run jobs from SD card.
-#define EEPROM_ENABLE 1 // I2C EEPROM (24LC16) support.
-#else
+#ifndef BOARD_CNC_BOOSTERPACK
 #define SDCARD_ENABLE 0 // Run jobs from SD card.
-#define EEPROM_ENABLE 0 // I2C EEPROM: 1 = 2 Kb (24LC16), 2 = > 2 Kb (24LC256 etc).
+#define EEPROM_ENABLE 0 // I2C EEPROM (24LC16) support.
+#else
+#define SDCARD_ENABLE 1 // Run jobs from SD card.
+#define EEPROM_ENABLE 1 // I2C EEPROM: 1 = 2 Kb (24LC16), 2 = > 2 Kb (24LC256 etc).
 #endif
 
 // Adjust STEP_PULSE_LATENCY to get accurate step pulse length when required, e.g if using high step rates.
@@ -123,10 +122,16 @@ extern driver_settings_t driver_settings;
 #define PULSE_TIMER TIM3
 #define DEBOUNCE_TIMER TIM4
 
-#if CNC_BOOSTERPACK
+#ifdef BOARD_CNC_BOOSTERPACK
+  #if N_AXIS > 3
+    #error Max number of axes is 3!
+  #endif
   #include "cnc_boosterpack_map.h"
 #elif defined(BOARD_CNC3040)
-    #include "cnc3040_map.h"
+  #if EEPROM_ENABLE
+    #error "EEPROM plugin not supported!"
+  #endif
+  #include "cnc3040_map.h"
 #else // default board
 
 // Define step pulse output pins.
@@ -248,6 +253,18 @@ extern driver_settings_t driver_settings;
 #endif
 
 #endif // default board
+
+#if KEYPAD_ENABLE && !defined(KEYPAD_PORT)
+#error "Keypad plugin not supported!"
+#endif
+
+#if SDCARD_ENABLE && !defined(SD_CS_PORT)
+#error "SD card plugin not supported!"
+#endif
+
+#if TRINAMIC_ENABLE && CNC_BOOSTERPACK == 0
+#error "Trinamic plugin not supported!"
+#endif
 
 bool driver_init (void);
 

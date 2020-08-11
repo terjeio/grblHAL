@@ -1,6 +1,7 @@
 /*
   settings.h - eeprom configuration handling
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -20,8 +21,8 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef settings_h
-#define settings_h
+#ifndef _SETTINGS_H_
+#define _SETTINGS_H_
 
 #include "config.h"
 #include "system.h"

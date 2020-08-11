@@ -1,6 +1,7 @@
 /*
   nuts_bolts.c - Shared functions
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -20,7 +21,18 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "grbl.h"
+#include <math.h>
+#include <stdint.h>
+#include <stdbool.h>
+
+#include "hal.h"
+#include "protocol.h"
+#include "state_machine.h"
+#include "nuts_bolts.h"
+
+#ifndef DWELL_TIME_STEP
+#define DWELL_TIME_STEP 50 // Integer (1-255) (milliseconds)
+#endif
 
 #define MAX_PRECISION 10
 

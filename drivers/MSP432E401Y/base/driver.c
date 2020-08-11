@@ -25,9 +25,12 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+
 #include "driver.h"
 #include "eeprom.h"
 #include "serial.h"
+
+#include "grbl/protocol.h"
 
 #ifdef FreeRTOS
 #include "FreeRTOS.h"

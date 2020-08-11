@@ -60,7 +60,11 @@
 // Define probe switch input pin.
 #define PROBE_PIN           (15U)
 
-#if EEPROM_ENABLE
+#if KEYPAD_ENABLE
+#define KEYPAD_STROBE_PIN   (28U)
+#endif
+
+#if EEPROM_ENABLE || KEYPAD_ENABLE
 #define I2C_PORT    0
 #define I2C_SCL0    (19u) // Not used, for info only
 #define I2C_SDA0    (18u) // Not used, for info only

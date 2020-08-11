@@ -1,6 +1,7 @@
 /*
   system.h - Header for system level commands and real-time processes
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2014-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -19,8 +20,8 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef system_h
-#define system_h
+#ifndef _SYSTEM_H_
+#define _SYSTEM_H_
 
 #include "gcode.h"
 #include "probe.h"

@@ -30,6 +30,7 @@
 #include "chip.h"
 #include "app_usbd_cfg.h"
 #include "cdc_vcom.h"
+#include "grbl/hal.h"
 
 extern const  USBD_HW_API_T hw_api;
 extern const  USBD_CORE_API_T core_api;

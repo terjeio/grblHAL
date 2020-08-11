@@ -1,7 +1,7 @@
 /*
   maslow.c - Maslow router kinematics implementation
 
-  Part of Grbl
+  Part of GrblHAL
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -26,12 +26,18 @@
   It has been adapted for grblHAL by Terje Io.
 */
 
-#include "config.h"
+#include "grbl.h"
 
 #ifdef MASLOW_ROUTER
 
-#include "maslow.h"
 #include "driver.h"
+
+#include "settings.h"
+#include "planner.h"
+#include "eeprom_emulate.h"
+#include "kinematics.h"
+#include "maslow.h"
+#include "report.h"
 
 #define A_MOTOR X_AXIS // Must be X_AXIS
 #define B_MOTOR Y_AXIS // Must be Y_AXIS

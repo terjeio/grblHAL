@@ -1,6 +1,7 @@
 /*
   limits.c - code pertaining to limit-switches and performing the homing cycle
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2017-2019 Terje Io
   Copyright (c) 2012-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -20,7 +21,17 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "grbl.h"
+#include <math.h>
+#include <string.h>
+
+#include "hal.h"
+#include "nuts_bolts.h"
+#include "protocol.h"
+#include "motion_control.h"
+#include "limits.h"
+#ifdef KINEMATICS_API
+#include "kinematics.h"
+#endif
 
 // Homing axis search distance multiplier. Computed by this value times the cycle travel.
 #ifndef HOMING_AXIS_SEARCH_SCALAR

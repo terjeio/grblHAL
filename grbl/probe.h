@@ -19,8 +19,8 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef __PROBE_H__
-#define __PROBE_H__
+#ifndef _PROBE_H_
+#define _PROBE_H_
 
 // Values that define the probing state machine.
 

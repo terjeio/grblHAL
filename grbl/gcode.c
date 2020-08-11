@@ -1,6 +1,7 @@
 /*
   gcode.c - rs274/ngc parser.
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -20,7 +21,13 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "grbl.h"
+#include <math.h>
+#include <string.h>
+#include <stdlib.h>
+
+#include "hal.h"
+#include "motion_control.h"
+#include "protocol.h"
 
 // NOTE: Max line number is defined by the g-code standard to be 99999. It seems to be an
 // arbitrary value, and some GUIs may require more. So we increased it based on a max safe
@@ -163,6 +170,31 @@ void gc_set_tool_offset (tool_offset_mode_t mode, uint_fast8_t idx, int32_t offs
         sys.report.tool_offset = true;
         system_flag_wco_change();
     }
+}
+
+plane_t *gc_get_plane_data (plane_t *plane, plane_select_t select)
+{
+    switch (select) {
+
+        case PlaneSelect_XY:
+            plane->axis_0 = X_AXIS;
+            plane->axis_1 = Y_AXIS;
+            plane->axis_linear = Z_AXIS;
+            break;
+
+        case PlaneSelect_ZX:
+            plane->axis_0 = Z_AXIS;
+            plane->axis_1 = X_AXIS;
+            plane->axis_linear = Y_AXIS;
+            break;
+
+        default: // case PlaneSelect_YZ:
+            plane->axis_0 = Y_AXIS;
+            plane->axis_1 = Z_AXIS;
+            plane->axis_linear = X_AXIS;
+    }
+
+    return plane;
 }
 
 void gc_init(bool cold_start)
@@ -330,7 +362,7 @@ status_code_t gc_execute_block(char *block, char *message)
     uint_fast8_t char_counter = gc_parser_flags.jog_motion ? 3 /* Start parsing after `$J=` */ : 0;
     char letter;
     float value;
-    uint_fast16_t int_value = 0;
+    uint32_t int_value = 0;
     uint_fast16_t mantissa = 0;
 
     while ((letter = block[char_counter++]) != '\0') { // Loop until no more g-code words in block.
@@ -349,7 +381,7 @@ status_code_t gc_execute_block(char *block, char *message)
         // a good enough comprimise and catch most all non-integer errors. To make it compliant,
         // we would simply need to change the mantissa to int16, but this add compiled flash space.
         // Maybe update this later.
-        int_value = (uint_fast16_t)truncf(value);
+        int_value = (uint32_t)truncf(value);
         mantissa = (uint_fast16_t)roundf(100.0f * (value - int_value)); // Compute mantissa for Gxx.x commands.
         // NOTE: Rounding must be used to catch small floating point errors.
 
@@ -748,7 +780,7 @@ status_code_t gc_execute_block(char *block, char *message)
                         if (mantissa > 0)
                             FAIL(Status_GcodeCommandValueNotInteger);
                         word_bit.parameter = Word_L;
-                        gc_block.values.l = int_value;
+                        gc_block.values.l = (uint8_t)int_value;
                         break;
 
                     case 'N':
@@ -990,7 +1022,7 @@ status_code_t gc_execute_block(char *block, char *message)
         if ((int32_t)gc_block.values.q < 1 || (int32_t)gc_block.values.q > MAX_TOOL_NUMBER)
             FAIL(Status_GcodeIllegalToolTableEntry);
 
-        gc_block.values.t = (uint8_t)gc_block.values.q;
+        gc_block.values.t = (uint32_t)gc_block.values.q;
 
         bit_false(value_words, bit(Word_Q));
     } else if (bit_isfalse(value_words, bit(Word_T)))
@@ -1128,25 +1160,7 @@ status_code_t gc_execute_block(char *block, char *message)
     }
 
     // [11. Set active plane ]: N/A
-    switch (gc_block.modal.plane_select) {
-
-        case PlaneSelect_XY:
-            plane.axis_0 = X_AXIS;
-            plane.axis_1 = Y_AXIS;
-            plane.axis_linear = Z_AXIS;
-            break;
-
-        case PlaneSelect_ZX:
-            plane.axis_0 = Z_AXIS;
-            plane.axis_1 = X_AXIS;
-            plane.axis_linear = Y_AXIS;
-            break;
-
-        default: // case PlaneSelect_YZ:
-            plane.axis_0 = Y_AXIS;
-            plane.axis_1 = Z_AXIS;
-            plane.axis_linear = X_AXIS;
-    }
+    gc_get_plane_data(&plane, gc_block.modal.plane_select);
 
     // [12. Set length units ]: N/A
     // Pre-convert XYZ coordinate values to millimeters, if applicable.
@@ -1557,7 +1571,7 @@ status_code_t gc_execute_block(char *block, char *message)
                 if(bit_isfalse(axis_words, bit(Z_AXIS)) || bit_isfalse(value_words, bit(Word_I)|bit(Word_J)|bit(Word_K)|bit(Word_P)))
                     FAIL(Status_GcodeValueWordMissing);
 
-                if(gc_block.values.p < 0.0f || gc_block.values.ijk[J_VALUE] < 0.0f || gc_block.values.ijk[K_VALUE] < 0.0f || gc_block.values.h < 0.0f)
+                if(gc_block.values.p < 0.0f || gc_block.values.ijk[J_VALUE] < 0.0f || gc_block.values.ijk[K_VALUE] < 0.0f)
                     FAIL(Status_NegativeValue);
 
                 if(gc_block.values.ijk[I_VALUE] == 0.0f ||

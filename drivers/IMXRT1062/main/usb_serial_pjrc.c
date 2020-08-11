@@ -22,7 +22,8 @@
 
 */
 
-//#include "avr/pgmspace.h"
+#include <string.h>
+
 #include "usb_serial.h"
 
 #include "driver.h"

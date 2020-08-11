@@ -29,7 +29,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "src/grbl/grbl.h"
+#include "src/grbl/hal.h"
 #include "src/grbl/stream.h"
 
 #define RX_BUFFER_HWM 900

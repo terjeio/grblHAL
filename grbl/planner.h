@@ -1,6 +1,7 @@
 /*
   planner.h - buffers movement commands and manages the acceleration profile plan
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2019-2020 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -20,8 +21,8 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef planner_h
-#define planner_h
+#ifndef _PLANNER_H_
+#define _PLANNER_H_
 
 // The number of linear motions that can be in the plan at any give time
 #ifndef BLOCK_BUFFER_SIZE

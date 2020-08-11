@@ -32,10 +32,8 @@
 
 #ifdef ARDUINO
 #include "../../i2c.h"
-#include "../grbl/grbl.h"
 #else
 #include "i2c.h"
-#include "grbl/grbl.h"
 #endif
 
 #define KEYBUF_SIZE 16

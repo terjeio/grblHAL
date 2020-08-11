@@ -3,7 +3,7 @@
 
   Buffer handlers for real-time override commands
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2016-2019 Terje Io
 
@@ -21,10 +21,12 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef __OVERRIDE_H__
-#define __OVERRIDE_H__
+#ifndef _OVERRIDE_H_
+#define _OVERRIDE_H_
 
+#ifndef OVERRIDE_BUFSIZE
 #define OVERRIDE_BUFSIZE 16 // must be a power of 2
+#endif
 
 void flush_override_buffers ();
 void enqueue_feed_override (uint8_t cmd);

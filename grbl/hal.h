@@ -19,12 +19,10 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef __HAL__
-#define __HAL__
+#ifndef _HAL_H_
+#define _HAL_H_
 
-#include <stdint.h>
-#include <stdbool.h>
-
+#include "grbl.h"
 #include "gcode.h"
 #include "system.h"
 #include "coolant_control.h"
@@ -34,6 +32,7 @@
 #include "stream.h"
 #include "probe.h"
 #include "plugins.h"
+#include "settings.h"
 
 #define HAL_VERSION 6
 
@@ -194,6 +193,7 @@ typedef struct HAL {
     void (*encoder_reset)(uint_fast8_t id);
     uint32_t (*get_elapsed_ticks)(void);
     void (*pallet_shuttle)(void);
+    void (*reboot)(void);
 #ifdef DEBUGOUT
     void (*debug_out)(bool on);
 #endif

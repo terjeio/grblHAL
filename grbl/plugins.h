@@ -23,8 +23,8 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef __PLUGINS_H__
-#define __PLUGINS_H__
+#ifndef _PLUGINS_H_
+#define _PLUGINS_H_
 
 #include <stdint.h>
 #include <stdbool.h>

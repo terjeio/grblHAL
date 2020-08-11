@@ -1,6 +1,7 @@
 /*
   motion_control.c - high level interface for issuing motion commands
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -24,7 +25,36 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "grbl.h"
+#include <math.h>
+#include <string.h>
+
+#include "hal.h"
+#include "nuts_bolts.h"
+#include "protocol.h"
+#include "limits.h"
+#include "report.h"
+#include "state_machine.h"
+#include "motion_control.h"
+#ifdef KINEMATICS_API
+#include "kinematics.h"
+#endif
+
+#ifndef N_ARC_CORRECTION
+#define N_ARC_CORRECTION 12
+#endif
+#ifndef ARC_ANGULAR_TRAVEL_EPSILON // Float (radians)
+#define ARC_ANGULAR_TRAVEL_EPSILON 5E-7f // Float (radians)
+#endif
+
+#ifndef BEZIER_MIN_STEP
+#define BEZIER_MIN_STEP 0.002f
+#endif
+#ifndef BEZIER_MAX_STEP
+#define BEZIER_MAX_STEP 0.1f
+#endif
+#ifndef BEZIER_SIGMA
+#define BEZIER_SIGMA 0.1f
+#endif
 
 #ifdef ENABLE_BACKLASH_COMPENSATION
 

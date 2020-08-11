@@ -36,17 +36,15 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 */
 
-#define TCP_SLOW_INTERVAL 500
-
-#include <stdint.h>
-#include <stdbool.h>
-#include <assert.h>
 
 #include "networking.h"
-#include "TCPStream.h"
 
-#define SOCKET_TIMEOUT 0
-#define BUFCOUNT(head, tail, size) ((head >= tail) ? (head - tail) : (size - tail + head))
+#if TELNET_ENABLE
+
+#include <assert.h>
+#include <string.h>
+
+#include "TCPStream.h"
 
 typedef enum
 {
@@ -526,3 +524,6 @@ void TCPStreamPoll (void)
         streamSession.lastSendTime = xTaskGetTickCount();
     }
 }
+
+#endif
+

@@ -19,8 +19,11 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <stdint.h>
-#include <stdbool.h>
+#include "driver.h"
+
+#if ETHERNET_ENABLE
+
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -30,15 +33,13 @@
 #include <lwip/netif.h>
 #include "lwip/dhcp.h"
 
-#include "driver.h"
+#include "src/grbl/report.h"
 #include "src/networking/TCPStream.h"
 #include "src/networking/WsStream.h"
 
-#if ETHERNET_ENABLE
-
 static volatile bool linkUp = false;
 static char IPAddress[IP4ADDR_STRLEN_MAX];
-static network_settings_t *network;
+static network_settings_t network;
 static network_services_t services = {0};
 
 char *enet_ip_address (void)
@@ -61,17 +62,17 @@ static void netif_status_callback (struct netif *netif)
     ip4addr_ntoa_r(netif_ip_addr4(netif), IPAddress, IP4ADDR_STRLEN_MAX);
 
 #if TELNET_ENABLE
-    if(network->services.telnet && !services.telnet) {
+    if(network.services.telnet && !services.telnet) {
         TCPStreamInit();
-        TCPStreamListen(network->telnet_port == 0 ? 23 : network->telnet_port);
+        TCPStreamListen(network.telnet_port == 0 ? 23 : network.telnet_port);
         services.telnet = On;
     }
 #endif
 
 #if WEBSOCKET_ENABLE
-    if(network->services.websocket && !services.websocket) {
+    if(network.services.websocket && !services.websocket) {
         WsStreamInit();
-        WsStreamListen(network->websocket_port == 0 ? 80 : network->websocket_port);
+        WsStreamListen(network.websocket_port == 0 ? 80 : network.websocket_port);
         services.websocket = On;
     }
 #endif
@@ -79,39 +80,57 @@ static void netif_status_callback (struct netif *netif)
 
 void grbl_enet_poll (void)
 {
-    enet_poll();
+    static uint32_t last_ms;
+    uint32_t ms;
 
-#if TELNET_ENABLE
-    if(services.telnet)
-        TCPStreamPoll();
-#endif
+    enet_proc_input();
 
-#if WEBSOCKET_ENABLE
-    if(services.websocket)
-        WsStreamPoll();
-#endif
+    ms = millis();
+    if (ms - last_ms > 100)
+    {
+        last_ms = ms;
+
+      #if TELNET_ENABLE
+        if(services.telnet)
+            TCPStreamPoll();
+      #endif
+      #if WEBSOCKET_ENABLE
+        if(services.websocket) {
+            WsStreamPoll();
+        }
+      #endif
+
+        enet_poll();
+    }
 }
 
-bool grbl_enet_init (network_settings_t *network)
+bool grbl_enet_init (network_settings_t *settings)
 {
     *IPAddress = '\0';
 
-    if(driver_settings.network.ip_mode == IpMode_Static)
-        enet_init((ip_addr_t *)&driver_settings.network.ip, (ip_addr_t *)&driver_settings.network.mask, (ip_addr_t *)&driver_settings.network.gateway);
+    memcpy(&network, settings, sizeof(network_settings_t));
+
+    if(network.ip_mode == IpMode_Static)
+        enet_init((ip_addr_t *)&network.ip, (ip_addr_t *)&network.mask, (ip_addr_t *)&network.gateway);
     else
         enet_init(NULL, NULL, NULL);
 
     netif_set_status_callback(netif_default, netif_status_callback);
     netif_set_link_callback(netif_default, link_status_callback);
+
     netif_set_up(netif_default);
 #if LWIP_NETIF_HOSTNAME
-    netif_set_hostname(netif_default, network->hostname);
+    netif_set_hostname(netif_default, network.hostname);
 #endif
-
-    if(driver_settings.network.ip_mode == IpMode_DHCP)
+    if(network.ip_mode == IpMode_DHCP)
         dhcp_start(netif_default);
 
     return true;
+}
+
+static inline void set_addr (char *ip, ip4_addr_t *addr)
+{
+    memcpy(ip, addr, sizeof(ip4_addr_t));
 }
 
 status_code_t ethernet_setting (setting_type_t param, float value, char *svalue)
@@ -180,7 +199,7 @@ status_code_t ethernet_setting (setting_type_t param, float value, char *svalue)
 #endif
 
         case Setting_IpMode:
-          if(isintf(value) >= 0.0f && value <= 2.0f) {
+          if(isintf(value) && value >= 0.0f && value <= 2.0f) {
               status = Status_OK;
               driver_settings.network.ip_mode = (ip_mode_t)(uint8_t)value;
           }
@@ -193,7 +212,7 @@ status_code_t ethernet_setting (setting_type_t param, float value, char *svalue)
               ip4_addr_t addr;
               if(ip4addr_aton(svalue, &addr) == 1) {
                   status = Status_OK;
-                  *((ip4_addr_t *)driver_settings.network.ip) = addr;
+                  set_addr(driver_settings.network.ip, &addr);
               } else
                   status = Status_InvalidStatement;
           }
@@ -204,7 +223,7 @@ status_code_t ethernet_setting (setting_type_t param, float value, char *svalue)
               ip4_addr_t addr;
               if(ip4addr_aton(svalue, &addr) == 1) {
                   status = Status_OK;
-                  *((ip4_addr_t *)driver_settings.network.gateway) = addr;
+                  set_addr(driver_settings.network.gateway, &addr);
               } else
                   status = Status_InvalidStatement;
           }
@@ -215,7 +234,7 @@ status_code_t ethernet_setting (setting_type_t param, float value, char *svalue)
               ip4_addr_t addr;
               if(ip4addr_aton(svalue, &addr) == 1) {
                   status = Status_OK;
-                  *((ip4_addr_t *)driver_settings.network.mask) = addr;
+                  set_addr(driver_settings.network.mask, &addr);
               } else
                   status = Status_InvalidStatement;
           }
@@ -290,26 +309,23 @@ void ethernet_settings_restore (void)
 
     ip4_addr_t addr;
 
-#if NETWORK_IPMODE_STATIC
-    driver_settings.network.ip_mode = IpMode_Static;
-
+    driver_settings.network.ip_mode = (ip_mode_t)NETWORK_IPMODE;
 
     if(ip4addr_aton(NETWORK_IP, &addr) == 1)
-        *((ip4_addr_t *)driver_settings.network.ip) = addr;
+        set_addr(driver_settings.network.ip, &addr);
 
     if(ip4addr_aton(NETWORK_GATEWAY, &addr) == 1)
-        *((ip4_addr_t *)driver_settings.network.gateway) = addr;
+        set_addr(driver_settings.network.gateway, &addr);
 
+#if NETWORK_IPMODE == 0
     if(ip4addr_aton(NETWORK_MASK, &addr) == 1)
-        *((ip4_addr_t *)driver_settings.network.mask) = addr;
-
+        set_addr(driver_settings.network.mask, &addr);
 #else
-    driver_settings.network.ip_mode = IpMode_DHCP;
-
     if(ip4addr_aton("255.255.255.0", &addr) == 1)
-        *((ip4_addr_t *)driver_settings.network.mask) = addr;
+        set_addr(driver_settings.network.mask, &addr);
 #endif
 
+    driver_settings.network.services.mask = 0;
     driver_settings.network.telnet_port = NETWORK_TELNET_PORT;
     driver_settings.network.http_port = NETWORK_HTTP_PORT;
     driver_settings.network.websocket_port = NETWORK_WEBSOCKET_PORT;

@@ -39,6 +39,8 @@
  * SOFTWARE.
  */
 
+#include <string.h>
+
 #include "driver.h"
 
 #define UART_CLOCK 24000000

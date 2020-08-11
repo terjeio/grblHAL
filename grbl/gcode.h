@@ -1,6 +1,7 @@
 /*
   gcode.h - rs274/ngc parser.
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -20,12 +21,12 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef gcode_h
-#define gcode_h
+#ifndef _GCODE_H_
+#define _GCODE_H_
 
+#include "nuts_bolts.h"
 #include "coolant_control.h"
 #include "spindle_control.h"
-
 
 // Define Grbl status codes. Valid values (0-255)
 typedef enum {
@@ -424,8 +425,8 @@ typedef struct {
     float xyz[N_AXIS];         // X,Y,Z Translational axes
     coord_system_t coord_data; // Coordinate data
     int32_t n;                 // Line number
-    uint8_t h;                 // Tool number
-    uint8_t t;                 // Tool selection
+    uint32_t h;                // Tool number
+    uint32_t t;                // Tool selection
     uint8_t l;                 // G10 or canned cycles parameters
 } gc_values_t;
 
@@ -547,5 +548,6 @@ float *gc_get_scaling (void);
 float gc_get_offset (uint_fast8_t idx);
 
 void gc_set_tool_offset (tool_offset_mode_t mode, uint_fast8_t idx, int32_t offset);
+plane_t *gc_get_plane_data (plane_t *plane, plane_select_t select);
 
 #endif

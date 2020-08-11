@@ -36,8 +36,11 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 */
 
-#include <stdint.h>
-#include <stdbool.h>
+#include "base/driver.h"
+
+#if ETHERNET_ENABLE
+
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -48,7 +51,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "posix/sys/socket.h"
 
-#include "base/driver.h"
+#include "grbl/report.h"
 #include "networking/networking.h"
 #include "networking/TCPStream.h"
 #include "networking/WsStream.h"
@@ -74,7 +77,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 static volatile bool linkUp = false;
 static uint32_t IPAddress = 0;
-static network_settings_t *network;
+static network_settings_t network;
 static network_services_t services = {0};
 
 char *enet_ip_address (void)
@@ -90,7 +93,7 @@ void lwIPHostTimerHandler (void)
 {
     bool isLinkUp = PREF(GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_0)) != 0;
 
-    IPAddress = network->ip_mode == IpMode_Static && isLinkUp ? *(uint32_t *)network->ip : lwIPLocalIPAddrGet();
+    IPAddress = network.ip_mode == IpMode_Static && isLinkUp ? *(uint32_t *)network.ip : lwIPLocalIPAddrGet();
 
     if(IPAddress == 0xffffffff)
         IPAddress = 0;
@@ -124,16 +127,16 @@ void setupServices (void *pvArg)
 #endif
 
 #if TELNET_ENABLE
-    if(network->services.telnet && !services.telnet) {
+    if(network.services.telnet && !services.telnet) {
         TCPStreamInit();
-        TCPStreamListen(network->telnet_port == 0 ? 23 : network->telnet_port);
+        TCPStreamListen(network.telnet_port == 0 ? 23 : network.telnet_port);
         services.telnet = On;
     }
 #endif
 #if WEBSOCKET_ENABLE
-    if(network->services.websocket && !services.websocket) {
+    if(network.services.websocket && !services.websocket) {
         WsStreamInit();
-        WsStreamListen(network->websocket_port == 0 ? 80 : network->websocket_port);
+        WsStreamListen(network.websocket_port == 0 ? 80 : network.websocket_port);
         services.websocket = On;
     }
 #endif
@@ -158,7 +161,7 @@ bool lwIPTaskInit (network_settings_t *settings)
     MACAddress[4] = ((User1 >>  8) & 0xFF);
     MACAddress[5] = ((User1 >> 16) & 0xFF);
 
-    network = settings;
+    memcpy(&network, settings, sizeof(network_settings_t));
 
     //
     // Lower the priority of the Ethernet interrupt handler to less than
@@ -190,14 +193,14 @@ bool lwIPTaskInit (network_settings_t *settings)
     PREF(IntPrioritySet(FAULT_SYSTICK, SYSTICK_INT_PRIORITY));
 #endif
 
-    if(network->ip_mode == IpMode_DHCP)
+    if(network.ip_mode == IpMode_DHCP)
         lwIPInit(configCPU_CLOCK_HZ, MACAddress, 0, 0, 0, IPADDR_USE_DHCP);
     else
-        lwIPInit(configCPU_CLOCK_HZ, MACAddress, ntohl(*(uint32_t *)network->ip), ntohl(*(uint32_t *)network->mask), ntohl(*(uint32_t *)network->gateway), network->ip_mode == IpMode_Static ? IPADDR_USE_STATIC : IPADDR_USE_AUTOIP);
+        lwIPInit(configCPU_CLOCK_HZ, MACAddress, ntohl(*(uint32_t *)network.ip), ntohl(*(uint32_t *)network.mask), ntohl(*(uint32_t *)network.gateway), network.ip_mode == IpMode_Static ? IPADDR_USE_STATIC : IPADDR_USE_AUTOIP);
 
 #if LWIP_NETIF_HOSTNAME
     extern struct netif *netif_default;
-    netif_set_hostname(netif_default, network->hostname);
+    netif_set_hostname(netif_default, network.hostname);
 #endif
 
     // Setup the remaining services inside the TCP/IP thread's context.
@@ -233,8 +236,6 @@ bool enet_init (network_settings_t *network)
     return lwIPTaskInit(network);
 }
 
-#if ETHERNET_ENABLE
-
 status_code_t ethernet_setting (setting_type_t param, float value, char *svalue)
 {
     status_code_t status = Status_Unhandled;
@@ -269,16 +270,16 @@ status_code_t ethernet_setting (setting_type_t param, float value, char *svalue)
                 status = Status_InvalidStatement; // too long...
             break;
 #endif
-/* Static mode is not working...
+// NOTE: Only DHCP is working...
         case Setting_IpMode:
-          if(isintf(value) >= 0.0f && value <= 2.0f) {
+          if(isintf(value) && value == 1.0f) {
               status = Status_OK;
               driver_settings.network.ip_mode = (ip_mode_t)(uint8_t)value;
           }
           else
               status = Status_InvalidStatement; // out of range...
           break;
-*/
+
         case Setting_IpAddress:
           {
               ip_addr_t addr;
@@ -403,9 +404,9 @@ void ethernet_settings_restore (void)
 {
     strcpy(driver_settings.network.hostname, NETWORK_HOSTNAME);
 
-#if NETWORK_IPMODE_STATIC
-
     ip_addr_t addr;
+
+    driver_settings.network.ip_mode = (ip_mode_t)NETWORK_IPMODE;
 
     if(ip4addr_aton(NETWORK_IP, &addr) == 1)
         *((ip_addr_t *)driver_settings.network.ip) = addr;
@@ -413,14 +414,15 @@ void ethernet_settings_restore (void)
     if(ip4addr_aton(NETWORK_GATEWAY, &addr) == 1)
         *((ip_addr_t *)driver_settings.network.gateway) = addr;
 
+#if NETWORK_IPMODE == 0
     if(ip4addr_aton(NETWORK_MASK, &addr) == 1)
         *((ip_addr_t *)driver_settings.network.mask) = addr;
-
-    driver_settings.network.ip_mode = IpMode_Static;
 #else
-    driver_settings.network.ip_mode = IpMode_DHCP;
+    if(ip4addr_aton("255.255.255.0", &addr) == 1)
+        *((ip_addr_t *)driver_settings.network.mask) = addr;
 #endif
 
+    driver_settings.network.services.mask = 0;
     driver_settings.network.telnet_port = NETWORK_TELNET_PORT;
     driver_settings.network.http_port = NETWORK_HTTP_PORT;
     driver_settings.network.websocket_port = NETWORK_WEBSOCKET_PORT;

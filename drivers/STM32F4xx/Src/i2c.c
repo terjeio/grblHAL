@@ -75,7 +75,7 @@ void i2c_init (void)
     __HAL_RCC_I2C2_CLK_ENABLE();
 
     HAL_I2C_Init(&i2c_port);
-endif
+#endif
 }
 
 #endif

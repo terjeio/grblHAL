@@ -36,7 +36,8 @@
 #include "tiva.h"
 #endif
 
-#include "grbl/grbl.h"
+#include "grbl/hal.h"
+#include "grbl/nuts_bolts.h"
 
 // Configuration
 // Set value to 1 to enable, 0 to disable
@@ -75,15 +76,16 @@
 
 #if ETHERNET_ENABLE
 #define NETWORK_HOSTNAME        "GRBL"
-#define NETWORK_IPMODE_STATIC   0 // do not change! Cannot get static mode to work!
-#if NETWORK_IPMODE_STATIC
+#define NETWORK_IPMODE          1 // do not change! Cannot get static mode to work!
 #define NETWORK_IP              "192.168.5.1"
 #define NETWORK_GATEWAY         "192.168.5.1"
 #define NETWORK_MASK            "255.255.255.0"
-#endif
 #define NETWORK_TELNET_PORT     23
 #define NETWORK_WEBSOCKET_PORT  80
 #define NETWORK_HTTP_PORT       80
+#if NETWORK_IPMODE != 1
+#error "Invalid IP mode selected!"
+#endif
 #endif
 
 // Adjust STEP_PULSE_LATENCY to get accurate step pulse length when required, e.g if using high step rates.

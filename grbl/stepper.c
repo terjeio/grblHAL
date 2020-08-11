@@ -1,6 +1,7 @@
 /*
   stepper.c - stepper motor driver: executes motion plans using stepper motors
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2016-2020 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -20,9 +21,18 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "grbl.h"
+#include <math.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "hal.h"
+#include "protocol.h"
 
 //#include "debug.h"
+
+#ifndef ACCELERATION_TICKS_PER_SECOND
+#define ACCELERATION_TICKS_PER_SECOND 100
+#endif
 
 // Some useful constants.
 #define DT_SEGMENT (1.0f/(ACCELERATION_TICKS_PER_SECOND*60.0f)) // min/segment

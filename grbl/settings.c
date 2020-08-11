@@ -1,6 +1,7 @@
 /*
   settings.c - eeprom configuration handling
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2011-2015 Sungeun K. Jeon
@@ -20,11 +21,37 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "grbl.h"
+#include <math.h>
+#include <string.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <assert.h>
+
+#include "hal.h"
+#include "defaults.h"
+#include "report.h"
+#include "limits.h"
+#include "eeprom_emulate.h"
 #include "tool_change.h"
 
 #ifdef ENABLE_SPINDLE_LINEARIZATION
 #include <stdio.h>
+#endif
+
+#ifndef SETTINGS_RESTORE_DEFAULTS
+#define SETTINGS_RESTORE_DEFAULTS          1
+#endif
+#ifndef SETTINGS_RESTORE_PARAMETERS
+#define SETTINGS_RESTORE_PARAMETERS        1
+#endif
+#ifndef SETTINGS_RESTORE_STARTUP_LINES
+#define SETTINGS_RESTORE_STARTUP_LINES     1
+#endif
+#ifndef SETTINGS_RESTORE_BUILD_INFO
+#define SETTINGS_RESTORE_BUILD_INFO        1
+#endif
+#ifndef SETTINGS_RESTORE_DRIVER_PARAMETERS
+#define SETTINGS_RESTORE_DRIVER_PARAMETERS 1
 #endif
 
 settings_t settings;
@@ -58,11 +85,7 @@ const settings_t defaults = {
     .flags.allow_probing_feed_override = ALLOW_FEED_OVERRIDE_DURING_PROBE_CYCLES,
 
     .steppers.pulse_microseconds = DEFAULT_STEP_PULSE_MICROSECONDS,
-#ifdef DEFAULT_STEP_PULSE_DELAY
     .steppers.pulse_delay_microseconds = DEFAULT_STEP_PULSE_DELAY,
-#else
-    .steppers.pulse_delay_microseconds = 0.0f,
-#endif
     .steppers.idle_lock_time = DEFAULT_STEPPER_IDLE_LOCK_TIME,
     .steppers.step_invert.mask = DEFAULT_STEPPING_INVERT_MASK,
     .steppers.dir_invert.mask = DEFAULT_DIRECTION_INVERT_MASK,
@@ -103,7 +126,7 @@ const settings_t defaults = {
     .limits.flags.soft_enabled = DEFAULT_SOFT_LIMIT_ENABLE,
     .limits.flags.jog_soft_limited = DEFAULT_JOG_LIMIT_ENABLE,
     .limits.flags.check_at_init = DEFAULT_CHECK_LIMITS_AT_INIT,
-    .limits.flags.two_switches = LIMITS_TWO_SWITCHES_ON_AXES,
+    .limits.flags.two_switches = DEFAULT_LIMITS_TWO_SWITCHES_ON_AXES,
     .limits.invert.mask = INVERT_LIMIT_PIN_MASK,
     .limits.disable_pullup.mask = DISABLE_LIMIT_PINS_PULL_UP_MASK,
 
@@ -358,8 +381,10 @@ void settings_restore (settings_restore_t restore)
             settings_write_startup_line(idx, empty_line);
     }
 
-    if (restore.build_info)
+    if (restore.build_info) {
         settings_write_build_info(empty_line);
+        settings_write_build_info(BUILD_INFO);
+    }
 
     if(restore.driver_parameters && hal.driver_settings_restore)
         hal.driver_settings_restore();

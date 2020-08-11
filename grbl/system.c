@@ -1,6 +1,7 @@
 /*
   system.c - Handles system level commands and real-time processes
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2014-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -19,8 +20,18 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "grbl.h"
+#include <math.h>
+#include <string.h>
+
+#include "hal.h"
+#include "motion_control.h"
+#include "protocol.h"
+#include "report.h"
 #include "tool_change.h"
+#include "state_machine.h"
+#ifdef KINEMATICS_API
+#include "kinematics.h"
+#endif
 
 // Pin change interrupt for pin-out commands, i.e. cycle start, feed hold, and reset. Sets
 // only the realtime command execute variable to have the main program execute these when
@@ -281,7 +292,8 @@ status_code_t system_execute_line (char *line)
 
         case 'T':
             if(sys.flags.probe_succeeded && line[2] == 'L' && line[3] == 'R') {
-                sys.tlo_reference = sys_probe_position[Z_AXIS];
+                plane_t plane;
+                sys.tlo_reference = sys_probe_position[gc_get_plane_data(&plane, gc_state.modal.plane_select)->axis_linear];
                 sys.tlo_reference_set = true;
                 retval = Status_OK;
             } else if(sys.flags.probe_succeeded && line[2] == 'P' && line[3] == 'W')
@@ -306,7 +318,7 @@ status_code_t system_execute_line (char *line)
                 settings_read_build_info(line);
                 report_build_info(line);
             }
-          #ifdef ENABLE_BUILD_INFO_WRITE_COMMAND
+          #ifndef DISABLE_BUILD_INFO_WRITE_COMMAND
             else if (line[2] == '=' && strlen(&line[3]) < (MAX_STORED_LINE_LENGTH - 1))
                 settings_write_build_info(&lcline[3]);
           #endif
@@ -323,25 +335,25 @@ status_code_t system_execute_line (char *line)
                     retval = Status_IdleError;
                 else switch (line[5]) {
 
-                  #ifdef ENABLE_RESTORE_EEPROM_DEFAULT_SETTINGS
+                  #ifndef DISABLE_RESTORE_EEPROM_DEFAULT_SETTINGS
                     case '$':
                         restore.defaults = On;
                         break;
                   #endif
 
-                  #ifdef ENABLE_RESTORE_EEPROM_CLEAR_PARAMETERS
+                  #ifndef DISABLE_RESTORE_EEPROM_CLEAR_PARAMETERS
                     case '#':
                         restore.parameters = On;
                         break;
                   #endif
 
-                  #ifdef ENABLE_RESTORE_EEPROM_WIPE_ALL
+                  #ifndef DISABLE_RESTORE_EEPROM_WIPE_ALL
                     case '*':
                         restore.mask = settings_all.mask;
                         break;
                   #endif
 
-                  #ifdef ENABLE_RESTORE_DRIVER_PARAMETERS
+                  #ifndef DISABLE_RESTORE_DRIVER_PARAMETERS
                     case '&':
                         restore.driver_parameters = On;
                         break;

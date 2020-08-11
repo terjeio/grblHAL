@@ -10,11 +10,16 @@
 */
 
 #include "driver.h"
-#include "src/eeprom/eeprom.h"
 
-#if EEPROM_ENABLE
+#ifdef I2C_PORT
+
+#include <string.h>
 
 #include "i2c.h"
+
+#if EEPROM_ENABLE
+#include "src/eeprom/eeprom.h"
+#endif
 
 #define i2cIsBusy (!(i2c.state == I2CState_Idle || i2c.state == I2CState_Error) || (port->MSR & (LPI2C_MSR_BBF|LPI2C_MSR_MBF)))
 

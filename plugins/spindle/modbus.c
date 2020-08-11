@@ -23,10 +23,12 @@
 
 */
 
+#include <string.h>
+
 #ifdef ARDUINO
-#include "../grbl/grbl.h"
+#include "../grbl/hal.h"
 #else
-#include "grbl/grbl.h"
+#include "grbl/hal.h"
 #endif
 
 #include "modbus.h"

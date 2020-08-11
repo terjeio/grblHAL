@@ -36,13 +36,13 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 */
 
-#define TCP_SLOW_INTERVAL 500
-
-#include <stdint.h>
-#include <stdbool.h>
-#include <assert.h>
-
 #include "networking.h"
+
+#if WEBSOCKET_ENABLE
+
+#include <assert.h>
+#include <string.h>
+
 #include "WsStream.h"
 #include "base64.h"
 #include "sha1.h"
@@ -1062,3 +1062,5 @@ void WsStreamPoll (void)
     else if(streamSession.state == WsStateClosing)
         closeSocket(&streamSession, streamSession.pcbConnect);
 }
+
+#endif

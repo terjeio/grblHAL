@@ -1,6 +1,7 @@
 /*
   grbllib.c - An embedded CNC Controller with rs274/ngc (g-code) support
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2011-2015 Sungeun K. Jeon
@@ -20,8 +21,22 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "grbl.h"
+#include <string.h>
+#include <stdlib.h>
+#include <assert.h>
+
+#include "hal.h"
+#include "nuts_bolts.h"
 #include "tool_change.h"
+#include "override.h"
+#include "protocol.h"
+#include "limits.h"
+#include "report.h"
+#include "state_machine.h"
+#include "eeprom_emulate.h"
+#ifdef KINEMATICS_API
+#include "kinematics.h"
+#endif
 
 #ifdef COREXY
 #include "corexy.h"

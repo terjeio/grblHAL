@@ -1,6 +1,7 @@
 /*
   motion_control.h - high level interface for issuing motion commands
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2017-2019 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -20,8 +21,8 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef motion_control_h
-#define motion_control_h
+#ifndef _MOTION_CONTROL_H_
+#define _MOTION_CONTROL_H_
 
 // System motion commands must have a line number of zero.
 #define HOMING_CYCLE_LINE_NUMBER 0

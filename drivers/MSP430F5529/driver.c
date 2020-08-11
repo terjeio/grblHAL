@@ -25,10 +25,12 @@
 
 #include <msp430.h>
 
-#include "grbl/grbl.h"
 #include "driver.h"
-#include "eeprom/eeprom.h"
 #include "serial.h"
+#include "grbl/hal.h"
+#include "grbl/grbl.h"
+#include "grbl/nuts_bolts.h"
+#include "eeprom/eeprom.h"
 
 static volatile uint16_t debounce_count = 0;
 static bool pwmEnabled = false, IOInitDone = false, busy = false;

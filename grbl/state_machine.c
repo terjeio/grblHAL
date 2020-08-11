@@ -3,7 +3,7 @@
 
   Main state machine
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2018-2019 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -23,7 +23,13 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "grbl.h"
+#include <string.h>
+//#include <stdlib.h>
+
+#include "hal.h"
+#include "motion_control.h"
+#include "state_machine.h"
+#include "override.h"
 
 static void state_idle (uint_fast16_t new_state);
 static void state_cycle (uint_fast16_t rt_exec);

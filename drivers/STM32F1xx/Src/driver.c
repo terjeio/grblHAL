@@ -22,10 +22,9 @@
 */
 
 #include <stdint.h>
+#include <string.h>
 
 #include "main.h"
-
-#include "grbl.h"
 
 #include "driver.h"
 #include "serial.h"

@@ -19,6 +19,8 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <math.h>
+
 #include "encoder.h"
 
 #if QEI_ENABLE

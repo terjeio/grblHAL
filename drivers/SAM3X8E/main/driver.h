@@ -23,7 +23,7 @@
 #define __DRIVER_H__
 
 #include "Arduino.h"
-#include "src/grbl/grbl.h"
+#include "src/grbl/hal.h"
 
 // NOTE: Only one board may be enabled!
 //#define BOARD_TINYG2_DUE

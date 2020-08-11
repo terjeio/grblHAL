@@ -1,6 +1,7 @@
 /*
   protocol.c - controls Grbl execution protocol and procedures
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -20,7 +21,18 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "grbl.h"
+#include <stdlib.h>
+#include <string.h>
+
+#include "hal.h"
+#include "nuts_bolts.h"
+#include "eeprom_emulate.h"
+#include "override.h"
+#include "report.h"
+#include "state_machine.h"
+#include "motion_control.h"
+#include "sleep.h"
+#include "protocol.h"
 
 // Define line flags. Includes comment type tracking and line overflow detection.
 typedef union {
@@ -662,6 +674,8 @@ static void protocol_exec_rt_suspend ()
 // Called from input stream interrupt handler.
 ISR_CODE bool protocol_enqueue_realtime_command (char c)
 {
+    static bool esc = false;
+
     bool drop = false;
 
     // 1. Process characters in the ranges 0x - 1x and 8x-Ax
@@ -777,6 +791,11 @@ ISR_CODE bool protocol_enqueue_realtime_command (char c)
             enqueue_accessory_override((uint8_t)c);
             break;
 
+        case CMD_REBOOT:
+            if(esc && hal.reboot)
+                hal.reboot(); // Force MCU reboot. This call should never return.
+            break;
+
         default:
             if(c < ' ' || (c >= 0x7F && c <= 0xBF))
                 drop = true;
@@ -816,6 +835,8 @@ ISR_CODE bool protocol_enqueue_realtime_command (char c)
             drop = !(keep_rt_commands || (unsigned char)c < 0x7F);
             break;
     }
+
+    esc = c == ASCII_ESC;
 
     return drop;
 }

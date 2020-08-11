@@ -1,6 +1,25 @@
 #ifndef __NETWORKING_H__
 #define __NETWORKING_H__
 
+//*****************************************************************************
+//
+// lwIP Options
+//
+//*****************************************************************************
+
+#include "lwipopts.h"
+
+// If no OS increase TX buffer size to hold the largest message generated and then some.
+// The list settings $$ command is currently the big one.
+#if NO_SYS > 0
+#define TX_BUFFER_SIZE 1024 // must be a power of 2
+#endif
+
+#define SOCKET_TIMEOUT 0
+#define TCP_SLOW_INTERVAL 500
+
+//*****************************************************************************
+
 #ifdef ARDUINO
 #include "../../driver.h"
 #else
@@ -13,17 +32,6 @@
 
 #if WEBSOCKET_ENABLE
 #include "WsSTream.h"
-#endif
-
-//*****************************************************************************
-//
-// lwIP Options
-//
-//*****************************************************************************
-#ifdef ARDUINO
-#include "lwip/opt.h"
-#else
-#include "lwipopts.h"
 #endif
 
 //*****************************************************************************

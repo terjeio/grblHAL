@@ -1,6 +1,7 @@
 /*
   report.h - reporting and messaging methods
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2018-2019 Terje Io
   Copyright (c) 2012-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -19,8 +20,8 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef report_h
-#define report_h
+#ifndef _REPORT_H_
+#define _REPORT_H_
 
 #include "system.h"
 

@@ -4,8 +4,8 @@
 		<cconfiguration id="cdt.managedbuild.toolchain.gnu.cross.base.1548809601">
 			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="cdt.managedbuild.toolchain.gnu.cross.base.1548809601" moduleId="org.eclipse.cdt.core.settings" name="Default">
 				<macros>
-					<stringMacro name="COMPILER_LOC" type="VALUE_TEXT" value="C:\Program Files (x86)\Arduino\hardware\tools\arm"/>
 					<stringMacro name="ARDUINO_HARDWARE" type="VALUE_TEXT" value="C:\Program Files (x86)\Arduino\hardware"/>
+					<stringMacro name="COMPILER_LOC" type="VALUE_TEXT" value="C:\Program Files (x86)\Arduino\hardware\tools\arm"/>
 					<stringMacro name="ETHERNET_LIB" type="VALUE_TEXT" value="C:\users\terjeio\Documents\Arduino\libraries\teensy41_ethernet-master\src"/>
 				</macros>
 				<externalSettings/>
@@ -42,6 +42,9 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.c.compiler.option.preprocessor.def.symbols.823275224" name="Defined symbols (-D)" superClass="gnu.c.compiler.option.preprocessor.def.symbols" useByScannerDiscovery="false" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="&quot;ETHERNET_LIB=C:\users\terjeio\Documents\Arduino\libraries\teensy41_ethernet-master\src&quot;"/>
+									<listOptionValue builtIn="false" value="ARDUINO_TEENSY41"/>
+									<listOptionValue builtIn="false" value="ARDUINO"/>
+									<listOptionValue builtIn="false" value="__IMXRT1062__"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.1291096238" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
 							</tool>
@@ -54,11 +57,14 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.cpp.compiler.option.preprocessor.def.1442240395" name="Defined symbols (-D)" superClass="gnu.cpp.compiler.option.preprocessor.def" useByScannerDiscovery="false" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="&quot;ETHERNET_LIB=C:\users\terjeio\Documents\Arduino\libraries\teensy41_ethernet-master\src&quot;"/>
+									<listOptionValue builtIn="false" value="ARDUINO_TEENSY41"/>
+									<listOptionValue builtIn="false" value="ARDUINO"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.839035704" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
 							</tool>
 							<tool id="cdt.managedbuild.tool.gnu.cross.c.linker.1045789806" name="Cross GCC Linker" superClass="cdt.managedbuild.tool.gnu.cross.c.linker"/>
 							<tool id="cdt.managedbuild.tool.gnu.cross.cpp.linker.2115955747" name="Cross G++ Linker" superClass="cdt.managedbuild.tool.gnu.cross.cpp.linker">
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="true" id="gnu.cpp.link.option.paths.1990632849" name="Library search path (-L)" superClass="gnu.cpp.link.option.paths" valueType="libPaths"/>
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.linker.input.861340448" superClass="cdt.managedbuild.tool.gnu.cpp.linker.input">
 									<additionalInput kind="additionalinputdependency" paths="$(USER_OBJS)"/>
 									<additionalInput kind="additionalinput" paths="$(LIBS)"/>

@@ -1,6 +1,7 @@
 /*
   corexy.c - corexy kinematics implementation
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2019 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -22,6 +23,10 @@
 #include "grbl.h"
 
 #ifdef COREXY
+
+#include "settings.h"
+#include "planner.h"
+#include "kinematics.h"
 
 // CoreXY motor assignments. DO NOT ALTER.
 // NOTE: If the A and B motor axis bindings are changed, this effects the CoreXY equations.

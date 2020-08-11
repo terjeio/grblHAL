@@ -19,8 +19,8 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef _kinematics_h_
-#define _kinematics_h_
+#ifndef _KINEMATICS_H_
+#define _KINEMATICS_H_
 
 typedef struct {
     void (*convert_array_steps_to_mpos)(float *position, int32_t *steps);

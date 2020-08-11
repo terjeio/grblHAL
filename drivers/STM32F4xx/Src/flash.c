@@ -23,9 +23,10 @@
 
 */
 
+#include <string.h>
 
 #include "main.h"
-#include "../grbl/grbl.h"
+#include "grbl/hal.h"
 //#include "stm32f4xx_hal_flash_ex.h"
 
 #define FLASH_SECTOR1_ADDR 0x8004000

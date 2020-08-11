@@ -5,7 +5,7 @@
 
   Part of Grbl
 
-  Copyright (c) 2016-2018 Terje Io
+  Copyright (c) 2016-2020 Terje Io
   Copyright (c) 2011-2015 Sungeun K. Jeon
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -28,7 +28,9 @@
 
 #include "tiva.h"
 
+#include "grbl/hal.h"
 #include "grbl/grbl.h"
+#include "grbl/nuts_bolts.h"
 
 // Configuration
 // Set value to 1 to enable, 0 to disable

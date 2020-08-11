@@ -34,9 +34,11 @@
 #ifdef ARDUINO
 #include "../grbl/grbl.h"
 #include "../grbl/plugins.h"
+#include "../grbl/nuts_bolts.h"
 #else
 #include "grbl/grbl.h"
 #include "grbl/plugins.h"
+#include "grbl/nuts_bolts.h"
 #endif
 
 #define EEPROM_I2C_ADDRESS (0xA0 >> 1)
