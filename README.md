@@ -1,3 +1,5 @@
+The test branch has been updated with Ethernet support for Teensy 4.1, new manual tool change options etc.
+
 ## GrblHAL ##
 ---
 
