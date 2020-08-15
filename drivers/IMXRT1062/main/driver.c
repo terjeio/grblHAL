@@ -262,6 +262,7 @@ static input_signal_t inputpin[] = {
 #define DIGITAL_OUT(gpio, on) { if(on) gpio.reg->DR_SET = gpio.bit; else gpio.reg->DR_CLEAR = gpio.bit; } 
 
 static bool IOInitDone = false, probe_invert = false;
+static uint16_t pulse_length, pulse_delay;
 static axes_signals_t next_step_outbits;
 static delay_t grbl_delay = { .ms = 0, .callback = NULL };
 
@@ -445,7 +446,7 @@ void selectStream (stream_type_t stream)
 // Set stepper pulse output pins.
 // step_outbits.value (or step_outbits.mask) are: bit0 -> X, bit1 -> Y...
 // Individual step bits can be accessed by step_outbits.x, step_outbits.y, ...
-inline static void set_step_outputs (axes_signals_t step_outbits)
+inline static __attribute__((always_inline)) void set_step_outputs (axes_signals_t step_outbits)
 {
     step_outbits.value ^= settings.steppers.step_invert.mask;
 
@@ -463,7 +464,7 @@ inline static void set_step_outputs (axes_signals_t step_outbits)
 // Set stepper direction ouput pins.
 // dir_outbits.value (or dir_outbits.mask) are: bit0 -> X, bit1 -> Y...
 // Individual direction bits can be accessed by dir_outbits.x, dir_outbits.y, ...
-inline static void set_dir_outputs (axes_signals_t dir_outbits)
+inline static __attribute__((always_inline)) void set_dir_outputs (axes_signals_t dir_outbits)
 {
     dir_outbits.value ^= settings.steppers.dir_invert.mask;
 
@@ -537,12 +538,12 @@ static void stepperCyclesPerTick (uint32_t cycles_per_tick)
     PIT_TCTRL0 |= PIT_TCTRL_TEN;
 }
 
-// Start a stepper pulse, no delay version
+// Start a stepper pulse, no delay version.
 // stepper_t struct is defined in grbl/stepper.h
 static void stepperPulseStart (stepper_t *stepper)
 {
-    if(stepper->new_block) {
-        stepper->new_block = false;
+    if(stepper->dir_change) {
+        stepper->dir_change = false;
         set_dir_outputs(stepper->dir_outbits);
     }
 
@@ -552,17 +553,33 @@ static void stepperPulseStart (stepper_t *stepper)
     }
 }
 
-// Start a stepper pulse, delay version
+// Start a stepper pulse, delay version.
+// Note: delay is only added when there is a direction change and a pulse to be output.
+//       In the delayed step pulse interrupt handler the pulses are output and
+//       normal (no delay) operation is resumed.
 // stepper_t struct is defined in grbl/stepper.h
 static void stepperPulseStartDelayed (stepper_t *stepper)
 {
-    if(stepper->new_block) {
-        stepper->new_block = false;
+    if(stepper->dir_change) {
+
+        stepper->dir_change = false;
         set_dir_outputs(stepper->dir_outbits);
+
+        if(stepper->step_outbits.value) {
+
+            next_step_outbits = stepper->step_outbits; // Store out_bits
+
+            attachInterruptVector(IRQ_QTIMER4, stepper_pulse_isr_delayed);
+
+            TMR4_COMP10 = pulse_delay;
+            TMR4_CTRL0 |= TMR_CTRL_CM(0b001);
+        }
+
+        return;
     }
 
     if(stepper->step_outbits.value) {
-        next_step_outbits = stepper->step_outbits; // Store out_bits
+        set_step_outputs(stepper->step_outbits);
         TMR4_CTRL0 |= TMR_CTRL_CM(0b001);
     }
 }
@@ -901,23 +918,23 @@ static void settings_changed (settings_t *settings)
 #endif
 
         // Stepper pulse timeout setup.
-        // When the stepper pulse is delayed either two timers or a timer that supports multiple
-        // compare registers is required.
         TMR4_CSCTRL0 &= ~(TMR_CSCTRL_TCF1|TMR_CSCTRL_TCF2);
-        if(settings->steppers.pulse_delay_microseconds > 0.0f) {
-            TMR4_COMP10 = (uint16_t)((float)F_BUS_MHZ * settings->steppers.pulse_delay_microseconds);
-            TMR4_COMP20 = (uint16_t)((float)F_BUS_MHZ * settings->steppers.pulse_microseconds);
-            TMR4_CSCTRL0 |= TMR_CSCTRL_TCF2EN;
-            TMR4_CTRL0 |= TMR_CTRL_OUTMODE(0b100);
+
+        pulse_length = (uint16_t)((float)F_BUS_MHZ * (settings->steppers.pulse_microseconds - STEP_PULSE_LATENCY));
+
+        if(hal.driver_cap.step_pulse_delay && settings->steppers.pulse_delay_microseconds > 0.0f) {
+            float delay = settings->steppers.pulse_delay_microseconds - STEP_PULSE_LATENCY;
+            if(delay <= STEP_PULSE_LATENCY)
+                delay = STEP_PULSE_LATENCY + 0.2f;
+            pulse_delay = (uint16_t)((float)F_BUS_MHZ * delay);;
             hal.stepper_pulse_start = stepperPulseStartDelayed;
-            attachInterruptVector(IRQ_QTIMER4, stepper_pulse_isr_delayed);
-        } else {
+        } else
             hal.stepper_pulse_start = stepperPulseStart;
-            TMR4_COMP10 = (uint16_t)((float)F_BUS_MHZ * (settings->steppers.pulse_microseconds - STEP_PULSE_LATENCY));
-            TMR4_CSCTRL0 &= ~TMR_CSCTRL_TCF2EN;
-            TMR4_CTRL0 &= ~TMR_CTRL_OUTMODE(0b000);
-            attachInterruptVector(IRQ_QTIMER4, stepper_pulse_isr);
-        }
+
+        TMR4_COMP10 = pulse_length;
+        TMR4_CSCTRL0 &= ~TMR_CSCTRL_TCF2EN;
+        TMR4_CTRL0 &= ~TMR_CTRL_OUTMODE(0b000);
+        attachInterruptVector(IRQ_QTIMER4, stepper_pulse_isr);
 
         /****************************************
          *  Control, limit & probe pins config  *
@@ -1464,7 +1481,7 @@ bool driver_init (void)
         options[strlen(options) - 1] = '\0';
 
     hal.info = "IMXRT1062";
-    hal.driver_version = "200807";
+    hal.driver_version = "200813";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1651,13 +1668,13 @@ static void stepper_pulse_isr (void)
 
 static void stepper_pulse_isr_delayed (void)
 {
-    if(TMR4_CSCTRL0 & TMR_CSCTRL_TCF1) {
-        TMR4_CSCTRL0 &= ~TMR_CSCTRL_TCF1;
-        set_step_outputs(next_step_outbits);
-    } else {
-        TMR4_CSCTRL0 &= ~TMR_CSCTRL_TCF2;
-        set_step_outputs((axes_signals_t){0});
-    }
+    TMR4_CSCTRL0 &= ~TMR_CSCTRL_TCF1;
+
+    set_step_outputs(next_step_outbits);
+
+    attachInterruptVector(IRQ_QTIMER4, stepper_pulse_isr);
+    TMR4_COMP10 = pulse_length;
+    TMR4_CTRL0 |= TMR_CTRL_CM(0b001);
 }
 
 inline static bool enqueue_debounce (input_signal_t *signal)

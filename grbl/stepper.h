@@ -91,6 +91,7 @@ typedef struct {
     #endif
 ;
     bool new_block;                 // Set to true when a new block is started, might be used by driver for advanced functionality
+    bool dir_change;                // Set to true on direction changes, might be used by driver for advanced functionality
     axes_signals_t step_outbits;    // The next stepping-bits to be output
     axes_signals_t dir_outbits;     // The next direction-bits to be output
     uint32_t steps[N_AXIS];

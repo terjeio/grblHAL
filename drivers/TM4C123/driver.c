@@ -103,6 +103,7 @@ static void stepperPulseStartSyncronized (stepper_t *stepper);
 #endif
 
 static bool pwmEnabled = false, IOInitDone = false, probeState = false;
+static uint32_t pulse_length, pulse_delay;
 static axes_signals_t next_step_outbits;
 static spindle_pwm_t spindle_pwm;
 static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
@@ -183,7 +184,7 @@ static void driver_delay_ms (uint32_t ms, void (*callback)(void))
 // 1. bitbanding. Pros: can assign pins to different ports, no RMW needed. Cons: overhead, pin changes not synchronous
 // 2. bit shift. Pros: fast, Cons: bits must be consecutive
 // 3. lookup table. Pros: signal inversions done at setup, Cons: slower than bit shift
-inline static void set_step_outputs (axes_signals_t step_outbits)
+inline static __attribute__((always_inline)) void set_step_outputs (axes_signals_t step_outbits)
 {
 #if STEP_OUTMODE == GPIO_MAP
     GPIOPinWrite(STEP_PORT, HWSTEP_MASK, step_outmap[step_outbits.value]);
@@ -194,7 +195,7 @@ inline static void set_step_outputs (axes_signals_t step_outbits)
 
 // Set stepper direction output pins
 // NOTE: see note for set_step_outputs()
-inline static void set_dir_outputs (axes_signals_t dir_outbits)
+inline static __attribute__((always_inline)) void set_dir_outputs (axes_signals_t dir_outbits)
 {
 #if DIRECTION_OUTMODE == GPIO_MAP
     GPIOPinWrite(DIRECTION_PORT, HWDIRECTION_MASK, dir_outmap[dir_outbits.value]);
@@ -226,6 +227,8 @@ static void stepperEnable (axes_signals_t enable)
 // Starts stepper driver ISR timer and forces a stepper driver interrupt callback
 static void stepperWakeUp (void)
 {
+    TimerLoadSet(PULSE_TIMER_BASE, TIMER_A, pulse_length);
+
 #if LASER_PPI
     laser.next_pulse = 0;
 #endif
@@ -304,14 +307,24 @@ static void stepperPulseStartDelayed (stepper_t *stepper)
         set_dir_outputs(stepper->dir_outbits);
     }
 #else
-    if(stepper->new_block) {
-        stepper->new_block = false;
+    if(stepper->dir_change) {
+
+        stepper->dir_change = false;
         set_dir_outputs(stepper->dir_outbits);
+
+        if(stepper->step_outbits.value) {
+            next_step_outbits = stepper->step_outbits; // Store out_bits
+            IntRegister(PULSE_TIMER_INT, stepper_pulse_isr_delayed);
+            TimerLoadSet(PULSE_TIMER_BASE, TIMER_A, pulse_delay);
+            TimerEnable(PULSE_TIMER_BASE, TIMER_A);
+        }
+
+        return;
     }
 #endif
 
     if(stepper->step_outbits.value) {
-        next_step_outbits = stepper->step_outbits; // Store out_bits
+        set_step_outputs(stepper->step_outbits);
         TimerEnable(PULSE_TIMER_BASE, TIMER_A);
     }
 }
@@ -748,18 +761,17 @@ static void settings_changed (settings_t *settings)
         } else
             hal.spindle_set_state = spindleSetState;
 
-        if(settings->steppers.pulse_delay_microseconds > 0.0f) {
-            TimerIntRegister(PULSE_TIMER_BASE, TIMER_A, stepper_pulse_isr_delayed);
-            TimerMatchSet(PULSE_TIMER_BASE, TIMER_A, (uint32_t)(10.0f * settings->steppers.pulse_delay_microseconds) - 1);
-            TimerLoadSet(PULSE_TIMER_BASE, TIMER_A, (uint32_t)(10.0f * (settings->steppers.pulse_microseconds + settings->steppers.pulse_delay_microseconds - STEP_PULSE_LATENCY)) - 1);
-            TimerIntEnable(PULSE_TIMER_BASE, TIMER_TIMA_TIMEOUT|TIMER_TIMA_MATCH);
+        pulse_length = (uint32_t)(10.0f * (settings->steppers.pulse_microseconds - STEP_PULSE_LATENCY)) - 1;
+
+        if(hal.driver_cap.step_pulse_delay && settings->steppers.pulse_delay_microseconds > 0.0f) {
+            int32_t delay = (uint32_t)(10.0f * (settings->steppers.pulse_delay_microseconds - 1.2f)) - 1;
+            pulse_delay = delay < 2 ? 2 : delay;
             hal.stepper_pulse_start = stepperPulseStartDelayed;
-        } else {
-            TimerIntRegister(PULSE_TIMER_BASE, TIMER_A, stepper_pulse_isr);
-            TimerLoadSet(PULSE_TIMER_BASE, TIMER_A, (uint32_t)(10.0f * (settings->steppers.pulse_microseconds - STEP_PULSE_LATENCY)) - 1);
-            TimerIntEnable(PULSE_TIMER_BASE, TIMER_TIMA_TIMEOUT);
+        } else
             hal.stepper_pulse_start = stepperPulseStart;
-        }
+
+        TimerIntRegister(PULSE_TIMER_BASE, TIMER_A, stepper_pulse_isr);
+        TimerIntEnable(PULSE_TIMER_BASE, TIMER_TIMA_TIMEOUT);
 
       #if LASER_PPI
         if(!settings->flags.laser_mode)
@@ -1143,7 +1155,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "TM4C123HP6PM";
-    hal.driver_version = "200721";
+    hal.driver_version = "200815";
 #if CNC_BOOSTERPACK
     hal.board = "CNC BoosterPack";
 #endif
@@ -1304,9 +1316,13 @@ static void stepper_pulse_isr (void)
 
 static void stepper_pulse_isr_delayed (void)
 {
-    uint32_t iflags = TimerIntStatus(PULSE_TIMER_BASE, true);
-    TimerIntClear(PULSE_TIMER_BASE, iflags);        // clear interrupt flags
-    set_step_outputs(iflags & TIMER_TIMA_MATCH ? next_step_outbits : (axes_signals_t){0});
+    TimerIntClear(PULSE_TIMER_BASE, TIMER_TIMA_TIMEOUT);
+    IntRegister(PULSE_TIMER_INT, stepper_pulse_isr);
+
+    set_step_outputs(next_step_outbits);
+
+    TimerLoadSet(PULSE_TIMER_BASE, TIMER_A, pulse_length);
+    TimerEnable(PULSE_TIMER_BASE, TIMER_A);
 }
 
 static void software_debounce_isr (void)

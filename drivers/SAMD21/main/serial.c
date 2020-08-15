@@ -197,7 +197,7 @@ void serialInit (void)
     IRQRegister(SERCOM5_IRQn, SERIAL_IRQHandler);
 
     NVIC_EnableIRQ(SERCOM5_IRQn);
-    NVIC_SetPriority(SERCOM5_IRQn, 0);
+    NVIC_SetPriority(SERCOM5_IRQn, 1);
 
     //  __enable_interrupts();
 }

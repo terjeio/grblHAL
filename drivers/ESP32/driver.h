@@ -36,7 +36,7 @@
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 
-#include "grbl/grbl.h"
+#include "grbl/hal.h"
 
 static const DRAM_ATTR float FZERO = 0.0f;
 
@@ -167,15 +167,17 @@ static const DRAM_ATTR float FZERO = 0.0f;
 #define NETWORK_WEBSOCKET_PORT  81
 
 // WiFi Station (STA) settings
-#define NETWORK_HOSTNAME        "Grbl"
-#define NETWORK_IPMODE_STATIC   0
-#if NETWORK_IPMODE_STATIC
-#define NETWORK_IP              "192.168.5.1"
-#define NETWORK_GATEWAY         "192.168.5.1"
-#define NETWORK_MASK            "255.255.255.0"
+#define NETWORK_HOSTNAME    "Grbl"
+#define NETWORK_IPMODE      1 // 0 = static, 1 = DHCP, 2 = AutoIP
+#define NETWORK_IP          "192.168.5.1"
+#define NETWORK_GATEWAY     "192.168.5.1"
+#define NETWORK_MASK        "255.255.255.0"
+
+#if NETWORK_IPMODE < 0 || NETWORK_IPMODE > 2
+#error "Invalid IP mode selected!"
 #endif
 
-#if NETWORK_IPMODE_STATIC && WIFI_SOFTAP
+#if NETWORK_IPMODE == 0 && WIFI_SOFTAP
 #error "Cannot use static IP for station when soft AP is enabled!"
 #endif
 
@@ -225,7 +227,6 @@ typedef struct {
     uint8_t action;
     void *params;
 } i2c_task_t;
-
 
 #if WIFI_ENABLE || BLUETOOTH_ENABLE || TRINAMIC_ENABLE || KEYPAD_ENABLE
 

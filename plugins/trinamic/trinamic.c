@@ -28,20 +28,23 @@
 #if TRINAMIC_ENABLE
 
 #include <stdio.h>
+#include <string.h>
 #include <math.h>
 
 #ifdef ARDUINO
-#if TRINAMIC_I2C
-#include "../../i2c.h"
-#else
-#include "../../spi.h"
+  #include "../grbl/report.h"
+  #if TRINAMIC_I2C
+    #include "../../i2c.h"
+  #else
+    #include "../../spi.h"
 #endif
 #else
-#if TRINAMIC_I2C
-#include "i2c.h"
-#else
-#include "spi.h"
-#endif
+  #include "grbl/report.h"
+  #if TRINAMIC_I2C
+    #include "i2c.h"
+  #else
+    #include "spi.h"
+  #endif
 #endif
 
 static bool warning = false, is_homing = false;

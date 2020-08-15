@@ -23,6 +23,10 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "driver.h"
+
+#if WIFI_ENABLE
+
 #include <string.h>
 
 #include "freertos/FreeRTOS.h"
@@ -40,7 +44,7 @@
 //#include "lwip/timeouts.h"
 
 #include "wifi.h"
-#include "driver.h"
+#include "grbl/report.h"
 #include "dns_server.h"
 #include "web/backend.h"
 
@@ -50,7 +54,7 @@ static EventGroupHandle_t wifi_event_group;
    but we only care about one event - are we connected
    to the AP with an IP? */
 
-static network_settings_t *network;
+static network_settings_t network;
 const static int CONNECTED_BIT = BIT0;
 const static int SCANNING_BIT = BIT1;
 const static int APSTA_BIT = BIT2;
@@ -126,24 +130,24 @@ static void lwIPHostTimerHandler (void *arg)
 static void start_services (void)
 {
 #if TELNET_ENABLE
-    if(network->services.telnet && !services.telnet) {
+    if(network.services.telnet && !services.telnet) {
         TCPStreamInit();
-        TCPStreamListen(network->telnet_port == 0 ? 23 : network->telnet_port);
+        TCPStreamListen(network.telnet_port == 0 ? 23 : network.telnet_port);
         services.telnet = On;
         sys_timeout(STREAM_POLL_INTERVAL, lwIPHostTimerHandler, NULL);
     }
 #endif
 #if WEBSOCKET_ENABLE
-    if(network->services.websocket && !services.websocket) {
+    if(network.services.websocket && !services.websocket) {
         WsStreamInit();
-        WsStreamListen(network->websocket_port == 0 ? 80 : network->websocket_port);
+        WsStreamListen(network.websocket_port == 0 ? 80 : network.websocket_port);
         services.websocket = On;
         sys_timeout(STREAM_POLL_INTERVAL, lwIPHostTimerHandler, NULL);
     }
 #endif
 #if HTTP_ENABLE
-    if(network->services.http && !services.http)
-        services.http = httpdaemon_start(network);
+    if(network.services.http && !services.http)
+        services.http = httpdaemon_start(&network);
 #endif
 }
 
@@ -299,18 +303,18 @@ static esp_err_t wifi_event_handler (void *ctx, system_event_t *event)
 
 static bool init_adapter (tcpip_adapter_if_t tcpip_if, network_settings_t *settings)
 {
-    network = settings;
+    memcpy(&network, settings, sizeof(network_settings_t));
 
     tcpip_adapter_ip_info_t ipInfo;
 
-    if(network->ip_mode == IpMode_Static) {
-        ipInfo.ip = *((ip4_addr_t *)network->ip);
-        ipInfo.gw = *((ip4_addr_t *)network->gateway);
-        ipInfo.netmask = *((ip4_addr_t *)network->mask);
+    if(network.ip_mode == IpMode_Static) {
+        ipInfo.ip = *((ip4_addr_t *)network.ip);
+        ipInfo.gw = *((ip4_addr_t *)network.gateway);
+        ipInfo.netmask = *((ip4_addr_t *)network.mask);
         tcpip_adapter_set_ip_info(tcpip_if, &ipInfo);
     }
 
-    return network->ip_mode == IpMode_DHCP;
+    return network.ip_mode == IpMode_DHCP;
 }
 
 static wifi_mode_t settingToMode(grbl_wifi_mode_t mode)
@@ -323,7 +327,6 @@ static wifi_mode_t settingToMode(grbl_wifi_mode_t mode)
 
 bool wifi_init (wifi_settings_t *settings)
 {
-    esp_err_t ret;
     wifi_mode_t currentMode;
 
 #if !WIFI_SOFTAP
@@ -482,7 +485,10 @@ bool wifi_stop (void)
     return true;
 }
 
-#if WIFI_ENABLE
+static inline void set_addr (char *ip, ip4_addr_t *addr)
+{
+    memcpy(ip, addr, sizeof(ip4_addr_t));
+}
 
 status_code_t wifi_setting (uint_fast16_t param, float value, char *svalue)
 {
@@ -561,14 +567,12 @@ status_code_t wifi_setting (uint_fast16_t param, float value, char *svalue)
             break;
 #endif
 
-#if NETWORK_IPMODE_STATIC || true
-
         case Setting_IpAddress:
             {
                 ip4_addr_t addr;
                 if(inet_pton(AF_INET, svalue, &addr) == 1) {
                     status = Status_OK;
-                    *((ip4_addr_t *)driver_settings.wifi.sta.network.ip) = addr;
+                    set_addr(driver_settings.wifi.sta.network.ip, &addr);
                 } else
                     status = Status_InvalidStatement;
             }
@@ -579,7 +583,7 @@ status_code_t wifi_setting (uint_fast16_t param, float value, char *svalue)
                 ip4_addr_t addr;
                 if(inet_pton(AF_INET, svalue, &addr) == 1) {
                     status = Status_OK;
-                    *((ip4_addr_t *)driver_settings.wifi.sta.network.gateway) = addr;
+                    set_addr(driver_settings.wifi.sta.network.gateway, &addr);
                 } else
                     status = Status_InvalidStatement;
             }
@@ -590,13 +594,11 @@ status_code_t wifi_setting (uint_fast16_t param, float value, char *svalue)
                 ip4_addr_t addr;
                 if(inet_pton(AF_INET, svalue, &addr) == 1) {
                     status = Status_OK;
-                    *((ip4_addr_t *)driver_settings.wifi.sta.network.mask) = addr;
+                    set_addr(driver_settings.wifi.sta.network.mask, &addr);
                 } else
                     status = Status_InvalidStatement;
             }
             break;
-
-#endif
 
 #if WIFI_SOFTAP
 
@@ -626,7 +628,7 @@ status_code_t wifi_setting (uint_fast16_t param, float value, char *svalue)
                 ip4_addr_t addr;
                 if(inet_pton(AF_INET, svalue, &addr) == 1) {
                     status = Status_OK;
-                    *((ip4_addr_t *)driver_settings.wifi.ap.network.ip) = addr;
+                    set_addr(driver_settings.wifi.ap.network.ip, &addr);
                 } else
                     status = Status_InvalidStatement;
             }
@@ -637,7 +639,7 @@ status_code_t wifi_setting (uint_fast16_t param, float value, char *svalue)
                 ip4_addr_t addr;
                 if(inet_pton(AF_INET, svalue, &addr) == 1) {
                     status = Status_OK;
-                    *((ip4_addr_t *)driver_settings.wifi.ap.network.gateway) = addr;
+                    set_addr(driver_settings.wifi.ap.network.gateway, &addr);
                 } else
                     status = Status_InvalidStatement;
             }
@@ -648,7 +650,7 @@ status_code_t wifi_setting (uint_fast16_t param, float value, char *svalue)
                 ip4_addr_t addr;
                 if(inet_pton(AF_INET, svalue, &addr) == 1) {
                     status = Status_OK;
-                    *((ip4_addr_t *)driver_settings.wifi.ap.network.mask) = addr;
+                    set_addr(driver_settings.wifi.ap.network.mask, &addr);
                 } else
                     status = Status_InvalidStatement;
             }
@@ -718,29 +720,26 @@ void wifi_settings_report (setting_type_t setting)
             report_string_setting(setting, driver_settings.wifi.sta.network.hostname);
             break;
 
-#if NETWORK_IPMODE_STATIC || true
-
         case Setting_IpAddress:
-            {
+            if(driver_settings.wifi.sta.network.ip_mode != IpMode_DHCP) {
                 char ip[INET6_ADDRSTRLEN];
                 report_string_setting(setting, inet_ntop(AF_INET, &driver_settings.wifi.sta.network.ip, ip, INET6_ADDRSTRLEN));
             }
             break;
 
         case Setting_Gateway:
-            {
+            if(driver_settings.wifi.sta.network.ip_mode != IpMode_DHCP) {
                 char ip[INET6_ADDRSTRLEN];
                 report_string_setting(setting, inet_ntop(AF_INET, &driver_settings.wifi.sta.network.gateway, ip, INET6_ADDRSTRLEN));
             }
             break;
 
         case Setting_NetMask:
-            {
+            if(driver_settings.wifi.sta.network.ip_mode != IpMode_DHCP) {
                 char ip[INET6_ADDRSTRLEN];
                 report_string_setting(setting, inet_ntop(AF_INET, &driver_settings.wifi.sta.network.mask, ip, INET6_ADDRSTRLEN));
             }
             break;
-#endif
 
 #if WIFI_SOFTAP
 
@@ -814,9 +813,7 @@ void wifi_settings_report (setting_type_t setting)
 
 void wifi_settings_restore (void)
 {
-#if NETWORK_IPMODE_STATIC || WIFI_SOFTAP
     ip4_addr_t addr;
-#endif
 
     driver_settings.wifi.mode = WIFI_MODE;
 
@@ -824,21 +821,20 @@ void wifi_settings_restore (void)
 
     strlcpy(driver_settings.wifi.sta.network.hostname, NETWORK_HOSTNAME, sizeof(driver_settings.wifi.sta.network.hostname));
 
-#if NETWORK_IPMODE_STATIC
-
-    driver_settings.wifi.sta.network.ip_mode = IpMode_Static;
+    driver_settings.wifi.sta.network.ip_mode = (ip_mode_t)NETWORK_IPMODE;
 
     if(inet_pton(AF_INET, NETWORK_IP, &addr) == 1)
-        *((ip4_addr_t *)driver_settings.wifi.sta.network.ip) = addr;
+        set_addr(driver_settings.wifi.sta.network.ip, &addr);
 
     if(inet_pton(AF_INET, NETWORK_GATEWAY, &addr) == 1)
-        *((ip4_addr_t *)driver_settings.wifi.sta.network.gateway) = addr;
+        set_addr(driver_settings.wifi.sta.network.gateway, &addr);
 
+#if NETWORK_IPMODE == 0
     if(inet_pton(AF_INET, NETWORK_MASK, &addr) == 1)
-        *((ip4_addr_t *)driver_settings.wifi.sta.network.mask) = addr;
-
-#else
-    driver_settings.wifi.sta.network.ip_mode = IpMode_DHCP;
+        set_addr(driver_settings.wifi.sta.network.mask, &addr);
+ #else
+    if(inet_pton(AF_INET, "255.255.255.0", &addr) == 1)
+        set_addr(driver_settings.wifi.sta.network.mask, &addr);
 #endif
 
 // Access Point
@@ -851,18 +847,20 @@ void wifi_settings_restore (void)
     strlcpy(driver_settings.wifi.ap.password, WIFI_AP_PASSWORD, sizeof(driver_settings.wifi.ap.password));
 
     if(inet_pton(AF_INET, NETWORK_AP_IP, &addr) == 1)
-        *((ip4_addr_t *)driver_settings.wifi.ap.network.ip) = addr;
+        set_addr(driver_settings.wifi.ap.network.ip, &addr);
 
     if(inet_pton(AF_INET, NETWORK_AP_GATEWAY, &addr) == 1)
-        *((ip4_addr_t *)driver_settings.wifi.ap.network.gateway) = addr;
+        set_addr(driver_settings.wifi.ap.network.gateway, &addr);
 
     if(inet_pton(AF_INET, NETWORK_AP_MASK, &addr) == 1)
-        *((ip4_addr_t *)driver_settings.wifi.ap.network.mask) = addr;
+        set_addr(driver_settings.wifi.ap.network.mask, &addr);
 
 #endif
 
 // Common
 
+    driver_settings.wifi.sta.network.services.mask =
+    driver_settings.wifi.ap.network.services.mask = 0;
     driver_settings.wifi.sta.network.telnet_port =
     driver_settings.wifi.ap.network.telnet_port = NETWORK_TELNET_PORT;
     driver_settings.wifi.sta.network.http_port =

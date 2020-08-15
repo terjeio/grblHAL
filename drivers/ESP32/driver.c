@@ -27,10 +27,12 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <string.h>
 
 #include "driver.h"
 #include "esp32-hal-uart.h"
 #include "nvs.h"
+#include "grbl/protocol.h"
 #include "esp_log.h"
 
 #if WIFI_ENABLE
@@ -271,7 +273,7 @@ static ledc_timer_config_t ledTimerConfig = {
     .speed_mode = LEDC_HIGH_SPEED_MODE,
     .duty_resolution = LEDC_TIMER_10_BIT,
     .timer_num = LEDC_TIMER_0,
-    .freq_hz = (uint32_t)DEFAULT_SPINDLE_PWM_FREQ
+    .freq_hz = 5000
 };
 
 static ledc_channel_config_t ledConfig = {
@@ -925,7 +927,7 @@ void debounceTimerCallback (TimerHandle_t xTimer)
           }
       } while(i);
 
-//    printf("Debounce %d %d\n", grp, systemGetState().value);
+//    printf("Debounce %d %d\n", grp, limitsGetState().value);
 
       if(grp & INPUT_GROUP_LIMIT)
             hal.limit_interrupt_callback(limitsGetState());
@@ -1135,6 +1137,12 @@ static void reportIP (void)
     hal.stream.write("[IP:");
     hal.stream.write(wifi_get_ip());
     hal.stream.write("]"  ASCII_EOL);
+
+    if(services.telnet || services.websocket) {
+        hal.stream.write("[NETCON:");
+        hal.stream.write(services.telnet ? "Telnet" : "Websocket");
+        hal.stream.write("]" ASCII_EOL);
+    }
 }
 #endif
 
@@ -1235,7 +1243,7 @@ static bool driver_setup (settings_t *settings)
     ****************************/
 
     if(hal.driver_cap.software_debounce)
-        debounceTimer = xTimerCreate("msDelay", pdMS_TO_TICKS(32), pdFALSE, NULL, debounceTimerCallback);
+        debounceTimer = xTimerCreate("debounce", pdMS_TO_TICKS(32), pdFALSE, NULL, debounceTimerCallback);
 
     /******************************************
      *  Control, limit & probe pins dir init  *
@@ -1478,6 +1486,7 @@ bool driver_init (void)
     }
 #endif
 
+//    hal.reboot = esp_restart; crashes the MCU...
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;

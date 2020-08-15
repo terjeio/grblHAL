@@ -105,6 +105,7 @@ typedef struct {
 } debounce_queue_t;
 
 static bool IOInitDone = false;
+static uint32_t pulse_length, pulse_delay;
 // Inverts the probe pin state depending on user settings and probing cycle mode.
 static bool probe_invert;
 static axes_signals_t next_step_outbits;
@@ -197,7 +198,7 @@ static void DEBOUNCE_IRQHandler (void);
 
 extern void Dummy_Handler(void);
 
-void IRQRegister(int32_t IRQnum, void (*IRQhandler)(void))
+inline __attribute__((always_inline)) void IRQRegister(int32_t IRQnum, void (*IRQhandler)(void))
 {
     vectorTable[IRQnum + 16] = (uint32_t)IRQhandler;
 }
@@ -219,7 +220,7 @@ static void driver_delay_ms (uint32_t ms, void (*callback)(void))
 
 // Set stepper pulse output pins
 #ifdef SQUARING_ENABLED
-inline static void set_step_outputs (axes_signals_t step_outbits_1)
+inline static __attribute__((always_inline)) void set_step_outputs (axes_signals_t step_outbits_1)
 {
     axes_signals_t step_outbits_2;
 
@@ -252,7 +253,7 @@ inline static void set_step_outputs (axes_signals_t step_outbits_1)
   #endif
 }
 #else // SQUARING DISABLED
-inline static void set_step_outputs (axes_signals_t step_outbits)
+inline static void __attribute__((always_inline)) set_step_outputs (axes_signals_t step_outbits)
 {
     step_outbits.value ^= settings.steppers.step_invert.mask;
 
@@ -284,7 +285,7 @@ inline static void set_step_outputs (axes_signals_t step_outbits)
 #endif
 
 // Set stepper direction output pins
-inline static void set_dir_outputs (axes_signals_t dir_outbits)
+inline static __attribute__((always_inline)) void set_dir_outputs (axes_signals_t dir_outbits)
 {
     dir_outbits.value ^= settings.steppers.dir_invert.mask;
 
@@ -382,11 +383,11 @@ static void stepperCyclesPerTick (uint32_t cycles_per_tick)
     STEPPER_TIMER.TC_CCR = TC_CCR_CLKEN|TC_CCR_SWTRG;
 }
 
-// Sets stepper direction and pulse pins and starts a step pulse
+// Sets stepper direction and pulse pins and starts a step pulse.
 static void stepperPulseStart (stepper_t *stepper)
 {
-    if(stepper->new_block) {
-        stepper->new_block = false;
+    if(stepper->dir_change) {
+        stepper->dir_change = false;
         set_dir_outputs(stepper->dir_outbits);
     }
 
@@ -396,16 +397,30 @@ static void stepperPulseStart (stepper_t *stepper)
     }
 }
 
-// Sets stepper direction and pulse pins and starts a step pulse with an initial delay
+// Start a stepper pulse, delay version.
+// Note: delay is only added when there is a direction change and a pulse to be output.
 static void stepperPulseStartDelayed (stepper_t *stepper)
 {
-    if(stepper->new_block) {
-        stepper->new_block = false;
+    if(stepper->dir_change) {
+
+        stepper->dir_change = false;
         set_dir_outputs(stepper->dir_outbits);
+
+        if(stepper->step_outbits.value) {
+
+            next_step_outbits = stepper->step_outbits; // Store out_bits
+
+            IRQRegister(STEP_TIMER_IRQn, STEPDELAY_IRQHandler);
+
+            STEP_TIMER.TC_RC = pulse_delay;
+            STEP_TIMER.TC_CCR = TC_CCR_SWTRG;
+        }
+
+        return;
     }
 
     if(stepper->step_outbits.value) {
-        next_step_outbits = stepper->step_outbits; // Store out_bits
+        set_step_outputs(stepper->step_outbits);
         STEP_TIMER.TC_CCR = TC_CCR_SWTRG;
     }
 }
@@ -894,19 +909,17 @@ void settings_changed (settings_t *settings)
 
       #endif
 
+        pulse_length = (uint32_t)(42.0f * (settings->steppers.pulse_microseconds - STEP_PULSE_LATENCY)) - 1;
+
         if(hal.driver_cap.step_pulse_delay && settings->steppers.pulse_delay_microseconds > 0.0f) {
+            int32_t delay = (uint32_t)(42.0f * (settings->steppers.pulse_delay_microseconds - 0.6f));
+            pulse_delay = delay < 2 ? 2 : delay;
             hal.stepper_pulse_start = stepperPulseStartDelayed;
-            IRQRegister(STEP_TIMER_IRQn, STEPDELAY_IRQHandler);
-            STEP_TIMER.TC_IER = TC_IER_CPAS; // Enable step start interrupt
-        } else {
+        } else
             hal.stepper_pulse_start = stepperPulseStart;
-            IRQRegister(STEP_TIMER_IRQn, STEP_IRQHandler);
-            STEP_TIMER.TC_IDR = TC_IDR_CPAS; // Disable step start interrupt
-        }
 
-        STEP_TIMER.TC_RA = (uint32_t)(42.0f * settings->steppers.pulse_delay_microseconds);
-        STEP_TIMER.TC_RC = (uint32_t)(42.0f * (settings->steppers.pulse_microseconds + settings->steppers.pulse_delay_microseconds - STEP_PULSE_LATENCY)) - 1;
-
+        IRQRegister(STEP_TIMER_IRQn, STEP_IRQHandler);
+        STEP_TIMER.TC_RC = pulse_length;
         STEP_TIMER.TC_IER = TC_IER_CPCS; // Enable step end interrupt
 
         /****************************************
@@ -1506,7 +1519,7 @@ bool driver_init (void)
     NVIC_EnableIRQ(SysTick_IRQn);
 
     hal.info = "SAM3X8E";
-	hal.driver_version = "200721";
+	hal.driver_version = "200814";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1701,10 +1714,15 @@ static void STEP_IRQHandler (void)
 // Step output on/off
 static void STEPDELAY_IRQHandler (void)
 {
-    uint32_t sr;
+    if(STEP_TIMER.TC_SR & STEP_TIMER.TC_IMR) {
 
-    if((sr = (STEP_TIMER.TC_SR & STEP_TIMER.TC_IMR)))
-        set_step_outputs(sr & TC_SR_CPAS ? next_step_outbits : (axes_signals_t){0});    
+        set_step_outputs(next_step_outbits);
+
+        IRQRegister(STEP_TIMER_IRQn, STEP_IRQHandler);
+
+        STEP_TIMER.TC_RC = pulse_length;
+        STEP_TIMER.TC_CCR = TC_CCR_SWTRG;
+    }
 }
 
 inline static bool enqueue_debounce (input_signal_t *signal)

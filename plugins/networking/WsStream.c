@@ -41,6 +41,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #if WEBSOCKET_ENABLE
 
 #include <assert.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "WsStream.h"

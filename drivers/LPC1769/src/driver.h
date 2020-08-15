@@ -43,7 +43,7 @@
 // Adjust STEP_PULSE_LATENCY to get accurate step pulse length when required, e.g if using high step rates.
 // The default value is calibrated for 10 microseconds length.
 // NOTE: step output mode, number of axes and compiler optimization settings may all affect this value.
-#define STEP_PULSE_LATENCY 1.6f // microseconds
+#define STEP_PULSE_LATENCY 2.2f // microseconds
 
 // End configuration
 

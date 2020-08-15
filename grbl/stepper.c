@@ -281,9 +281,10 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
             // If the new segment starts a new planner block, initialize stepper variables and counters.
             if (st.exec_block != st.exec_segment->exec_block) {
 
+                if((st.dir_change = st.exec_block == NULL || st.dir_outbits.value != st.exec_segment->exec_block->direction_bits.value))
+                    st.dir_outbits = st.exec_segment->exec_block->direction_bits;
                 st.exec_block = st.exec_segment->exec_block;
                 st.step_event_count = st.exec_block->step_event_count;
-                st.dir_outbits = st.exec_block->direction_bits;
                 st.new_block = true;
 #ifdef ENABLE_BACKLASH_COMPENSATION
                 backlash_motion = st.exec_block->backlash_motion;

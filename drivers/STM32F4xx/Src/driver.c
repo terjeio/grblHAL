@@ -58,7 +58,7 @@ driver_settings_t driver_settings;
 #endif
 
 extern __IO uint32_t uwTick;
-
+static uint32_t pulse_length, pulse_delay;
 static bool pwmEnabled = false, IOInitDone = false;
 // Inverts the probe pin state depending on user settings and probing cycle mode.
 static bool probe_invert;
@@ -246,7 +246,7 @@ static void stepperCyclesPerTickPrescaled (uint32_t cycles_per_tick)
 
 // Set stepper pulse output pins
 // NOTE: step_outbits are: bit0 -> X, bit1 -> Y, bit2 -> Z...
-inline static void stepperSetStepOutputs (axes_signals_t step_outbits)
+inline static __attribute__((always_inline)) void stepperSetStepOutputs (axes_signals_t step_outbits)
 {
 #if STEP_OUTMODE == GPIO_BITBAND
     step_outbits.mask ^= settings.steppers.step_invert.mask;
@@ -262,7 +262,7 @@ inline static void stepperSetStepOutputs (axes_signals_t step_outbits)
 
 // Set stepper direction output pins
 // NOTE: see note for stepperSetStepOutputs()
-inline static void stepperSetDirOutputs (axes_signals_t dir_outbits)
+inline static __attribute__((always_inline)) void stepperSetDirOutputs (axes_signals_t dir_outbits)
 {
 #if STEP_OUTMODE == GPIO_BITBAND
     dir_outbits.mask ^= settings.steppers.dir_invert.mask;
@@ -276,12 +276,11 @@ inline static void stepperSetDirOutputs (axes_signals_t dir_outbits)
 #endif
 }
 
-// Sets stepper direction and pulse pins and starts a step pulse
-// When delayed pulse the step register is written in the step delay interrupt handler
+// Sets stepper direction and pulse pins and starts a step pulse.
 static void stepperPulseStart (stepper_t *stepper)
 {
-    if(stepper->new_block) {
-        stepper->new_block = false;
+    if(stepper->dir_change) {
+        stepper->dir_change = false;
         stepperSetDirOutputs(stepper->dir_outbits);
     }
 
@@ -292,16 +291,27 @@ static void stepperPulseStart (stepper_t *stepper)
     }
 }
 
-// Sets stepper direction and pulse pins and starts a step pulse with and initial delay
+// Start a stepper pulse, delay version.
+// Note: delay is only added when there is a direction change and a pulse to be output.
 static void stepperPulseStartDelayed (stepper_t *stepper)
 {
-    if(stepper->new_block) {
-        stepper->new_block = false;
+    if(stepper->dir_change) {
+
+        stepper->dir_change = false;
         stepperSetDirOutputs(stepper->dir_outbits);
+
+        if(stepper->step_outbits.value) {
+            next_step_outbits = stepper->step_outbits; // Store out_bits
+            PULSE_TIMER->ARR = pulse_delay;
+            PULSE_TIMER->EGR = TIM_EGR_UG;
+            PULSE_TIMER->CR1 |= TIM_CR1_CEN;
+        }
+
+        return;
     }
 
     if(stepper->step_outbits.value) {
-        next_step_outbits = stepper->step_outbits; // Store out_bits
+        stepperSetStepOutputs(stepper->step_outbits);
         PULSE_TIMER->EGR = TIM_EGR_UG;
         PULSE_TIMER->CR1 |= TIM_CR1_CEN;
     }
@@ -645,16 +655,21 @@ void settings_changed (settings_t *settings)
         } else
             hal.spindle_set_state = spindleSetState;
 
+        pulse_length = (uint32_t)(10.0f * (settings->steppers.pulse_microseconds - STEP_PULSE_LATENCY)) - 1;
+
         if(hal.driver_cap.step_pulse_delay && settings->steppers.pulse_delay_microseconds > 0.0f) {
+            pulse_delay = (uint32_t)(10.0f * (settings->steppers.pulse_delay_microseconds - 1.0f));
+            if(pulse_delay < 2)
+                pulse_delay = 2;
+            else if(pulse_delay == pulse_length)
+                pulse_delay++;
             hal.stepper_pulse_start = &stepperPulseStartDelayed;
-            PULSE_TIMER->DIER |= TIM_DIER_CC1IE; // Enable CC1 interrupt
         } else {
+            pulse_delay = 0;
             hal.stepper_pulse_start = &stepperPulseStart;
-            PULSE_TIMER->DIER &= ~TIM_DIER_CC1IE; // Disable CC1 interrupt
         }
 
-        PULSE_TIMER->ARR = (uint32_t)(10.0f * (settings->steppers.pulse_microseconds + settings->steppers.pulse_delay_microseconds - STEP_PULSE_LATENCY)) - 1;
-        PULSE_TIMER->CCR1 = (uint32_t)(10.0f * settings->steppers.pulse_delay_microseconds);
+        PULSE_TIMER->ARR = pulse_length;
         PULSE_TIMER->EGR = TIM_EGR_UG;
 
         /*************************
@@ -1075,7 +1090,7 @@ bool driver_init (void)
 #else
     hal.info = "STM32F401CC";
 #endif
-    hal.driver_version = "200731";
+    hal.driver_version = "200814";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1238,14 +1253,16 @@ void TIM2_IRQHandler(void)
 // completing one step cycle.
 void TIM3_IRQHandler(void)
 {
-    if ((PULSE_TIMER->SR & TIM_SR_CC1IF) != 0)          // Delayed step pulse?
+    PULSE_TIMER->SR &= ~TIM_SR_UIF;                 // Clear UIF flag
+
+    if (PULSE_TIMER->ARR == pulse_delay)            // Delayed step pulse?
     {
-        PULSE_TIMER->SR &= ~(TIM_SR_UIF|TIM_SR_CC1IF);  // Clear UIF & CC1IF flags and
-        stepperSetStepOutputs(next_step_outbits);       // begin step pulse
-    } else {
-        PULSE_TIMER->SR &= ~TIM_SR_UIF;                 // Clear UIF flag and
-        stepperSetStepOutputs((axes_signals_t){0});     // end step pulse
-    }
+        PULSE_TIMER->ARR = pulse_length;
+        stepperSetStepOutputs(next_step_outbits);   // begin step pulse
+        PULSE_TIMER->EGR = TIM_EGR_UG;
+        PULSE_TIMER->CR1 |= TIM_CR1_CEN;
+    } else
+        stepperSetStepOutputs((axes_signals_t){0}); // end step pulse
 }
 
 // Debounce timer interrupt handler

@@ -22,10 +22,14 @@
 */
 
 #include <stdio.h>
+#include <string.h>
 
 #include "driver.h"
 #include "serial.h"
+
+#ifdef USE_I2C
 #include "i2c.h"
+#endif
 
 #if EEPROM_ENABLE
 #include "eeprom/eeprom.h"
@@ -98,6 +102,7 @@ static volatile bool spindleLock = false;
 static bool IOInitDone = false;
 // Inverts the probe pin state depending on user settings and probing cycle mode.
 static bool probe_invert;
+static uint16_t pulse_length;
 static axes_signals_t next_step_outbits;
 static spindle_data_t spindle_data;
 static spindle_encoder_t spindle_encoder = {0};
@@ -241,7 +246,7 @@ static void driver_delay_ms (uint32_t ms, void (*callback)(void))
 // 1. bitbanding. Pros: can assign pins to different ports, no RMW needed. Cons: overhead, pin changes not synchronous
 // 2. bit shift. Pros: fast, Cons: bits must be consecutive
 // 3. lookup table. Pros: signal inversions done at setup, Cons: slower than bit shift
-inline static void set_step_outputs (axes_signals_t step_outbits)
+inline __attribute__((always_inline)) static void set_step_outputs (axes_signals_t step_outbits)
 {
 #if STEP_OUTMODE == GPIO_BITBAND
     step_outbits.value ^= settings.steppers.step_invert.mask;
@@ -257,7 +262,7 @@ inline static void set_step_outputs (axes_signals_t step_outbits)
 
 // Set stepper direction output pins
 // NOTE: see note for set_step_outputs()
-inline static void set_dir_outputs (axes_signals_t dir_outbits)
+inline __attribute__((always_inline)) static void set_dir_outputs (axes_signals_t dir_outbits)
 {
 #if DIRECTION_OUTMODE == GPIO_BITBAND
     dir_outbits.value ^= settings.steppers.dir_invert.mask;
@@ -320,14 +325,18 @@ static void stepperCyclesPerTick (uint32_t cycles_per_tick)
 static void stepperPulseStart (stepper_t *stepper)
 {
     if(stepper->new_block) {
+
         if(stepper->exec_segment->spindle_sync) {
             spindle_tracker.stepper_pulse_start_normal = hal.stepper_pulse_start;
             hal.stepper_pulse_start = stepperPulseStartSynchronized;
             hal.stepper_pulse_start(stepper);
             return;
         }
+
         stepper->new_block = false;
-        set_dir_outputs(stepper->dir_outbits);
+
+        if(stepper->dir_change)
+            set_dir_outputs(stepper->dir_outbits);
     }
 
     if(stepper->step_outbits.value) {
@@ -338,22 +347,37 @@ static void stepperPulseStart (stepper_t *stepper)
 
 // Delayed pulse version: sets stepper direction and pulse pins and starts a step pulse with an initial delay.
 // If spindle synchronized motion switch to PID version.
-// TODO: only delay after setting dir outputs?
 static void stepperPulseStartDelayed (stepper_t *stepper)
 {
     if(stepper->new_block) {
+
         if(stepper->exec_segment->spindle_sync) {
             spindle_tracker.stepper_pulse_start_normal = hal.stepper_pulse_start;
             hal.stepper_pulse_start = stepperPulseStartSynchronized;
             hal.stepper_pulse_start(stepper);
             return;
         }
+
         stepper->new_block = false;
-        set_dir_outputs(stepper->dir_outbits);
+
+        if(stepper->dir_change) {
+
+            set_dir_outputs(stepper->dir_outbits);
+
+            if(stepper->step_outbits.value) {
+                next_step_outbits = stepper->step_outbits;              // Store out_bits
+                PULSE_TIMER->CCR[0] = 0;
+                PULSE_TIMER->CCTL[1] &= ~TIMER_A_CCTLN_CCIFG;           // Clear and
+                PULSE_TIMER->CCTL[1] |= TIMER_A_CCTLN_CCIE;             // enable CCR1 interrupt
+                PULSE_TIMER->CTL |= TIMER_A_CTL_CLR|TIMER_A_CTL_MC1;
+
+            }
+            return;
+        }
     }
 
     if(stepper->step_outbits.value) {
-        next_step_outbits = stepper->step_outbits; // Store out_bits
+        set_step_outputs(stepper->step_outbits);
         PULSE_TIMER->CTL |= TIMER_A_CTL_CLR|TIMER_A_CTL_MC1;
     }
 }
@@ -388,10 +412,7 @@ static void stepperPulseStartSynchronized (stepper_t *stepper)
     }
 
     if(stepper->step_outbits.value) {
-        if(settings.steppers.pulse_delay_microseconds)
-            next_step_outbits = stepper->step_outbits; // Store out_bits;
-        else
-            set_step_outputs(stepper->step_outbits);
+        set_step_outputs(stepper->step_outbits);
         PULSE_TIMER->CTL |= TIMER_A_CTL_CLR|TIMER_A_CTL_MC1;
     }
 
@@ -530,6 +551,8 @@ inline static axes_signals_t limitsGetState()
     return signals;
 }
 
+// Returns system state as a control_signals_t variable.
+// Each bitfield bit indicates a control signal, where triggered is 1 and not triggered is 0.
 static control_signals_t systemGetState (void)
 {
     control_signals_t signals;
@@ -1063,16 +1086,17 @@ void settings_changed (settings_t *settings)
         }
 #endif
 
+        pulse_length = (uint16_t)(12.0f * (settings->steppers.pulse_microseconds - STEP_PULSE_LATENCY));
+
         if(hal.driver_cap.step_pulse_delay && settings->steppers.pulse_delay_microseconds > 0.0f) {
+            int16_t pulse_delay = (uint16_t)(12.0f * (settings->steppers.pulse_delay_microseconds - 1.2f));
+            PULSE_TIMER->CCR[1] = pulse_delay < 2 ? 2 : pulse_delay;
             hal.stepper_pulse_start = stepperPulseStartDelayed;
-            PULSE_TIMER->CCR[1] = (uint16_t)(11.4f * settings->steppers.pulse_delay_microseconds);
-            PULSE_TIMER->CCTL[1] |= TIMER_A_CCTLN_CCIE;                   // Enable CCR1 interrupt
-        } else {
+        } else
             hal.stepper_pulse_start = stepperPulseStart;
-            PULSE_TIMER->CCR[1] = 0;
-            PULSE_TIMER->CCTL[1] &= ~TIMER_A_CCTLN_CCIE;                  // Disable CCR1 interrupt
-        }
-        PULSE_TIMER->CCR[0] = (uint16_t)(11.4f * (settings->steppers.pulse_microseconds + settings->steppers.pulse_delay_microseconds - STEP_PULSE_LATENCY));
+
+        PULSE_TIMER->CCTL[1] &= ~TIMER_A_CCTLN_CCIE; // Disable CCR1 (step delay) interrupt
+        PULSE_TIMER->CCR[0] = pulse_length;
 
         /*************************
          *  Control pins config  *
@@ -1508,12 +1532,12 @@ bool driver_init (void)
 
     serialInit();
 
-#if EEPROM_ENABLE || KEYPAD_ENABLE || TRINAMIC_I2C
+#ifdef USE_I2C
     i2c_init();
 #endif
 
     hal.info = "MSP432";
-    hal.driver_version = "200721";
+    hal.driver_version = "200814";
 #if CNC_BOOSTERPACK
  #if TRINAMIC_ENABLE
     hal.board = "CNC BoosterPack (Trinamic)";
@@ -1678,14 +1702,15 @@ void STEPPER_IRQHandler (void)
 */
 
 // This interrupt is used only when STEP_PULSE_DELAY is enabled. Here, the step pulse is
-// initiated after the STEP_PULSE_DELAY time period has elapsed. The ISR TIMER2_OVF interrupt
-// will then trigger after the appropriate settings.pulse_microseconds, as in normal operation.
-// The new timing between direction, step pulse, and step complete events are setup in the
-// st_wake_up() routine.
+// initiated after the STEP_PULSE_DELAY time period has elapsed.
 void STEPPULSE_N_IRQHandler (void)
 {
-    if(PULSE_TIMER->IV == 0x02) // CCR1 - IV read clears interrupt
-        set_step_outputs(next_step_outbits); // Begin step pulse.
+    if(PULSE_TIMER->IV == 0x02) {                               // CCR1 - IV read clears interrupt
+        set_step_outputs(next_step_outbits);                    // Begin step pulse
+        PULSE_TIMER->CCTL[1] &= ~TIMER_A_CCTLN_CCIE;            // Disable CCR1 interrupt
+        PULSE_TIMER->CCR[0] = pulse_length;                     // Set pulse length
+        PULSE_TIMER->CTL |= TIMER_A_CTL_CLR|TIMER_A_CTL_MC1;    // and restart timer
+    }
 }
 
 // This interrupt is enabled when Grbl sets the motor port bits to execute
@@ -1700,12 +1725,12 @@ void STEPPULSE_0_IRQHandler (void)
 
 void DEBOUNCE_IRQHandler (void)
 {
-    DEBOUNCE_TIMER->CCTL[0] &= ~TIMER_A_CCTLN_CCIFG; // Clear interrupt flag and
-    DEBOUNCE_TIMER->CTL &= ~(TIMER_A_CTL_MC0|TIMER_A_CTL_MC1); // stop debounce timer
+    DEBOUNCE_TIMER->CCTL[0] &= ~TIMER_A_CCTLN_CCIFG;            // Clear interrupt flag and
+    DEBOUNCE_TIMER->CTL &= ~(TIMER_A_CTL_MC0|TIMER_A_CTL_MC1);  // stop debounce timer
 
     axes_signals_t state = limitsGetState();
 
-    if(state.mask) //TODO: add check for limit switches having same state as when limit_isr were invoked?
+    if(state.mask)
         hal.limit_interrupt_callback(state);
 }
 
@@ -1718,7 +1743,7 @@ void RPMCOUNTER_IRQHandler (void)
 
     spindle_data.pulse_count += cval - spindle_encoder.pulse_counter_last;
     spindle_encoder.pulse_counter_last = cval;
-    spindle_encoder.tpp = (spindle_encoder.timer_value_last - tval) >> 2; // / spindle_encoder.pulse_counter_trigger..
+    spindle_encoder.tpp = (spindle_encoder.timer_value_last - tval) >> 2; // spindle_encoder.pulse_counter_trigger..
     spindle_encoder.timer_value_last = tval;
     RPM_COUNTER->CCR[0] += spindle_encoder.pulse_counter_trigger;
 }

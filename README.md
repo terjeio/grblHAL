@@ -6,6 +6,15 @@ Windows users may try [my sender](https://github.com/terjeio/Grbl-GCode-Sender),
 
 ---
 
+Build 20200813:
+
+* "Hardened" step pulse generation when delay is enabled. The delay will now only be added on direction changes.
+The minimum possible delay is dependent on many factors and will be adjusted to match what the processor is capable of.
+By default driver code is calibrated for a 2.5 &micro;s delay and may deviate a bit for other settings and configurations. The actual delay should be checked with an oscilloscope when high step rates are used.
+__NOTE:__ A delay is only added if AMASS is disabled, when AMASS is enabled \(it is by default\) there is always a implicit delay on direction changes.
+
+---
+
 Build 20200811:
 
 * Part one of large overhaul of configuration system.

@@ -43,6 +43,7 @@
 #include "backend.h"
 #include "wifi.h"
 #include "upload.h"
+#include "grbl/report.h"
 #include "networking/urldecode.h"
 
 #if WEBUI_ENABLE

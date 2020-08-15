@@ -137,7 +137,11 @@ extern driver_settings_t driver_settings;
 #define timerPeriph(t) timerP(t)
 #define timerP(t) SYSCTL_PERIPH_TIMER ## t
 #define timerINT(t, i) timerI(t, i)
+#ifdef EK_TM4C129_BP2
+#define timerI(t, i) INT_TIMER ## t ## i ## _TM4C129
+#else
 #define timerI(t, i) INT_TIMER ## t ## i
+#endif
 
 // Define GPIO output mode options
 // Use GPIO_SHIFTx when output bits are consecutive and in the same port

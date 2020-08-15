@@ -140,7 +140,10 @@ typedef union {
                  stop_disable       :1, // M1
                  e_stop             :1,
                  probe_disconnected :1,
-                 unassigned         :6,
+                 motor_fault        :1,
+                 motor_warning      :1,
+                 arc_ok             :1,
+                 unassigned         :3,
                  probe_triggered    :1, // used for probe protection
                  deasserted         :1; // this flag is set if signals are deasserted. Note: do NOT pass on to Grbl control_interrupt_handler if set.
     };

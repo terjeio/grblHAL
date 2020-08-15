@@ -14,7 +14,7 @@ OPTION(WebUI "WebUI services" OFF)
 OPTION(WebAuth "WebUI authentication" OFF)
 OPTION(MPGMode "MPG mode" OFF)
 OPTION(BoosterPack "Compile for CNC BoosterPack" OFF)
-OPTION(HUANYANG "Compile with Huanyang RS485 Spindle support" ON)
+OPTION(HUANYANG "Compile with Huanyang RS485 Spindle support" OFF)
 
 set(SDCARD_SOURCE sdcard/sdcard.c)
 set(KEYPAD_SOURCE keypad/keypad.c)
@@ -45,6 +45,7 @@ set(MAIN_SRCS main.c driver.c nvs.c esp32-hal-uart.c
  grbl/state_machine.c
  grbl/stepper.c
  grbl/system.c
+ grbl/tool_change.c
 )
 
 if(Networking)

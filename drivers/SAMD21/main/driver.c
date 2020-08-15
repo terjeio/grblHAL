@@ -66,8 +66,8 @@ static gpio_t Led;
 
 uint32_t vectorTable[sizeof(DeviceVectors) / sizeof(uint32_t)] __attribute__(( aligned (0x100ul) ));
 
-static uint32_t lim_IRQMask = 0;
-static uint16_t pulse_length;
+//static uint32_t lim_IRQMask = 0;
+static uint16_t pulse_length, pulse_delay;
 static bool pwmEnabled = false, IOInitDone = false;
 // Inverts the probe pin state depending on user settings and probing cycle mode.
 static bool probe_invert, sd_detect = false;
@@ -198,71 +198,43 @@ static void stepperCyclesPerTick (uint32_t cycles_per_tick)
 // Sets stepper direction and pulse pins and starts a step pulse
 static void stepperPulseStart (stepper_t *stepper)
 {
-    if(stepper->new_block) {
-        stepper->new_block = false;
+    if(stepper->dir_change) {
+        stepper->dir_change = false;
         set_dir_outputs(stepper->dir_outbits);
     }
 
     if(stepper->step_outbits.value) {
-
-        STEP_TIMER->COUNT16.COUNT.reg = 0;
-        while(STEP_TIMER->COUNT16.STATUS.bit.SYNCBUSY);
-
         set_step_outputs(stepper->step_outbits);
-
-        STEP_TIMER->COUNT16.CTRLBSET.reg = TC_CTRLBCLR_CMD_RETRIGGER;
-        while(STEP_TIMER->COUNT16.STATUS.bit.SYNCBUSY);
+        STEP_TIMER->COUNT16.CTRLBSET.reg = TC_CTRLBCLR_CMD_RETRIGGER|TCC_CTRLBSET_ONESHOT;
     }
 }
 
-// Sets stepper direction and pulse pins and starts a step pulse with and initial delay
-static void stepperPulseAddDelay (stepper_t *stepper)
-{
-    if(stepper->new_block) {
-        stepper->new_block = false;
-        set_dir_outputs(stepper->dir_outbits);
-
-        IRQRegister(STEP_TIMER_IRQn, STEPPULSE_Delayed_IRQHandler);
-
-        STEP_TIMER->COUNT16.CC[0].reg = 50000;
-        while(STEP_TIMER->COUNT16.STATUS.bit.SYNCBUSY);
-        STEP_TIMER->COUNT16.INTENSET.bit.MC1 = 1; // Enable CC1 interrupt
-    }
-
-    if(stepper->step_outbits.value) {
-
-        STEP_TIMER->COUNT16.COUNT.reg = 0;
-        while(STEP_TIMER->COUNT16.STATUS.bit.SYNCBUSY);
-
-        next_step_outbits = stepper->step_outbits; // Store out_bits
-
-        STEP_TIMER->COUNT16.CTRLBSET.reg = TC_CTRLBCLR_CMD_RETRIGGER;
-        while(STEP_TIMER->COUNT16.STATUS.bit.SYNCBUSY);
-    }
-}
-
-// Sets stepper direction and pulse pins and starts a step pulse with
-// an initial delay if new bock and step is to be output
+// Start a stepper pulse, delay version.
+// Note: delay is only added when there is a direction change and a pulse to be output.
 static void stepperPulseStartDelayed (stepper_t *stepper)
 {
-    if(stepper->new_block) {
-        if(stepper->step_outbits.value) {
-            stepperPulseAddDelay(stepper);
-            return;
-        }
-        stepper->new_block = false;
+    if(stepper->dir_change) {
+
+        stepper->dir_change = false;
         set_dir_outputs(stepper->dir_outbits);
+
+        if(stepper->step_outbits.value) {
+
+            IRQRegister(STEP_TIMER_IRQn, STEPPULSE_Delayed_IRQHandler);
+
+            next_step_outbits = stepper->step_outbits; // Store out_bits
+
+            STEP_TIMER->COUNT16.CC[0].reg = pulse_delay;
+            while(STEP_TIMER->COUNT16.STATUS.bit.SYNCBUSY);
+            STEP_TIMER->COUNT16.CTRLBSET.reg = TC_CTRLBCLR_CMD_RETRIGGER|TCC_CTRLBSET_ONESHOT;
+        }
+
+        return;
     }
 
     if(stepper->step_outbits.value) {
-
-        STEP_TIMER->COUNT16.COUNT.reg = 0;
-        while(STEP_TIMER->COUNT16.STATUS.bit.SYNCBUSY);
-
         set_step_outputs(stepper->step_outbits);
-
-        STEP_TIMER->COUNT16.CTRLBSET.reg = TC_CTRLBCLR_CMD_RETRIGGER;
-        while(STEP_TIMER->COUNT16.STATUS.bit.SYNCBUSY);
+        STEP_TIMER->COUNT16.CTRLBSET.reg = TC_CTRLBCLR_CMD_RETRIGGER|TCC_CTRLBSET_ONESHOT;
     }
 }
 
@@ -616,16 +588,12 @@ void settings_changed (settings_t *settings)
         } else
             hal.spindle_set_state = spindleSetState;
 
-        pulse_length = (int16_t)(24.0f * (settings->steppers.pulse_microseconds - STEP_PULSE_LATENCY)) - 1;
-        if(pulse_length < 2)
-            pulse_length = 2;
+        int16_t t = (int16_t)(24.0f * (settings->steppers.pulse_microseconds - STEP_PULSE_LATENCY)) - 1;
+        pulse_length = t < 2 ? 2 : t;
 
         if(settings->steppers.pulse_delay_microseconds > 0.0f) {
-            int16_t ccval1 = (int16_t)(24.0f * (settings->steppers.pulse_delay_microseconds - 1.4f)) - 1;
-
-            STEP_TIMER->COUNT16.CC[1].reg = ccval1 < 23 ? 23 : ccval1;
-            while(STEP_TIMER->COUNT16.STATUS.bit.SYNCBUSY);
-
+            t = (int16_t)(24.0f * (settings->steppers.pulse_delay_microseconds - 1.7f)) - 1;
+            pulse_delay = t < 2 ? 2 : t;
             hal.stepper_pulse_start = stepperPulseStartDelayed;
         } else
             hal.stepper_pulse_start = stepperPulseStart;
@@ -634,8 +602,6 @@ void settings_changed (settings_t *settings)
         IRQRegister(STEP_TIMER_IRQn, STEPPULSE_IRQHandler);
 
         STEP_TIMER->COUNT16.CC[0].reg = pulse_length;
-        while(STEP_TIMER->COUNT16.STATUS.bit.SYNCBUSY);
-        STEP_TIMER->COUNT16.INTENCLR.bit.MC1 = 1; // Disable CC1 interrupt
         STEP_TIMER->COUNT16.INTENSET.bit.MC0 = 1; // Enable CC0 interrupt
 
         /*************************
@@ -1232,22 +1198,17 @@ static void STEPPULSE_IRQHandler (void)
 // Will only be called if AMASS is not used
 static void STEPPULSE_Delayed_IRQHandler (void)
 {
-    STEP_TIMER->COUNT16.INTFLAG.bit.MC1 = 1;
-    STEP_TIMER->COUNT16.INTENCLR.bit.MC1 = 1; // Disable CC1 interrupt
-
+    STEP_TIMER->COUNT16.INTFLAG.bit.MC0 = 1;
     STEP_TIMER->COUNT16.CC[0].reg = pulse_length;
-    while(STEP_TIMER->COUNT16.STATUS.bit.SYNCBUSY);
+
+    set_step_outputs(next_step_outbits);
 
     STEP_TIMER->COUNT16.COUNT.reg = 0;
     while(STEP_TIMER->COUNT16.STATUS.bit.SYNCBUSY);
 
     IRQRegister(STEP_TIMER_IRQn, STEPPULSE_IRQHandler);
-    STEP_TIMER->COUNT16.INTENSET.bit.MC0 = 1; // Enable CC0 interrupt (why again?)
 
-    set_step_outputs(next_step_outbits);
-
-    STEP_TIMER->COUNT16.CTRLBSET.reg = TC_CTRLBCLR_CMD_RETRIGGER;
-    while(STEP_TIMER->COUNT16.STATUS.bit.SYNCBUSY);
+    STEP_TIMER->COUNT16.CTRLBSET.reg = TC_CTRLBCLR_CMD_RETRIGGER|TCC_CTRLBSET_ONESHOT;
 }
 
 static void DEBOUNCE_IRQHandler (void)
