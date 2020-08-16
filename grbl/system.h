@@ -177,22 +177,22 @@ typedef struct {
 typedef union {
     uint16_t value;
     struct {
-        uint16_t mpg_mode    :1, // MPG mode changed.
-                 scaling     :1, // Scaling (G50/G51) changed.
-                 homed       :1, // Homed state changed.
-                 xmode       :1, // Lathe radius/diameter mode changed.
-                 spindle     :1, // Spindle state changed.
-                 coolant     :1, // Coolant state changed.
-                 overrides   :1, // Overrides changed.
-                 tool        :1, // Tool changed.
-                 wco         :1, // Add work coordinates.
-                 gwco        :1, // Add work coordinate.
-                 tool_offset :1, // Tool offsets changed.
-                 pwm         :1, // Add PWM information (optional: to be added by driver).
-                 motor       :1, // Add motor information (optional: to be added by driver).
-                 encoder     :1, // Add encoder information (optional: to be added by driver).
-                 unused      :1,
-                 all         :1; // Set when CMD_STATUS_REPORT_ALL is requested, may be used by user code
+        uint16_t mpg_mode      :1, // MPG mode changed.
+                 scaling       :1, // Scaling (G50/G51) changed.
+                 homed         :1, // Homed state changed.
+                 xmode         :1, // Lathe radius/diameter mode changed.
+                 spindle       :1, // Spindle state changed.
+                 coolant       :1, // Coolant state changed.
+                 overrides     :1, // Overrides changed.
+                 tool          :1, // Tool changed.
+                 wco           :1, // Add work coordinates.
+                 gwco          :1, // Add work coordinate.
+                 tool_offset   :1, // Tool offsets changed.
+                 pwm           :1, // Add PWM information (optional: to be added by driver).
+                 motor         :1, // Add motor information (optional: to be added by driver).
+                 encoder       :1, // Add encoder information (optional: to be added by driver).
+                 tlo_reference :1, // Tool length offset reference changed
+                 all           :1; // Set when CMD_STATUS_REPORT_ALL is requested, may be used by user code
     };
 } report_tracking_flags_t;
 

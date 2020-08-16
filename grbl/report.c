@@ -1085,11 +1085,13 @@ void report_realtime_status (void)
             hal.stream.write_all(appendbuf(2, "|Ln:", uitoa((uint32_t)cur_block->line_number)));
     }
 
+    spindle_state_t sp_state = hal.spindle_get_state();
+
     // Report realtime feed speed
     if(settings.status_report.feed_speed) {
         if(hal.driver_cap.variable_spindle) {
             hal.stream.write_all(appendbuf(2, "|FS:", get_rate_value(st_get_realtime_rate())));
-            hal.stream.write_all(appendbuf(2, ",", uitoa((uint32_t)sys.spindle_rpm)));
+            hal.stream.write_all(appendbuf(2, ",", uitoa(sp_state.on ? (uint32_t)sys.spindle_rpm : 0)));
             if(hal.spindle_get_data /* && sys.mpg_mode */)
                 hal.stream.write_all(appendbuf(2, ",", uitoa((uint32_t)hal.spindle_get_data(SpindleData_RPM).rpm)));
         } else
@@ -1186,7 +1188,6 @@ void report_realtime_status (void)
 
         if(sys.report.spindle || sys.report.coolant || sys.report.tool || gc_state.tool_change) {
 
-            spindle_state_t sp_state = hal.spindle_get_state();
             coolant_state_t cl_state = hal.coolant_get_state();
 
             char *append = &buf[3];
@@ -1230,6 +1231,9 @@ void report_realtime_status (void)
 
         if(sys.report.tool)
             hal.stream.write_all(appendbuf(2, "|T:", uitoa(gc_state.tool->tool)));
+
+        if(sys.report.tlo_reference)
+            hal.stream.write_all(appendbuf(2, "|TLR:", uitoa(sys.tlo_reference_set)));
     }
 
     if(hal.driver_rt_report)

@@ -400,11 +400,23 @@ bool protocol_exec_rt_system ()
         protocol_message(NULL);
 
     if (sys_rt_exec_alarm && (rt_exec = system_clear_exec_alarm())) { // Enter only if any bit flag is true
+
         // System alarm. Everything has shutdown by something that has gone severely wrong. Report
         // the source of the error to the user. If critical, Grbl disables by entering an infinite
         // loop until system reset/abort.
         set_state((alarm_code_t)rt_exec == Alarm_EStop ? STATE_ESTOP : STATE_ALARM); // Set system alarm state
         report_alarm_message((alarm_code_t)rt_exec);
+
+        if(sys_rt_exec_state & EXEC_RESET) {
+
+            // Kill spindle and coolant.
+            hal.spindle_set_state((spindle_state_t){0}, 0.0f);
+            hal.coolant_set_state((coolant_state_t){0});
+
+            if(hal.driver_reset)
+                hal.driver_reset();
+        }
+
         // Halt everything upon a critical event flag. Currently hard and soft limits flag this.
         if ((alarm_code_t)rt_exec == Alarm_HardLimit || (alarm_code_t)rt_exec == Alarm_SoftLimit || (alarm_code_t)rt_exec == Alarm_EStop) {
             system_set_exec_alarm(rt_exec);

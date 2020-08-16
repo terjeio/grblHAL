@@ -291,10 +291,12 @@ status_code_t system_execute_line (char *line)
             break;
 
         case 'T':
-            if(sys.flags.probe_succeeded && line[2] == 'L' && line[3] == 'R') {
-                plane_t plane;
-                sys.tlo_reference = sys_probe_position[gc_get_plane_data(&plane, gc_state.modal.plane_select)->axis_linear];
-                sys.tlo_reference_set = true;
+            if(line[2] == 'L' && line[3] == 'R') {
+                if((sys.tlo_reference_set = sys.flags.probe_succeeded)) {
+                    plane_t plane;
+                    sys.tlo_reference = sys_probe_position[gc_get_plane_data(&plane, gc_state.modal.plane_select)->axis_linear];
+                }
+                sys.report.tlo_reference = On;
                 retval = Status_OK;
             } else if(sys.flags.probe_succeeded && line[2] == 'P' && line[3] == 'W')
                 retval = tc_probe_workpiece();

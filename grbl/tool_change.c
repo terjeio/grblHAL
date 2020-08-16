@@ -179,6 +179,7 @@ static void execute_probe (uint_fast16_t state)
             if(!sys.tlo_reference_set) {
                 sys.tlo_reference = sys_probe_position[plane.axis_linear];
                 sys.tlo_reference_set = true;
+                sys.report.tlo_reference = On;
                 report_feedback_message(Message_ReferenceTLOEstablished);
             } else
                 gc_set_tool_offset(ToolLengthOffset_EnableDynamic, plane.axis_linear, sys_probe_position[plane.axis_linear] - sys.tlo_reference);
@@ -303,6 +304,7 @@ void tc_init (void)
     if(!hal.stream.suspend_read) // Tool change requires support for suspending input stream.
         return;
 
+    sys.report.tlo_reference = sys.tlo_reference_set;
     sys.tlo_reference_set = false;
 
     gc_set_tool_offset(ToolLengthOffset_Cancel, 0, 0.0f);
