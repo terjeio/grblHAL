@@ -626,7 +626,7 @@ static control_signals_t systemGetState (void)
 // Sets up the probe pin invert mask to
 // appropriately set the pin logic according to setting for normal-high/normal-low operation
 // and the probing cycle modes for toward-workpiece/away-from-workpiece.
-static void probeConfigureInvertMask (bool is_probe_away)
+static void probeConfigure (bool is_probe_away, bool probing)
 {
   probe_invert = settings.flags.invert_probe_pin;
 
@@ -1519,7 +1519,7 @@ bool driver_init (void)
     NVIC_EnableIRQ(SysTick_IRQn);
 
     hal.info = "SAM3X8E";
-	hal.driver_version = "200814";
+	hal.driver_version = "200818";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1546,7 +1546,7 @@ bool driver_init (void)
 //#ifdef PROBE_PIN
     hal.probe_get_state = probeGetState;
 //#endif
-    hal.probe_configure_invert_mask = probeConfigureInvertMask;
+    hal.probe_configure_invert_mask = probeConfigure;
 
 #ifndef VFD_SPINDLE
     hal.spindle_set_state = spindleSetState;

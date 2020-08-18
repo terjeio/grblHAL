@@ -165,7 +165,7 @@ typedef struct HAL {
     // optional entry points, may be unassigned (null)
     bool (*driver_release)(void);
     probe_state_t (*probe_get_state)(void);
-    void (*probe_configure_invert_mask)(bool is_probe_away);
+    void (*probe_configure_invert_mask)(bool is_probe_away, bool probing);
     void (*execute_realtime)(uint_fast16_t state);
     user_mcode_t (*user_mcode_check)(user_mcode_t mcode);
     status_code_t (*user_mcode_validate)(parser_block_t *gc_block, uint32_t *value_words);

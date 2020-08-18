@@ -476,7 +476,7 @@ inline static control_signals_t systemGetState (void)
 // Sets up the probe pin invert mask to
 // appropriately set the pin logic according to setting for normal-high/normal-low operation
 // and the probing cycle modes for toward-workpiece/away-from-workpiece.
-static void probeConfigure(bool is_probe_away)
+static void probeConfigure (bool is_probe_away, bool probing)
 {
   probe_invert = settings.flags.invert_probe_pin ? 0 : PROBE_PIN;
 
@@ -1155,7 +1155,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "TM4C123HP6PM";
-    hal.driver_version = "200815";
+    hal.driver_version = "200818";
 #if CNC_BOOSTERPACK
     hal.board = "CNC BoosterPack";
 #endif

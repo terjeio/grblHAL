@@ -395,7 +395,7 @@ static control_signals_t systemGetState (void)
 // Sets up the probe pin invert mask to
 // appropriately set the pin logic according to setting for normal-high/normal-low operation
 // and the probing cycle modes for toward-workpiece/away-from-workpiece.
-static void probeConfigureInvertMask(bool is_probe_away)
+static void probeConfigure(bool is_probe_away, bool probing)
 {
     probe_invert = settings.flags.invert_probe_pin;
 #ifdef PROBE_PIN
@@ -1090,7 +1090,7 @@ bool driver_init (void)
 #else
     hal.info = "STM32F401CC";
 #endif
-    hal.driver_version = "200814";
+    hal.driver_version = "200818";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1113,7 +1113,7 @@ bool driver_init (void)
     hal.coolant_get_state = coolantGetState;
 
     hal.probe_get_state = probeGetState;
-    hal.probe_configure_invert_mask = probeConfigureInvertMask;
+    hal.probe_configure_invert_mask = probeConfigure;
 
     hal.spindle_set_state = spindleSetState;
     hal.spindle_get_state = spindleGetState;

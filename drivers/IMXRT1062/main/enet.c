@@ -80,26 +80,28 @@ static void netif_status_callback (struct netif *netif)
 
 void grbl_enet_poll (void)
 {
-    static uint32_t last_ms;
+    static uint32_t last_ms0, last_ms1;
     uint32_t ms;
 
     enet_proc_input();
 
     ms = millis();
-    if (ms - last_ms > 100)
-    {
-        last_ms = ms;
 
-      #if TELNET_ENABLE
+    if(ms - last_ms0 > 1) {
+        last_ms0 = ms;
+#if TELNET_ENABLE
         if(services.telnet)
-            TCPStreamPoll();
-      #endif
-      #if WEBSOCKET_ENABLE
-        if(services.websocket) {
-            WsStreamPoll();
-        }
-      #endif
+          TCPStreamPoll();
+#endif
+    #if WEBSOCKET_ENABLE
+        if(services.websocket)
+          WsStreamPoll();
+#endif
+    }
 
+    if (ms - last_ms1 > 100)
+    {
+        last_ms1 = ms;
         enet_poll();
     }
 }

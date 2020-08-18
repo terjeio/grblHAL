@@ -28,12 +28,18 @@
 
 #if KEYPAD_ENABLE
 
+#include <string.h>
+
 #include "keypad.h"
 
 #ifdef ARDUINO
 #include "../../i2c.h"
+#include "../grbl/report.h"
+#include "../grbl/override.h"
 #else
 #include "i2c.h"
+#include "grbl/report.h"
+#include "grbl/override.h"
 #endif
 
 #define KEYBUF_SIZE 16

@@ -865,7 +865,7 @@ gc_probe_t mc_probe_cycle (float *target, plan_line_data_t *pl_data, gc_parser_f
 
     // Initialize probing control variables
     sys.flags.probe_succeeded = Off; // Re-initialize probe history before beginning cycle.
-    hal.probe_configure_invert_mask(parser_flags.probe_is_away);
+    hal.probe_configure_invert_mask(parser_flags.probe_is_away, true);
 
     // After syncing, check if probe is already triggered or not connected. If so, halt and issue alarm.
     // NOTE: This probe initialization error applies to all probing cycles.
@@ -873,7 +873,7 @@ gc_probe_t mc_probe_cycle (float *target, plan_line_data_t *pl_data, gc_parser_f
     if (probe.triggered || !probe.connected) { // Check probe state.
         system_set_exec_alarm(Alarm_ProbeFailInitial);
         protocol_execute_realtime();
-        hal.probe_configure_invert_mask(false); // Re-initialize invert mask before returning.
+        hal.probe_configure_invert_mask(false, false); // Re-initialize invert mask before returning.
         return GCProbe_FailInit; // Nothing else to do but bail.
     }
 
@@ -902,9 +902,9 @@ gc_probe_t mc_probe_cycle (float *target, plan_line_data_t *pl_data, gc_parser_f
     } else
         sys.flags.probe_succeeded = On; // Indicate to system the probing cycle completed successfully.
 
-    sys_probing_state = Probing_Off;        // Ensure probe state monitor is disabled.
-    hal.probe_configure_invert_mask(false); // Re-initialize invert mask.
-    protocol_execute_realtime();            // Check and execute run-time commands
+    sys_probing_state = Probing_Off;                // Ensure probe state monitor is disabled.
+    hal.probe_configure_invert_mask(false, false);  // Re-initialize invert mask.
+    protocol_execute_realtime();                    // Check and execute run-time commands
 
     // Reset the stepper and planner buffers to remove the remainder of the probe motion.
     st_reset();             // Reset step segment buffer.

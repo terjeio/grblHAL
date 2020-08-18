@@ -461,10 +461,11 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
 void st_reset ()
 {
     if(hal.probe_configure_invert_mask)
-        hal.probe_configure_invert_mask(false);
+        hal.probe_configure_invert_mask(false, false);
 
     // Initialize stepper driver idle state, clear step and direction port pins.
-    hal.stepper_go_idle(true);
+    st_go_idle();
+   // hal.stepper_go_idle(true);
 
     // NOTE: buffer indices starts from 1 for simpler driver coding!
 

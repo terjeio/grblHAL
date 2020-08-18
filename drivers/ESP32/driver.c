@@ -35,6 +35,10 @@
 #include "grbl/protocol.h"
 #include "esp_log.h"
 
+#ifdef USE_I2S_OUT
+#include "i2s_out.h"
+#endif
+
 #if WIFI_ENABLE
 #include "wifi.h"
 #endif
@@ -144,6 +148,7 @@ typedef struct {
     volatile bool debounce;
 } state_signal_t;
 
+
 #if MPG_MODE_ENABLE
 static io_stream_t prev_stream = {0};
 #endif
@@ -239,16 +244,33 @@ const io_stream_t bluetooth_stream = {
 #define INPUT_GROUP_MPG     (1 << 4)
 
 state_signal_t inputpin[] = {
+#ifdef RESET_PIN
     { .id = Input_Reset,        .pin = RESET_PIN,       .group = INPUT_GROUP_CONTROL },
+#endif
+#ifdef FEED_HOLD_PIN
     { .id = Input_FeedHold,     .pin = FEED_HOLD_PIN,   .group = INPUT_GROUP_CONTROL },
+#endif
+#ifdef CYCLE_START_PIN
     { .id = Input_CycleStart,   .pin = CYCLE_START_PIN, .group = INPUT_GROUP_CONTROL },
+#endif
+#ifdef SAFETY_DOOR_PIN
     { .id = Input_SafetyDoor,   .pin = SAFETY_DOOR_PIN, .group = INPUT_GROUP_CONTROL },
+#endif
     { .id = Input_Probe,        .pin = PROBE_PIN,       .group = INPUT_GROUP_PROBE },
     { .id = Input_LimitX,       .pin = X_LIMIT_PIN,     .group = INPUT_GROUP_LIMIT },
     { .id = Input_LimitY,       .pin = Y_LIMIT_PIN,     .group = INPUT_GROUP_LIMIT },
     { .id = Input_LimitZ,       .pin = Z_LIMIT_PIN,     .group = INPUT_GROUP_LIMIT }
+#ifdef A_LIMIT_PIN
+  , { .id = Input_LimitA,       .pin = A_LIMIT_PIN,     .group = INPUT_GROUP_LIMIT }
+#endif
+#ifdef B_LIMIT_PIN
+  , { .id = Input_LimitB,       .pin = B_LIMIT_PIN,     .group = INPUT_GROUP_LIMIT }
+#endif
+#ifdef C_LIMIT_PIN
+  , { .id = Input_LimitC,       .pin = C_LIMIT_PIN,     .group = INPUT_GROUP_LIMIT }
+#endif
 #if MPG_MODE_ENABLE
-  ,  { .id = Input_ModeSelect,  .pin = MPG_ENABLE_PIN,  .group = INPUT_GROUP_MPG }
+  , { .id = Input_ModeSelect,   .pin = MPG_ENABLE_PIN,  .group = INPUT_GROUP_MPG }
 #endif
 #if KEYPAD_ENABLE
   , { .id = Input_KeypadStrobe, .pin = KEYPAD_STROBE_PIN, .group = INPUT_GROUP_KEYPAD }
@@ -260,6 +282,15 @@ static bool IOInitDone = false;
 static portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 // Inverts the probe pin state depending on user settings and probing cycle mode.
 static uint8_t probe_invert;
+
+#ifdef USE_I2S_OUT
+#define DIGITAL_IN(pin) i2s_out_state(pin)
+#define DIGITAL_OUT(pin, state) i2s_out_write(pin, state)
+uint32_t step_length = I2S_OUT_USEC_PER_PULSE;
+#else
+#define DIGITAL_IN(pin) gpio_get_level(pin)
+#define DIGITAL_OUT(pin, state) gpio_set_level(pin, state)
+#endif
 
 #if IOEXPAND_ENABLE
 static ioexpand_t iopins = {0};
@@ -297,8 +328,8 @@ static TimerHandle_t xModBusTimer = NULL;
 #endif
 
 // Interrupt handler prototypes
-static void stepper_driver_isr (void *arg);
 static void gpio_isr (void *arg);
+static void stepper_driver_isr (void *arg);
 
 static TimerHandle_t xDelayTimer = NULL, debounceTimer = NULL;
 
@@ -446,50 +477,31 @@ static void debug_out (bool enable)
 }
 #endif
 
-
-// Set stepper pulse output pins
-inline IRAM_ATTR static void set_step_outputs (axes_signals_t step_outbits)
-{
-#ifdef xDEBUGOUT
-    if(step_outbits.value)
-        hal.debug_out(true);
-#endif
-    if(step_outbits.x) {
-        RMT.conf_ch[0].conf1.mem_rd_rst = 1;
-        RMT.conf_ch[0].conf1.tx_start = 1;
-    }
-
-    if(step_outbits.y) {
-        RMT.conf_ch[1].conf1.mem_rd_rst = 1;
-        RMT.conf_ch[1].conf1.tx_start = 1;
-    }
-
-    if(step_outbits.z) {
-        RMT.conf_ch[2].conf1.mem_rd_rst = 1;
-        RMT.conf_ch[2].conf1.tx_start = 1;
-    }
-/*
-    step_outbits.value ^= settings.steppers.step_invert.mask;
-    gpio_set_level(X_STEP_PIN, step_outbits.x);
-    gpio_set_level(Y_STEP_PIN, step_outbits.y);
-    gpio_set_level(Z_STEP_PIN, step_outbits.z);
-*/
-}
-
 // Set stepper direction output pins
 // NOTE: see note for set_step_outputs()
 inline IRAM_ATTR static void set_dir_outputs (axes_signals_t dir_outbits)
 {
     dir_outbits.value ^= settings.steppers.dir_invert.mask;
-    gpio_set_level(X_DIRECTION_PIN, dir_outbits.x);
-    gpio_set_level(Y_DIRECTION_PIN, dir_outbits.y);
-    gpio_set_level(Z_DIRECTION_PIN, dir_outbits.z);
+    DIGITAL_OUT(X_DIRECTION_PIN, dir_outbits.x);
+    DIGITAL_OUT(Y_DIRECTION_PIN, dir_outbits.y);
+    DIGITAL_OUT(Z_DIRECTION_PIN, dir_outbits.z);
+#ifdef A_AXIS
+    DIGITAL_OUT(A_DIRECTION_PIN, dir_outbits.a);
+#endif
+#ifdef B_AXIS
+    DIGITAL_OUT(B_DIRECTION_PIN, dir_outbits.b);
+#endif
+#ifdef C_AXIS
+    DIGITAL_OUT(C_DIRECTION_PIN, dir_outbits.c);
+#endif
 }
+
 
 // Enable/disable steppers
 static void stepperEnable (axes_signals_t enable)
 {
     enable.mask ^= settings.steppers.enable_invert.mask;
+
 #if TRINAMIC_ENABLE && TRINAMIC_I2C
     axes_signals_t tmc_enable = trinamic_stepper_enable(enable);
  #if !CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
@@ -507,17 +519,109 @@ static void stepperEnable (axes_signals_t enable)
     iopins.stepper_enable_y = enable.y;
     iopins.stepper_enable_z = enable.z;
     ioexpand_out(iopins);
+#elif defined(STEPPERS_DISABLE_PIN)
+    DIGITAL_OUT(STEPPERS_DISABLE_PIN, enable.x);
 #else
-    gpio_set_level(STEPPERS_DISABLE_PIN, enable.x);
+    DIGITAL_OUT(X_DISABLE_PIN, enable.x);
+    DIGITAL_OUT(Y_DISABLE_PIN, enable.y);
+    DIGITAL_OUT(Z_DISABLE_PIN, enable.z);
+#ifdef A_AXIS
+    DIGITAL_OUT(A_DISABLE_PIN, enable.a);
+#endif
+#ifdef B_AXIS
+    DIGITAL_OUT(B_DISABLE_PIN, enable.b);
+#endif
+#ifdef C_AXIS
+    DIGITAL_OUT(C_DISABLE_PIN, enable.c);
+#endif
 #endif
 }
+
+#ifdef USE_I2S_OUT
+
+// Set stepper pulse output pins
+inline IRAM_ATTR static void i2s_set_step_outputs (axes_signals_t step_outbits)
+{
+    step_outbits.value ^= settings.steppers.step_invert.mask;
+    DIGITAL_OUT(X_STEP_PIN, step_outbits.x);
+    DIGITAL_OUT(Y_STEP_PIN, step_outbits.y);
+    DIGITAL_OUT(Z_STEP_PIN, step_outbits.z);
+#ifdef A_AXIS
+    DIGITAL_OUT(A_STEP_PIN, step_outbits.a);
+#endif
+#ifdef B_AXIS
+    DIGITAL_OUT(B_STEP_PIN, step_outbits.b);
+#endif
+#ifdef C_AXIS
+    DIGITAL_OUT(C_STEP_PIN, step_outbits.c);
+#endif
+#ifdef USE_I2S_OUT
+    i2s_out_push_sample(8 / I2S_OUT_USEC_PER_PULSE);
+#endif
+}
+
+IRAM_ATTR static void I2S_stepperGoIdle (bool clear_signals)
+{
+    if(clear_signals) {
+        i2s_set_step_outputs((axes_signals_t){0});
+        set_dir_outputs((axes_signals_t){0});
+        i2s_out_reset();
+    }
+
+    i2s_out_set_passthrough();
+}
+
+IRAM_ATTR static void I2S_stepperCyclesPerTick (uint32_t cycles_per_tick)
+{
+    i2s_out_set_pulse_period(cycles_per_tick);
+}
+
+// Sets stepper direction and pulse pins and starts a step pulse
+IRAM_ATTR static void I2S_stepperPulseStart (stepper_t *stepper)
+{
+    if(stepper->new_block) {
+        stepper->new_block = false;
+        set_dir_outputs(stepper->dir_outbits);
+    }
+
+    i2s_out_push_sample(step_length / I2S_OUT_USEC_PER_PULSE);
+    i2s_set_step_outputs((axes_signals_t){0});
+}
+
+// Starts stepper driver ISR timer and forces a stepper driver interrupt callback
+static void I2S_stepperWakeUp (void)
+{
+    // Enable stepper drivers.
+    stepperEnable((axes_signals_t){AXES_BITMASK});
+    i2s_out_set_stepping();
+}
+
+#else
+
+// Set stepper pulse output pins
+inline IRAM_ATTR static void set_step_outputs (axes_signals_t step_outbits)
+{
+    if(step_outbits.x) {
+        RMT.conf_ch[0].conf1.mem_rd_rst = 1;
+        RMT.conf_ch[0].conf1.tx_start = 1;
+    }
+
+    if(step_outbits.y) {
+        RMT.conf_ch[1].conf1.mem_rd_rst = 1;
+        RMT.conf_ch[1].conf1.tx_start = 1;
+    }
+
+    if(step_outbits.z) {
+        RMT.conf_ch[2].conf1.mem_rd_rst = 1;
+        RMT.conf_ch[2].conf1.tx_start = 1;
+    }
+}
+
+#endif
 
 // Starts stepper driver ISR timer and forces a stepper driver interrupt callback
 static void stepperWakeUp (void)
 {
-#ifdef LASER_PPI
-    laser.next_pulse = 0;
-#endif
     // Enable stepper drivers.
     stepperEnable((axes_signals_t){AXES_BITMASK});
 
@@ -534,8 +638,13 @@ static void stepperWakeUp (void)
 IRAM_ATTR static void stepperGoIdle (bool clear_signals)
 {
     timer_pause(STEP_TIMER_GROUP, STEP_TIMER_INDEX);
+
     if(clear_signals) {
+#ifdef USE_I2S_OUT
+        i2s_set_step_outputs((axes_signals_t){0});
+#else
         set_step_outputs((axes_signals_t){0});
+#endif
         set_dir_outputs((axes_signals_t){0});
     }
 }
@@ -543,10 +652,6 @@ IRAM_ATTR static void stepperGoIdle (bool clear_signals)
 // Sets up stepper driver interrupt timeout
 IRAM_ATTR static void stepperCyclesPerTick (uint32_t cycles_per_tick)
 {
-#ifdef xDEBUGOUT
-    if(cycles_per_tick > 1500000UL)
-        hal.debug_out(true);
-#endif
 // Limit min steps/s to about 2 (hal.f_step_timer @ 20MHz)
 #ifdef ADAPTIVE_MULTI_AXIS_STEP_SMOOTHING
     TIMERG0.hw_timer[STEP_TIMER_INDEX].alarm_low = cycles_per_tick < (1UL << 18) ? cycles_per_tick : (1UL << 18) - 1UL;
@@ -564,16 +669,50 @@ IRAM_ATTR static void stepperPulseStart (stepper_t *stepper)
     }
 
     if(stepper->step_outbits.value) {
+#ifdef USE_I2S_OUT
+        uint64_t step_pulse_start_time = esp_timer_get_time();
+        i2s_set_step_outputs(stepper->step_outbits);
+        while (esp_timer_get_time() - step_pulse_start_time < step_length) {
+            __asm__ __volatile__ ("nop");  // spin here until time to turn off step
+        }
+        i2s_set_step_outputs((axes_signals_t){0});
+#else
         set_step_outputs(stepper->step_outbits);
-#ifdef DEBUGOUT
-        hal.debug_out(false);
 #endif
     }
 }
 
+#ifdef USE_I2S_OUT
+
+static void i2s_set_streaming_mode (bool stream)
+{
+    if(!stream && hal.stepper_wake_up == I2S_stepperWakeUp) {
+        i2s_out_set_passthrough();
+        i2s_out_delay();
+    }
+
+    if(stream) {
+        hal.stepper_wake_up = I2S_stepperWakeUp;
+        hal.stepper_go_idle = I2S_stepperGoIdle;
+        hal.stepper_cycles_per_tick = I2S_stepperCyclesPerTick;
+        hal.stepper_pulse_start = I2S_stepperPulseStart;
+    } else {
+        hal.stepper_wake_up = stepperWakeUp;
+        hal.stepper_go_idle = stepperGoIdle;
+        hal.stepper_cycles_per_tick = stepperCyclesPerTick;
+        hal.stepper_pulse_start = stepperPulseStart;
+    }
+}
+
+#endif
+
 // Enable/disable limit pins interrupt
 static void limitsEnable (bool on, bool homing)
 {
+#ifdef USE_I2S_OUT
+    i2s_set_streaming_mode(!homing);
+#endif
+
     uint32_t i = sizeof(inputpin) / sizeof(state_signal_t);
     do {
         if(inputpin[--i].group == INPUT_GROUP_LIMIT)
@@ -594,6 +733,15 @@ inline IRAM_ATTR static axes_signals_t limitsGetState()
     signals.x = gpio_get_level(X_LIMIT_PIN);
     signals.y = gpio_get_level(Y_LIMIT_PIN);
     signals.z = gpio_get_level(Z_LIMIT_PIN);
+#ifdef A_LIMIT_PIN
+    signals.a = gpio_get_level(A_LIMIT_PIN);
+#endif
+#ifdef B_LIMIT_PIN
+    signals.b = gpio_get_level(B_LIMIT_PIN);
+#endif
+#ifdef C_LIMIT_PIN
+    signals.c = gpio_get_level(C_LIMIT_PIN);
+#endif
 
     if (settings.limits.invert.value)
         signals.value ^= settings.limits.invert.value;
@@ -609,9 +757,15 @@ inline IRAM_ATTR static control_signals_t systemGetState (void)
 
     signals.value = settings.control_invert.value;
 
+#ifdef RESET_PIN
     signals.reset = gpio_get_level(RESET_PIN);
+#endif
+#ifdef FEED_HOLD_PIN
     signals.feed_hold = gpio_get_level(FEED_HOLD_PIN);
+#endif
+#ifdef CYCLE_START_PIN
     signals.cycle_start = gpio_get_level(CYCLE_START_PIN);
+#endif
 #ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
     signals.safety_door_ajar = gpio_get_level(SAFETY_DOOR_PIN);
 #endif
@@ -622,20 +776,43 @@ inline IRAM_ATTR static control_signals_t systemGetState (void)
     return signals;
 }
 
+#ifdef USE_I2S_OUT
+
 // Sets up the probe pin invert mask to
 // appropriately set the pin logic according to setting for normal-high/normal-low operation
 // and the probing cycle modes for toward-workpiece/away-from-workpiece.
-static void probeConfigure(bool is_probe_away)
+static void probeConfigure(bool is_probe_away, bool probing)
 {
-  probe_invert = settings.flags.invert_probe_pin ? 0 : 1;
+    i2s_set_streaming_mode(!probing);
 
-  if(is_probe_away)
-      probe_invert ^= 1;
+    probe_invert = settings.flags.invert_probe_pin ? 0 : 1;
+
+    if(is_probe_away)
+        probe_invert ^= 1;
 #if PROBE_ISR
     gpio_set_intr_type(inputpin[INPUT_PROBE].pin, probe_invert ? GPIO_INTR_NEGEDGE : GPIO_INTR_POSEDGE);
     inputpin[INPUT_PROBE].active = false;
 #endif
 }
+#else
+static void probeConfigure(bool is_probe_away)
+{
+#ifdef USE_I2S_OUT
+    i2s_set_streaming_mode(!probing);
+#endif
+
+    probe_invert = settings.flags.invert_probe_pin ? 0 : 1;
+
+    if(is_probe_away)
+        probe_invert ^= 1;
+#if PROBE_ISR
+    gpio_set_intr_type(inputpin[INPUT_PROBE].pin, probe_invert ? GPIO_INTR_NEGEDGE : GPIO_INTR_POSEDGE);
+    inputpin[INPUT_PROBE].active = false;
+#endif
+}
+#endif
+
+
 // Returns the probe connected and triggered pin states.
 probe_state_t probeGetState (void)
 {
@@ -673,7 +850,7 @@ IRAM_ATTR inline static void spindle_on (void)
     iopins.spindle_on = settings.spindle.invert.on ? Off : On;
     ioexpand_out(iopins);
 #else
-   gpio_set_level(SPINDLE_ENABLE_PIN, settings.spindle.invert.on ? 0 : 1);
+    gpio_set_level(SPINDLE_ENABLE_PIN, settings.spindle.invert.on ? 0 : 1);
 #endif
 }
 
@@ -1011,7 +1188,13 @@ static void settings_changed (settings_t *settings)
          * Step pulse config *
          *********************/
 
+#ifdef USE_I2S_OUT
+        step_length = (uint32_t)(settings->steppers.pulse_microseconds);
+        if(step_length < I2S_OUT_USEC_PER_PULSE)
+            step_length = I2S_OUT_USEC_PER_PULSE;
+#else
         initRMT(settings);
+#endif
 
         /****************************************
          *  Control, limit & probe pins config  *
@@ -1077,6 +1260,24 @@ static void settings_changed (settings_t *settings)
                     pullup = !settings->limits.disable_pullup.z;
                     inputpin[i].invert = limit_fei.z;
                     break;
+#ifdef A_LIMIT_PIN
+                case Input_LimitA:
+                    pullup = !settings->limits.disable_pullup.a;
+                    inputpin[i].invert = limit_fei.a;
+                    break;
+#endif
+#ifdef B_LIMIT_PIN
+                case Input_LimitB:
+                    pullup = !settings->limits.disable_pullup.b;
+                    inputpin[i].invert = limit_fei.b;
+                    break;
+#endif
+#ifdef C_LIMIT_PIN
+                case Input_LimitC:
+                    pullup = !settings->limits.disable_pullup.c;
+                    inputpin[i].invert = limit_fei.c;
+                    break;
+#endif
 #if MPG_MODE_ENABLE
                 case Input_ModeSelect:
                     pullup = true;
@@ -1423,11 +1624,21 @@ bool driver_init (void)
     hal.delay_ms = driver_delay_ms;
     hal.settings_changed = settings_changed;
 
+#ifndef USE_I2S_OUT
     hal.stepper_wake_up = stepperWakeUp;
     hal.stepper_go_idle = stepperGoIdle;
     hal.stepper_enable = stepperEnable;
     hal.stepper_cycles_per_tick = stepperCyclesPerTick;
     hal.stepper_pulse_start = stepperPulseStart;
+#else
+    hal.stepper_wake_up = I2S_stepperWakeUp;
+    hal.stepper_go_idle = I2S_stepperGoIdle;
+    hal.stepper_enable = stepperEnable;
+    hal.stepper_cycles_per_tick = I2S_stepperCyclesPerTick;
+    hal.stepper_pulse_start = I2S_stepperPulseStart;
+    i2s_out_init();
+    i2s_out_set_pulse_callback(hal.stepper_interrupt_callback);
+#endif
 
     hal.limits_enable = limitsEnable;
     hal.limits_get_state = limitsGetState;

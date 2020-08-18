@@ -505,7 +505,7 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 if(!hal.probe_configure_invert_mask)
                     return Status_SettingDisabled;
                 settings.flags.invert_probe_pin = int_value != 0;
-                hal.probe_configure_invert_mask(false);
+                hal.probe_configure_invert_mask(false, false);
                 break;
 
             case Setting_StatusReportMask:
@@ -884,6 +884,6 @@ void settings_init() {
 #endif
         hal.settings_changed(&settings);
         if(hal.probe_configure_invert_mask) // Initialize probe invert mask.
-            hal.probe_configure_invert_mask(false);
+            hal.probe_configure_invert_mask(false, false);
     }
 }

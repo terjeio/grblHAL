@@ -579,7 +579,10 @@ void report_tool_offsets (void)
 {
     hal.stream.write("[TLO:");
 #ifdef TOOL_LENGTH_OFFSET_AXIS
-    hal.stream.write(ftoa(gc_state.tool_length_offset[Z_AXIS], settings.flags.report_inches ? N_DECIMAL_COORDVALUE_INCH : N_DECIMAL_COORDVALUE_INCH));
+    if(settings.flags.report_inches)
+        hal.stream.write(ftoa(gc_state.tool_length_offset[Z_AXIS] * INCH_PER_MM, N_DECIMAL_COORDVALUE_INCH));
+    else
+        hal.stream.write(ftoa(gc_state.tool_length_offset[Z_AXIS], N_DECIMAL_COORDVALUE_INCH));
 #else
     hal.stream.write(get_axis_values(gc_state.tool_length_offset));
 #endif

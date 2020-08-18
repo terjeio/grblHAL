@@ -91,6 +91,7 @@ static const DRAM_ATTR float FZERO = 0.0f;
 // NOTE: Only one board may be enabled!
 #define BOARD_BDRING_V4
 //#define BOARD_BDRING_V3P5
+//#define BOARD_BDRING_I2S6A
 #endif
 
 //
@@ -248,11 +249,13 @@ extern driver_settings_t driver_settings;
 #endif
 
 #ifdef CNC_BOOSTERPACK
-    #include "boosterpack_map.h"
+  #include "boosterpack_map.h"
 #elif defined(BOARD_BDRING_V4)
-    #include "bdring_v4_map.h"
+  #include "bdring_v4_map.h"
 #elif defined(BOARD_BDRING_V3P5)
-    #include "bdring_v3.5_map.h"
+  #include "bdring_v3.5_map.h"
+#elif defined(BOARD_BDRING_I2S6A)
+  #include "bdring_i2s_6_axis_map.h"
 #else // default board - NOTE: NOT FINAL VERSION!
 
 #if SDCARD_ENABLE
