@@ -29,14 +29,14 @@
 #include "src/grbl/hal.h"
 #include "src/grbl/nuts_bolts.h"
 
-//#define UART_DEBUG // For development only - enable only with USB_SERIAL_GRBL enabled and SPINDLE_HUANYANG disabled
+#define UART_DEBUG // For development only - enable only with USB_SERIAL_GRBL enabled and SPINDLE_HUANYANG disabled
 
 // NOTE: Only one board may be enabled! If none is enabled pin mappings from defaults below will be used
-//#define BOARD_SIMPLE_MACHINE // Do not use, to be added!
+#define BOARD_T41U5XBB
 //#define BOARD_CNC_BOOSTERPACK
 
 // Configuration
-// Set value to 1 to enable, 0 to disable
+// Set value to 1 or greater to enable, 0 to disable
 
 #define USB_SERIAL_GRBL    2 // Set to 1 for Arduino class library, 2 for PJRC C library.
 #define USB_SERIAL_WAIT    0 // Wait for USB connection before starting grblHAL.
@@ -60,13 +60,13 @@
 #define KEYPAD_ENABLE      0 // I2C keypad for jogging etc., requires keypad plugin.
 
 #ifndef BOARD_CNC_BOOSTERPACK
-  #define EEPROM_ENABLE    0 // I2C EEPROM support. Set to 1 for 24LC16(2K), 2 for larger sizes.
+  #define EEPROM_ENABLE    1 // I2C EEPROM support. Set to 1 for 24LC16(2K), 2 for larger sizes.
                              // Requires eeprom plugin.
   #define TRINAMIC_ENABLE  0 // Do not enable!
   #define TRINAMIC_I2C     0 // Do not enable!
   #define TRINAMIC_DEV     0 // Do not enable!
 #else
-  #define EEPROM_ENABLE    1 // I2C EEPROM support. Set to 1 for 24LC16(2K), 2 for larger sizes.
+  #define EEPROM_ENABLE    0 // I2C EEPROM support. Set to 1 for 24LC16(2K), 2 for larger sizes.
                              // Requires eeprom plugin. The CNC BoostePack has an on board EEPROM.
   #define TRINAMIC_ENABLE  0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
   #define TRINAMIC_I2C     0 // Trinamic I2C - SPI bridge interface.
@@ -134,8 +134,8 @@ extern driver_settings_t driver_settings;
 
 #ifdef BOARD_CNC_BOOSTERPACK
   #include "cnc_boosterpack_map.h"
-#elif defined(BOARD_SIMPLE_MACHINE)
-  #include "simple_machine_map.h"
+#elif defined(BOARD_T41U5XBB)
+  #include "T41U5XBB_map.h"
 #else // default board
 
 // Define step pulse output pins.

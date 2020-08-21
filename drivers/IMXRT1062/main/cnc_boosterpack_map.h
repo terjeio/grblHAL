@@ -34,8 +34,8 @@
 #define Z_DIRECTION_PIN (13u)
 
 // Define stepper driver enable/disable output pin(s).
-#define STEPPERS_ENABLE_PIN   (24u)
-#define STEPPERS_ENABLE_Z_PIN (8u)
+#define STEPPERS_ENABLE_PIN (24u)
+#define Z_ENABLE_PIN        (8u)
 
 // Define homing/hard limit switch input pins.
 #define X_LIMIT_PIN     (10u)
