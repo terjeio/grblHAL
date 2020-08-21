@@ -66,7 +66,7 @@
   #define TRINAMIC_I2C     0 // Do not enable!
   #define TRINAMIC_DEV     0 // Do not enable!
 #else
-  #define EEPROM_ENABLE    0 // I2C EEPROM support. Set to 1 for 24LC16(2K), 2 for larger sizes.
+  #define EEPROM_ENABLE    1 // I2C EEPROM support. Set to 1 for 24LC16(2K), 2 for larger sizes.
                              // Requires eeprom plugin. The CNC BoostePack has an on board EEPROM.
   #define TRINAMIC_ENABLE  0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
   #define TRINAMIC_I2C     0 // Trinamic I2C - SPI bridge interface.
@@ -169,9 +169,9 @@ extern driver_settings_t driver_settings;
 #endif
 
 // Define spindle enable and spindle direction output pins.
-#define SPINDLE_ENABLE_PIN      (13u)
+#define SPINDLE_ENABLE_PIN      (12u)
 #define SPINDLE_DIRECTION_PIN   (11u)
-#define SPINDLEPWMPIN           (12u) // NOTE: only pin 12 or pin 13 can be assigned!
+#define SPINDLEPWMPIN           (13u) // NOTE: only pin 12 or pin 13 can be assigned!
 
 // Define flood and mist coolant enable output pins.
 #define COOLANT_FLOOD_PIN   (19u)

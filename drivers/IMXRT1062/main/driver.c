@@ -527,8 +527,17 @@ inline static __attribute__((always_inline)) void set_step_outputs (axes_signals
 #ifdef X2_STEP_PIN
     DIGITAL_OUT(stepX2, step_outbits_2.x);
 #endif
+
     DIGITAL_OUT(stepY, step_outbits_1.y);
+#ifdef Y2_STEP_PIN
+    DIGITAL_OUT(stepY2, step_outbits_2.y);
+#endif
+
     DIGITAL_OUT(stepZ, step_outbits_1.z);
+#ifdef Z2_STEP_PIN
+    DIGITAL_OUT(stepZ2, step_outbits_2.z);
+#endif
+
 #ifdef A_AXIS
     DIGITAL_OUT(stepA, step_outbits_1.a);
 #endif
@@ -545,8 +554,17 @@ inline static __attribute__((always_inline)) void set_step_outputs (axes_signals
 #ifdef X2_STEP_PIN
     DIGITAL_OUT(stepX2, step_outbits.x);
 #endif
+
     DIGITAL_OUT(stepY, step_outbits.y);
+#ifdef Y2_STEP_PIN
+    DIGITAL_OUT(stepY2, step_outbits.y);
+#endif
+
     DIGITAL_OUT(stepZ, step_outbits.z);
+#ifdef Z2_STEP_PIN
+    DIGITAL_OUT(stepZ2, step_outbits.z);
+#endif
+
 #ifdef A_AXIS
     DIGITAL_OUT(stepA, step_outbits.a);
 #endif

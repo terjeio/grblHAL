@@ -1,5 +1,5 @@
 /*
-  T451U5XBB_map.h - driver code for IMXRT1062 processor (on Teensy 4.0 board)
+  T41U5XBB_map.h - driver code for IMXRT1062 processor (on Teensy 4.0 board)
 
   Part of GrblHAL
 
@@ -21,7 +21,7 @@
 
 #include "driver.h"
 
-#define BOARD_NAME "T451U5XBB"
+#define BOARD_NAME "T41U5XBB"
 
 // Default pin assignments allow only one axis to be ganged or auto squared.
 // B axis pin numbers are used for the ganged/auto squared axis.
@@ -86,15 +86,13 @@
 #define B_STEP_PIN      (26u)
 #define B_DIRECTION_PIN (27u)
 #define B_ENABLE_PIN    (37u)
-#if X_AUTO_SQUARE
-  #define B_LIMIT_PIN   (28u)
-#endif
+#define B_LIMIT_PIN     (28u)
 #endif
 
 // Define spindle enable and spindle direction output pins.
-#define SPINDLE_ENABLE_PIN      (13u)
+#define SPINDLE_ENABLE_PIN      (12u)
 #define SPINDLE_DIRECTION_PIN   (11u)
-#define SPINDLEPWMPIN           (12u) // NOTE: only pin 12 or pin 13 can be assigned!
+#define SPINDLEPWMPIN           (13u) // NOTE: only pin 12 or pin 13 can be assigned!
 
 // Define flood and mist coolant enable output pins.
 #define COOLANT_FLOOD_PIN   (19u)
@@ -116,8 +114,8 @@
 #endif
 
 #if QEI_ENABLE
-#define QEI_A_PIN      (0)
-#define QEI_B_PIN      (3)
+#define QEI_A_PIN      (30)
+#define QEI_B_PIN      (34)
 // #define QEI_INDEX_PIN  GPIO2_PIN
-#define QEI_SELECT_PIN (1)
+#define QEI_SELECT_PIN (35u)
 #endif
