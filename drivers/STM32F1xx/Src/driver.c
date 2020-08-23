@@ -355,7 +355,7 @@ static control_signals_t systemGetState (void)
 #else
     signals.value = (uint8_t)((CONTROL_PORT->IDR & CONTROL_MASK) >> CONTROL_INMODE);
  #ifndef ENABLE_SAFETY_DOOR_INPUT_PIN
- 	signals.safety_door_ajar = Off;
+ 	signals.safety_door_ajar = settings.control_invert.safety_door_ajar;
  #endif
 #endif
 

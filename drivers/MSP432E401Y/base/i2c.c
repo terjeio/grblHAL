@@ -23,6 +23,8 @@
 
 #include "driver.h"
 
+#ifdef USE_I2C
+
 #include "i2c.h"
 
 typedef enum {
@@ -272,3 +274,6 @@ static void I2C_interrupt_handler (void)
             break;
     }
 }
+
+#endif
+

@@ -20,6 +20,7 @@
 */
 
 #include <math.h>
+#include <stdlib.h>
 
 #include "encoder.h"
 
@@ -27,8 +28,10 @@
 
 #ifdef ARDUINO
 #include "../grbl/grbl.h"
+#include "../grbl/report.h"
 #else
 #include "grbl/grbl.h"
+#include "grbl/report.h"
 #endif
 
 #include "../../uart.h"

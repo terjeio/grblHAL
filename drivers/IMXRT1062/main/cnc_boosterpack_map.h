@@ -19,9 +19,12 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "driver.h"
-
 #define BOARD_NAME "CNC BoosterPack"
+
+#ifdef EEPROM_ENABLE
+#undef EEPROM_ENABLE
+#endif
+#define EEPROM_ENABLE   1 // CNC BoosterPack has on-board EEPROM
 
 // Define step pulse output pins.
 #define X_STEP_PIN      (32u)

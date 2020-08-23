@@ -5,7 +5,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2019 Terje Io
+  Copyright (c) 2019-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -161,7 +161,9 @@ void i2c_eeprom_transfer (i2c_eeprom_trans_t *eeprom, bool read)
         memcpy(&txbuf[1], eeprom->data, eeprom->count);
         txbuf[0] = eeprom->word_addr;
         I2C_Send(eeprom->address, txbuf, eeprom->count, true);
+#if !EEPROM_IS_FRAM
         hal.delay_ms(5, NULL);
+#endif
     }
 }
 

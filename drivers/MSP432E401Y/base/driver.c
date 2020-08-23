@@ -47,7 +47,7 @@ static void keyclick_int_handler (void);
 static void trinamic_diag1_isr (void);
 #endif
 
-#if KEYPAD_ENABLE || TRINAMIC_I2C
+#if USE_I2C
 #include "i2c.h"
 #endif
 
@@ -167,7 +167,7 @@ const io_stream_t serial_stream = {
 
 typedef struct {
     volatile uint32_t ms_cfg;
-    volatile uint32_t delay.ms;
+    volatile uint32_t delay_ms;
     int32_t pwm_current;
     int32_t pwm_target;
     int32_t pwm_step;
@@ -923,12 +923,12 @@ static void spindleSetState (spindle_state_t state, float rpm)
 // Sets spindle speed
 #if PWM_RAMPED
 
-static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
+static void spindle_set_speed (uint_fast16_t pwm_value)
 {
     if (pwm_value == spindle_pwm.off_value) {
         pwm_ramp.pwm_target = 0;
         pwm_ramp.pwm_step = -SPINDLE_RAMP_STEP_INCR;
-        pwm_ramp.delay.ms = 0;
+        pwm_ramp.delay_ms = 0;
         pwm_ramp.ms_cfg = SPINDLE_RAMP_STEP_TIME;
         SysTickEnable();
      } else {
@@ -937,7 +937,7 @@ static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
             spindle_on();
             pwmEnabled = true;
             pwm_ramp.pwm_current = spindle_pwm.min_value;
-            pwm_ramp.delay.ms = 0;
+            pwm_ramp.delay_ms = 0;
             TimerMatchSet(SPINDLE_PWM_TIMER_BASE, TIMER_B, spindle_pwm.period - pwm_ramp.pwm_current + 15);
             TimerLoadSet(SPINDLE_PWM_TIMER_BASE, TIMER_B, spindle_pwm.period);
             TimerEnable(SPINDLE_PWM_TIMER_BASE, TIMER_B); // Ensure PWM output is enabled.
@@ -949,8 +949,6 @@ static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
         TimerControlLevel(SPINDLE_PWM_TIMER_BASE, TIMER_B, false);
         SysTickEnable();
     }
-
-    return pwm_value;
 }
 
 #else
@@ -1731,7 +1729,7 @@ bool driver_init (void)
 
     serialInit();
 
-#if KEYPAD_ENABLE || TRINAMIC_I2C
+#if USE_I2C
     I2CInit();
 #endif
 
@@ -1748,12 +1746,10 @@ bool driver_init (void)
     hal.info = "TM4C1294NCPDT";
   #endif
 #endif
-#if CNC_BOOSTERPACK2
-    hal.board = "CNC BoosterPack x2";
-#else
-    hal.board = "CNC BoosterPack";
+#ifdef BOARD_NAME
+    hal.board = BOARD_NAME;
 #endif
-    hal.driver_version = "200818";
+    hal.driver_version = "200822";
     hal.driver_setup = driver_setup;
 #if !USE_32BIT_TIMER
     hal.f_step_timer = hal.f_step_timer / (STEPPER_DRIVER_PRESCALER + 1);
@@ -2211,9 +2207,9 @@ static void control_isr_sd (void)
 static void systick_isr (void)
 {
     if(pwm_ramp.ms_cfg) {
-        if(++pwm_ramp.delay.ms == pwm_ramp.ms_cfg) {
+        if(++pwm_ramp.delay_ms == pwm_ramp.ms_cfg) {
 
-            pwm_ramp.delay.ms = 0;
+            pwm_ramp.delay_ms = 0;
             pwm_ramp.pwm_current += pwm_ramp.pwm_step;
 
             if(pwm_ramp.pwm_step < 0) { // decrease speed

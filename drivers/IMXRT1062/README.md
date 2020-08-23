@@ -1,8 +1,12 @@
-## IMXRT1062 Driver
+## iMXRT1062 Driver
 
-A GrblHAL driver for the NXP IMXRT1062 processor on a [Teensy 4.x board](https://www.pjrc.com/store/teensy40.html).
+A GrblHAL driver for the NXP iMXRT1062 processor on a [Teensy 4.x board](https://www.pjrc.com/store/teensy40.html).
 
 This driver compiles and uploads from the Arduino IDE and is partially dependent on the Arduino framework. [Teensyduino](https://www.pjrc.com/teensy/td_download.html) is required and must be added to the Arduino IDE.
+
+See the Wiki-page for [compiling grblHAL](https://github.com/terjeio/grblHAL/wiki/Compiling-GrblHAL) for instructions for how to import the project, configure the driver and compile.
+
+Available driver options can be found [here](main/my_machine.h).
 
 ---
 
@@ -43,4 +47,4 @@ CNC breakout boards:
 [GRBL Header for a Teensy 4](https://github.com/phil-barrett/grbl-teensy-4) by Phil Barrett.
 
 ---
-2020-08-11
+2020-08-23

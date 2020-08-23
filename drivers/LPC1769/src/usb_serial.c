@@ -24,9 +24,12 @@
 #ifndef __usb_serial_h__
 #define __usb_serial_h__
 
+#include "driver.h"
+
+#if USB_ENABLE
+
 #include <string.h>
 
-#include "driver.h"
 #include "chip.h"
 #include "app_usbd_cfg.h"
 #include "cdc_vcom.h"
@@ -105,7 +108,6 @@ USB_INTERFACE_DESCRIPTOR *find_IntfDesc(const uint8_t *pDesc, uint32_t intfClass
     return pIntfDesc;
 }
 
-#if USB_ENABLE
 
 #include "grbl/grbl.h"
 

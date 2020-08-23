@@ -2,6 +2,10 @@
 
 A GrblHAL driver for the Texas Instruments [MSP432E401Y LaunchPad](http://www.ti.com/tool/MSP-EXP432E401Y#).
 
+See the Wiki-page for [compiling grblHAL](https://github.com/terjeio/grblHAL/wiki/Compiling-GrblHAL) for instructions for how to import the project, configure the driver and compile.
+
+Available driver options can be found [here](base/my_machine.h).
+
 Default pin assignments matches the [CNC BoosterPack](https://github.com/terjeio/CNC_Boosterpack).
 
 To enable IP streaming use setting:
@@ -41,7 +45,5 @@ The empty project is of no interest - it can be deleted, we need to build the _f
 
 Prepare the driver project in the MSP432E401Y folder by copying the grbl source code from the GRBL folder in the root of the download to GRBL folder inside the MSP432E401Y folder.
 
-
-
 ---
-2018-12-09
+2020-08-23

@@ -41,6 +41,18 @@
 
 #define DEBOUNCE_QUEUE 8 // Must be a power of 2
 
+#if X_AUTO_SQUARE || Y_AUTO_SQUARE || Z_AUTO_SQUARE
+#define SQUARING_ENABLED
+#endif
+
+#if defined(X_LIMIT_PIN_MAX) || defined(Y_LIMIT_PIN_MAX) || defined(Z_LIMIT_PIN_MAX) || defined(A_LIMIT_PIN_MAX) || defined(B_LIMIT_PIN_MAX) || defined(C_LIMIT_PIN_MAX)
+#define DUAL_LIMIT_SWITCHES
+#else
+  #ifdef SQUARING_ENABLED
+    #error "Squaring requires at least one axis with dual switch inputs!"
+  #endif
+#endif
+
 #define INPUT_GROUP_CONTROL 1
 #define INPUT_GROUP_PROBE   2
 #define INPUT_GROUP_LIMIT   4
@@ -51,14 +63,6 @@
 #endif
 #ifndef INPUT
 #define INPUT false
-#endif
-
-#if defined(X_LIMIT_PIN_MAX) || defined(Y_LIMIT_PIN_MAX) || defined(Z_LIMIT_PIN_MAX) || defined(A_LIMIT_PIN_MAX) || defined(B_LIMIT_PIN_MAX) || defined(C_LIMIT_PIN_MAX)
-#define DUAL_LIMIT_SWITCHES
-#else
-  #ifdef SQUARING_ENABLED 
-    #error "Squaring requires at least one axis with dual switch inputs!"
-  #endif
 #endif
 
 typedef enum {
@@ -219,13 +223,15 @@ static void driver_delay_ms (uint32_t ms, void (*callback)(void))
 }
 
 // Set stepper pulse output pins
+
 #ifdef SQUARING_ENABLED
+
 inline static __attribute__((always_inline)) void set_step_outputs (axes_signals_t step_outbits_1)
 {
     axes_signals_t step_outbits_2;
 
-    step_outbits_2.mask = (step_outbits_1.mask & motors_2.mask) ^= settings.steppers.step_invert.mask;
-    step_outbits_1.mask = (step_outbits_1.mask & motors_1.mask) ^= settings.steppers.step_invert.mask;
+    step_outbits_2.mask = (step_outbits_1.mask & motors_2.mask) ^ settings.steppers.step_invert.mask;
+    step_outbits_1.mask = (step_outbits_1.mask & motors_1.mask) ^ settings.steppers.step_invert.mask;
 
     BITBAND_PERI(X_STEP_PORT->PIO_ODSR, X_STEP_PIN) = step_outbits_1.x;
   #ifdef X2_STEP_PIN
@@ -252,7 +258,9 @@ inline static __attribute__((always_inline)) void set_step_outputs (axes_signals
     BITBAND_PERI(C_STEP_PORT->PIO_ODSR, C_STEP_PIN) = step_outbits_1.c;
   #endif
 }
+
 #else // SQUARING DISABLED
+
 inline static void __attribute__((always_inline)) set_step_outputs (axes_signals_t step_outbits)
 {
     step_outbits.value ^= settings.steppers.step_invert.mask;
@@ -282,6 +290,7 @@ inline static void __attribute__((always_inline)) set_step_outputs (axes_signals
     BITBAND_PERI(C_STEP_PORT->PIO_ODSR, C_STEP_PIN) = step_outbits.c;
   #endif
 }
+
 #endif
 
 // Set stepper direction output pins
@@ -483,25 +492,28 @@ inline static axes_signals_t limitsGetState()
 // Single limit switch input per axis version.
 inline static axes_signals_t limitsGetState()
 {
-    axes_signals_t signals_min = {settings.limits.invert.mask}, signals_max = {settings.limits.invert.mask};
+    axes_signals_t signals = {settings.limits.invert.mask};
     
-    signals_min.x = BITBAND_PERI(X_LIMIT_PORT->PIO_PDSR, X_LIMIT_PIN);
-    signals_min.y = BITBAND_PERI(Y_LIMIT_PORT->PIO_PDSR, Y_LIMIT_PIN);
-    signals_min.z = BITBAND_PERI(Z_LIMIT_PORT->PIO_PDSR, Z_LIMIT_PIN);
+    signals.x = BITBAND_PERI(X_LIMIT_PORT->PIO_PDSR, X_LIMIT_PIN);
+
+    signals.y = BITBAND_PERI(Y_LIMIT_PORT->PIO_PDSR, Y_LIMIT_PIN);
+
+    signals.z = BITBAND_PERI(Z_LIMIT_PORT->PIO_PDSR, Z_LIMIT_PIN);
+
   #ifdef A_LIMIT_PIN
-    signals_min.a = BITBAND_PERI(A_LIMIT_PORT->PIO_PDSR, A_LIMIT_PIN);
+    signals.a = BITBAND_PERI(A_LIMIT_PORT->PIO_PDSR, A_LIMIT_PIN);
   #endif
   #ifdef B_LIMIT_PIN
-    signals_min.b = BITBAND_PERI(B_LIMIT_PORT->PIO_PDSR, B_LIMIT_PIN);
+    signals.b = BITBAND_PERI(B_LIMIT_PORT->PIO_PDSR, B_LIMIT_PIN);
   #endif
   #ifdef C_LIMIT_PIN
-    signals_min.c = BITBAND_PERI(C_LIMIT_PORT->PIO_PDSR, C_LIMIT_PIN);
+    signals.c = BITBAND_PERI(C_LIMIT_PORT->PIO_PDSR, C_LIMIT_PIN);
   #endif
 
     if (settings.limits.invert.mask)
-        signals_min.value ^= settings.limits.invert.mask;
+        signals.value ^= settings.limits.invert.mask;
 
-    return signals_min;
+    return signals;
 }
 
 #endif
@@ -511,16 +523,8 @@ inline static axes_signals_t limitsGetState()
 // Enable/disable motors for auto squaring of ganged axes
 static void StepperDisableMotors (axes_signals_t axes, squaring_mode_t mode)
 {
-    motors_1.mask = (mode == SquaringMode_A || mode == SquaringMode_Both ? axes.mask : 0);
-    motors_2.mask = (mode == SquaringMode_B || mode == SquaringMode_Both ? axes.mask : 0);
-/*
-    if(hal.driver_cap.axis_ganged_x) {
-        BITBAND_PERI(X_DISABLE_PORT->PIO_ODSR, X_DISABLE_PIN) = motors_1.x ^ settings.steppers.enable_invert.mask.x;
-      #ifdef A_DISABLE_PIN
-        BITBAND_PERI(A_DISABLE_PORT->PIO_ODSR, A_DISABLE_PIN) = motors_2.x ^ settings.steppers.enable_invert.mask.x;
-      #endif
-    }
-*/
+    motors_1.mask = (mode == SquaringMode_A || mode == SquaringMode_Both ? axes.mask : 0) ^ AXES_BITMASK;
+    motors_2.mask = (mode == SquaringMode_B || mode == SquaringMode_Both ? axes.mask : 0) ^ AXES_BITMASK;
 }
 
 // Returns limit state as an axes_signals_t variable.
@@ -898,6 +902,10 @@ void settings_changed (settings_t *settings)
       #endif
 
         stepperEnable(settings->steppers.deenergize);
+
+#ifdef SQUARING_ENABLED
+        hal.stepper_disable_motors((axes_signals_t){0}, SquaringMode_Both);
+#endif
 
       #ifndef VFD_SPINDLE
 
@@ -1519,7 +1527,7 @@ bool driver_init (void)
     NVIC_EnableIRQ(SysTick_IRQn);
 
     hal.info = "SAM3X8E";
-	hal.driver_version = "200818";
+	hal.driver_version = "200821";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1665,9 +1673,26 @@ bool driver_init (void)
   #endif
   #ifdef Z2_STEP_PIN
     hal.driver_cap.axis_ganged_z = On;
+//    hal.axis_ganged.z = On;
   #endif
 #endif
-
+/*
+#ifdef X_LIMIT_PIN_MAX
+#if !X_AUTO_SQUARE
+  hal.axis_dual_limit_switches.x = On;
+#endif
+#endif
+#ifdef Y_LIMIT_PIN_MAX
+#if !Y_AUTO_SQUARE
+  hal.axis_dual_limit_switches.y = On;
+#endif
+#endif
+#ifdef Z_LIMIT_PIN_MAX
+#if !Z_AUTO_SQUARE
+  hal.axis_dual_limit_switches.z = On;
+#endif
+#endif
+*/
 #if SDCARD_ENABLE
     hal.driver_cap.sd_card = On;
 #endif

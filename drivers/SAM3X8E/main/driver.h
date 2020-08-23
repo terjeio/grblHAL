@@ -19,18 +19,19 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+//
+// NOTE: do NOT change configuration here - edit my_machine.h instead!
+//
+
 #ifndef __DRIVER_H__
 #define __DRIVER_H__
 
 #include "Arduino.h"
 #include "src/grbl/hal.h"
 
-// NOTE: Only one board may be enabled!
-//#define BOARD_TINYG2_DUE
-#define BOARD_RAMPS_16
-//#define BOARD_MEGA256
-//#define BOARD_PROTONEER
-//#define BOARD_CMCGRATH
+#ifndef OVERRIDE_MY_MACHINE
+#include "my_machine.h"
+#endif
 
 /******************************************************************************
 * Definitions for bit band access and dynamic IRQ registration                *
@@ -53,24 +54,67 @@ void IRQUnRegister(int32_t IRQnum);
 
 /*****************************************************************************/
 
-// Configuration
-// Set value to 1 to enable, 0 to disable
+#ifndef USB_SERIAL
+#define USB_SERIAL          0 // for UART comms
+#endif
+#ifndef USB_SERIAL_WAIT
+#define USB_SERIAL_WAIT     0
+#endif
+#ifndef SPINDLE_HUANYANG
+#define SPINDLE_HUANYANG    0
+#endif
+#ifndef SDCARD_ENABLE
+#define SDCARD_ENABLE       0
+#endif
+#ifndef KEYPAD_ENABLE
+#define KEYPAD_ENABLE       0
+#endif
+#ifndef EEPROM_ENABLE
+#define EEPROM_ENABLE       0
+#endif
+#ifndef EEPROM_IS_FRAM
+#define EEPROM_IS_FRAM      0
+#endif
+#ifndef TRINAMIC_ENABLE
+#define TRINAMIC_ENABLE     0
+#endif
+#ifndef TRINAMIC_I2C
+#define TRINAMIC_I2C        0
+#endif
+#ifndef TRINAMIC_DEV
+#define TRINAMIC_DEV        0
+#endif
 
-#define USB_SERIAL       0
-#define USB_SERIAL_WAIT  0 // Wait for connection before starting grblHAL 
-#define SPINDLE_HUANYANG 0 // Set to 1 or 2 for Huanyang VFD spindle
-#define EEPROM_ENABLE    0 // I2C EEPROM (24LC16) support (using TWI0).
-// NOTE: none of the following options are ready. DO NOT ENABLE!
-#define SDCARD_ENABLE    0
-#define KEYPAD_ENABLE    0 // I2C keypad for jogging etc.
-#define TRINAMIC_ENABLE  0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
-#define TRINAMIC_I2C     0 // Trinamic I2C - SPI bridge interface.
-#define TRINAMIC_DEV     0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
+// timer definitions
+
+#define STEPPER_TIMER       (TC0->TC_CHANNEL[0])
+#define STEPPER_TIMER_IRQn  TC0_IRQn
+#define STEP_TIMER          (TC0->TC_CHANNEL[1])
+#define STEP_TIMER_IRQn     TC1_IRQn
+
+#define DEBOUNCE_TIMER      (TC1->TC_CHANNEL[0])
+#define DEBOUNCE_TIMER_IRQn TC3_IRQn
+
+#ifdef BOARD_TINYG2_DUE
+    #include "tinyg2_due_map.h"
+#elif defined(BOARD_RAMPS_16)
+    #include "ramps_1.6_map.h"
+#elif defined(BOARD_CMCGRATH)
+    #include "cmcgrath_rev3_map.h"
+#elif defined(BOARD_MEGA256)
+    #include "mega_2560_map.h"
+#elif defined(BOARD_PROTONEER)
+    #include "protoneer_3.xx_map.h"
+#else
+    #include "generic_map.h"
+#endif
 
 // Adjust STEP_PULSE_LATENCY to get accurate step pulse length when required, e.g if using high step rates.
 // The default value is calibrated for 10 microseconds length.
 // NOTE: step output mode, number of axes and compiler optimization settings may all affect this value.
+#ifndef STEP_PULSE_LATENCY
 #define STEP_PULSE_LATENCY 1.0f // microseconds
+#endif
 
 // End configuration
 
@@ -99,127 +143,6 @@ extern driver_settings_t driver_settings;
 
 #endif
 
-// timer definitions
-
-#define STEPPER_TIMER       (TC0->TC_CHANNEL[0])
-#define STEPPER_TIMER_IRQn  TC0_IRQn
-#define STEP_TIMER          (TC0->TC_CHANNEL[1])
-#define STEP_TIMER_IRQn     TC1_IRQn
-
-#define DEBOUNCE_TIMER      (TC1->TC_CHANNEL[0])
-#define DEBOUNCE_TIMER_IRQn TC3_IRQn
-
-#ifdef BOARD_TINYG2_DUE
-    #include "tinyg2_due_map.h"
-#elif defined(BOARD_RAMPS_16)
-    #include "ramps_1.6_map.h"
-#elif defined(BOARD_CMCGRATH)
-    #include "cmcgrath_rev3_map.h"
-#else // default board - NOTE: NOT FINAL VERSION!
-
-// Define step pulse output pins.
-#define X_STEP_PORT         PIOA
-#define X_STEP_PIN          16
-#define X_STEP_BIT          (1<<X_STEP_PIN)
-#define Y_STEP_PORT         PIOA
-#define Y_STEP_PIN          3
-#define Y_STEP_BIT          (1<<Y_STEP_PIN)
-#define Z_STEP_PORT         PIOC
-#define Z_STEP_PIN          17
-#define Z_STEP_BIT          (1<<Z_STEP_PIN)
-
-// Define step direction output pins.
-#define X_DIRECTION_PORT    PIOA
-#define X_DIRECTION_PIN     24
-#define X_DIRECTION_BIT     (1<<X_DIRECTION_PIN)
-#define Y_DIRECTION_PORT    PIOA
-#define Y_DIRECTION_PIN     2
-#define Y_DIRECTION_BIT     (1<<Y_DIRECTION_PIN)
-#define Z_DIRECTION_PORT    PIOC
-#define Z_DIRECTION_PIN     15
-#define Z_DIRECTION_BIT     (1<<Z_STEP_PIN)
-
-// Define stepper driver enable/disable output pin(s).
-#define X_DISABLE_PORT      PIOC
-#define X_DISABLE_PIN       6
-#define X_DISABLE_BIT       (1<<X_DISABLE_PIN)
-#define Y_DISABLE_PORT      PIOA
-#define Y_DISABLE_PIN       23
-#define Y_DISABLE_BIT       (1<<Y_DISABLE_PIN)
-#define Z_DISABLE_PORT      PIOB
-#define Z_DISABLE_PIN       17
-#define Z_DISABLE_BIT       (1<<Z_DISABLE_PIN)
-
-// Define homing/hard limit switch input pins.
-#define X_LIMIT_PORT        PIOB // C28
-#define X_LIMIT_PIN         25
-#define X_LIMIT_BIT         (1<<X_LIMIT_PIN)
-#define Y_LIMIT_PORT        PIOD // D14
-#define Y_LIMIT_PIN         25
-#define Y_LIMIT_BIT         (1<<Y_LIMIT_PIN)
-#define Z_LIMIT_PORT        PIOC // A11
-#define Z_LIMIT_PIN         24
-#define Z_LIMIT_BIT         (1<<Z_LIMIT_PIN)
-
-// Define spindle enable and spindle direction output pins.
-#define SPINDLE_ENABLE_PORT     PIOA
-#define SPINDLE_ENABLE_PIN      15
-#define SPINDLE_ENABLE_BIT      (1<<SPINDLE_ENABLE_PIN)
-#define SPINDLE_DIRECTION_PORT  PIOD
-#define SPINDLE_DIRECTION_PIN   3
-#define SPINDLE_DIRECTION_BIT   (1<<SPINDLE_DIRECTION_PIN)
-
-// Start of PWM & Stepper Enabled Spindle
-#define SPINDLE_PWM_TIMER   (TC2->TC_CHANNEL[0])
-#define SPINDLE_PWM_PORT    PIOC
-#define SPINDLE_PWM_PIN     25  // TIOA6
-#define SPINDLE_PWM_BIT     (1<<SPINDLE_PWM_PIN)
-
-// Define flood and mist coolant enable output pins.
-#define COOLANT_FLOOD_PORT  PIOC
-#define COOLANT_FLOOD_PIN   5
-#define COOLANT_FLOOD_BIT   (1<<COOLANT_FLOOD_PIN)
-#define COOLANT_MIST_PORT   PIOC
-#define COOLANT_MIST_PIN    3
-#define COOLANT_MIST_BIT    (1<<COOLANT_MIST_PIN)
-
-// Define user-control CONTROLs (cycle start, reset, feed hold) input pins.
-#define RESET_PORT          PIOC
-#define RESET_PIN           12
-#define RESET_BIT           (1<<RESET_PIN)
-
-#define FEED_HOLD_PORT      PIOC
-#define FEED_HOLD_PIN       14
-#define FEED_HOLD_BIT       (1<<FEED_HOLD_PIN)
-
-#define CYCLE_START_PORT    PIOC
-#define CYCLE_START_PIN     16
-#define CYCLE_START_BIT     (1<<CYCLE_START_PIN)
-
-#define SAFETY_DOOR_PORT    PIOC
-#define SAFETY_DOOR_PIN     18
-#define SAFETY_DOOR_BIT     (1<<SAFETY_DOOR_PIN)
-
-// Define probe switch input pin.
-#define PROBE_PORT          PIOC
-#define PROBE_PIN           13
-#define PROBE_BIT           (1<<PROBE_PIN)
-
-#if KEYPAD_ENABLE
-#define KEYPAD_PORT         PIOA
-#define KEYPAD_PIN          5
-#define KEYPAD_BIT          (1<<KEYPAD_PIN)
-#endif
-
-#if SDCARD_ENABLE
-// Define SD card detect pin.
-#define SD_CD_PORT          PIOA
-#define SD_CD_PIN           30
-#define SD_CD_BIT           (1<<SD_CD_PIN)
-#endif
-
-#endif // default board
-
 #if EEPROM_ENABLE || KEYPAD_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
 
 // Define I2C port/pins
@@ -237,6 +160,10 @@ extern driver_settings_t driver_settings;
 #endif
 
 // Simple sanity check...
+
+#if KEYPAD_ENABLE && !defined(KEYPAD_PIN)
+#error Keypad plugin is not available for this driver
+#endif
 
 #if N_AXIS > 3 && !defined(A_STEP_PIN)
 #error A motor must be defined for 4 or more axes

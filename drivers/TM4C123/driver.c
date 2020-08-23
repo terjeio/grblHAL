@@ -69,7 +69,7 @@ driver_settings_t driver_settings;
 
 typedef struct {
     volatile uint32_t ms_cfg;
-    volatile uint32_t delay.ms;
+    volatile uint32_t delay_ms;
     int32_t pwm_current;
     int32_t pwm_target;
     int32_t pwm_step;
@@ -536,12 +536,12 @@ static void spindleSetState (spindle_state_t state, float rpm)
 // Sets spindle speed
 #if PWM_RAMPED
 
-static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
+static void spindle_set_speed (uint_fast16_t pwm_value)
 {
     if (pwm_value == spindle_pwm.off_value) {
         pwm_ramp.pwm_target = 0;
         pwm_ramp.pwm_step = -SPINDLE_RAMP_STEP_INCR;
-        pwm_ramp.delay.ms = 0;
+        pwm_ramp.delay_ms = 0;
         pwm_ramp.ms_cfg = SPINDLE_RAMP_STEP_TIME;
         SysTickEnable();
      } else {
@@ -550,7 +550,7 @@ static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
             spindle_on();
             pwmEnabled = true;
             pwm_ramp.pwm_current = spindle_pwm.min_value;
-            pwm_ramp.delay.ms = 0;
+            pwm_ramp.delay_ms = 0;
             TimerMatchSet(SPINDLE_PWM_TIMER_BASE, TIMER_A, spindle_pwm.period - pwm_ramp.pwm_current + 15);
             TimerLoadSet(SPINDLE_PWM_TIMER_BASE, TIMER_A, spindle_pwm.period);
             TimerEnable(SPINDLE_PWM_TIMER_BASE, TIMER_A); // Ensure PWM output is enabled.
@@ -562,8 +562,6 @@ static uint_fast16_t spindle_set_speed (uint_fast16_t pwm_value)
         TimerControlLevel(SPINDLE_PWM_TIMER_BASE, TIMER_A, false);
         SysTickEnable();
     }
-
-    return pwm_value;
 }
 
 #else
@@ -1155,9 +1153,9 @@ bool driver_init (void)
 #endif
 
     hal.info = "TM4C123HP6PM";
-    hal.driver_version = "200818";
-#if CNC_BOOSTERPACK
-    hal.board = "CNC BoosterPack";
+    hal.driver_version = "200822";
+#ifdef BOARD_NAME
+    hal.board = BOARD_NAME;
 #endif
     hal.driver_setup = driver_setup;
     hal.f_step_timer = SysCtlClockGet() / (STEPPER_DRIVER_PRESCALER + 1); // 20 MHz
@@ -1237,9 +1235,9 @@ bool driver_init (void)
     hal.set_value_atomic = valueSetAtomic;
 
 #ifdef _USERMCODES_H_
-    hal.driver_mcode_check = userMCodeCheck;
-    hal.driver_mcode_validate = userMCodeValidate;
-    hal.driver_mcode_execute = userMCodeExecute;
+    hal.user_mcode_check = userMCodeCheck;
+    hal.user_mcode_validate = userMCodeValidate;
+    hal.user_mcode_execute = userMCodeExecute;
 #endif
 
     hal.show_message = showMessage;
@@ -1436,9 +1434,9 @@ static void trinamic_diag1_isr (void)
 static void systick_isr (void)
 {
     if(pwm_ramp.ms_cfg) {
-        if(++pwm_ramp.delay.ms == pwm_ramp.ms_cfg) {
+        if(++pwm_ramp.delay_ms == pwm_ramp.ms_cfg) {
 
-            pwm_ramp.delay.ms = 0;
+            pwm_ramp.delay_ms = 0;
             pwm_ramp.pwm_current += pwm_ramp.pwm_step;
 
             if(pwm_ramp.pwm_step < 0) { // decrease speed

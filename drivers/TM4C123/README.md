@@ -2,6 +2,10 @@
 
 A GrblHAL driver for the Texas Instruments [Tiva C \(EK-TM4C123GXL\) Launchpad](http://www.ti.com/tool/EK-TM4C123GXL)
 
+See the Wiki-page for [compiling grblHAL](https://github.com/terjeio/grblHAL/wiki/Compiling-GrblHAL) for instructions for how to import the project, configure the driver and compile.
+
+Available driver options can be found [here](./my_machine.h).
+
 Optional support for [I2C keypad](https://github.com/terjeio/I2C-interface-for-4x4-keyboard) added, can be used for jogging and mist/coolant overrides. Jogging can be toggled between fast, slow and step mode. Laser PPI mode (PPI - Pulses Per Inch) may also be enabled, this to ensure constant power delivered to the workpiece regardless of speed. PPI mode parameters are set by some user-defined M-codes:
 
 #### M123P\<n\>
@@ -20,4 +24,4 @@ Default pin assignments matches the [CNC BoosterPack](https://github.com/terjeio
 
 
 ---
-2018-12-17
+2020-08-23

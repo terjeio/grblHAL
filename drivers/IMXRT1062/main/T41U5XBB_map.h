@@ -19,8 +19,6 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "driver.h"
-
 #define BOARD_NAME "T41U5XBB"
 
 // Default pin assignments allow only one axis to be ganged or auto squared.

@@ -23,6 +23,17 @@
 
 #define BOARD_NAME "CNC BoosterPack"
 
+#ifdef EEPROM_ENABLE
+#undef EEPROM_ENABLE
+#endif
+
+#ifdef IOEXPAND_ENABLE
+#undef IOEXPAND_ENABLE
+#endif
+
+#define EEPROM_ENABLE   1 // only change if BoosterPack does not have EEPROM mounted
+#define IOEXPAND_ENABLE 1
+
 // Define step pulse output pins.
 #define X_STEP_PIN      (19u)
 #define Y_STEP_PIN      (20u)

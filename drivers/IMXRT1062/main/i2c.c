@@ -324,7 +324,9 @@ void i2c_eeprom_transfer (i2c_eeprom_trans_t *eeprom, bool read)
             txbuf[1] = eeprom->word_addr & 0xFF;
         }
         I2C_Send(eeprom->address, txbuf, eeprom->count + eeprom->word_addr_bytes, true);
+#if !EEPROM_IS_FRAM
         hal.delay_ms(7, NULL);
+#endif
     }
 }
 

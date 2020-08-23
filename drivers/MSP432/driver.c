@@ -26,6 +26,7 @@
 
 #include "driver.h"
 #include "serial.h"
+#include "grbl/pid.h"
 
 #ifdef USE_I2C
 #include "i2c.h"
@@ -50,17 +51,6 @@ typedef enum {
 } pid_state_t;
 
 typedef struct {
-    pid_values_t cfg;
-    float deadband;
-    float i_error;
-    float d_error;
-    float sample_rate_prev;
-    float error;
-    float max_error;
-    bool enabled;
-} pid_t;
-
-typedef struct {
     uint32_t ppr;                           // Encoder pulses per revolution
     float rpm_factor;
     float pulse_distance;                   // Encoder pulse distance in fraction of one revolution
@@ -80,7 +70,8 @@ typedef struct {
 // PID data for closed loop spindle RPM control
 typedef struct {
     pid_state_t pid_state;
-    pid_t pid;
+    pidf_t pid;
+    bool pid_enabled;
 } spindle_control_t;
 
 typedef struct {
@@ -91,7 +82,7 @@ typedef struct {
     uint32_t min_cycles_per_tick;   // Minimum cycles per tick for PID loop
     void (*stepper_pulse_start_normal)(stepper_t *stepper);
     uint_fast8_t segment_id;        // Used for detecing start of new segment
-    pid_t pid;                      // PID data for position
+    pidf_t pid;                     // PID data for position
 #ifdef PID_LOG
     int32_t log[PID_LOG];
     int32_t pos[PID_LOG];
@@ -173,60 +164,6 @@ static spindle_data_t spindleGetData (spindle_data_request_t request);
 // You will always get oscillation on a PID system if you increase any P,I,D term too high
 // I would try using less P (say 2) and then see how high an I term you can have and stay stable
 // D term should not be needed
-
-inline static float pid (pid_t *pid, float command, float actual, float sample_rate)
-{
-    float error = command - actual;
-/*
-    if(error > pid->deadband)
-        error -= pid->deadband;
-    else if (error < pid->deadband)
-        error += pid->deadband;
-    else
-        error = 0.0f;
-*/
-    // calculate the proportional term
-    float pidres = pid->cfg.p_gain * error;
-
-    // calculate and add the integral term
-    pid->i_error += error * (pid->sample_rate_prev / sample_rate);
-
-    if(pid->cfg.i_max_error != 0.0f) {
-        if (pid->i_error > pid->cfg.i_max_error)
-            pid->i_error = pid->cfg.i_max_error;
-        else if (pid->i_error < -pid->cfg.i_max_error)
-            pid->i_error = -pid->cfg.i_max_error;
-    }
-
-    pidres += pid->cfg.i_gain * pid->i_error;
-
-    // calculate and add the derivative term
-    if(pid->cfg.d_gain != 0.0f) {
-        float p_error = (error - pid->d_error) * (sample_rate / pid->sample_rate_prev);
-        if(pid->cfg.d_max_error != 0.0f) {
-            if (p_error > pid->cfg.d_max_error)
-                p_error = pid->cfg.d_max_error;
-            else if (p_error < -pid->cfg.d_max_error)
-                p_error = -pid->cfg.d_max_error;
-        }
-        pidres += pid->cfg.d_gain * p_error;
-        pid->d_error = error;
-    }
-
-    pid->sample_rate_prev = sample_rate;
-
-    // limit error output
-    if(pid->cfg.max_error != 0.0f) {
-        if(pidres > pid->cfg.max_error)
-            pidres = pid->cfg.max_error;
-        else if(pidres < -pid->cfg.max_error)
-            pidres = -pid->cfg.max_error;
-    }
-
-    pid->error = pidres;
-
-    return pidres;
-}
 
 static void driver_delay_ms (uint32_t ms, void (*callback)(void))
 {
@@ -401,10 +338,8 @@ static void stepperPulseStartSynchronized (stepper_t *stepper)
         spindle_tracker.steps_per_mm = stepper->exec_block->steps_per_mm;
         spindle_tracker.segment_id = 0;
         spindle_tracker.prev_pos = 0.0f;
-        spindle_tracker.pid.i_error = 0.0f;
-        spindle_tracker.pid.d_error = 0.0f;
-        spindle_tracker.pid.sample_rate_prev = 0.0f;
         spindle_tracker.block_start = spindleGetData(SpindleData_AngularPosition).angular_position * spindle_tracker.programmed_rate;
+        pidf_reset(&spindle_tracker.pid);
 #ifdef PID_LOG
         sys.pid_log.idx = 0;
         sys.pid_log.setpoint = 100.0f;
@@ -440,7 +375,7 @@ static void stepperPulseStartSynchronized (stepper_t *stepper)
                 }
 
                 actual_pos -= spindle_tracker.block_start;
-                int32_t step_delta = (int32_t)(pid(&spindle_tracker.pid, spindle_tracker.prev_pos, actual_pos, dt) * spindle_tracker.steps_per_mm);
+                int32_t step_delta = (int32_t)(pidf(&spindle_tracker.pid, spindle_tracker.prev_pos, actual_pos, dt) * spindle_tracker.steps_per_mm);
 
 
                 int32_t ticks = (((int32_t)stepper->step_count + step_delta) * (int32_t)stepper->exec_segment->cycles_per_tick) / (int32_t)stepper->step_count;
@@ -739,16 +674,14 @@ static void spindleSetStateVariable (spindle_state_t state, float rpm)
             SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
         spindle_encoder.rpm = 0.0f;
         spindle_control.pid_state = PIDState_Disabled;
-        spindle_control.pid.error = 0.0f;
-        spindle_control.pid.i_error = 0.0f;
-        spindle_control.pid.d_error = 0.0f;
+        pidf_reset(&spindle_control.pid);
         spindle_control.pid.sample_rate_prev = 1.0f;
 #endif
     } else {
         spindle_dir(state.ccw);
 #ifdef SPINDLE_RPM_CONTROLLED
         if(spindle_data.rpm_programmed == 0.0f) {
-            if(spindle_control.pid.enabled) {
+            if(spindle_control.pid_enabled) {
                 pid_count = 0;
                 spindle_control.pid_state = PIDState_Pending;
                 SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
@@ -796,7 +729,7 @@ inline static void spindle_rpm_pid (uint32_t tpp)
     spindleLock = true;
 
     spindle_encoder.rpm = spindle_calc_rpm(tpp);
-    float error = pid(&spindle_control.pid, spindle_data.rpm_programmed, spindle_encoder.rpm, 1.0);
+    float error = pidf(&spindle_control.pid, spindle_data.rpm_programmed, spindle_encoder.rpm, 1.0);
 
 #ifdef sPID_LOG
     if(sys.pid_log.idx < PID_LOG) {
@@ -836,7 +769,7 @@ static spindle_data_t spindleGetData (spindle_data_request_t request)
         case SpindleData_RPM:
             if(!stopped)
 #ifdef SPINDLE_RPM_CONTROLLED
-                spindle_data.rpm = spindle_control.pid.enabled ? spindle_encoder.rpm : spindle_calc_rpm(spindle_encoder.tpp);
+                spindle_data.rpm = spindle_control.pid_enabled ? spindle_encoder.rpm : spindle_calc_rpm(spindle_encoder.tpp);
 #else
                 spindle_data.rpm = spindle_calc_rpm(spindle_encoder.tpp);
 #endif
@@ -866,7 +799,7 @@ static void spindleDataReset (void)
 //    if(spindleGetData(SpindleData_RPM).rpm > 0.0f) // wait for index pulse if running
 //        while(index_count != spindle_data.index_count);
 #ifdef SPINDLE_RPM_CONTROLLED
-    if(spindle_control.pid.enabled)
+    if(spindle_control.pid_enabled)
         spindle_control.pid_state = PIDState_Pending;
 #endif
 
@@ -1022,16 +955,16 @@ void settings_changed (settings_t *settings)
     hal.spindle_set_state = hal.driver_cap.variable_spindle ? spindleSetStateVariable : spindleSetState;
 
     if((hal.spindle_get_data = hal.driver_cap.spindle_at_speed ? spindleGetData : NULL)) {
-        memcpy(&spindle_tracker.pid.cfg, &settings->position.pid, sizeof(pid_values_t));
+        pidf_init(&spindle_tracker.pid, &settings->position.pid);
         spindle_tracker.min_cycles_per_tick = hal.f_step_timer / 1000000UL * (settings->steppers.pulse_microseconds * 2 + settings->steppers.pulse_delay_microseconds);
     }
 
   #if SPINDLE_RPM_CONTROLLED
 
-    if((spindle_control.pid.enabled = hal.spindle_get_data && settings->spindle.pid.p_gain != 0.0f)) {
+    if((spindle_control.pid_enabled = hal.spindle_get_data && settings->spindle.pid.p_gain != 0.0f)) {
         if(memcmp(&spindle_control.pid.cfg, &settings->spindle.pid, sizeof(pid_values_t)) != 0) {
             spindle_set_state((spindle_state_t){0}, 0.0f);
-            memcpy(&spindle_control.pid.cfg, &settings->spindle.pid, sizeof(pid_values_t));
+            pidf_init(&spindle_control.pid, &settings->spindle.pid);
       //      spindle_encoder.pid.cfg.i_max_error = spindle_encoder.pid.cfg.i_max_error / settings->spindle.pid.i_gain; // Makes max value sensible?
             SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
         }
@@ -1538,12 +1471,8 @@ bool driver_init (void)
 
     hal.info = "MSP432";
     hal.driver_version = "200818";
-#if CNC_BOOSTERPACK
- #if TRINAMIC_ENABLE
-    hal.board = "CNC BoosterPack (Trinamic)";
- #else
-    hal.board = "CNC BoosterPack";
- #endif
+#ifdef BOARD_NAME
+    hal.board = BOARD_NAME;
 #endif
     hal.driver_setup = driver_setup;
     hal.f_step_timer = SystemCoreClock;

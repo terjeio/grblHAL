@@ -382,7 +382,7 @@ static control_signals_t systemGetState (void)
 #else
     signals.value = (uint8_t)((CONTROL_PORT->IDR & CONTROL_MASK) >> CONTROL_INMODE);
   #ifndef ENABLE_SAFETY_DOOR_INPUT_PIN
-    signals.safety_door_ajar = Off;
+    signals.safety_door_ajar = settings.control_invert.safety_door_ajar;
   #endif
 #endif
 
@@ -527,7 +527,7 @@ static void coolantSetState (coolant_state_t mode)
 // Returns coolant state in a coolant_state_t variable
 static coolant_state_t coolantGetState (void)
 {
-    coolant_state_t state = {0};
+    coolant_state_t state = (coolant_state_t){settings.coolant_invert.mask};
 
     state.flood = (COOLANT_FLOOD_PORT->IDR & COOLANT_FLOOD_BIT) != 0;
 #ifdef COOLANT_MIST_PIN
