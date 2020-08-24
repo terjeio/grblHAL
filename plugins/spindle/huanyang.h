@@ -25,7 +25,7 @@
 #define _HUANYANG_H_
 
 #ifdef ARDUINO
-#include "../../driver.h"
+#include "../driver.h"
 #else
 #include "driver.h"
 #endif

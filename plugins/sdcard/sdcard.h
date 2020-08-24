@@ -25,7 +25,7 @@
 #define _SDCARD_H_
 
 #ifdef ARDUINO
-#include "../../driver.h"
+#include "../driver.h"
 #include "../grbl/hal.h"
 #else
 #include "driver.h"

@@ -23,7 +23,7 @@
 #define _TRINAMIC_OPTION_H_
 
 #ifdef ARDUINO_SAMD_MKRZERO
-#include "../../driver.h"
+#include "../driver.h"
 #if TRINAMIC_I2C
 #include "../trinamic/TMC2130_I2C_map.h"
 #endif

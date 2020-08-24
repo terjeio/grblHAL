@@ -8,13 +8,8 @@
 #include <ctype.h>
 #include <stdarg.h>
 
-#ifdef ARDUINO
-#include "../grbl/plugins.h"
-#include "../grbl/nuts_bolts.h"
-#else
 #include "grbl/plugins.h"
 #include "grbl/nuts_bolts.h"
-#endif
 
 #include "utils.h"
 

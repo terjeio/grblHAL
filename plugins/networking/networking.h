@@ -21,7 +21,7 @@
 //*****************************************************************************
 
 #ifdef ARDUINO
-#include "../../driver.h"
+#include "../driver.h"
 #else
 #include "driver.h"
 #endif

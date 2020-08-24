@@ -23,23 +23,13 @@
 
 */
 
-#ifdef ARDUINO
-#include "../../driver.h"
-#else
 #include "driver.h"
-#endif
 
 #if EEPROM_ENABLE == 2
 
-#ifdef ARDUINO
-#include "../grbl/grbl.h"
-#include "../grbl/plugins.h"
-#include "../grbl/nuts_bolts.h"
-#else
 #include "grbl/grbl.h"
 #include "grbl/plugins.h"
 #include "grbl/nuts_bolts.h"
-#endif
 
 #define EEPROM_I2C_ADDRESS (0xA0 >> 1)
 #define EEPROM_PAGE_SIZE 64

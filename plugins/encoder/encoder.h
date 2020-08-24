@@ -23,18 +23,14 @@
 #define _ENCODER_H_
 
 #ifdef ARDUINO
-#include "../../driver.h"
+#include "../driver.h"
 #else
 #include "driver.h"
 #endif
 
 #if QEI_ENABLE
 
-#ifdef ARDUINO
-#include "../grbl/plugins.h"
-#else
 #include "grbl/plugins.h"
-#endif
 
 void encoder_init (encoder_t *encoder);
 void encoder_event (encoder_t *encoder, int32_t position);

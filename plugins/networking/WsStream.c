@@ -50,11 +50,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "utils.h"
 #include "strutils.h"
 
-#ifdef ARDUINO
-#include "../grbl/grbl.h"
-#else
 #include "grbl/grbl.h"
-#endif
 
 //#define WSDEBUG
 

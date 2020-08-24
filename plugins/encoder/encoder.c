@@ -34,7 +34,7 @@
 #include "grbl/report.h"
 #endif
 
-#include "../../uart.h"
+#include "../uart.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -249,7 +249,10 @@ void encoder_execute_realtime (uint_fast16_t state)
 	    uint_fast8_t idx = 0;
 
 	    axes_signals_t event, axes;
+
+#ifdef UART_DEBUG
 	    serialWriteS("+");
+#endif
 
 	    while(mpg_spin_lock);
 

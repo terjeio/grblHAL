@@ -20,7 +20,7 @@
 */
 
 #ifdef ARDUINO
-#include "../../driver.h"
+#include "../driver.h"
 #else
 #include "driver.h"
 #endif
@@ -31,15 +31,14 @@
 #include <string.h>
 #include <math.h>
 
+#include "grbl/report.h"
 #ifdef ARDUINO
-  #include "../grbl/report.h"
   #if TRINAMIC_I2C
-    #include "../../i2c.h"
+    #include "../i2c.h"
   #else
-    #include "../../spi.h"
+    #include "../spi.h"
 #endif
 #else
-  #include "grbl/report.h"
   #if TRINAMIC_I2C
     #include "i2c.h"
   #else
