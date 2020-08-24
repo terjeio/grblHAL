@@ -6,6 +6,10 @@ Windows users may try [my sender](https://github.com/terjeio/Grbl-GCode-Sender),
 
 --
 
+__NOTE:__ Arduino drivers has now been converted to Arduino libraries, [installation and compilation procedure](https://github.com/terjeio/grblHAL/wiki/Compiling-GrblHAL) has been changed!
+
+---
+
 Build 20200818:
 
 * Part two of large overhaul of configuration system.
@@ -182,4 +186,4 @@ List of Supported G-Codes in GrblHAL v1.1:
 ```
 
 ---
-2020-08-11
+2020-08-24
