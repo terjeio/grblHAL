@@ -68,6 +68,7 @@
 
 static char buf[(STRLEN_COORDVALUE + 1) * N_AXIS];
 static char *(*get_axis_values)(float *axis_values);
+static char *(*get_axis_value)(float value);
 static char *(*get_rate_value)(float value);
 static uint8_t override_counter = 0; // Tracks when to add override data to status reports.
 static uint8_t wco_counter = 0;      // Tracks when to add work coordinate offset data to status reports.
@@ -147,6 +148,18 @@ static char *get_axis_values_inches (float *axis_values)
 }
 
 // Convert rate value to null terminated string (mm).
+static char *get_axis_value_mm (float value)
+{
+    return strcpy(buf, ftoa(value, N_DECIMAL_COORDVALUE_MM));
+}
+
+// Convert rate value to null terminated string (mm).
+static char *get_axis_value_inches (float value)
+{
+    return strcpy(buf, ftoa(value * INCH_PER_MM, N_DECIMAL_COORDVALUE_INCH));
+}
+
+// Convert rate value to null terminated string (mm).
 static char *get_rate_value_mm (float value)
 {
     return uitoa((uint32_t)value);
@@ -194,6 +207,7 @@ inline static char *axis_signals_tostring (char *buf, axes_signals_t signals)
 void report_init (void)
 {
     current_alarm = Alarm_None;
+    get_axis_value = settings.flags.report_inches ? get_axis_value_inches : get_axis_value_mm;
     get_axis_values = settings.flags.report_inches ? get_axis_values_inches : get_axis_values_mm;
     get_rate_value = settings.flags.report_inches ? get_rate_value_inch : get_rate_value_mm;
 }
@@ -579,10 +593,7 @@ void report_tool_offsets (void)
 {
     hal.stream.write("[TLO:");
 #ifdef TOOL_LENGTH_OFFSET_AXIS
-    if(settings.flags.report_inches)
-        hal.stream.write(ftoa(gc_state.tool_length_offset[Z_AXIS] * INCH_PER_MM, N_DECIMAL_COORDVALUE_INCH));
-    else
-        hal.stream.write(ftoa(gc_state.tool_length_offset[Z_AXIS], N_DECIMAL_COORDVALUE_INCH));
+    hal.stream.write(get_axis_value(gc_state.tool_length_offset[Z_AXIS]));
 #else
     hal.stream.write(get_axis_values(gc_state.tool_length_offset));
 #endif
@@ -641,16 +652,20 @@ void report_ngc_parameters (void)
         hal.stream.write("|");
         hal.stream.write(get_axis_values(tool_table[idx].offset));
         hal.stream.write("|");
-        if(settings.flags.report_inches)
-            hal.stream.write(ftoa(tool_table[idx].radius * INCH_PER_MM, N_DECIMAL_COORDVALUE_INCH));
-        else
-            hal.stream.write(ftoa(tool_table[idx].radius, N_DECIMAL_COORDVALUE_MM));
+        hal.stream.write(get_axis_value(tool_table[idx].radius));
         hal.stream.write("]" ASCII_EOL);
     }
 #endif
 
-    report_tool_offsets();      // Print tool length offset value
+    report_tool_offsets();      // Print tool length offset value.
     report_probe_parameters();  // Print probe parameters. Not persistent in memory.
+    if(sys.tlo_reference_set) { // Print tool length reference offset. Not persistent in memory.
+        plane_t plane;
+        gc_get_plane_data(&plane, gc_state.modal.plane_select);
+        hal.stream.write("[TLR:");
+        hal.stream.write(get_axis_value(sys.tlo_reference / settings.axis[plane.axis_linear].steps_per_mm));
+        hal.stream.write("]" ASCII_EOL);
+    }
 }
 
 static inline bool is_g92_active (void)
@@ -1105,7 +1120,10 @@ void report_realtime_status (void)
 
         axes_signals_t lim_pin_state = hal.limits_get_state();
         control_signals_t ctrl_pin_state = hal.system_control_get_state();
-        probe_state_t probe_state = {0};
+        probe_state_t probe_state = {
+            .connected = On,
+            .triggered = Off
+        };
 
         if(hal.probe_get_state)
             probe_state = hal.probe_get_state();
@@ -1118,6 +1136,9 @@ void report_realtime_status (void)
 
             if (probe_state.triggered)
                 *append++ = 'P';
+
+            if(!probe_state.connected)
+                *append++ = 'O';
 
             if (lim_pin_state.value)
                 append = axis_signals_tostring(append, lim_pin_state);
@@ -1137,8 +1158,8 @@ void report_realtime_status (void)
                     *append++ = 'B';
                 if (hal.driver_cap.program_stop ? ctrl_pin_state.stop_disable : sys.flags.optional_stop_disable)
                     *append++ = 'T';
-                if(!probe_state.connected)
-                    *append++ = 'O';
+                if(ctrl_pin_state.arc_ok)
+                    *append++ = 'Q';
             }
             *append = '\0';
             hal.stream.write_all(buf);

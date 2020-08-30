@@ -300,12 +300,14 @@ static void state_await_toolchanged (uint_fast16_t rt_exec)
     if (rt_exec & EXEC_CYCLE_START) {
         if(!gc_state.tool_change) {
             if(hal.stream.suspend_read)
-                hal.stream.suspend_read(false); // Tool change complete, restore "normal" stream input
+                hal.stream.suspend_read(false); // Tool change complete, restore "normal" stream input.
             sys.report.tool = On;
         }
         pending_state = gc_state.tool_change ? STATE_TOOL_CHANGE : STATE_IDLE;
         set_state(STATE_IDLE);
         set_state(STATE_CYCLE);
+        // Force a status report to let the sender know tool change is completed.
+        system_set_exec_state_flag(EXEC_STATUS_REPORT);
     }
 }
 

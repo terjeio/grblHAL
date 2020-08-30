@@ -241,6 +241,9 @@ static bool limits_homing_cycle (axes_signals_t cycle)
                 }
             }
 
+            if(hal.execute_realtime)
+                hal.execute_realtime(STATE_HOMING);
+
         } while (axislock.mask & AXES_BITMASK);
 
         st_reset(); // Immediately force kill steppers and reset step segment buffer.

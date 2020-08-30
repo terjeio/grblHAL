@@ -248,6 +248,9 @@ int grbl_enter (void)
         plan_sync_position();
         gc_sync_position();
 
+        if(hal.stepper_disable_motors)
+            hal.stepper_disable_motors((axes_signals_t){0}, SquaringMode_Both);
+
         if(!hal.driver_cap.atc)
             tc_init();
 

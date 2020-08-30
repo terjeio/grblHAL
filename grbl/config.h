@@ -30,17 +30,9 @@
 
 // Compile time only default configuration
 
-// Control signals bit definitions and mask.
-// NOTE: these definitions are only referenced in this file.
-#define SIGNALS_RESET_BIT (1<<0)
-#define SIGNALS_FEEDHOLD_BIT (1<<1)
-#define SIGNALS_CYCLESTART_BIT (1<<2)
-#define SIGNALS_SAFETYDOOR_BIT (1<<3)
-#define SIGNALS_BLOCKDELETE_BIT (1<<4)
-#define SIGNALS_STOPDISABLE_BIT (1<<5)
-#define SIGNALS_ESTOP_BIT (1<<6)
-#define SIGNALS_PROBE_CONNECTED_BIT (1<<7)
-#define SIGNALS_BITMASK (SIGNALS_RESET_BIT|SIGNALS_FEEDHOLD_BIT|SIGNALS_CYCLESTART_BIT|SIGNALS_SAFETYDOOR_BIT|SIGNALS_BLOCKDELETE_BIT|SIGNALS_STOPDISABLE_BIT|SIGNALS_ESTOP_BIT|SIGNALS_PROBE_CONNECTED_BIT)
+// Number of axes supported: minimum 3, maximum 6
+// If more than 3 axes are required a compliant driver must be provided
+//#define N_AXIS 3 // Number of axes
 
 // Defines compatibility level with the grbl 1.1 protocol.
 // Additional G- and M-codes are not disabled except when level is set to >= 10.
@@ -72,17 +64,11 @@
 // have the same steps per mm internally.
 //#define COREXY // Default disabled. Uncomment to enable.
 
-// #define DEBUGOUT // Remove comment to add HAL entry point for debug output
-
 // Add a short delay for each block processed in Check Mode to
 // avoid overwhelming the sender with fast reply messages.
 // This is likely to happen when streaming is done via a protocol where
 // the speed is not limited to 115200 baud. An example is native USB streaming.
 //#define CHECK_MODE_DELAY 0 // ms
-
-// Number of axes supported: minimum 3, maximum 6
-// If more than 3 axes are required a compliant driver must be provided
-//#define N_AXIS 3 // Number of axes
 
 // This option enables the safety door switch. A safety door, when triggered,
 // immediately forces a feed hold and then safely de-energizes the machine. Resuming is blocked until
@@ -95,11 +81,25 @@
 //#define SAFETY_DOOR_SPINDLE_DELAY 4.0f // Float (seconds)
 //#define SAFETY_DOOR_COOLANT_DELAY 1.0f // Float (seconds)
 
+// Control signals bit definitions and mask.
+// NOTE: these definitions are only referenced in this file. Do NOT change!
+#define SIGNALS_RESET_BIT (1<<0)
+#define SIGNALS_FEEDHOLD_BIT (1<<1)
+#define SIGNALS_CYCLESTART_BIT (1<<2)
+#define SIGNALS_SAFETYDOOR_BIT (1<<3)
+#define SIGNALS_BLOCKDELETE_BIT (1<<4)
+#define SIGNALS_STOPDISABLE_BIT (1<<5)
+#define SIGNALS_ESTOP_BIT (1<<6)
+#define SIGNALS_PROBE_CONNECTED_BIT (1<<7)
+#define SIGNALS_BITMASK (SIGNALS_RESET_BIT|SIGNALS_FEEDHOLD_BIT|SIGNALS_CYCLESTART_BIT|SIGNALS_SAFETYDOOR_BIT|SIGNALS_BLOCKDELETE_BIT|SIGNALS_STOPDISABLE_BIT|SIGNALS_ESTOP_BIT|SIGNALS_PROBE_CONNECTED_BIT)
+/**/
+
 // ---------------------------------------------------------------------------------------
 // ADVANCED CONFIGURATION OPTIONS:
 
 // Enables code for debugging purposes. Not for general use and always in constant flux.
 // #define DEBUG // Uncomment to enable. Default disabled.
+// #define DEBUGOUT // Uncomment to add HAL entry point for debug output.
 
 // If spindle RPM is set by high-level commands to a spindle controller (eg. via Modbus) or the driver supports closed loop
 // spindle RPM control either uncomment the #define SPINDLE_RPM_CONTROLLED below or add SPINDLE_RPM_CONTROLLED as predefined symbol

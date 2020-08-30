@@ -37,6 +37,7 @@
 #define TOOL_CHANGE_PROBE_RETRACT_DISTANCE 2.0f
 #endif
 
+static bool block_cycle_start;
 static tool_data_t *current_tool = NULL, *next_tool = NULL;
 static driver_reset_ptr driver_reset = NULL;
 static plane_t plane;
@@ -201,7 +202,7 @@ static void execute_probe (uint_fast16_t state)
 ISR_CODE static void trap_control_cycle_start (control_signals_t signals)
 {
     if(signals.cycle_start) {
-        if(execute_realtime == NULL) {
+        if(!block_cycle_start && execute_realtime == NULL) {
             execute_realtime = hal.execute_realtime;
             hal.execute_realtime = settings.tool_change.mode == ToolChange_SemiAutomatic ? execute_probe : execute_restore;
         }
@@ -215,7 +216,7 @@ ISR_CODE static bool trap_stream_cycle_start (char c)
     bool drop = false;
 
     if((drop = (c == CMD_CYCLE_START || c == CMD_CYCLE_START_LEGACY))) {
-        if(execute_realtime == NULL) {
+        if(!block_cycle_start && execute_realtime == NULL) {
             execute_realtime = hal.execute_realtime;
             hal.execute_realtime = settings.tool_change.mode == ToolChange_SemiAutomatic ? execute_probe : execute_restore;
         }
@@ -233,13 +234,19 @@ static status_code_t tool_change (parser_state_t *gc_state)
     if(current_tool == next_tool)
         return Status_OK;
 
-    if(!sys.homed.mask || sys.homed.mask != sys.homing.mask)
+    // A plane change should invalidate current tool reference offset?
+    gc_get_plane_data(&plane, gc_state->modal.plane_select);
+
+    uint8_t homed_req = settings.tool_change.mode == ToolChange_Manual ? bit(plane.axis_linear) : (X_AXIS_BIT|Y_AXIS_BIT|Z_AXIS_BIT);
+
+    if((sys.homed.mask & homed_req) != homed_req)
         return Status_HomingRequired;
 
     if(settings.tool_change.mode != ToolChange_SemiAutomatic)
         hal.on_probe_completed = on_probe_completed;
 
     // Trap cycle start command and control signal.
+    block_cycle_start = settings.tool_change.mode == ToolChange_Manual;
     enqueue_realtime_command = hal.stream.enqueue_realtime_command;
     hal.stream.enqueue_realtime_command = trap_stream_cycle_start;
     control_interrupt_callback = hal.control_interrupt_callback;
@@ -255,8 +262,6 @@ static status_code_t tool_change (parser_state_t *gc_state)
     system_convert_array_steps_to_mpos(previous.values, sys_position);
 
     // Establish axis assignments.
-    // A plane change should invalidate current tool reference offset?
-    gc_get_plane_data(&plane, gc_state->modal.plane_select);
 
     previous.values[plane.axis_linear] -= gc_get_offset(plane.axis_linear);
 
@@ -351,14 +356,23 @@ status_code_t tc_probe_workpiece (void)
         // Retract a bit and perform slow probe.
         target.values[plane.axis_linear] += TOOL_CHANGE_PROBE_RETRACT_DISTANCE;
         if((ok = mc_line(target.values, &plan_data))) {
+
             plan_data.feed_rate = settings.tool_change.feed_rate;
             target.values[plane.axis_linear] -= (TOOL_CHANGE_PROBE_RETRACT_DISTANCE + 2.0f);
-            ok = mc_probe_cycle(target.values, &plan_data, flags) == GCProbe_Found;
+            if((ok = mc_probe_cycle(target.values, &plan_data, flags) == GCProbe_Found)) {
+                // Retract a bit again so that any touch plate can be removed
+                system_convert_array_steps_to_mpos(target.values, sys_probe_position);
+                plan_data.feed_rate = settings.tool_change.seek_rate;
+                target.values[plane.axis_linear] += TOOL_CHANGE_PROBE_RETRACT_DISTANCE * 2.0f;
+                ok = mc_line(target.values, &plan_data);
+            }
         }
     }
 
-    if(ok)
-        hal.stream.enqueue_realtime_command(CMD_CYCLE_START);
+    if(ok && protocol_buffer_synchronize()) {
+        block_cycle_start = false;
+        hal.stream.write("[MSG:Remove any touch plate and press cycle start to continue.]" ASCII_EOL);
+    }
 
     return ok ? Status_OK : Status_GCodeToolError;
 }
