@@ -37,12 +37,12 @@
 #include "grbl/hal.h"
 #include "grbl/nuts_bolts.h"
 
-#if USB_SERIAL_GRBL > 0
-//#define UART_DEBUG // For development only - enable only with USB_SERIAL_GRBL enabled and SPINDLE_HUANYANG disabled
+#if USB_SERIAL_CDC > 0
+//#define UART_DEBUG // For development only - enable only with USB_SERIAL_CDC enabled and SPINDLE_HUANYANG disabled
 #endif
 
-#ifndef USB_SERIAL_GRBL
-#define USB_SERIAL_GRBL     0 // for UART comms
+#ifndef USB_SERIAL_CDC
+#define USB_SERIAL_CDC      0 // for UART comms
 #endif
 #ifndef USB_SERIAL_WAIT
 #define USB_SERIAL_WAIT     0
@@ -130,6 +130,8 @@
 
 #ifdef BOARD_CNC_BOOSTERPACK
   #include "cnc_boosterpack_map.h"
+#elif defined(BOARD_T40X101)
+  #include "T40X101_map.h"
 #elif defined(BOARD_T41U5XBB)
   #include "T41U5XBB_map.h"
 #else // default board
@@ -160,7 +162,7 @@
 #endif
 
 #if SPINDLE_HUANYANG
-#if USB_SERIAL_GRBL == 0
+#if USB_SERIAL_CDC == 0
 #error "Huanyang VFD cannot be used with UART communications enabled!"
 #endif
 #include "spindle/huanyang.h"

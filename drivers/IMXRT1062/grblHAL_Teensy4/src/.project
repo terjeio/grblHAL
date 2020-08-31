@@ -26,6 +26,10 @@
 	</natures>
 	<variableList>
 		<variable>
+			<name>ARDUINOPATH</name>
+			<value>file:/C:/Program%20Files%20(x86)/Arduino</value>
+		</variable>
+		<variable>
 			<name>COMPILER_LOC</name>
 			<value>file:/C:/Program%20Files%20(x86)/Arduino/hardware/tools/arm/arm-none-eabi</value>
 		</variable>

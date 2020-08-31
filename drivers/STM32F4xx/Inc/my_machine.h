@@ -30,7 +30,7 @@
 // Uncomment to enable.
 
 #ifndef NUCLEO_F411 // The Nucleo-F411RE board has an off-chip UART to USB interface.
-#define USB_SERIAL           1 // Serial communication via native USB.
+#define USB_SERIAL_CDC       1 // Serial communication via native USB.
 #endif
 //#define SDCARD_ENABLE      1 // Run gcode programs from SD card, requires sdcard plugin.
 //#define KEYPAD_ENABLE      1 // I2C keypad for jogging etc., requires keypad plugin.

@@ -31,7 +31,7 @@
 // Configuration
 // Uncomment to enable.
 
-//#define USB_SERIAL         1 // Use native USB port for communication.
+//#define USB_SERIAL_CDC     1 // Use native USB port for communication.
 //#define SPINDLE_HUANYANG   1 // Set to 1 or 2 for Huanyang VFD spindle. Requires spindle plugin.
 //#define KEYPAD_ENABLE      1 // I2C keypad for jogging etc., requires keypad plugin.
 //#define EEPROM_ENABLE      1 // I2C EEPROM support. Set to 1 for 24LC16(2K), 2 for larger sizes. Requires eeprom plugin.

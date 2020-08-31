@@ -56,9 +56,9 @@
 
 #endif
 
-#if USB_SERIAL_GRBL == 1
+#if USB_SERIAL_CDC == 1
 #include "usb_serial_ard.h"
-#elif USB_SERIAL_GRBL == 2
+#elif USB_SERIAL_CDC == 2
 #include "usb_serial_pjrc.h"
 #endif
 
@@ -365,7 +365,7 @@ static void enetStreamWriteS (const char *data)
     if(services.websocket)
         WsStreamWriteS(data);
 #endif
-#if USB_SERIAL_GRBL
+#if USB_SERIAL_CDC
     if(!(services.telnet || services.websocket))
         usb_serialWriteS(data);
 #else
@@ -411,7 +411,7 @@ static void enetStreamWriteS (const char *data)
 
 #endif // ETHERNET_ENABLE
 
-#if USB_SERIAL_GRBL
+#if USB_SERIAL_CDC
     const io_stream_t serial_stream = {
         .type = StreamType_Serial,
         .read = usb_serialGetC,
@@ -1697,13 +1697,13 @@ bool nvsWrite (uint8_t *source)
 
 #endif
 
-#if QEI_SELECT_ENABLED || KEYPAD_ENABLE || ETHERNET_ENABLE || USB_SERIAL_GRBL > 0
+#if QEI_SELECT_ENABLED || KEYPAD_ENABLE || ETHERNET_ENABLE || USB_SERIAL_CDC > 0
 
 static void execute_realtime (uint_fast16_t state)
 {
     if(ms_event) {
         ms_event = false;
-  #if USB_SERIAL_GRBL > 0
+  #if USB_SERIAL_CDC > 0
     usb_execute_realtime(state);
   #endif
   #if KEYPAD_ENABLE
@@ -1760,10 +1760,10 @@ bool driver_init (void)
 
     options[0] = '\0';
 
-#if USB_SERIAL_GRBL == 1
+#if USB_SERIAL_CDC == 1
     strcat(options, "USB.1 ");
 #endif
-#if USB_SERIAL_GRBL == 2
+#if USB_SERIAL_CDC == 2
     strcat(options, "USB.2 ");
 #endif
 #if KEYPAD
@@ -1824,7 +1824,7 @@ bool driver_init (void)
     hal.report_options = reportIP;
 #endif
 
-#if USB_SERIAL_GRBL
+#if USB_SERIAL_CDC
     usb_serialInit();
 #else
     serialInit(115200);
@@ -1863,7 +1863,7 @@ bool driver_init (void)
 
     hal.show_message = showMessage;
 
-#if QEI_SELECT_ENABLED || KEYPAD_ENABLE || ETHERNET_ENABLE || USB_SERIAL_GRBL > 0
+#if QEI_SELECT_ENABLED || KEYPAD_ENABLE || ETHERNET_ENABLE || USB_SERIAL_CDC > 0
     hal.execute_realtime = execute_realtime;
 #endif
 
@@ -2148,7 +2148,7 @@ static void systick_isr (void)
 {
     ms_event = true;
 
-#if USB_SERIAL_GRBL == 2 || ETHERNET_ENABLE
+#if USB_SERIAL_CDC == 2 || ETHERNET_ENABLE
     systick_isr_org();
 #endif
 

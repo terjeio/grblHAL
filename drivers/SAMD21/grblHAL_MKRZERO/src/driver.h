@@ -32,8 +32,8 @@
 #include "my_machine.h"
 #endif
 
-#ifndef USB_SERIAL
-#define USB_SERIAL          0 // for UART comms
+#ifndef USB_SERIAL_CDC
+#define USB_SERIAL_CDC      0 // for UART comms
 #endif
 #ifndef USB_SERIAL_WAIT
 #define USB_SERIAL_WAIT     0

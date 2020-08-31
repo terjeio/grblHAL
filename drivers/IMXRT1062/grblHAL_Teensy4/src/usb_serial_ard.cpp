@@ -28,7 +28,7 @@
 
 #include "driver.h"
 
-#if USB_SERIAL_GRBL == 1
+#if USB_SERIAL_CDC == 1
 
 #ifdef __cplusplus
 extern "C" {

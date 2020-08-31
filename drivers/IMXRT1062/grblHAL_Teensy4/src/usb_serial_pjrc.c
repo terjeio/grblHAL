@@ -28,7 +28,7 @@
 
 #include "driver.h"
 
-#if USB_SERIAL_GRBL == 2
+#if USB_SERIAL_CDC == 2
 
 #define BLOCK_RX_BUFFER_SIZE 20
 

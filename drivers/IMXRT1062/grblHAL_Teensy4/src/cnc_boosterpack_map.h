@@ -21,6 +21,10 @@
 
 #define BOARD_NAME "CNC BoosterPack"
 
+#if N_AXIS > 3
+#error Max number of axes is 3 for CNC BoosterPack
+#endif
+
 #ifdef EEPROM_ENABLE
 #undef EEPROM_ENABLE
 #endif

@@ -39,7 +39,7 @@
 #include "diskio.h"
 #endif
 
-#if USB_ENABLE
+#if USB_SERIAL_CDC
 #include "usb_serial.h"
 #endif
 
@@ -977,7 +977,7 @@ bool driver_init (void)
 
     // GPIO_PinRemapConfig(GPIO_Remap_SWJ_Disable, ENABLE); // ??? Disable JTAG and SWD!?? Bug?
 
-#if USB_ENABLE
+#if USB_SERIAL_CDC
     usbInit();
 #else
     serialInit();
@@ -1030,7 +1030,7 @@ bool driver_init (void)
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
 
-#if USB_ENABLE
+#if USB_SERIAL_CDC
     hal.stream.read = usbGetC;
     hal.stream.write = usbWriteS;
     hal.stream.write_all = usbWriteS;

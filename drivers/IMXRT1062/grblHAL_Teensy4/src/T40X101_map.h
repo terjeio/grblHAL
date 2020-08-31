@@ -1,5 +1,5 @@
 /*
-  T41U5XBB_map.h - driver code for IMXRT1062 processor (on Teensy 4.1 board)
+  T40X101_map.h - driver code for IMXRT1062 processor (on Teensy 4.0 board)
 
   Part of GrblHAL
 
@@ -21,14 +21,18 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#define BOARD_NAME "T41U5XBB"
+#define BOARD_NAME "T40X101"
 
-#if N_AXIS > 5
-#error Max number of axes is 5 for T41U5XBB
+#if N_AXIS > 4
+#error Max number of axes is 4 for T40X101
+#endif
+
+#if QEI_ENABLE
+#error No pins available for encoder input!
 #endif
 
 // Default pin assignments allow only one axis to be ganged or auto squared.
-// B axis pin numbers are used for the ganged/auto squared axis.
+// A axis pin numbers are used for the ganged/auto squared axis.
 // If a second axis is to be ganged/auto squared pin assignments needs to be changed!
 // Set to 1 to enable, 0 to disable.
 #define X_GANGED        0
@@ -41,48 +45,41 @@
 
 #define X_STEP_PIN      (2u)
 #define X_DIRECTION_PIN (3u)
-#define X_ENABLE_PIN    (10u)
 #define X_LIMIT_PIN     (20u)
 
 #if X_GANGED || X_AUTO_SQUARE
-#define X2_STEP_PIN      (26u)
-#define X2_DIRECTION_PIN (27u)
-#define X2_ENABLE_PIN    (37u)
+#define X2_STEP_PIN      (8u)
+#define X2_DIRECTION_PIN (9u)
 #if X_AUTO_SQUARE
-  #define X2_LIMIT_PIN   (28u)
+  #define X2_LIMIT_PIN   (23u)
 #endif
 #endif
 
 #define Y_STEP_PIN      (4u)
 #define Y_DIRECTION_PIN (5u)
-#define Y_ENABLE_PIN    (40u)
 #define Y_LIMIT_PIN     (21u)
 
 #if Y_GANGED || Y_AUTO_SQUARE
-#define Y2_STEP_PIN      (26u)
-#define Y2_DIRECTION_PIN (27u)
-#define Y2_ENABLE_PIN    (37u)
+#define Y2_STEP_PIN      (8u)
+#define Y2_DIRECTION_PIN (9u)
 #if Y_AUTO_SQUARE
-  #define Y2_LIMIT_PIN   (28u)
+  #define Y2_LIMIT_PIN   (23u)
 #endif
 #endif
 
 #define Z_STEP_PIN      (6u)
 #define Z_DIRECTION_PIN (7u)
-#define Z_ENABLE_PIN    (39u)
 #define Z_LIMIT_PIN     (22u)
 
 #if Z_GANGED || Z_AUTO_SQUARE
-#define Z2_STEP_PIN      (26u)
-#define Z2_DIRECTION_PIN (27u)
-#define Z2_ENABLE_PIN    (37u)
-#define Z2_LIMIT_PIN     (28u)
+#define Z2_STEP_PIN      (8u)
+#define Z2_DIRECTION_PIN (9u)
+#define Z2_LIMIT_PIN     (23u)
 #endif
 
 #if N_AXIS > 3
 #define A_STEP_PIN      (8u)
 #define A_DIRECTION_PIN (9u)
-#define A_ENABLE_PIN    (38u)
 #define A_LIMIT_PIN     (23u)
 #endif
 
@@ -92,6 +89,9 @@
 #define B_ENABLE_PIN    (37u)
 #define B_LIMIT_PIN     (28u)
 #endif
+
+// Define stepper driver enable/disable output pin(s).
+#define STEPPERS_ENABLE_PIN     (10u)
 
 // Define spindle enable and spindle direction output pins.
 #define SPINDLE_ENABLE_PIN      (12u)
@@ -115,11 +115,4 @@
 #define I2C_PORT    4
 #define I2C_SCL4    (24u) // Not used, for info only
 #define I2C_SDA4    (25u) // Not used, for info only
-#endif
-
-#if QEI_ENABLE
-#define QEI_A_PIN      (30)
-#define QEI_B_PIN      (34)
-// #define QEI_INDEX_PIN  GPIO2_PIN
-#define QEI_SELECT_PIN (35u)
 #endif

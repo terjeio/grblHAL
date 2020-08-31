@@ -26,7 +26,7 @@
 #include "driver.h"
 #include "serial.h"
 
-#if USB_SERIAL
+#if USB_SERIAL_CDC
 #include "usb_serial.h"
 #endif
 
@@ -1003,10 +1003,10 @@ bool nvsInit (void)
 
 // End EEPROM emulation
 
-#if KEYPAD_ENABLE || USB_SERIAL
+#if KEYPAD_ENABLE || USB_SERIAL_CDC
 static void execute_realtime (uint_fast16_t state)
 {
-#if USB_SERIAL
+#if USB_SERIAL_CDC
     usb_execute_realtime(state);
 #endif
 #if KEYPAD_ENABLE
@@ -1082,7 +1082,7 @@ bool driver_init (void) {
 
     hal.show_message = showMessage;
 
-#if USB_SERIAL
+#if USB_SERIAL_CDC
     usb_serialInit();
     hal.stream.read = usb_serialGetC;
     hal.stream.get_rx_buffer_available = usb_serialRxFree;
@@ -1147,7 +1147,7 @@ bool driver_init (void) {
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
 
-#if KEYPAD_ENABLE || USB_SERIAL
+#if KEYPAD_ENABLE || USB_SERIAL_CDC
     hal.execute_realtime = execute_realtime;
 #endif
 
