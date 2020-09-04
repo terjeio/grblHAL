@@ -1,6 +1,7 @@
 /*
   wall_plotter.h - wall plotter kinematics implementation
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2019 Terje Io
 
@@ -18,5 +19,10 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#ifndef _WALL_PLOTTER_H_
+#define _WALL_PLOTTER_H_
+
 // Initialize HAL pointers for Wall Plotter kinematics
 void wall_plotter_init (void);
+
+#endif

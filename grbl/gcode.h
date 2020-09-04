@@ -1,6 +1,7 @@
 /*
   gcode.h - rs274/ngc parser.
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -20,12 +21,12 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef gcode_h
-#define gcode_h
+#ifndef _GCODE_H_
+#define _GCODE_H_
 
+#include "nuts_bolts.h"
 #include "coolant_control.h"
 #include "spindle_control.h"
-
 
 // Define Grbl status codes. Valid values (0-255)
 typedef enum {
@@ -228,7 +229,8 @@ typedef enum {
     ProgramFlow_Paused  = 3,        // M0
     ProgramFlow_OptionalStop = 1,   // M1
     ProgramFlow_CompletedM2 = 2,    // M2 (Do not alter value)
-    ProgramFlow_CompletedM30 = 30   // M30 (Do not alter value)
+    ProgramFlow_CompletedM30 = 30,  // M30 (Do not alter value)
+    ProgramFlow_CompletedM60 = 60   // M60 (Do not alter value)
 } program_flow_t;
 
 // Modal Group G5: Feed rate mode
@@ -423,8 +425,8 @@ typedef struct {
     float xyz[N_AXIS];         // X,Y,Z Translational axes
     coord_system_t coord_data; // Coordinate data
     int32_t n;                 // Line number
-    uint8_t h;                 // Tool number
-    uint8_t t;                 // Tool selection
+    uint32_t h;                // Tool number
+    uint32_t t;                // Tool selection
     uint8_t l;                 // G10 or canned cycles parameters
 } gc_values_t;
 
@@ -465,7 +467,7 @@ typedef struct {
 typedef struct {
     float offset[N_AXIS];
     float radius;
-    uint8_t tool;
+    uint32_t tool;
 } tool_data_t;
 
 // Data used for Constant Surface Speed Mode calculations
@@ -491,7 +493,7 @@ typedef struct {
     float distance_per_rev;             // Millimeters/rev
     float position[N_AXIS];             // Where the interpreter considers the tool to be at this point in the code
     int32_t line_number;                // Last line number sent
-    uint8_t tool_pending;               // Tool to be selected on next M6
+    uint32_t tool_pending;              // Tool to be selected on next M6
     bool file_run;                      // Tracks % command
     bool is_laser_ppi_mode;
     bool is_rpm_rate_adjusted;
@@ -544,5 +546,8 @@ float *gc_get_scaling (void);
 
 // Get current axis offset.
 float gc_get_offset (uint_fast8_t idx);
+
+void gc_set_tool_offset (tool_offset_mode_t mode, uint_fast8_t idx, int32_t offset);
+plane_t *gc_get_plane_data (plane_t *plane, plane_select_t select);
 
 #endif

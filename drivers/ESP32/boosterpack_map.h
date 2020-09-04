@@ -23,7 +23,7 @@
 
 #define BOARD_NAME "CNC BoosterPack"
 
-#define IOEXPAND 0
+#define IOEXPAND 0 // Do not change!
 
 #if SDCARD_ENABLE
 
@@ -63,11 +63,15 @@
 #define Z_LIMIT_PIN     GPIO_NUM_32
 #define LIMIT_MASK      (1ULL << X_LIMIT_PIN|1ULL << Y_LIMIT_PIN|1ULL << Z_LIMIT_PIN) // All limit bits
 
+#ifndef VFD_SPINDLE
 // Define spindle enable and spindle direction output pins.
 #define SPINDLE_ENABLE_PIN      IOEXPAND
 #define SPINDLE_DIRECTION_PIN   IOEXPAND
 #define SPINDLE_MASK            (1ULL << SPINDLE_ENABLE_PIN|1ULL << SPINDLE_DIRECTION_PIN)
 #define SPINDLEPWMPIN           GPIO_NUM_17
+#else
+#define SPINDLE_MASK            0
+#endif
 
 // Define flood and mist coolant enable output pins.
 
@@ -89,9 +93,12 @@
 #define KEYPAD_STROBE_PIN   GPIO_NUM_33
 #endif
 
-#if MPG_MODE_ENABLE
-#define MPG_RX_PIN      GPIO_NUM_33
-#define MPG_ENABLE_PIN  GPIO_NUM_25
+#if MPG_MODE_ENABLE || MODBUS_ENABLE
+#define UART2_RX_PIN            GPIO_NUM_17
+#define UART2_TX_PIN            GPIO_NUM_33
+#define MODBUS_DIRECTION_PIN    GPIO_NUM_25
+//#define MPG_ENABLE_PIN  GPIO_NUM_25
+#define MODBUS_BAUD             19200
 #endif
 
 #if IOEXPAND_ENABLE || KEYPAD_ENABLE || EEPROM_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)

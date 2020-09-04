@@ -1,6 +1,7 @@
 /*
   spindle_control.h - spindle control methods
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2012-2015 Sungeun K. Jeon
@@ -20,8 +21,8 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef spindle_control_h
-#define spindle_control_h
+#ifndef _SPINDLE_CONTROL_H_
+#define _SPINDLE_CONTROL_H_
 
 typedef union {
     uint8_t value;

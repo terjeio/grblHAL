@@ -1,6 +1,7 @@
 /*
   sleep.c - determines and executes sleep procedures
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2018-2019 Terje Io
   Copyright (c) 2016 Sungeun K. Jeon
@@ -19,7 +20,7 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "grbl.h"
+#include "hal.h"
 
 volatile bool slumber;
 

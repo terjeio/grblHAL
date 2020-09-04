@@ -21,21 +21,25 @@
 
 
 #ifdef ARDUINO
-#include "../../driver.h"
+#include "../driver.h"
 #else
 #include "driver.h"
 #endif
 
 #if KEYPAD_ENABLE
 
+#include <string.h>
+
 #include "keypad.h"
 
 #ifdef ARDUINO
 #include "../../i2c.h"
-#include "../grbl/grbl.h"
+#include "../grbl/report.h"
+#include "../grbl/override.h"
 #else
 #include "i2c.h"
-#include "grbl/grbl.h"
+#include "grbl/report.h"
+#include "grbl/override.h"
 #endif
 
 #define KEYBUF_SIZE 16

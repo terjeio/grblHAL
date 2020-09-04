@@ -1,6 +1,7 @@
 /*
   settings.h - eeprom configuration handling
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -20,15 +21,15 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef settings_h
-#define settings_h
+#ifndef _SETTINGS_H_
+#define _SETTINGS_H_
 
 #include "config.h"
 #include "system.h"
 
 // Version of the persistent storage data. Will be used to migrate existing data from older versions of Grbl
 // when firmware is upgraded. Always stored in byte 0 of eeprom
-#define SETTINGS_VERSION 16  // NOTE: Check settings_reset() when moving to next version.
+#define SETTINGS_VERSION 17  // NOTE: Check settings_reset() when moving to next version.
 
 // Define persistent storage memory address location values for Grbl settings and parameters
 // NOTE: 1KB persistent storage is the minimum required. The upper half is reserved for parameters and
@@ -77,13 +78,18 @@ typedef enum {
 
 #define N_COORDINATE_SYSTEMS (SettingIndex_NCoord - 3)  // Number of supported work coordinate systems (from index 1)
 
-// Define Grbl axis settings numbering scheme. Starts at Setting_AxisSettingsBase, every INCREMENT, over N_SETTINGS.
+// Define axis settings numbering scheme. Starts at Setting_AxisSettingsBase, every INCREMENT, over N_SETTINGS.
 #ifdef ENABLE_BACKLASH_COMPENSATION
 #define AXIS_N_SETTINGS          6
 #else
 #define AXIS_N_SETTINGS          4
 #endif
-#define AXIS_SETTINGS_INCREMENT  10  // Must be greater than the number of axis settings TODO: change to 100 to allow for a logical wider range of parameters?
+#define AXIS_SETTINGS_INCREMENT  10 // Must be greater than the number of axis settings TODO: change to 100 to allow for a logical wider range of parameters?
+
+// Define encoder settings numbering scheme. Starts at Setting_EncoderSettingsBase, every INCREMENT, over N_SETTINGS.
+// Not referenced by the core.
+#define ENCODER_N_SETTINGS_MAX 5 // NOTE: This is the maximum number of encoders allowed.
+#define ENCODER_SETTINGS_INCREMENT 10
 
 typedef enum {
     Setting_PulseMicroseconds = 0,
@@ -237,6 +243,15 @@ typedef enum {
     Setting_AdminPassword = 330,
     Setting_UserPassword = 331,
 
+    Setting_SpindleAtSpeedTolerance = 340,
+    Setting_ToolChangeMode = 341,
+    Setting_ToolChangeProbingDistance = 342,
+    Setting_ToolChangeFeedRate = 343,
+    Setting_ToolChangeSeekRate = 344,
+
+    Setting_EncoderSettingsBase = 400, // NOTE: Reserving settings values >= 400 for encoder settings. Up to 449.
+    Setting_EncoderSettingsMax = 449,
+
     Setting_SettingsMax
 //
 } setting_type_t;
@@ -284,7 +299,7 @@ typedef union {
                  sleep_enable                 :1,
                  disable_laser_during_hold    :1,
                  force_initialization_alarm   :1,
-                 unassigned1                  :1,
+                 legacy_rt_commands           :1,
                  allow_probing_feed_override  :1,
                  unassigned2                  :1,
                  restore_after_feed_hold      :1,
@@ -350,6 +365,7 @@ typedef struct {
     float pwm_off_value;
     float pwm_min_value;
     float pwm_max_value;
+    float at_speed_tolerance;
     pwm_piece_t pwm_piece[SPINDLE_NPWM_PIECES];
     pid_values_t pid;
     uint16_t ppr; // Spindle encoder pulses per revolution
@@ -389,10 +405,20 @@ typedef struct {
     axes_signals_t dir_invert;
     axes_signals_t enable_invert;
     axes_signals_t deenergize;
-    uint8_t pulse_microseconds;
-    uint8_t pulse_delay_microseconds;
+    float pulse_microseconds;
+    float pulse_delay_microseconds;
     uint8_t idle_lock_time; // If max value 255, steppers do not disable.
 } stepper_settings_t;
+
+typedef struct {
+    float steps_per_mm;
+    float max_rate;
+    float acceleration;
+    float max_travel;
+#ifdef ENABLE_BACKLASH_COMPENSATION
+    float backlash;
+#endif
+} axis_settings_t;
 
 typedef union {
     uint8_t value;
@@ -412,22 +438,29 @@ typedef struct {
     axes_signals_t disable_pullup;
 } limit_settings_t;
 
+typedef enum {
+    ToolChange_Disabled = 0,
+    ToolChange_Manual,
+    ToolChange_Manual_G59_3,
+    ToolChange_SemiAutomatic // Must be last
+} toolchange_mode_t;
+
+typedef struct {
+    float feed_rate;
+    float seek_rate;
+    float probing_distance;
+    toolchange_mode_t mode;
+} tool_change_settings_t;
+
 // Global persistent settings (Stored from byte persistent storage_ADDR_GLOBAL onwards)
 typedef struct {
     // Settings struct version
     uint32_t version;
-    // Axis settings
-    float steps_per_mm[N_AXIS];
-    float max_rate[N_AXIS];
-    float acceleration[N_AXIS];
-    float max_travel[N_AXIS];
-#ifdef ENABLE_BACKLASH_COMPENSATION
-    float backlash[N_AXIS];
-#endif
     float junction_deviation;
     float arc_tolerance;
     float g73_retract;
-    bool legacy_rt_commands;
+    tool_change_settings_t tool_change;
+    axis_settings_t axis[N_AXIS];
     control_signals_t control_invert;
     control_signals_t control_disable_pullup;
     coolant_state_t coolant_invert;
@@ -440,80 +473,6 @@ typedef struct {
     parking_settings_t parking;
     position_pid_t position;    // Used for synchronized motion
 } settings_t;
-
-// Setting structs that may be used by drivers
-
-typedef struct {
-    float fast_speed;
-    float slow_speed;
-    float step_speed;
-    float fast_distance;
-    float slow_distance;
-    float step_distance;
-} jog_settings_t;
-
-typedef enum {
-    IpMode_Static = 0,
-    IpMode_DHCP,
-    IpMode_AutoIP
-} ip_mode_t;
-
-typedef union {
-    uint8_t mask;
-    struct {
-        uint8_t telnet     :1,
-                websocket  :1,
-                http       :1,
-                dns        :1,
-                mdns       :1,
-                ssdp       :1,
-                unassigned :2;
-    };
-} network_services_t;
-
-typedef char ssid_t[65];
-typedef char password_t[33];
-typedef char hostname_t[33];
-
-typedef struct {
-    char ip[16];
-    char gateway[16];
-    char mask[16];
-    hostname_t hostname;
-    uint16_t telnet_port;
-    uint16_t websocket_port;
-    uint16_t http_port;
-    ip_mode_t ip_mode;
-    network_services_t services;
-} network_settings_t;
-
-typedef enum {
-    WiFiMode_NULL = 0,
-    WiFiMode_STA,
-    WiFiMode_AP,
-    WiFiMode_APSTA
-} grbl_wifi_mode_t;
-
-typedef struct {
-    ssid_t ssid;
-    password_t password;
-    char country[4];
-    uint8_t channel;
-    network_settings_t network;
-} wifi_ap_settings_t;
-
-typedef struct {
-    ssid_t ssid;
-    password_t password;
-    network_settings_t network;
-} wifi_sta_settings_t;
-
-typedef struct {
-    char device_name[33];
-    char service_name[33];
-} bluetooth_settings_t;
-
-// End of setting structs that may be used by drivers
 
 extern settings_t settings;
 
@@ -548,6 +507,6 @@ bool settings_read_coord_data(uint8_t idx, float (*coord_data)[N_AXIS]);
 bool settings_write_tool_data (tool_data_t *tool_data);
 
 // Read selected tool data from persistent storage
-bool settings_read_tool_data (uint8_t tool, tool_data_t *tool_data);
+bool settings_read_tool_data (uint32_t tool, tool_data_t *tool_data);
 
 #endif

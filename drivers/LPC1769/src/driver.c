@@ -22,8 +22,10 @@
 */
 
 #include <stdint.h>
+#include <string.h>
 
-#include "grbl/grbl.h"
+#include "grbl/hal.h"
+#include "grbl/nuts_bolts.h"
 
 #include "driver.h"
 #include "serial.h"
@@ -43,7 +45,7 @@
 #include "sdcard/sdcard.h"
 #endif
 
-#if USB_ENABLE
+#if USB_SERIAL_CDC
 #include "usb_serial.h"
 #endif
 
@@ -52,6 +54,7 @@
 #endif
 
 static bool pwmEnabled = false, IOInitDone = false;
+static uint16_t pulse_length, pulse_delay;
 // Inverts the probe pin state depending on user settings and probing cycle mode.
 static uint8_t probe_invert_mask;
 static axes_signals_t next_step_outbits;
@@ -264,7 +267,7 @@ static void stepperCyclesPerTick (uint32_t cycles_per_tick)
 // 1. bitbanding. Pros: can assign pins to different ports, no RMW needed. Cons: overhead, pin changes not synchronous
 // 2. bit shift. Pros: fast, Cons: bits must be consecutive
 // 3. lookup table. Pros: signal inversions done at setup, Cons: slower than bit shift?
-inline static void stepperSetStepOutputs (axes_signals_t step_outbits)
+inline static __attribute__((always_inline)) void stepperSetStepOutputs (axes_signals_t step_outbits)
 {
 #if STEP_OUTMODE == GPIO_BITBAND
     step_outbits.value ^= settings.steppers.step_invert.value;
@@ -286,7 +289,7 @@ inline static void stepperSetStepOutputs (axes_signals_t step_outbits)
 
 // Set stepper direction output pins
 // NOTE: see note for stepperSetStepOutputs()
-inline static void stepperSetDirOutputs (axes_signals_t dir_outbits)
+inline static __attribute__((always_inline)) void stepperSetDirOutputs (axes_signals_t dir_outbits)
 {
 #if DIRECTION_OUTMODE == GPIO_BITBAND
     dir_outbits.value ^= settings.steppers.dir_invert.value;
@@ -306,31 +309,41 @@ inline static void stepperSetDirOutputs (axes_signals_t dir_outbits)
 #endif
 }
 
-// Sets stepper direction and pulse pins and starts a step pulse
-// When delayed pulse the step register is written in the step delay interrupt handler
+// Sets stepper direction and pulse pins and starts a step pulse.
 static void stepperPulseStart (stepper_t *stepper)
 {
-    if(stepper->new_block) {
-        stepper->new_block = false;
+    if(stepper->dir_change) {
+        stepper->dir_change = false;
         stepperSetDirOutputs(stepper->dir_outbits);
     }
 
     if(stepper->step_outbits.value) {
         stepperSetStepOutputs(stepper->step_outbits);
-        PULSE_TIMER->TCR = 1;
+        PULSE_TIMER->TCR = 0b01;
     }
 }
 
-// Sets stepper direction and pulse pins and starts a step pulse with and initial delay
+// Start a stepper pulse, delay version.
+// Note: delay is only added when there is a direction change and a pulse to be output.
 static void stepperPulseStartDelayed (stepper_t *stepper)
 {
-    if(stepper->new_block) {
-        stepper->new_block = false;
+    if(stepper->dir_change) {
+
+        stepper->dir_change = false;
         stepperSetDirOutputs(stepper->dir_outbits);
+
+        if(stepper->step_outbits.value) {
+            PULSE_TIMER->TCR = 0b10;
+            next_step_outbits = stepper->step_outbits; // Store out_bits
+            PULSE_TIMER->MR[0] = pulse_delay;
+            PULSE_TIMER->TCR = 0b01;
+        }
+
+        return;
     }
 
     if(stepper->step_outbits.value) {
-        next_step_outbits = stepper->step_outbits; // Store out_bits
+        stepperSetStepOutputs(stepper->step_outbits);
         PULSE_TIMER->TCR = 1;
     }
 }
@@ -403,7 +416,10 @@ inline static axes_signals_t limitsGetState()
 // Each bitfield bit indicates a control signal, where triggered is 1 and not triggered is 0.
 static control_signals_t systemGetState (void)
 {
-    control_signals_t signals = {0};
+    control_signals_t signals;
+
+    signals.value = settings.control_invert.mask;
+
 #if CONTROL_INMODE == GPIO_BITBAND
     signals.reset = BITBAND_GPIO(RESET_PORT->PIN, RESET_PIN);
     signals.feed_hold = BITBAND_GPIO(FEED_HOLD_PORT->PIN, FEED_HOLD_PIN);
@@ -431,7 +447,7 @@ static control_signals_t systemGetState (void)
 // Sets up the probe pin invert mask to
 // appropriately set the pin logic according to setting for normal-high/normal-low operation
 // and the probing cycle modes for toward-workpiece/away-from-workpiece.
-static void probeConfigureInvertMask(bool is_probe_away)
+static void probeConfigure(bool is_probe_away, bool probing)
 {
   probe_invert_mask = settings.flags.invert_probe_pin ? 0 : PROBE_BIT;
 
@@ -697,16 +713,24 @@ void settings_changed (settings_t *settings)
         } else
             hal.spindle_set_state = spindleSetState;
 
-        if(hal.driver_cap.step_pulse_delay && settings->steppers.pulse_delay_microseconds) {
+        int32_t t = (uint32_t)(12.0f * (settings->steppers.pulse_microseconds - STEP_PULSE_LATENCY)) - 1;
+        pulse_length = t < 2 ? 2 : t;
+
+        if(hal.driver_cap.step_pulse_delay && settings->steppers.pulse_delay_microseconds > 0.0f) {
+            t = (uint32_t)(12.0f * (settings->steppers.pulse_delay_microseconds - 1.5f)) - 1;
+            pulse_delay = t < 2 ? 2 : t;
+            if(pulse_delay == pulse_length)
+                pulse_delay++;
             hal.stepper_pulse_start = &stepperPulseStartDelayed;
-            PULSE_TIMER->MCR |= MR0I;                   // Enable CCR1 interrupt
-        } else {
+        } else
             hal.stepper_pulse_start = &stepperPulseStart;
-            PULSE_TIMER->MCR &= ~MR0I;                  // Disable CCR1 interrupt
-        }
-        PULSE_TIMER->MCR |= (MR1I|MR1S|MR1R); // Enable interrupt for finish step pulse, reset and stop timer
-        PULSE_TIMER->MR[0] = settings->steppers.pulse_delay_microseconds;
-        PULSE_TIMER->MR[1] = settings->steppers.pulse_microseconds + settings->steppers.pulse_delay_microseconds;
+
+        PULSE_TIMER->TCR = 0b10;
+        PULSE_TIMER->MR[0] = pulse_length;
+        PULSE_TIMER->MCR |= (MR0I|MR0S|MR0R); // Enable interrupt for finish step pulse, reset and stop timer
+        PULSE_TIMER->TCR = 0b00;
+
+        stepperSetStepOutputs((axes_signals_t){0});
 
         NVIC_DisableIRQ(EINT3_IRQn);  // Disable GPIO interrupt
 
@@ -899,7 +923,7 @@ static bool driver_setup (settings_t *settings)
     BITBAND_GPIO(Y_STEP_PORT->DIR, Y_STEP_PIN) = 1;
     BITBAND_GPIO(Z_STEP_PORT->DIR, Z_STEP_PIN) = 1;
 #ifdef A_AXIS
-    BITBAND_GPIO(A_STEP_PORT->DIR, B_STEP_PIN) = 1;
+    BITBAND_GPIO(A_STEP_PORT->DIR, A_STEP_PIN) = 1;
 #endif
 #ifdef B_AXIS
     BITBAND_GPIO(B_STEP_PORT->DIR, B_STEP_PIN) = 1;
@@ -938,9 +962,11 @@ static bool driver_setup (settings_t *settings)
     STEPPER_TIMER->CCR = 0;            // no capture
     STEPPER_TIMER->EMR = 0;            // no external match
 
+    uint32_t xx = SystemCoreClock / 12000000UL / Chip_Clock_GetPCLKDiv(PULSE_TIMER_PCLK) - 1; // to 0.12 us
+
     PULSE_TIMER->TCR = 0b10;
     PULSE_TIMER->CTCR = 0;
-    PULSE_TIMER->PR = SystemCoreClock / 1000000 / Chip_Clock_GetPCLKDiv(PULSE_TIMER_PCLK); // to 1 us
+    PULSE_TIMER->PR = xx; // to 0.1 us;
     PULSE_TIMER->TCR = 0;
 
     NVIC_EnableIRQ(STEPPER_TIMER_INT0);   // Enable stepper interrupt
@@ -990,7 +1016,7 @@ static bool driver_setup (settings_t *settings)
 
  // Set defaults
 
-    IOInitDone = settings->version == 16;
+    IOInitDone = settings->version == 17;
 
     settings_changed(settings);
 
@@ -1028,7 +1054,7 @@ bool driver_init (void) {
 #endif
 
     hal.info = "LCP1769";
-    hal.driver_version = "200528";
+    hal.driver_version = "200818";
     hal.driver_setup = driver_setup;
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
@@ -1051,7 +1077,7 @@ bool driver_init (void) {
     hal.coolant_get_state = coolantGetState;
 
     hal.probe_get_state = probeGetState;
-    hal.probe_configure_invert_mask = probeConfigureInvertMask;
+    hal.probe_configure_invert_mask = probeConfigure;
 
     hal.spindle_set_state = spindleSetState;
     hal.spindle_get_state = spindleGetState;
@@ -1064,7 +1090,7 @@ bool driver_init (void) {
 
     hal.system_control_get_state = systemGetState;
 
-#if USB_ENABLE
+#if USB_SERIAL_CDC
     usbInit();
     hal.stream.read = usbGetC;
     hal.stream.write = usbWriteS;
@@ -1160,12 +1186,16 @@ void STEPPER_IRQHandler (void)
 // completing one step cycle.
 void STEPPULSE_IRQHandler (void)
 {
-    uint32_t ifg = PULSE_TIMER->IR;
-    if(ifg & MR0IFG)
-        stepperSetStepOutputs(next_step_outbits); // Begin step pulse
-    else if(ifg & MR1IFG)
-        stepperSetStepOutputs((axes_signals_t){0}); // End step pulse
-    PULSE_TIMER->IR = ifg;
+    PULSE_TIMER->IR = PULSE_TIMER->IR;
+
+    if(PULSE_TIMER->MR[0] == pulse_length)
+        stepperSetStepOutputs((axes_signals_t){0}); // End step pulse.
+    else {
+        stepperSetStepOutputs(next_step_outbits);   // Begin step pulse.
+        PULSE_TIMER->TCR = 0b10;
+        PULSE_TIMER->MR[0] = pulse_length;
+        PULSE_TIMER->TCR = 0b01;
+    }
 }
 
 inline static bool enqueue_debounce (input_signal_t *signal)

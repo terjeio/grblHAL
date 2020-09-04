@@ -1,6 +1,7 @@
 /*
   grbllib.c - An embedded CNC Controller with rs274/ngc (g-code) support
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2011-2015 Sungeun K. Jeon
@@ -20,7 +21,22 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "grbl.h"
+#include <string.h>
+#include <stdlib.h>
+#include <assert.h>
+
+#include "hal.h"
+#include "nuts_bolts.h"
+#include "tool_change.h"
+#include "override.h"
+#include "protocol.h"
+#include "limits.h"
+#include "report.h"
+#include "state_machine.h"
+#include "eeprom_emulate.h"
+#ifdef KINEMATICS_API
+#include "kinematics.h"
+#endif
 
 #ifdef COREXY
 #include "corexy.h"
@@ -151,7 +167,7 @@ int grbl_enter (void)
     hal.driver_cap.amass_level = 0;
 #endif
 
-#if DEFAULT_STEP_PULSE_DELAY > 0
+#ifdef DEFAULT_STEP_PULSE_DELAY
     driver_ok = driver_ok & hal.driver_cap.step_pulse_delay;
 #endif
 /*
@@ -173,7 +189,7 @@ int grbl_enter (void)
 #endif
 
     if(!driver_ok) {
-        hal.stream.write("GrblHAL: incompatible driver\r\n");
+        hal.stream.write("GrblHAL: incompatible driver" ASCII_EOL);
         while(true);
     }
 
@@ -231,6 +247,12 @@ int grbl_enter (void)
         // Sync cleared gcode and planner positions to current system position.
         plan_sync_position();
         gc_sync_position();
+
+        if(hal.stepper_disable_motors)
+            hal.stepper_disable_motors((axes_signals_t){0}, SquaringMode_Both);
+
+        if(!hal.driver_cap.atc)
+            tc_init();
 
         // Print welcome message. Indicates an initialization has occured at power-up or with a reset.
         report_init_message();

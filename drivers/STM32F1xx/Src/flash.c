@@ -1,6 +1,6 @@
 /*
 
-  flash.h - driver code for STM32F103C8 ARM processors
+  flash.c - driver code for STM32F103C8 ARM processors
 
   Part of GrblHAL
 
@@ -23,9 +23,10 @@
 
 */
 
-#include "../grbl/grbl.h"
+#include <string.h>
 
 #include "main.h"
+#include "grbl/hal.h"
 #include "stm32f1xx_hal_flash_ex.h"
 
 static const uint8_t *flash_target = (uint8_t *)(FLASH_BANK1_END - FLASH_PAGE_SIZE + 1);    // Last page start adress

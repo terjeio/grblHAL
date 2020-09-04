@@ -3,7 +3,7 @@
 
   Main state machine
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2018-2019 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -23,7 +23,13 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "grbl.h"
+#include <string.h>
+//#include <stdlib.h>
+
+#include "hal.h"
+#include "motion_control.h"
+#include "state_machine.h"
+#include "override.h"
 
 static void state_idle (uint_fast16_t new_state);
 static void state_cycle (uint_fast16_t rt_exec);
@@ -291,16 +297,17 @@ static void state_cycle (uint_fast16_t rt_exec)
 
 static void state_await_toolchanged (uint_fast16_t rt_exec)
 {
-    if ((rt_exec & EXEC_CYCLE_START) && !gc_state.tool_change) {
-        // Tool change complete, restore "normal" stream input
-        if(hal.stream.suspend_read && hal.stream.suspend_read(false)) {
-            sys.state = STATE_CYCLE;    // Force a running state realtime report
-            report_realtime_status();   // to get streaming going again
+    if (rt_exec & EXEC_CYCLE_START) {
+        if(!gc_state.tool_change) {
+            if(hal.stream.suspend_read)
+                hal.stream.suspend_read(false); // Tool change complete, restore "normal" stream input.
+            sys.report.tool = On;
         }
-        sys.report.tool = On;
-        pending_state = STATE_IDLE;
+        pending_state = gc_state.tool_change ? STATE_TOOL_CHANGE : STATE_IDLE;
         set_state(STATE_IDLE);
         set_state(STATE_CYCLE);
+        // Force a status report to let the sender know tool change is completed.
+        system_set_exec_state_flag(EXEC_STATUS_REPORT);
     }
 }
 
@@ -319,6 +326,8 @@ static void state_await_motion_cancel (uint_fast16_t rt_exec)
             sys.suspend = false;
         }
         set_state(pending_state);
+        if(gc_state.tool_change)
+            set_state(STATE_TOOL_CHANGE);
     }
 }
 

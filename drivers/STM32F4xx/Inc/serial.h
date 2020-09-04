@@ -24,8 +24,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define USE_USB
-
 #define RX_BUFFER_HWM 900
 #define RX_BUFFER_LWM 300
 

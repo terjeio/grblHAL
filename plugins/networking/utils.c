@@ -8,8 +8,10 @@
 #include <ctype.h>
 #include <stdarg.h>
 
+#include "grbl/plugins.h"
+#include "grbl/nuts_bolts.h"
+
 #include "utils.h"
-#include "grbl/grbl.h"
 
 char *btoa (uint64_t bytes)
 {

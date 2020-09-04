@@ -1,6 +1,7 @@
 /*
   limits.c - code pertaining to limit-switches and performing the homing cycle
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2017-2019 Terje Io
   Copyright (c) 2012-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -20,7 +21,17 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "grbl.h"
+#include <math.h>
+#include <string.h>
+
+#include "hal.h"
+#include "nuts_bolts.h"
+#include "protocol.h"
+#include "motion_control.h"
+#include "limits.h"
+#ifdef KINEMATICS_API
+#include "kinematics.h"
+#endif
 
 // Homing axis search distance multiplier. Computed by this value times the cycle travel.
 #ifndef HOMING_AXIS_SEARCH_SCALAR
@@ -81,8 +92,8 @@ void limits_set_machine_positions (axes_signals_t cycle, bool add_pulloff)
     } else do {
         if (cycle.mask & bit(--idx))
             sys_position[idx] = bit_istrue(settings.homing.dir_mask.value, bit(idx))
-                                 ? lroundf((settings.max_travel[idx] + pulloff) * settings.steps_per_mm[idx])
-                                 : lroundf(-pulloff * settings.steps_per_mm[idx]);
+                                 ? lroundf((settings.axis[idx].max_travel + pulloff) * settings.axis[idx].steps_per_mm)
+                                 : lroundf(-pulloff * settings.axis[idx].steps_per_mm);
     } while(idx);
 }
 #endif
@@ -129,7 +140,7 @@ static bool limits_homing_cycle (axes_signals_t cycle)
         // Set target based on max_travel setting. Ensure homing switches engaged with search scalar.
         // NOTE: settings.max_travel[] is stored as a negative value.
         if (bit_istrue(cycle.mask, bit(idx)))
-            max_travel = max(max_travel,(-HOMING_AXIS_SEARCH_SCALAR) * settings.max_travel[idx]);
+            max_travel = max(max_travel,(-HOMING_AXIS_SEARCH_SCALAR) * settings.axis[idx].max_travel);
     } while(idx);
 
     // Set search mode with approach at seek rate to quickly engage the specified cycle.mask limit switches.
@@ -229,6 +240,9 @@ static bool limits_homing_cycle (axes_signals_t cycle)
                     break;
                 }
             }
+
+            if(hal.execute_realtime)
+                hal.execute_realtime(STATE_HOMING);
 
         } while (axislock.mask & AXES_BITMASK);
 

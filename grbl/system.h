@@ -1,6 +1,7 @@
 /*
   system.h - Header for system level commands and real-time processes
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2014-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -19,8 +20,8 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef system_h
-#define system_h
+#ifndef _SYSTEM_H_
+#define _SYSTEM_H_
 
 #include "gcode.h"
 #include "probe.h"
@@ -77,6 +78,7 @@ typedef enum {
     Message_EStop = 12,
     Message_HomingCycleRequired = 13,
     Message_CycleStartToRerun = 14,
+    Message_ReferenceTLOEstablished = 15,
     Message_NextMessage // Next unassigned message number
 } message_code_t;
 
@@ -95,7 +97,8 @@ typedef enum {
     Alarm_EStop = 10,
     Alarm_HomingRequried = 11,
     Alarm_LimitsEngaged = 12,
-    Alarm_ProbeProtect = 13
+    Alarm_ProbeProtect = 13,
+    Alarm_Spindle = 14
 } alarm_code_t;
 
 typedef enum {
@@ -137,7 +140,10 @@ typedef union {
                  stop_disable       :1, // M1
                  e_stop             :1,
                  probe_disconnected :1,
-                 unassigned         :6,
+                 motor_fault        :1,
+                 motor_warning      :1,
+                 arc_ok             :1,
+                 unassigned         :3,
                  probe_triggered    :1, // used for probe protection
                  deasserted         :1; // this flag is set if signals are deasserted. Note: do NOT pass on to Grbl control_interrupt_handler if set.
     };
@@ -171,20 +177,22 @@ typedef struct {
 typedef union {
     uint16_t value;
     struct {
-        uint16_t mpg_mode    :1, // MPG mode changed.
-                 scaling     :1, // Scaling (G50/G51) changed.
-                 homed       :1, // Homed state changed.
-                 xmode       :1, // Lathe radius/diameter mode changed.
-                 spindle     :1, // Spindle state changed.
-                 coolant     :1, // Coolant state changed.
-                 overrides   :1, // Overrides changed.
-                 tool        :1, // Tool changed.
-                 wco         :1, // Add work coordinates.
-                 gwco        :1, // Add work coordinate.
-                 pwm         :1, // Add PWM information (optional: to be added by driver).
-                 motor       :1, // Add motor information (optional: to be added by driver).
-                 tool_offset :1, // Tool offsets changed.
-                 unused      :3;
+        uint16_t mpg_mode      :1, // MPG mode changed.
+                 scaling       :1, // Scaling (G50/G51) changed.
+                 homed         :1, // Homed state changed.
+                 xmode         :1, // Lathe radius/diameter mode changed.
+                 spindle       :1, // Spindle state changed.
+                 coolant       :1, // Coolant state changed.
+                 overrides     :1, // Overrides changed.
+                 tool          :1, // Tool changed.
+                 wco           :1, // Add work coordinates.
+                 gwco          :1, // Add work coordinate.
+                 tool_offset   :1, // Tool offsets changed.
+                 pwm           :1, // Add PWM information (optional: to be added by driver).
+                 motor         :1, // Add motor information (optional: to be added by driver).
+                 encoder       :1, // Add encoder information (optional: to be added by driver).
+                 tlo_reference :1, // Tool length offset reference changed
+                 all           :1; // Set when CMD_STATUS_REPORT_ALL is requested, may be used by user code
     };
 } report_tracking_flags_t;
 
@@ -219,6 +227,8 @@ typedef struct {
     bool suspend;                       // System suspend state flag.
     volatile bool steppers_deenergize;  // Set to true to deenergize stepperes
     bool mpg_mode;                      // To be moved to system_flags_t
+    bool tlo_reference_set;             // True when tool length reference offset is established
+    int32_t tlo_reference;              // Tool length reference offset
     alarm_code_t alarm_pending;         // Delayed alarm, currently used for probe protection
     system_flags_t flags;               // Assorted state flags
     step_control_t step_control;        // Governs the step segment generator depending on system state.

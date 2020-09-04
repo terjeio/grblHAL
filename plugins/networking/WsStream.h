@@ -1,5 +1,5 @@
 //
-// WsStream.h - lw-IP/FreeRTOS websocket stream implementation
+// WsStream.h - lwIP websocket stream implementation
 //
 // v1.0 / 2019-11-18 / Io Engineering / Terje
 //

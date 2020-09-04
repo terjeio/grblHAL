@@ -1,6 +1,7 @@
 /*
   protocol.h - controls Grbl execution protocol and procedures
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
@@ -19,8 +20,8 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef protocol_h
-#define protocol_h
+#ifndef _PROTOCOL_H_
+#define _PROTOCOL_H_
 
 // Line buffer size from the input stream to be executed.
 // NOTE: Not a problem except for extreme cases, but the line buffer size can be too small

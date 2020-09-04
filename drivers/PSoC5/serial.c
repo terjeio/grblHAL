@@ -23,7 +23,8 @@
 
 #include "project.h"
 #include "serial.h"
-#include "grbl.h"
+#include "stream.h"
+#include "hal.h"
 
 static void uart_rx_interrupt_handler (void);
 

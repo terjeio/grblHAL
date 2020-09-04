@@ -1,12 +1,12 @@
 $-Code	 Setting	 Units	Datatype	Data format	Setting Description	Min	Max
-0	Step pulse time	microseconds	integer	#0	Sets time length per step. Minimum 3 microseconds.	3	
+0	Step pulse time	microseconds	float	#0.0	Sets time length per step. Minimum 2 microseconds.\n\nThis needs to be reduced from the default value of 10 when max. step rates exceed approximately 80 kHz. 	2	
 1	Step idle delay	milliseconds	integer	##0	Sets a short hold delay when stopping to let dynamics settle before disabling steppers. Value 255 keeps motors enabled.		255
 2	Step pulse invert	mask	bitfield	axes	Inverts the step signals (active low).		
 3	Step direction invert	mask	bitfield	axes	Inverts the direction signals (active low).		
 4	Invert step enable pin	boolean	bitfield	axes	Inverts the stepper driver enable signals  (active low). If the stepper drivers shares the same enable signal only X is used.		
 5	Invert limit pins	mask	bitfield	axes	Inverts the axis limit input signals. 		
 6	Invert probe pin	boolean	bool		Inverts the probe input pin signal.		
-10	Status report options	mask	bitfield	Position in machine coordinate,Buffer state,Line numbers,Feed & speed,Pin state,Work coordinate offset,Overrides,Probe coordinates,Buffer sync on WCO change,Alarm substatus,Parser state	Specifies optional data included in status reports.\n\nNote that Parser state will be sent separately after the status report and only on changes.		
+10	Status report options	mask	bitfield	Position in machine coordinate,Buffer state,Line numbers,Feed & speed,Pin state,Work coordinate offset,Overrides,Probe coordinates,Buffer sync on WCO change,Parser state,Alarm substatus	Specifies optional data included in status reports.\n\nNote that Parser state will be sent separately after the status report and only on changes.		
 11	Junction deviation	mm	float	#####0.000	Sets how fast Grbl travels through consecutive motions. Lower value slows it down.		
 12	Arc tolerance	mm	float	#####0.000	Sets the G2 and G3 arc tracing accuracy based on radial error. Beware: A very small value may effect performance.		
 13	Report in inches	boolean	bool		Enables inch units when returning any position and rate value that is not a settings value.		
@@ -20,12 +20,12 @@ $-Code	 Setting	 Units	Datatype	Data format	Setting Description	Min	Max
 21	Hard limits enable	mask	xbitfield	Enable,Strict mode	When enabled immediately halts motion and throws an alarm when a limit switch is triggered. In strict mode only homing is possible when a switch is engaged. 		
 22	Homing cycle	mask	xbitfield	Enable,Enable single axis commands,Homing on startup required,Set machine origin to 0,Two switches shares one input pin,Allow manual	Enables homing cycle. Requires limit switches on axes to be automatically homed.\n\nWhen `Enable single axis commands` is checked, single axis homing can be performed by $H<axis letter> commands.\n\nWhen `Allow manual` is checked, axes not homed automatically may be homed manually by $H or $H<axis letter> commands.		
 23	Homing direction invert	mask	bitfield	axes	Homing searches for a switch in the positive direction. Set axis bit to search in negative direction.		
-24	Homing locate feed rate	mm/min	float	#####0.000	Feed rate to slowly engage limit switch to determine its location accurately.		
-25	Homing search seek rate	mm/min	float	#####0.000	Seek rate to quickly find the limit switch before the slower locating phase.		
+24	Homing locate feed rate	mm/min	float	#####0.0	Feed rate to slowly engage limit switch to determine its location accurately.		
+25	Homing search seek rate	mm/min	float	#####0.0	Seek rate to quickly find the limit switch before the slower locating phase.		
 26	Homing switch debounce delay	milliseconds	integer	##0	Sets a short delay between phases of homing cycle to let a switch debounce.		
 27	Homing switch pull-off distance	mm	float	#####0.000	Retract distance after triggering switch to disengage it. Homing will fail if switch isn't cleared.		
 28	G73 Retract distance	mm	float	#####0.000	G73 retract distance (for chip breaking drilling).		
-29	Pulse delay	microseconds	integer	##0	Step pulse delay.	0	10
+29	Pulse delay	microseconds	float	#0.0	Step pulse delay.\n\nNormally leave this at 0 as there is an implicit delay on direction changes when AMASS is active. 	0	10
 30	Maximum spindle speed	RPM	float	#####0.000	Maximum spindle speed. Sets PWM to maximum duty cycle.		
 31	Minimum spindle speed	RPM	float	#####0.000	Minimum spindle speed. Sets PWM to minimum duty cycle.		
 32	Mode of operation	integer	radiobuttons	Normal,Laser mode,Lathe mode	Laser mode: consecutive G1/2/3 commands will not halt when spindle speed is changed.\nLathe mode: allows use of G7, G8, G96 and G97.		
@@ -62,7 +62,7 @@ $-Code	 Setting	 Units	Datatype	Data format	Setting Description	Min	Max
 63	Feed hold actions	mask	bitfield	Disable laser during hold,Restore spindle and coolant state on resume	Actions taken during feed hold and on resume from feed hold. 		
 64	Force init alarm	boolean	bool		Starts Grbl in alarm mode after a cold reset.		
 65	Probing feed override	boolean	bool		Allow feed override during probing. 
-70	Network Services	mask	bitfield	Telnet,Websocket,HTTP,DNS,MDNS,SSDP	Network services to enable. Consult driver documentation for availability.		
+70	Network Services	mask	bitfield	Telnet,Websocket,HTTP,DNS,MDNS,SSDP	Network services to enable. Consult driver documentation for availability.\n\nNOTE: A hard reset of the controller is required after changing network settings.		
 71	Bluetooth device		string	x(32)	Bluetooth device name.
 72	Bluetooth service		string	x(32)	Bluetooth service name.
 73	WiFi Mode	integer	radiobuttons	Off,Station,Access Point,Access Point/Station	WiFi Mode.
@@ -123,13 +123,22 @@ $-Code	 Setting	 Units	Datatype	Data format	Setting Description	Min	Max
 165	C-axis backlash compensation	mm	float	#####0.000	B-axis backlash distance to compensate for.		
 256	Trinamic driver	mask	bitfield	axes	Enable SPI controlled Trinamic driver for axis.		
 257	Sensorless homing	mask	bitfield	axes	Enable sensorless homing for axis. Requires SPI controlled Trinamic driver.		
-300	Hostname		string	x(64)	Network hostname.
-301	IP Mode	integer	radiobuttons	AutoIP,Static,DHCP	IP Mode.		
-302	IP Address		ip4		Static IP address. Only available when IP Mode is set to Static.
-303	Gateway		ip4		Static gateway address. Only available when IP Mode is set to Static.
-304	Netmask		ip4		Static netmask. Only available when IP Mode is set to Static.
-305	Telnet Port		integer	####0	(Raw) Telnet port number listening for incoming connections.	1	65535
-306	HTTP Port		integer	####0	HTTP port number listening for incoming connections.	1	65535
-307	Websocket Port		integer	####0	Websocket port number listening for incoming connections.\nNOTE: WebUI requires this to be HTTP port number + 1.	1	65535
+300	Hostname		string	x(64)	Network hostname.\n\nNOTE: A hard reset of the controller is required after changing network settings.
+301	IP Mode	integer	radiobuttons	Static,DHCP,AutoIP	IP Mode.\n\nNOTE: A hard reset of the controller is required after changing network settings.		
+302	IP Address		ip4		Static IP address.\n\nNOTE: A hard reset of the controller is required after changing network settings.
+303	Gateway		ip4		Static gateway address.\n\nNOTE: A hard reset of the controller is required after changing network settings.
+304	Netmask		ip4		Static netmask.\n\nNOTE: A hard reset of the controller is required after changing network settings.
+305	Telnet Port		integer	####0	(Raw) Telnet port number listening for incoming connections.\n\nNOTE: A hard reset of the controller is required after changing network settings.	1	65535
+306	HTTP Port		integer	####0	HTTP port number listening for incoming connections.\n\nNOTE: A hard reset of the controller is required after changing network settings.	1	65535
+307	Websocket Port		integer	####0	Websocket port number listening for incoming connections.\n\nNOTE: A hard reset of the controller is required after changing network settings.\nNOTE: WebUI requires this to be HTTP port number + 1.	1	65535
 330	Admin Password		string	x(32)	Administrator password.
 331	User Password		string	x(32)	User password.
+340	Spindle at speed tolerance	percent	float	##0.0	"Spindle at speed" tolerance in percent of programmed RPM. Set to 0 to disable "spindle at speed" check.	1	100
+341	Tool change mode	integer	radiobuttons	Normal,Manual touch off,Manual touch off @ G59.3,Automatic touch off @ G59.3	Normal: allows jogging for manual touch off. Set new position manually.\n\nManual touch off: retracts tool axis to home position for tool change, use jogging or $TPW for touch off.\n\nManual touch off @ G59.3: retracts tool axis to home position then to G59.3 position for tool change, use jogging or $TPW for touch off.\n\nAutomatic touch off @ G59.3: retracts tool axis to home position for tool change, then to G59.3 position for automatic touch off.\n\nAll modes except "Normal" returns the tool (controlled point) to original position after touch off.
+342	Tool change probing distance	mm	float	#####0.0	Maximum probing distance for automatic or $TPW touch off.		
+343	Tool change locate feed rate	mm/min	float	#####0.0	Feed rate to slowly engage tool change sensor to determine the tool offset accurately.		
+344	Tool change search seek rate	mm/min	float	#####0.0	Seek rate to quickly find the tool change sensor before the slower locating phase.		
+400	Encoder mode	integer	radiobuttons	Universal,Feed rate override,Rapid rate override,Spindle RPM override	Universal: Toggle between Feed rate, Rapid rate and Spindle RPM override modes with single click. Double click to reset to default.\nOther modes: single or double click to reset to default value.		
+401	Encoder CPR		integer	###0	Encoder Count Per Revolution.	1	
+402	Encoder CPD		integer	#0	Encoder Count Per Detent.	1	
+403	Encoder double click sensitivity	ms	integer	##0	Maximum time for detecting a double click.	100	900

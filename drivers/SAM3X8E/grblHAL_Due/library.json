@@ -1,0 +1,17 @@
+{
+	"name": "grbl for Arduino Due",
+	"frameworks": "Arduino",
+	"platforms": "Due",
+	"keywords": "grbl, CNC",
+	"description": "grblHAL for Arduino Due", 
+	"version": "1.1.7",
+	"authors":
+	{	"name": "Terje Io",
+		"maintainer": true
+	},
+	"repository":
+	{	"type": "git",
+		"url": "https://github.com/terjeio/grblHAL"
+	},
+    "examples": "examples/*/*.ino"
+}

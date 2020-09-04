@@ -5,7 +5,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2018 Terje Io
+  Copyright (c) 2018-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -24,7 +24,7 @@
 #ifndef _ATC_H_
 #define _ATC_H_
 
-#include "grbl/grbl.h"
+#include "grbl/gcode.h"
 
 void atc_tool_select (uint8_t tool);
 void atc_tool_selected (tool_data_t *tool);

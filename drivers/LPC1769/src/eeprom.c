@@ -23,12 +23,18 @@
 
 */
 
-#include "chip.h"
 #include "driver.h"
-#include "grbl/grbl.h"
 
 #define EEPROM_I2C_ADDRESS (0xA0 >> 1)
 #define EEPROM_PAGE_SIZE 32
+
+#if EEPROM_ENABLE
+
+#include <string.h>
+
+#include "chip.h"
+#include "grbl/grbl.h"
+#include "grbl/nuts_bolts.h"
 
 typedef struct {
     uint16_t addr;
@@ -36,8 +42,6 @@ typedef struct {
     uint8_t *data;
     uint16_t word_addr;
 } i2c_trans_t;
-
-#if EEPROM_ENABLE
 
 static i2c_trans_t i2c;
 static I2C_XFER_T xfer;
@@ -75,8 +79,10 @@ static void I2C_EEPROM (i2c_trans_t *i2c, bool read)
 
     Chip_I2C_MasterTransfer(I2C1, &xfer);
 
+#if !EEPROM_IS_FRAM
     if(!read)
         hal.delay_ms(15, NULL);
+#endif
 
     i2c->data += i2c->count;
 }

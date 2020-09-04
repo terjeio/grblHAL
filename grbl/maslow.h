@@ -1,7 +1,7 @@
 /*
   maslow.h - Maslow router kinematics implementation
 
-  Part of Grbl
+  Part of GrblHAL
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -31,8 +31,8 @@
 
 #include "grbl.h"
 
-#ifndef __maslow_h__
-#define __maslow_h__
+#ifndef _MASLOW_H_
+#define _MASLOW_H_
 
 #define FP_SCALING 1024.0f
 #define SPROCKET_RADIUS_MM (10.1f)

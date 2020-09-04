@@ -1,6 +1,7 @@
 /*
   settings.c - eeprom configuration handling
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2011-2015 Sungeun K. Jeon
@@ -20,10 +21,37 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "grbl.h"
+#include <math.h>
+#include <string.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <assert.h>
+
+#include "hal.h"
+#include "defaults.h"
+#include "report.h"
+#include "limits.h"
+#include "eeprom_emulate.h"
+#include "tool_change.h"
 
 #ifdef ENABLE_SPINDLE_LINEARIZATION
 #include <stdio.h>
+#endif
+
+#ifndef SETTINGS_RESTORE_DEFAULTS
+#define SETTINGS_RESTORE_DEFAULTS          1
+#endif
+#ifndef SETTINGS_RESTORE_PARAMETERS
+#define SETTINGS_RESTORE_PARAMETERS        1
+#endif
+#ifndef SETTINGS_RESTORE_STARTUP_LINES
+#define SETTINGS_RESTORE_STARTUP_LINES     1
+#endif
+#ifndef SETTINGS_RESTORE_BUILD_INFO
+#define SETTINGS_RESTORE_BUILD_INFO        1
+#endif
+#ifndef SETTINGS_RESTORE_DRIVER_PARAMETERS
+#define SETTINGS_RESTORE_DRIVER_PARAMETERS 1
 #endif
 
 settings_t settings;
@@ -44,8 +72,7 @@ const settings_t defaults = {
     .arc_tolerance = DEFAULT_ARC_TOLERANCE,
     .g73_retract = DEFAULT_G73_RETRACT,
 
-    .legacy_rt_commands = DEFAULT_LEGACY_RTCOMMANDS,
-
+    .flags.legacy_rt_commands = DEFAULT_LEGACY_RTCOMMANDS,
     .flags.report_inches = DEFAULT_REPORT_INCHES,
     .flags.laser_mode = DEFAULT_LASER_MODE,
     .flags.lathe_mode = DEFAULT_LATHE_MODE,
@@ -64,11 +91,15 @@ const settings_t defaults = {
     .steppers.dir_invert.mask = DEFAULT_DIRECTION_INVERT_MASK,
     .steppers.enable_invert.mask = INVERT_ST_ENABLE_MASK,
     .steppers.deenergize.mask = ST_DEENERGIZE_MASK,
-
+#if DEFAULT_HOMING_ENABLE
     .homing.flags.enabled = DEFAULT_HOMING_ENABLE,
     .homing.flags.init_lock = DEFAULT_HOMING_INIT_LOCK,
     .homing.flags.single_axis_commands = HOMING_SINGLE_AXIS_COMMANDS,
     .homing.flags.force_set_origin = HOMING_FORCE_SET_ORIGIN,
+    .homing.flags.manual = DEFAULT_HOMING_ALLOW_MANUAL,
+#else
+    .homing.flags.value = 0,
+#endif
     .homing.dir_mask.value = DEFAULT_HOMING_DIR_MASK,
     .homing.feed_rate = DEFAULT_HOMING_FEED_RATE,
     .homing.seek_rate = DEFAULT_HOMING_SEEK_RATE,
@@ -79,19 +110,23 @@ const settings_t defaults = {
     .homing.cycle[1].mask = HOMING_CYCLE_1,
     .homing.cycle[2].mask = HOMING_CYCLE_2,
 
-    .status_report.buffer_state = REPORT_FIELD_BUFFER_STATE,
-    .status_report.line_numbers = REPORT_FIELD_LINE_NUMBERS,
-    .status_report.feed_speed = REPORT_FIELD_CURRENT_FEED_SPEED,
-    .status_report.pin_state = REPORT_FIELD_PIN_STATE,
-    .status_report.work_coord_offset = REPORT_FIELD_WORK_COORD_OFFSET,
-    .status_report.overrides = REPORT_FIELD_OVERRIDES,
-    .status_report.sync_on_wco_change = FORCE_BUFFER_SYNC_DURING_WCO_CHANGE,
-    .status_report.probe_coordinates = REPORT_PROBE_COORDINATES,
+    .status_report.machine_position = DEFAULT_REPORT_BUFFER_STATE,
+    .status_report.buffer_state = DEFAULT_REPORT_BUFFER_STATE,
+    .status_report.line_numbers = DEFAULT_REPORT_LINE_NUMBERS,
+    .status_report.feed_speed = DEFAULT_REPORT_CURRENT_FEED_SPEED,
+    .status_report.pin_state = DEFAULT_REPORT_PIN_STATE,
+    .status_report.work_coord_offset = DEFAULT_REPORT_WORK_COORD_OFFSET,
+    .status_report.overrides = DEFAULT_REPORT_OVERRIDES,
+    .status_report.probe_coordinates = DEFAULT_REPORT_PROBE_COORDINATES,
+    .status_report.sync_on_wco_change = DEFAULT_REPORT_SYNC_ON_WCO_CHANGE,
+    .status_report.parser_state = DEFAULT_REPORT_PARSER_STATE,
+    .status_report.alarm_substate = DEFAULT_REPORT_ALARM_SUBSTATE,
 
     .limits.flags.hard_enabled = DEFAULT_HARD_LIMIT_ENABLE,
     .limits.flags.soft_enabled = DEFAULT_SOFT_LIMIT_ENABLE,
+    .limits.flags.jog_soft_limited = DEFAULT_JOG_LIMIT_ENABLE,
     .limits.flags.check_at_init = DEFAULT_CHECK_LIMITS_AT_INIT,
-    .limits.flags.two_switches = LIMITS_TWO_SWITCHES_ON_AXES,
+    .limits.flags.two_switches = DEFAULT_LIMITS_TWO_SWITCHES_ON_AXES,
     .limits.invert.mask = INVERT_LIMIT_PIN_MASK,
     .limits.disable_pullup.mask = DISABLE_LIMIT_PINS_PULL_UP_MASK,
 
@@ -106,6 +141,7 @@ const settings_t defaults = {
     .spindle.pwm_off_value = DEFAULT_SPINDLE_PWM_OFF_VALUE,
     .spindle.pwm_min_value = DEFAULT_SPINDLE_PWM_MIN_VALUE,
     .spindle.pwm_max_value = DEFAULT_SPINDLE_PWM_MAX_VALUE,
+    .spindle.at_speed_tolerance = DEFAULT_SPINDLE_AT_SPEED_TOLERANCE,
     .spindle.ppr = DEFAULT_SPINDLE_PPR,
     .spindle.pid.p_gain = DEFAULT_SPINDLE_P_GAIN,
     .spindle.pid.i_gain = DEFAULT_SPINDLE_I_GAIN,
@@ -127,40 +163,45 @@ const settings_t defaults = {
     .coolant_invert.flood = INVERT_COOLANT_FLOOD_PIN,
     .coolant_invert.mist = INVERT_COOLANT_MIST_PIN,
 
-    .steps_per_mm[X_AXIS] = DEFAULT_X_STEPS_PER_MM,
-    .steps_per_mm[Y_AXIS] = DEFAULT_Y_STEPS_PER_MM,
-    .steps_per_mm[Z_AXIS] = DEFAULT_Z_STEPS_PER_MM,
-    .max_rate[X_AXIS] = DEFAULT_X_MAX_RATE,
-    .max_rate[Y_AXIS] = DEFAULT_Y_MAX_RATE,
-    .max_rate[Z_AXIS] = DEFAULT_Z_MAX_RATE,
-    .acceleration[X_AXIS] = DEFAULT_X_ACCELERATION,
-    .acceleration[Y_AXIS] = DEFAULT_Y_ACCELERATION,
-    .acceleration[Z_AXIS] = DEFAULT_Z_ACCELERATION,
-    .max_travel[X_AXIS] = (-DEFAULT_X_MAX_TRAVEL),
-    .max_travel[Y_AXIS] = (-DEFAULT_Y_MAX_TRAVEL),
-    .max_travel[Z_AXIS] = (-DEFAULT_Z_MAX_TRAVEL),
+    .axis[X_AXIS].steps_per_mm = DEFAULT_X_STEPS_PER_MM,
+    .axis[Y_AXIS].steps_per_mm = DEFAULT_Y_STEPS_PER_MM,
+    .axis[Z_AXIS].steps_per_mm = DEFAULT_Z_STEPS_PER_MM,
+    .axis[X_AXIS].max_rate = DEFAULT_X_MAX_RATE,
+    .axis[Y_AXIS].max_rate = DEFAULT_Y_MAX_RATE,
+    .axis[Z_AXIS].max_rate = DEFAULT_Z_MAX_RATE,
+    .axis[X_AXIS].acceleration = DEFAULT_X_ACCELERATION,
+    .axis[Y_AXIS].acceleration = DEFAULT_Y_ACCELERATION,
+    .axis[Z_AXIS].acceleration = DEFAULT_Z_ACCELERATION,
+    .axis[X_AXIS].max_travel = (-DEFAULT_X_MAX_TRAVEL),
+    .axis[Y_AXIS].max_travel = (-DEFAULT_Y_MAX_TRAVEL),
+    .axis[Z_AXIS].max_travel = (-DEFAULT_Z_MAX_TRAVEL),
 
   #ifdef A_AXIS
-    .steps_per_mm[A_AXIS] = DEFAULT_A_STEPS_PER_MM,
-    .max_rate[A_AXIS] = DEFAULT_A_MAX_RATE,
-    .acceleration[A_AXIS] = DEFAULT_A_ACCELERATION,
-    .max_travel[A_AXIS] = (-DEFAULT_A_MAX_TRAVEL),
+    .axis[A_AXIS].steps_per_mm = DEFAULT_A_STEPS_PER_MM,
+    .axis[A_AXIS].max_rate = DEFAULT_A_MAX_RATE,
+    .axis[A_AXIS].acceleration = DEFAULT_A_ACCELERATION,
+    .axis[A_AXIS].max_travel = (-DEFAULT_A_MAX_TRAVEL),
     .homing.cycle[3].mask = HOMING_CYCLE_3,
   #endif
   #ifdef B_AXIS
-    .steps_per_mm[B_AXIS] = DEFAULT_B_STEPS_PER_MM,
-    .max_rate[B_AXIS] = DEFAULT_B_MAX_RATE,
-    .acceleration[B_AXIS] = DEFAULT_B_ACCELERATION,
-    .max_travel[B_AXIS] = (-DEFAULT_B_MAX_TRAVEL),
+    .axis[B_AXIS].steps_per_mm = DEFAULT_B_STEPS_PER_MM,
+    .axis[B_AXIS].max_rate = DEFAULT_B_MAX_RATE,
+    .axis[B_AXIS].acceleration = DEFAULT_B_ACCELERATION,
+    .axis[B_AXIS].max_travel = (-DEFAULT_B_MAX_TRAVEL),
     .homing.cycle[4].mask = HOMING_CYCLE_4,
   #endif
   #ifdef C_AXIS
-    .steps_per_mm[C_AXIS] = DEFAULT_C_STEPS_PER_MM,
-    .acceleration[C_AXIS] = DEFAULT_C_ACCELERATION,
-    .max_rate[C_AXIS] = DEFAULT_C_MAX_RATE,
-    .max_travel[C_AXIS] = (-DEFAULT_C_MAX_TRAVEL),
+    .axis[C_AXIS].steps_per_mm = DEFAULT_C_STEPS_PER_MM,
+    .axis[C_AXIS].acceleration = DEFAULT_C_ACCELERATION,
+    .axis[C_AXIS].max_rate = DEFAULT_C_MAX_RATE,
+    .axis[C_AXIS].max_travel = (-DEFAULT_C_MAX_TRAVEL),
     .homing.cycle[5].mask = HOMING_CYCLE_5,
   #endif
+
+    .tool_change.mode = (toolchange_mode_t)DEFAULT_TOOLCHANGE_MODE,
+    .tool_change.probing_distance = DEFAULT_TOOLCHANGE_PROBING_DISTANCE,
+    .tool_change.feed_rate = DEFAULT_TOOLCHANGE_FEED_RATE,
+    .tool_change.seek_rate = DEFAULT_TOOLCHANGE_SEEK_RATE,
 
     .parking.flags.enabled = DEFAULT_PARKING_ENABLE,
     .parking.flags.deactivate_upon_init = DEFAULT_DEACTIVATE_PARKING_UPON_INIT,
@@ -261,7 +302,7 @@ bool settings_write_tool_data (tool_data_t *tool_data)
 }
 
 // Read selected tool data from persistent storage.
-bool settings_read_tool_data (uint8_t tool, tool_data_t *tool_data)
+bool settings_read_tool_data (uint32_t tool, tool_data_t *tool_data)
 {
 #ifdef N_TOOLS
     assert(tool > 0 && tool <= N_TOOLS); // NOTE: idx 0 is a non-persistent entry for tools not in tool table
@@ -340,8 +381,10 @@ void settings_restore (settings_restore_t restore)
             settings_write_startup_line(idx, empty_line);
     }
 
-    if (restore.build_info)
+    if (restore.build_info) {
         settings_write_build_info(empty_line);
+        settings_write_build_info(BUILD_INFO);
+    }
 
     if(restore.driver_parameters && hal.driver_settings_restore)
         hal.driver_settings_restore();
@@ -381,36 +424,36 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
 
             case AxisSetting_StepsPerMM:
                 #ifdef MAX_STEP_RATE_HZ
-                if (value * settings.max_rate[axis_idx] > (MAX_STEP_RATE_HZ * 60.0f))
+                if (value * settings.axis[axis_idx].max_rate > (MAX_STEP_RATE_HZ * 60.0f))
                     return Status_MaxStepRateExceeded;
                 #endif
                 found = true;
-                settings.steps_per_mm[axis_idx] = value;
+                settings.axis[axis_idx].steps_per_mm = value;
                 break;
 
             case AxisSetting_MaxRate:
                 #ifdef MAX_STEP_RATE_HZ
-                if (value * settings.steps_per_mm[axis_idx] > (MAX_STEP_RATE_HZ * 60.0f))
+                if (value * settings.axis[axis_idx].steps_per_mm > (MAX_STEP_RATE_HZ * 60.0f))
                     return Status_MaxStepRateExceeded;
                 #endif
                 found = true;
-                settings.max_rate[axis_idx] = value;
+                settings.axis[axis_idx].max_rate = value;
                 break;
 
             case AxisSetting_Acceleration:
                 found = true;
-                settings.acceleration[axis_idx] = value * 60.0f * 60.0f; // Convert to mm/min^2 for grbl internal use.
+                settings.axis[axis_idx].acceleration = value * 60.0f * 60.0f; // Convert to mm/min^2 for grbl internal use.
                 break;
 
             case AxisSetting_MaxTravel:
                 found = true;
-                settings.max_travel[axis_idx] = -value; // Store as negative for grbl internal use.
+                settings.axis[axis_idx].max_travel = -value; // Store as negative for grbl internal use.
                 break;
 
 #ifdef ENABLE_BACKLASH_COMPENSATION
             case AxisSetting_Backlash:
                 found = true;
-                settings.backlash[axis_idx] = value;
+                settings.axis[axis_idx].backlash = value;
                 break;
 #endif
 
@@ -427,20 +470,16 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
         switch(setting) {
 
             case Setting_PulseMicroseconds:
-                if (int_value < 3)
+                if (value < 2.0f)
                     return Status_SettingStepPulseMin;
-                settings.steppers.pulse_microseconds = int_value;
+                settings.steppers.pulse_microseconds = value;
                 break;
-
-#if COMPATIBILITY_LEVEL <= 1
 
             case Setting_PulseDelayMicroseconds:
-                if(int_value > 0 && !hal.driver_cap.step_pulse_delay)
+                if(value > 0.0f && !hal.driver_cap.step_pulse_delay)
                     return Status_SettingDisabled;
-                settings.steppers.pulse_delay_microseconds = int_value;
+                settings.steppers.pulse_delay_microseconds = value;
                 break;
-
-#endif
 
             case Setting_StepperIdleLockTime:
                 settings.steppers.idle_lock_time = int_value;
@@ -466,15 +505,15 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 if(!hal.probe_configure_invert_mask)
                     return Status_SettingDisabled;
                 settings.flags.invert_probe_pin = int_value != 0;
-                hal.probe_configure_invert_mask(false);
+                hal.probe_configure_invert_mask(false, false);
                 break;
 
             case Setting_StatusReportMask:
 #if COMPATIBILITY_LEVEL <= 1
                 settings.status_report.mask = int_value;
 #else
-                int_value &= 0x03;
-                settings.status_report.mask = (settings.status_report.mask & ~0x03) | int_value;
+                int_value &= 0b111;
+                settings.status_report.mask = (settings.status_report.mask & ~0b111) | int_value;
 #endif
                 break;
 
@@ -492,14 +531,13 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 system_flag_wco_change(); // Make sure WCO is immediately updated.
                 break;
 
-#if COMPATIBILITY_LEVEL <= 1
-
             case Setting_ControlInvertMask:
                 settings.control_invert.mask = int_value;
                 settings.control_invert.block_delete &= hal.driver_cap.block_delete;
                 settings.control_invert.e_stop &= hal.driver_cap.e_stop;
                 settings.control_invert.stop_disable &= hal.driver_cap.program_stop;
-                break;
+                settings.control_invert.probe_disconnected &= hal.driver_cap.probe_connected;
+               break;
 
             case Setting_CoolantInvertMask:
                 settings.coolant_invert.mask = int_value;
@@ -513,11 +551,16 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 }
                 break;
 
+            case Setting_SpindleAtSpeedTolerance:
+                settings.spindle.at_speed_tolerance = value;
+                break;
+
             case Setting_ControlPullUpDisableMask:
-                settings.control_disable_pullup.mask = int_value & 0x0F;
+                settings.control_disable_pullup.mask = int_value;
                 settings.control_disable_pullup.block_delete &= hal.driver_cap.block_delete;
                 settings.control_disable_pullup.e_stop &= hal.driver_cap.e_stop;
                 settings.control_disable_pullup.stop_disable &= hal.driver_cap.program_stop;
+                settings.control_invert.probe_disconnected &= hal.driver_cap.probe_connected;
                 break;
 
             case Setting_LimitPullUpDisableMask:
@@ -529,8 +572,6 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                     return Status_SettingDisabled;
                 settings.flags.disable_probe_pullup = int_value != 0;
                 break;
-
-#endif
 
             case Setting_SoftLimitsEnable:
                 if (int_value && !settings.homing.flags.enabled)
@@ -545,8 +586,6 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
 #endif
                 hal.limits_enable(settings.limits.flags.hard_enabled, false); // Change immediately. NOTE: Nice to have but could be problematic later.
                 break;
-
-#if COMPATIBILITY_LEVEL <= 1
 
             case Setting_JogSoftLimited:
                 if (int_value && !settings.homing.flags.enabled)
@@ -578,8 +617,6 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
             case Setting_ProbingFeedOverride:
                 settings.flags.allow_probing_feed_override = int_value != 0;
                 break;
-
-#endif
 
             case Setting_HomingEnable:
                 if (bit_istrue(int_value, bit(0))) {
@@ -617,10 +654,8 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 settings.homing.pulloff = value;
                 break;
 
-#if COMPATIBILITY_LEVEL <= 1
-
             case Setting_EnableLegacyRTCommands:
-                settings.legacy_rt_commands = value != 0;
+                settings.flags.legacy_rt_commands = value != 0;
                 break;
 
             case Setting_HomingLocateCycles:
@@ -645,8 +680,6 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 settings.spindle.pwm_freq = value;
                 break;
 
-#endif
-
             case Setting_RpmMax:
                 settings.spindle.rpm_max = value;
                 break;
@@ -664,13 +697,10 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                         settings.flags.lathe_mode = Off;
                         break;
 
-#if COMPATIBILITY_LEVEL <= 1
-
                      case 2:
                         settings.flags.laser_mode = Off;
                         settings.flags.lathe_mode = On;
                         break;
-#endif
 
                      default:
                         settings.flags.laser_mode = Off;
@@ -680,8 +710,6 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 if(!settings.flags.lathe_mode)
                     gc_state.modal.diameter_mode = false;
                 break;
-
-#if COMPATIBILITY_LEVEL <= 1
 
             case Setting_ParkingEnable:
                 if (bit_istrue(int_value, bit(0)))
@@ -727,8 +755,6 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
             case Setting_SpindlePPR:
                 settings.spindle.ppr = int_value;
                 break;
-
-#endif
 
 #ifdef ENABLE_SPINDLE_LINEARIZATION
 
@@ -794,6 +820,29 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 settings.position.pid.i_max_error = value;
                 break;
 
+            case Setting_ToolChangeMode:
+                if(!hal.driver_cap.atc && hal.stream.suspend_read && int_value <= ToolChange_SemiAutomatic) {
+                    settings.tool_change.mode = (toolchange_mode_t)int_value;
+                    tc_init();
+                } else
+                    return Status_InvalidStatement;
+                break;
+
+            case Setting_ToolChangeProbingDistance:
+                if(!hal.driver_cap.atc)
+                    settings.tool_change.probing_distance = value;
+                else
+                    return Status_InvalidStatement;
+                break;
+
+            case Setting_ToolChangeFeedRate:
+                settings.tool_change.feed_rate = value;
+                break;
+
+            case Setting_ToolChangeSeekRate:
+                settings.tool_change.seek_rate = value;
+                break;
+
             default:;
                 status_code_t status = hal.driver_setting ? hal.driver_setting(setting, value, svalue) : Status_Unhandled;
                 return status == Status_Unhandled ? Status_InvalidStatement : status;
@@ -817,7 +866,11 @@ void settings_init() {
         hal.report.status_message(Status_SettingReadFail);
         settings_restore(settings); // Force restore all EEPROM data.
         report_init();
-        report_grbl_settings();
+#if COMPATIBILITY_LEVEL <= 1
+        report_grbl_settings(true);
+#else
+        report_grbl_settings(false);
+#endif
     } else {
         memset(&tool_table, 0, sizeof(tool_data_t)); // First entry is for tools not in tool table
 #ifdef N_TOOLS
@@ -831,6 +884,6 @@ void settings_init() {
 #endif
         hal.settings_changed(&settings);
         if(hal.probe_configure_invert_mask) // Initialize probe invert mask.
-            hal.probe_configure_invert_mask(false);
+            hal.probe_configure_invert_mask(false, false);
     }
 }

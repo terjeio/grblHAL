@@ -4,7 +4,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2017-2019 Terje Io
+  Copyright (c) 2017-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -58,7 +58,7 @@
 #define SERIAL_RTS_PIN 4
 #define SERIAL_RTS_BIT (1<<SERIAL_RTS_PIN)
 
-#if MPG_MODE_ENABLE
+#if MPG_MODE_ENABLE || MODBUS_ENABLE
 #define SERIAL2_MOD A2
 #define SERIAL2_MODULE eusci(SERIAL2_MOD)
 #define SERIAL2_MODULE_INT eusciINT(SERIAL2_MOD)
@@ -85,9 +85,14 @@ void serialRxFlush(void);
 void serialRxCancel(void);
 
 #ifdef SERIAL2_MOD
+void serial2Init(uint32_t baud_rate);
 uint16_t serial2RxFree (void);
 void serial2RxFlush (void);
 void serial2RxCancel (void);
+uint16_t serial2RxCount (void);
+uint16_t serial2TxCount (void);
+void serial2TxFlush (void);
+void serial2Write(const char *s, uint16_t length);
 int16_t serial2GetC (void);
 void serialSelect (bool mpg);
 #endif

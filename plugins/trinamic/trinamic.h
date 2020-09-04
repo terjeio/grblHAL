@@ -3,7 +3,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2018-2019 Terje Io
+  Copyright (c) 2018-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,7 +23,7 @@
 #define _TRINAMIC_OPTION_H_
 
 #ifdef ARDUINO_SAMD_MKRZERO
-#include "../../driver.h"
+#include "../driver.h"
 #if TRINAMIC_I2C
 #include "../trinamic/TMC2130_I2C_map.h"
 #endif
@@ -51,7 +51,7 @@
 #define tmc_hysteresis_end(axis, val)   { stepper[axis].chopconf.reg.hend = (uint8_t)(val + 3) & 0x0F; TMC2130_WriteRegister(&stepper[axis], (TMC2130_datagram_t *)&stepper[axis].chopconf); }
 
 // General
-#if TRINAMIC_ENABLE && CNC_BOOSTERPACK
+#if TRINAMIC_ENABLE && defined(BOARD_CNC_BOOSTERPACK)
 #define TMC_X_ENABLE 1 // Do not change
 #else
 #define TMC_X_ENABLE 0
@@ -77,7 +77,7 @@ tmc_hysteresis_start(X_AXIS, 4); \
 tmc_hysteresis_end(X_AXIS, -2);
 // General
 
-#if TRINAMIC_ENABLE && CNC_BOOSTERPACK
+#if TRINAMIC_ENABLE && defined(BOARD_CNC_BOOSTERPACK)
 #define TMC_Y_ENABLE 1 // Do not change
 #else
 #define TMC_Y_ENABLE 0
@@ -102,7 +102,7 @@ tmc_chopper_mode(Y_AXIS, 0); \
 tmc_hysteresis_start(Y_AXIS, 5); \
 tmc_hysteresis_end(Y_AXIS, 1);
 
-#if TRINAMIC_ENABLE && CNC_BOOSTERPACK
+#if TRINAMIC_ENABLE && defined(BOARD_CNC_BOOSTERPACK)
 #define TMC_Z_ENABLE 1 // Do not change
 #else
 #define TMC_Z_ENABLE 0

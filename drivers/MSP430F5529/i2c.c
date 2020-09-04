@@ -21,9 +21,13 @@
 
 */
 
+#include "driver.h"
+
+#if EEPROM_ENABLE
+
 #include <msp430.h>
 
-#include "grbl/grbl.h"
+#include "grbl/hal.h"
 #include "grbl/plugins.h"
 
 #define SDA BIT1
@@ -111,8 +115,11 @@ void i2c_eeprom_transfer (i2c_eeprom_trans_t *i2c, bool read)
             while(!(UCB1IFG & UCTXIFG));
         }
         UCB1CTL1 |= UCTXSTP;                // I2C stop condition
- //       WaitForACK();
+#if !EEPROM_IS_FRAM
         hal.delay_ms(5, NULL);              // Wait a bit for the write cycle to complete
+#endif
     }
     while (UCB1CTL1 & UCTXSTP);             // Ensure stop condition got sent
 }
+
+#endif

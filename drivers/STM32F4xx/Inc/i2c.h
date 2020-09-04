@@ -23,7 +23,6 @@
 #define __I2C_DRIVER_H__
 
 #include "driver.h"
-#include "driver.h"
 #include "grbl/plugins.h"
 
 #if TRINAMIC_ENABLE && TRINAMIC_I2C

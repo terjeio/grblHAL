@@ -23,6 +23,8 @@
 
 // User defined mcode handling
 
+#include <math.h>
+
 #include "grbl/grbl.h"
 
 #include "tiva.h"

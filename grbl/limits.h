@@ -1,6 +1,7 @@
 /*
   limits.h - code pertaining to limit-switches and performing the homing cycle
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2017-2018 Terje Io
   Copyright (c) 2012-2015 Sungeun K. Jeon
@@ -20,8 +21,8 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef limits_h
-#define limits_h
+#ifndef _LIMITS_H_
+#define _LIMITS_H_
 
 #include "nuts_bolts.h"
 

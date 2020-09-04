@@ -19,12 +19,10 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef __HAL__
-#define __HAL__
+#ifndef _HAL_H_
+#define _HAL_H_
 
-#include <stdint.h>
-#include <stdbool.h>
-
+#include "grbl.h"
 #include "gcode.h"
 #include "system.h"
 #include "coolant_control.h"
@@ -34,6 +32,7 @@
 #include "stream.h"
 #include "probe.h"
 #include "plugins.h"
+#include "settings.h"
 
 #define HAL_VERSION 6
 
@@ -69,7 +68,8 @@ typedef union {
                  mpg_mode                  :1,
                  spindle_pwm_linearization :1,
                  probe_connected           :1,
-                 unassigned                :3;
+                 atc                       :1,
+                 unassigned                :2;
     };
 } driver_cap_t;
 
@@ -165,7 +165,7 @@ typedef struct HAL {
     // optional entry points, may be unassigned (null)
     bool (*driver_release)(void);
     probe_state_t (*probe_get_state)(void);
-    void (*probe_configure_invert_mask)(bool is_probe_away);
+    void (*probe_configure_invert_mask)(bool is_probe_away, bool probing);
     void (*execute_realtime)(uint_fast16_t state);
     user_mcode_t (*user_mcode_check)(user_mcode_t mcode);
     status_code_t (*user_mcode_validate)(parser_block_t *gc_block, uint32_t *value_words);
@@ -188,7 +188,12 @@ typedef struct HAL {
     spindle_data_t (*spindle_get_data)(spindle_data_request_t request);
     void (*spindle_reset_data)(void);
     void (*state_change_requested)(uint_fast16_t state);
-    void (*encoder_state_changed)(encoder_t *encoder);
+    void (*on_probe_completed)(void);
+    void (*encoder_event_handler)(encoder_t *encoder, int32_t position);
+    void (*encoder_reset)(uint_fast8_t id);
+    uint32_t (*get_elapsed_ticks)(void);
+    void (*pallet_shuttle)(void);
+    void (*reboot)(void);
 #ifdef DEBUGOUT
     void (*debug_out)(bool on);
 #endif

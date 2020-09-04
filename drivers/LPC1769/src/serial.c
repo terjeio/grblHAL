@@ -24,9 +24,11 @@
 #ifndef __serial_h__
 #define __serial_h__
 
+#include <string.h>
+
 #include "driver.h"
 #include "serial.h"
-#include "grbl/grbl.h"
+#include "grbl/hal.h"
 
 #include "chip.h"
 

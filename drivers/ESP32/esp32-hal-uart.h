@@ -68,23 +68,25 @@ void uartWriteS (const char *data);
 void uartFlush (void);
 void uartCancel (void);
 
-#if MPG_MODE_ENABLE
+#if SERIAL2_ENABLE
 
-void uart2Init (void);
+void uart2Init (uint32_t baud_rate);
 void uart2Stop (void);
 void uart2Start (void);
-uint32_t uart2Available (void);
+uint16_t uart2txCount (void);
+uint16_t uart2Available (void);
 uint16_t uart2RXFree (void);
 int16_t uart2Read (void);
 bool uart2SuspendInput (bool suspend);
 
 bool uart2PutC (const char c);
-void uart2WriteS (const char *data);
+void uart2Write (const char *s, uint16_t length);
 
 void uart2Flush (void);
 void uart2Cancel (void);
+void uart2Direction (bool tx);
 
-void serialSelect(bool mpg_mode);
+void serialSelect (bool mpg_mode);
 
 #endif
 

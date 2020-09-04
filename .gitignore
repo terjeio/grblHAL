@@ -26,6 +26,10 @@ $RECYCLE.BIN/
 
 .settings
 
+# STM32 .ioc files
+
+*.ioc
+
 # =========================
 # Operating System Files
 # =========================

@@ -5,7 +5,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2019 Terje Io
+  Copyright (c) 2019-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -36,6 +36,7 @@
 #include <esp_spiffs.h>
 
 #include "driver.h"
+#include "grbl/report.h"
 #include "wifi.h"
 #include "webui.h"
 #include "networking/WsStream.h"
@@ -49,6 +50,10 @@
 #endif
 
 #include "flashfs.h"
+
+#ifndef LINE_BUFFER_SIZE
+#define LINE_BUFFER_SIZE 257 // 256 characters plus terminator
+#endif
 
 typedef enum {
     WebUICmd_GetSetSTA_SSID = 100,

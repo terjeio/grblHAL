@@ -1,6 +1,7 @@
 /*
-  eeprom_emulate.h - RAM based EEPROM emulation
-  Part of Grbl
+  eeprom_emulate.c - RAM based EEPROM emulation
+
+  Part of GrblHAL
 
   Copyright (c) 2017-2019 Terje Io
   Copyright (c) 2012-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -25,7 +26,11 @@
 // Call noeeprom_init(), if returns true then set up EEPROM HAL pointers to these functions
 //
 
-#include "grbl.h"
+#include <string.h>
+#include <stdlib.h>
+
+#include "hal.h"
+#include "eeprom_emulate.h"
 
 static uint8_t *noepromdata = 0;
 static eeprom_io_t physical_eeprom;

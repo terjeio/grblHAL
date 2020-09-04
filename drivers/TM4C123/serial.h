@@ -1,12 +1,12 @@
 //
 // serial.h - (UART) port library for Tiva
 //
-// v1.00 / 2019-11-18 / Io Engineering / Terje
+// v1.01 / 2020-08-06 / Io Engineering / Terje
 //
 
 /*
 
-Copyright (c) 2017-2019, Terje Io
+Copyright (c) 2017-2020, Terje Io
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -39,7 +39,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "grbl/grbl.h"
+#include "grbl/hal.h"
 
 #define BACKCHANNEL // comment out to use UART1 instead of UART0 (Tiva C Backchannel)
 

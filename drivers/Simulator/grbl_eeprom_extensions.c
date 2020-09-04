@@ -33,31 +33,16 @@ void memcpy_to_eeprom_with_checksum(uint32_t destination, uint8_t *source, uint3
     for(; size > 0; size--)
         eeprom_put_char(dest++, *(source++));
 
-hal.stream.write("WR:");
-hal.stream.write(uitoa(dest));
-hal.stream.write(":");
-hal.stream.write(uitoa(checksum));
-hal.stream.write(":");
-hal.stream.write(uitoa(*source));
-
     eeprom_put_char(dest, checksum);
 }
 
 bool memcpy_from_eeprom_with_checksum(uint8_t *destination, uint32_t source, uint32_t size)
 {
-uint8_t *dest = destination; uint32_t sz = size;
-//hal.stream.write("EP:");
-//hal.stream.write(uitoa(source));
+    uint8_t *dest = destination; uint32_t sz = size;
 
     for(; size > 0; size--)
         *(destination++) = eeprom_get_char(source++);
 
-/*
-hal.stream.write(":");
-hal.stream.write(uitoa(checksum));
-hal.stream.write(":");
-hal.stream.write(uitoa(eeprom_get_char(source)));
-*/
     return calc_checksum(dest, sz) == eeprom_get_char(source);
 }
 

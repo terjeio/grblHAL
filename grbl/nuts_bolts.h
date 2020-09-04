@@ -1,6 +1,7 @@
 /*
   nuts_bolts.h - Header file for shared definitions, variables, and functions
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2017-2019 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -20,13 +21,10 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef nuts_bolts_h
-#define nuts_bolts_h
+#ifndef _NUTS_BOLTS_H_
+#define _NUTS_BOLTS_H_
 
-#include <stdint.h>
-#include <stdbool.h>
-
-#include "config.h"
+#include "grbl.h"
 
 #ifndef true
 #define false 0
@@ -56,9 +54,6 @@
 #endif
 
 // Axis array index values. Must start with 0 and be continuous.
-#ifndef N_AXIS
-#define N_AXIS 3 // Number of axes
-#endif
 #define X_AXIS 0 // Axis indexing value.
 #define Y_AXIS 1
 #define Z_AXIS 2
@@ -160,7 +155,6 @@ bool read_float(char *line, uint_fast8_t *char_counter, float *float_ptr);
 void delay_sec(float seconds, delaymode_t mode);
 
 float convert_delta_vector_to_unit_vector(float *vector);
-float limit_value_by_axis_maximum(float *max_value, float *unit_vec);
 
 // calculate checksum byte for EEPROM data
 uint8_t calc_checksum (uint8_t *data, uint32_t size);

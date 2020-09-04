@@ -62,13 +62,24 @@
 #define LIMIT_MASK      (1ULL << X_LIMIT_PIN|1ULL << Y_LIMIT_PIN|1ULL << Z_LIMIT_PIN) // All limit bits
 
 // Define spindle enable and spindle direction output pins.
+
+#ifndef VFD_SPINDLE
 #define SPINDLE_ENABLE_PIN      GPIO_NUM_22
 #define SPINDLE_MASK            (1ULL << SPINDLE_ENABLE_PIN)
 #define SPINDLEPWMPIN           GPIO_NUM_2
+#else
+#define SPINDLE_MASK            0
+#endif
 
 // Define flood and mist coolant enable output pins.
 
-// N/A
+#define COOLANT_FLOOD_PIN   GPIO_NUM_25
+#ifndef VFD_SPINDLE
+#define COOLANT_MIST_PIN    GPIO_NUM_21
+#define COOLANT_MASK        (1UL << COOLANT_FLOOD_PIN|1ULL << COOLANT_MIST_PIN)
+#else
+#define COOLANT_MASK        (1UL << COOLANT_FLOOD_PIN)
+#endif
 
 // Define user-control CONTROLs (cycle start, reset, feed hold) input pins.
 #define RESET_PIN           GPIO_NUM_34
@@ -83,6 +94,14 @@
 #else
 #define PROBE_PIN       0xFF
 #endif
+
+#if MODBUS_ENABLE
+#define UART2_RX_PIN            GPIO_NUM_22
+#define UART2_TX_PIN            GPIO_NUM_21
+#define MODBUS_DIRECTION_PIN    GPIO_NUM_2
+#define MODBUS_BAUD             19200
+#endif
+
 
 #if KEYPAD_ENABLE
 #error No free pins for keypad!

@@ -19,7 +19,13 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+
 #include "i2c.h"
+
+#ifdef USE_I2C
+
+#include <string.h>
+
 #include "serial.h"
 
 typedef enum {
@@ -101,8 +107,10 @@ void i2c_init (void)
 //    I2C_PORT->IE |= EUSCI_B_IE_NACKIE;                                              // NACK interrupt enable
 
     NVIC_EnableIRQ(I2C_INT);       // Enable I2C interrupt and
-    NVIC_SetPriority(I2C_INT, 3);  // set priority
+    NVIC_SetPriority(I2C_INT, 1);  // set priority
 }
+
+#if ATC_ENABLE
 
 static uint8_t *I2C_Receive (uint32_t i2cAddr, uint32_t bytes, bool block)
 {
@@ -126,6 +134,10 @@ static uint8_t *I2C_Receive (uint32_t i2cAddr, uint32_t bytes, bool block)
 
     return i2c.buffer;
 }
+
+#endif
+
+#if (TRINAMIC_ENABLE && TRINAMIC_I2C) || ATC_ENABLE
 
 static void I2C_Send (uint32_t i2cAddr, uint8_t bytes, bool block)
 {
@@ -160,6 +172,8 @@ static uint8_t *I2C_ReadRegister (uint32_t i2cAddr, uint8_t bytes, bool block)
 
     return i2c.buffer;
 }
+
+#endif
 
 #if EEPROM_ENABLE
 
@@ -373,3 +387,5 @@ void I2C_IRQHandler (void)
             break;
     }
 }
+
+#endif
