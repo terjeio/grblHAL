@@ -26,7 +26,7 @@
 
 #include "driver.h"
 
-#if USB_ENABLE
+#if USB_SERIAL_CDC
 
 #include <string.h>
 

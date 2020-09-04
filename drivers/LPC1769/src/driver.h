@@ -40,8 +40,8 @@
 // Configuration
 // Set value to 1 to enable, 0 to disable
 
-#ifndef USB_ENABLE
-#define USB_ENABLE          0 // for UART comms
+#ifndef USB_SERIAL_CDC
+#define USB_SERIAL_CDC      0 // for UART comms
 #endif
 #ifndef SDCARD_ENABLE
 #define SDCARD_ENABLE       0

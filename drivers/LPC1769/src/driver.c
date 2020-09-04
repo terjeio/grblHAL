@@ -45,7 +45,7 @@
 #include "sdcard/sdcard.h"
 #endif
 
-#if USB_ENABLE
+#if USB_SERIAL_CDC
 #include "usb_serial.h"
 #endif
 
@@ -1090,7 +1090,7 @@ bool driver_init (void) {
 
     hal.system_control_get_state = systemGetState;
 
-#if USB_ENABLE
+#if USB_SERIAL_CDC
     usbInit();
     hal.stream.read = usbGetC;
     hal.stream.write = usbWriteS;
