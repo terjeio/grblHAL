@@ -1,6 +1,7 @@
 /*
   grbllib.h - An embedded CNC Controller with rs274/ngc (g-code) support
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2011-2015 Sungeun K. Jeon
   Copyright (c) 2009-2011 Simen Svale Skogsrud
@@ -19,6 +20,9 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#ifndef _GRBLLIB_H_
+#define _GRBLLIB_H_
+
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -30,4 +34,6 @@ int grbl_enter (void);
 
 #ifdef __cplusplus
 }
+#endif
+
 #endif

@@ -27,7 +27,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "grbl.h"
+#include "hal.h"
 
 #define KEYBUF_SIZE 16
 #define KEYPAD_I2CADDR 0x49

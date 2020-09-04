@@ -1,6 +1,7 @@
 /*
   coolant_control.h - spindle control methods
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2012-2016 Sungeun K. Jeon for Gnea Research LLC
 
@@ -18,8 +19,8 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef coolant_control_h
-#define coolant_control_h
+#ifndef _COOLANT_CONTROL_H_
+#define _COOLANT_CONTROL_H_
 
 typedef union {
     uint8_t value;

@@ -1,5 +1,5 @@
 //
-// TCPStream.h - lw-IP/FreeRTOS stream implementation
+// TCPStream.h - lwIP stream implementation
 //
 // v1.0 / 2018-09-21 / Io Engineering / Terje
 //

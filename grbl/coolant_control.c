@@ -1,6 +1,7 @@
 /*
   coolant_control.c - coolant control methods
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2012-2016 Sungeun K. Jeon for Gnea Research LLC
 
@@ -18,7 +19,12 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "grbl.h"
+#include <stdint.h>
+#include <stdbool.h>
+
+#include "hal.h"
+#include "protocol.h"
+#include "coolant_control.h"
 
 // Main program only. Immediately sets flood coolant running state and also mist coolant,
 // if enabled. Also sets a flag to report an update to a coolant state.

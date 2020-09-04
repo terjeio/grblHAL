@@ -3,7 +3,7 @@
 
   Buffer handlers for real-time override commands
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2017-2019 Terje Io
 
@@ -22,6 +22,7 @@
 */
 
 #include "grbl.h"
+#include "override.h"
 
 typedef struct {
     volatile uint_fast8_t head;

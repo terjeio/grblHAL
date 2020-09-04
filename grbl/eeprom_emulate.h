@@ -1,6 +1,7 @@
 /*
   eeprom_emulate.h - EEPROM emulation methods
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2017 Terje Io
   Copyright (c) 2009-2011 Simen Svale Skogsrud
@@ -19,8 +20,8 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef __noeeprom_h__
-#define __noeeprom_h__
+#ifndef _EEPROM_EMULATE_H_
+#define _EEPROM_EMULATE_H_
 
 typedef struct {
     bool is_dirty;

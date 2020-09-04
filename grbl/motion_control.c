@@ -1,6 +1,7 @@
 /*
   motion_control.c - high level interface for issuing motion commands
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -24,7 +25,36 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "grbl.h"
+#include <math.h>
+#include <string.h>
+
+#include "hal.h"
+#include "nuts_bolts.h"
+#include "protocol.h"
+#include "limits.h"
+#include "report.h"
+#include "state_machine.h"
+#include "motion_control.h"
+#ifdef KINEMATICS_API
+#include "kinematics.h"
+#endif
+
+#ifndef N_ARC_CORRECTION
+#define N_ARC_CORRECTION 12
+#endif
+#ifndef ARC_ANGULAR_TRAVEL_EPSILON // Float (radians)
+#define ARC_ANGULAR_TRAVEL_EPSILON 5E-7f // Float (radians)
+#endif
+
+#ifndef BEZIER_MIN_STEP
+#define BEZIER_MIN_STEP 0.002f
+#endif
+#ifndef BEZIER_MAX_STEP
+#define BEZIER_MAX_STEP 0.1f
+#endif
+#ifndef BEZIER_SIGMA
+#define BEZIER_SIGMA 0.1f
+#endif
 
 #ifdef ENABLE_BACKLASH_COMPENSATION
 
@@ -38,7 +68,7 @@ void mc_backlash_init (void)
     backlash_enabled.mask = dir_negative.value = 0;
 
     do {
-        if(settings.backlash[--idx] > 0.0001f)
+        if(settings.axis[--idx].backlash > 0.0001f)
             backlash_enabled.mask |= bit(idx);
         dir_negative.value |= bit(idx);
     } while(idx);
@@ -102,12 +132,12 @@ bool mc_line (float *target, plan_line_data_t *pl_data)
                     if(target[idx] > target_prev[idx]) {
                         if (dir_negative.value & axismask) {
                             dir_negative.value &= ~axismask;
-                            target_prev[idx] += settings.backlash[idx];
+                            target_prev[idx] += settings.axis[idx].backlash;
                             backlash_comp = true;
                         }
                     } else if(target[idx] < target_prev[idx] && !(dir_negative.value & axismask)) {
                         dir_negative.value |= axismask;
-                        target_prev[idx] -= settings.backlash[idx];
+                        target_prev[idx] -= settings.axis[idx].backlash;
                         backlash_comp = true;
                     }
                 }
@@ -721,6 +751,9 @@ status_code_t mc_homing_cycle (axes_signals_t cycle)
 {
     bool home_all = cycle.mask == 0;
 
+    sys.report.tlo_reference = sys.tlo_reference_set;
+    sys.tlo_reference_set = false;  // Invalidate tool length offset reference
+
     if(settings.homing.flags.manual && (home_all ? sys.homing.mask : (cycle.mask & sys.homing.mask)) == 0) {
 
         if(home_all)
@@ -743,10 +776,11 @@ status_code_t mc_homing_cycle (axes_signals_t cycle)
             return Status_Unhandled;
         }
 
-        set_state(STATE_HOMING);                                // Set homing system state,
-        hal.stream.enqueue_realtime_command(CMD_STATUS_REPORT); // force a status report and
+        set_state(STATE_HOMING);                                // Set homing system state.
+#if COMPATIBILITY_LEVEL == 0
+        hal.stream.enqueue_realtime_command(CMD_STATUS_REPORT); // Force a status report and
         delay_sec(0.1f, DelayMode_Dwell);                       // delay a bit to get it sent (or perhaps wait a bit for a request?)
-
+#endif
         hal.limits_enable(false, true); // Disable hard limits pin change register for cycle duration
 
         // Turn off spindle and coolant (and update parser state)
@@ -831,7 +865,7 @@ gc_probe_t mc_probe_cycle (float *target, plan_line_data_t *pl_data, gc_parser_f
 
     // Initialize probing control variables
     sys.flags.probe_succeeded = Off; // Re-initialize probe history before beginning cycle.
-    hal.probe_configure_invert_mask(parser_flags.probe_is_away);
+    hal.probe_configure_invert_mask(parser_flags.probe_is_away, true);
 
     // After syncing, check if probe is already triggered or not connected. If so, halt and issue alarm.
     // NOTE: This probe initialization error applies to all probing cycles.
@@ -839,12 +873,13 @@ gc_probe_t mc_probe_cycle (float *target, plan_line_data_t *pl_data, gc_parser_f
     if (probe.triggered || !probe.connected) { // Check probe state.
         system_set_exec_alarm(Alarm_ProbeFailInitial);
         protocol_execute_realtime();
-        hal.probe_configure_invert_mask(false); // Re-initialize invert mask before returning.
+        hal.probe_configure_invert_mask(false, false); // Re-initialize invert mask before returning.
         return GCProbe_FailInit; // Nothing else to do but bail.
     }
 
     // Setup and queue probing motion. Auto cycle-start should not start the cycle.
-    mc_line(target, pl_data);
+    if(!mc_line(target, pl_data))
+        return GCProbe_Abort;
 
     // Activate the probing state monitor in the stepper module.
     sys_probing_state = Probing_Active;
@@ -854,7 +889,7 @@ gc_probe_t mc_probe_cycle (float *target, plan_line_data_t *pl_data, gc_parser_f
     do {
         if(!protocol_execute_realtime()) // Check for system abort
             return GCProbe_Abort;
-    } while (sys.state != STATE_IDLE);
+    } while (!(sys.state == STATE_IDLE || sys.state == STATE_TOOL_CHANGE));
 
     // Probing cycle complete!
 
@@ -867,9 +902,9 @@ gc_probe_t mc_probe_cycle (float *target, plan_line_data_t *pl_data, gc_parser_f
     } else
         sys.flags.probe_succeeded = On; // Indicate to system the probing cycle completed successfully.
 
-    sys_probing_state = Probing_Off;        // Ensure probe state monitor is disabled.
-    hal.probe_configure_invert_mask(false); // Re-initialize invert mask.
-    protocol_execute_realtime();            // Check and execute run-time commands
+    sys_probing_state = Probing_Off;                // Ensure probe state monitor is disabled.
+    hal.probe_configure_invert_mask(false, false);  // Re-initialize invert mask.
+    protocol_execute_realtime();                    // Check and execute run-time commands
 
     // Reset the stepper and planner buffers to remove the remainder of the probe motion.
     st_reset();             // Reset step segment buffer.
@@ -879,6 +914,9 @@ gc_probe_t mc_probe_cycle (float *target, plan_line_data_t *pl_data, gc_parser_f
     // All done! Output the probe position as message if configured.
     if(settings.status_report.probe_coordinates)
         report_probe_parameters();
+
+    if(hal.on_probe_completed)
+        hal.on_probe_completed();
 
     // Successful probe cycle or Failed to trigger probe within travel. With or without error.
     return sys.flags.probe_succeeded ? GCProbe_Found : GCProbe_FailEnd;
@@ -924,10 +962,6 @@ ISR_CODE void mc_reset ()
     if (bit_isfalse(sys_rt_exec_state, EXEC_RESET)) {
 
         system_set_exec_state_flag(EXEC_RESET);
-
-        // Kill spindle and coolant.
-        hal.spindle_set_state((spindle_state_t){0}, 0.0f);
-        hal.coolant_set_state((coolant_state_t){0});
 
         if(hal.stream.suspend_read)
             hal.stream.suspend_read(false);

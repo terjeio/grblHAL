@@ -21,8 +21,13 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <assert.h>
+
 #include "project.h"
 #include "i2c_keypad.h"
+#include "eeprom_emulate.h"
+#include "override.h"
+#include "report.h"
 
 #define KEYBUF_SIZE 16
 

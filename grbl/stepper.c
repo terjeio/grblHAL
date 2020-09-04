@@ -1,6 +1,7 @@
 /*
   stepper.c - stepper motor driver: executes motion plans using stepper motors
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2016-2020 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -20,9 +21,18 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "grbl.h"
+#include <math.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "hal.h"
+#include "protocol.h"
 
 //#include "debug.h"
+
+#ifndef ACCELERATION_TICKS_PER_SECOND
+#define ACCELERATION_TICKS_PER_SECOND 100
+#endif
 
 // Some useful constants.
 #define DT_SEGMENT (1.0f/(ACCELERATION_TICKS_PER_SECOND*60.0f)) // min/segment
@@ -271,9 +281,10 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
             // If the new segment starts a new planner block, initialize stepper variables and counters.
             if (st.exec_block != st.exec_segment->exec_block) {
 
+                if((st.dir_change = st.exec_block == NULL || st.dir_outbits.value != st.exec_segment->exec_block->direction_bits.value))
+                    st.dir_outbits = st.exec_segment->exec_block->direction_bits;
                 st.exec_block = st.exec_segment->exec_block;
                 st.step_event_count = st.exec_block->step_event_count;
-                st.dir_outbits = st.exec_block->direction_bits;
                 st.new_block = true;
 #ifdef ENABLE_BACKLASH_COMPENSATION
                 backlash_motion = st.exec_block->backlash_motion;
@@ -449,10 +460,12 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
 // Reset and clear stepper subsystem variables
 void st_reset ()
 {
-    hal.probe_configure_invert_mask(false);
+    if(hal.probe_configure_invert_mask)
+        hal.probe_configure_invert_mask(false, false);
 
     // Initialize stepper driver idle state, clear step and direction port pins.
-    hal.stepper_go_idle(true);
+    st_go_idle();
+   // hal.stepper_go_idle(true);
 
     // NOTE: buffer indices starts from 1 for simpler driver coding!
 

@@ -25,6 +25,8 @@
 
 #define EEPROMOFFSET 0
 
+#include <stdlib.h>
+
 static inline uint32_t putByte (uint32_t target, uint32_t source, uint32_t byte) {
     uint32_t mask = 0xFF;
     byte <<= 3;

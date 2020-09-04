@@ -42,6 +42,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdint.h>
 
 #include "serial.h"
+#include "grbl/hal.h"
 
 #define BUFCOUNT(head, tail, size) ((head >= tail) ? (head - tail) : (size - tail + head))
 

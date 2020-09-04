@@ -1,6 +1,7 @@
 /*
   protocol.c - controls Grbl execution protocol and procedures
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -20,7 +21,18 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "grbl.h"
+#include <stdlib.h>
+#include <string.h>
+
+#include "hal.h"
+#include "nuts_bolts.h"
+#include "eeprom_emulate.h"
+#include "override.h"
+#include "report.h"
+#include "state_machine.h"
+#include "motion_control.h"
+#include "sleep.h"
+#include "protocol.h"
 
 // Define line flags. Includes comment type tracking and line overflow detection.
 typedef union {
@@ -112,6 +124,12 @@ bool protocol_main_loop(bool cold_start)
         system_execute_startup(line); // Execute startup script.
     }
 
+    // Ensure spindle and coolant is switched off on a cold start
+    if(cold_start) {
+        hal.spindle_set_state((spindle_state_t){0}, 0.0f);
+        hal.coolant_set_state((coolant_state_t){0});
+    }
+
     // ---------------------------------------------------------------------------------
     // Primary loop! Upon a system abort, this exits back to main() to reset the system.
     // This is also where Grbl idles while waiting for something to do.
@@ -176,7 +194,7 @@ bool protocol_main_loop(bool cold_start)
                 else if (sys.state & (STATE_ALARM|STATE_ESTOP|STATE_JOG)) // Everything else is gcode. Block if in alarm, eStop or jog mode.
                     gc_state.last_error = Status_SystemGClock;
 #if COMPATIBILITY_LEVEL == 0
-                else if(gc_state.last_error == Status_OK) { // Parse and execute g-code block.
+                else if(gc_state.last_error == Status_OK || gc_state.last_error == Status_GcodeToolChangePending) { // Parse and execute g-code block.
 #else
                 else { // Parse and execute g-code block.
 
@@ -382,11 +400,23 @@ bool protocol_exec_rt_system ()
         protocol_message(NULL);
 
     if (sys_rt_exec_alarm && (rt_exec = system_clear_exec_alarm())) { // Enter only if any bit flag is true
+
         // System alarm. Everything has shutdown by something that has gone severely wrong. Report
         // the source of the error to the user. If critical, Grbl disables by entering an infinite
         // loop until system reset/abort.
         set_state((alarm_code_t)rt_exec == Alarm_EStop ? STATE_ESTOP : STATE_ALARM); // Set system alarm state
         report_alarm_message((alarm_code_t)rt_exec);
+
+        if(sys_rt_exec_state & EXEC_RESET) {
+
+            // Kill spindle and coolant.
+            hal.spindle_set_state((spindle_state_t){0}, 0.0f);
+            hal.coolant_set_state((coolant_state_t){0});
+
+            if(hal.driver_reset)
+                hal.driver_reset();
+        }
+
         // Halt everything upon a critical event flag. Currently hard and soft limits flag this.
         if ((alarm_code_t)rt_exec == Alarm_HardLimit || (alarm_code_t)rt_exec == Alarm_SoftLimit || (alarm_code_t)rt_exec == Alarm_EStop) {
             system_set_exec_alarm(rt_exec);
@@ -414,6 +444,10 @@ bool protocol_exec_rt_system ()
 
         // Execute system abort.
         if (rt_exec & EXEC_RESET) {
+
+            // Kill spindle and coolant.
+            hal.spindle_set_state((spindle_state_t){0}, 0.0f);
+            hal.coolant_set_state((coolant_state_t){0});
 
             hal.driver_reset();
 
@@ -652,6 +686,8 @@ static void protocol_exec_rt_suspend ()
 // Called from input stream interrupt handler.
 ISR_CODE bool protocol_enqueue_realtime_command (char c)
 {
+    static bool esc = false;
+
     bool drop = false;
 
     // 1. Process characters in the ranges 0x - 1x and 8x-Ax
@@ -677,11 +713,13 @@ ISR_CODE bool protocol_enqueue_realtime_command (char c)
             drop = true;
             break;
 
+#if COMPATIBILITY_LEVEL == 0
         case CMD_EXIT: // Call motion control reset routine.
             mc_reset();
             sys.flags.exit = On;
             drop = true;
             break;
+#endif
 
         case CMD_STATUS_REPORT_ALL: // Add all statuses on to report
             {
@@ -765,6 +803,11 @@ ISR_CODE bool protocol_enqueue_realtime_command (char c)
             enqueue_accessory_override((uint8_t)c);
             break;
 
+        case CMD_REBOOT:
+            if(esc && hal.reboot)
+                hal.reboot(); // Force MCU reboot. This call should never return.
+            break;
+
         default:
             if(c < ' ' || (c >= 0x7F && c <= 0xBF))
                 drop = true;
@@ -778,14 +821,14 @@ ISR_CODE bool protocol_enqueue_realtime_command (char c)
     if(!drop) switch ((unsigned char)c) {
 
         case CMD_STATUS_REPORT_LEGACY:
-            if(!keep_rt_commands || settings.legacy_rt_commands) {
+            if(!keep_rt_commands || settings.flags.legacy_rt_commands) {
                 system_set_exec_state_flag(EXEC_STATUS_REPORT);
                 drop = true;
             }
             break;
 
         case CMD_CYCLE_START_LEGACY:
-            if(!keep_rt_commands || settings.legacy_rt_commands) {
+            if(!keep_rt_commands || settings.flags.legacy_rt_commands) {
                 system_set_exec_state_flag(EXEC_CYCLE_START);
                 // Cancel any pending tool change
                 gc_state.tool_change = false;
@@ -794,7 +837,7 @@ ISR_CODE bool protocol_enqueue_realtime_command (char c)
             break;
 
         case CMD_FEED_HOLD_LEGACY:
-            if(!keep_rt_commands || settings.legacy_rt_commands) {
+            if(!keep_rt_commands || settings.flags.legacy_rt_commands) {
                 system_set_exec_state_flag(EXEC_FEED_HOLD);
                 drop = true;
             }
@@ -804,6 +847,8 @@ ISR_CODE bool protocol_enqueue_realtime_command (char c)
             drop = !(keep_rt_commands || (unsigned char)c < 0x7F);
             break;
     }
+
+    esc = c == ASCII_ESC;
 
     return drop;
 }

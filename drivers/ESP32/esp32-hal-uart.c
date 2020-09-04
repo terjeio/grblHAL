@@ -15,6 +15,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <string.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -79,31 +80,19 @@ static const DRAM_ATTR uint8_t ESP_CMD_TOOL_ACK = CMD_TOOL_ACK;
 
 static uart_t *uart1 = NULL;
 
-static stream_rx_buffer_t rxbuffer = {
-    .head = 0,
-    .tail = 0,
-    .backup = false,
-    .overflow = false
-};
+static stream_rx_buffer_t rxbuffer = {0}, rxbackup;
 
-static stream_rx_buffer_t rxbackup;
-
-#if MPG_MODE_ENABLE
+#if SERIAL2_ENABLE
 
 static uart_t *uart2 = NULL;
 
-static stream_rx_buffer_t rxbuffer2 = {
-    .head = 0,
-    .tail = 0,
-    .backup = false,
-    .overflow = false
-};
+static stream_rx_buffer_t rxbuffer2 = {0};
 
 static stream_rx_buffer_t rxbackup2;
 
 #endif
 
-static void IRAM_ATTR _uart1_isr (void *arg)
+IRAM_ATTR static void _uart1_isr (void *arg)
 {
     uint8_t c;
 
@@ -134,12 +123,6 @@ static void IRAM_ATTR _uart1_isr (void *arg)
             }
         }
     }
-
-/*
-    if (xHigherPriorityTaskWoken) {
-        portYIELD_FROM_ISR();
-    }
-    */
 }
 
 static void uartEnableInterrupt (uart_t *uart, uart_isr_ptr isr, bool enable_rx)
@@ -184,7 +167,7 @@ static void uartSetBaudRate (uart_t *uart, uint32_t baud_rate)
     UART_MUTEX_UNLOCK(uart);
 }
 
-static void uartConfig (uart_t *uart)
+static void uartConfig (uart_t *uart, uint32_t baud_rate)
 {
 #if !CONFIG_DISABLE_HAL_LOCKS
     if(uart->lock == NULL) {
@@ -212,7 +195,7 @@ static void uartConfig (uart_t *uart)
             break;
     }
 
-    uartSetBaudRate(uart, BAUD_RATE);
+    uartSetBaudRate(uart, baud_rate);
 
     UART_MUTEX_LOCK(uart);
     uart->dev->conf0.val = SERIAL_8N2;
@@ -224,9 +207,13 @@ static void uartConfig (uart_t *uart)
 
     // Note: UART0 pin mappings are set at boot, no need to set here unless override is required
 
-#if MPG_MODE_ENABLE
+#if SERIAL2_ENABLE
     if(uart->num == 1)
-        uart_set_pin(uart->num , UART_PIN_NO_CHANGE, MPG_RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+  #if MODBUS_ENABLE
+        uart_set_pin(uart->num, UART2_TX_PIN, UART2_RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+  #else
+        uart_set_pin(uart->num, UART_PIN_NO_CHANGE, UART2_RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+  #endif
 #endif
 
     UART_MUTEX_UNLOCK(uart);
@@ -252,7 +239,7 @@ void uartInit (void)
 {
     uart1 = &_uart_bus_array[0]; // use UART 0
 
-    uartConfig(uart1);
+    uartConfig(uart1, BAUD_RATE);
 
     uartFlush();
     uartEnableInterrupt(uart1, _uart1_isr, true);
@@ -351,7 +338,7 @@ IRAM_ATTR bool uartSuspendInput (bool suspend)
     return rxbuffer.tail != rxbuffer.head;
 }
 
-#if MPG_MODE_ENABLE
+#if SERIAL2_ENABLE
 
 static void IRAM_ATTR _uart2_isr (void *arg)
 {
@@ -365,6 +352,16 @@ static void IRAM_ATTR _uart2_isr (void *arg)
 
         c = uart2->dev->fifo.rw_byte;
 
+#if MODBUS_ENABLE
+        uint32_t bptr = (rxbuffer2.head + 1) & RX_BUFFER_SIZE_MASK;  // Get next head pointer
+
+        if(bptr == rxbuffer2.tail)                    // If buffer full
+            rxbuffer2.overflow = 1;                   // flag overflow,
+        else {
+            rxbuffer2.data[rxbuffer2.head] = (char)c; // else add data to buffer
+            rxbuffer2.head = bptr;                    // and update pointer
+        }
+#else
         if(c == ESP_CMD_TOOL_ACK && !rxbuffer.backup) {
 
             memcpy(&rxbackup2, &rxbuffer2, sizeof(stream_rx_buffer_t));
@@ -383,6 +380,7 @@ static void IRAM_ATTR _uart2_isr (void *arg)
                 rxbuffer2.head = bptr;                    // and update pointer
             }
         }
+#endif
     }
 
 /*
@@ -391,6 +389,15 @@ static void IRAM_ATTR _uart2_isr (void *arg)
     }
     */
 }
+
+#if MODBUS_ENABLE && defined(MODBUS_DIRECTION_PIN)
+
+IRAM_ATTR void uart2Direction(bool tx)
+{
+    gpio_set_level(MODBUS_DIRECTION_PIN, tx);
+}
+
+#else
 
 IRAM_ATTR void serialSelect(bool mpg_mode)
 {
@@ -413,21 +420,43 @@ IRAM_ATTR void serialSelect(bool mpg_mode)
     uart_on->dev->int_ena.rxfifo_tout = 1;
 }
 
-void uart2Init (void)
+#endif
+
+void uart2Init (uint32_t baud_rate)
 {
     uart2 = &_uart_bus_array[1]; // use UART 1
 
-    uartConfig(uart2);
+    uartConfig(uart2, baud_rate);
 
     uart2Flush();
+#if MODBUS_ENABLE
+    uartEnableInterrupt(uart2, _uart2_isr, true);
+  #ifdef MODBUS_DIRECTION_PIN
+    gpio_config_t gpioConfig = {
+        .pin_bit_mask = (1UL << MODBUS_DIRECTION_PIN),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE
+    };
+    gpio_config(&gpioConfig);
+    uart2Direction(false);
+  #endif
+#else
     uartEnableInterrupt(uart2, _uart2_isr, false);
+#endif
 }
 
-uint32_t uart2Available (void)
+uint16_t uart2Available (void)
 {
     uint16_t head = rxbuffer2.head, tail = rxbuffer2.tail;
 
     return BUFCOUNT(head, tail, RX_BUFFER_SIZE);
+}
+
+uint16_t uart2txCount (void)
+{
+    return (uint16_t)uart2->dev->status.txfifo_cnt;
 }
 
 uint16_t uart2RXFree (void)
@@ -436,6 +465,29 @@ uint16_t uart2RXFree (void)
 
     return (RX_BUFFER_SIZE - 1) - BUFCOUNT(head, tail, RX_BUFFER_SIZE);
 }
+
+bool uart2PutC (const char c)
+{
+    UART_MUTEX_LOCK(uart2);
+
+    while(uart2->dev->status.txfifo_cnt == 0x7F);
+
+    uart2->dev->fifo.rw_byte = c;
+    UART_MUTEX_UNLOCK(uart2);
+
+    return true;
+}
+
+// Writes a number of characters from a buffer to the serial output stream, blocks if buffer full
+//
+void uart2Write (const char *s, uint16_t length)
+{
+    char *ptr = (char *)s;
+
+    while(length--)
+        uart2PutC(*ptr++);
+}
+
 
 int16_t uart2Read (void)
 {

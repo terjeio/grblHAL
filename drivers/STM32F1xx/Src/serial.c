@@ -21,8 +21,7 @@
 
 */
 
-#ifndef __serial_h__
-#define __serial_h__
+#include <string.h>
 
 #include "driver.h"
 #include "serial.h"
@@ -213,5 +212,3 @@ void USART1_IRQHandler (void)
             USART1->CR1 &= ~USART_CR1_TXEIE;    // disable UART TX interrupt
    }
 }
-
-#endif // __serial_h__

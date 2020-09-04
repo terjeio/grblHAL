@@ -1,7 +1,7 @@
 /*
   stream.h - some ASCII control character definitions and optional structures for stream buffers
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2019-2020 Terje Io
 
@@ -19,8 +19,8 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef stream_h
-#define stream_h
+#ifndef _STREAM_H_
+#define _STREAM_H_
 
 #define ASCII_ETX  0x03
 #define ASCII_ACK  0x06
@@ -33,6 +33,7 @@
 #define ASCII_EOF  0x1A
 #define ASCII_CAN  0x18
 #define ASCII_EM   0x19
+#define ASCII_ESC  0x1B
 #define ASCII_DEL  0x7F
 #define ASCII_EOL  "\r\n"
 
@@ -46,6 +47,16 @@
 
 #ifndef BLOCK_TX_BUFFER_SIZE
 #define BLOCK_TX_BUFFER_SIZE 200
+#endif
+
+// Serial baud rate
+#ifndef BAUD_RATE
+#define BAUD_RATE 115200
+#endif
+
+// Value to be returned from input stream when no data is available
+#ifndef SERIAL_NO_DATA
+#define SERIAL_NO_DATA -1
 #endif
 
 #define BUFCOUNT(head, tail, size) ((head >= tail) ? (head - tail) : (size - tail + head))

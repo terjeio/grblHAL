@@ -1,7 +1,7 @@
 //
-// WsStream.c - lw-IP/FreeRTOS websocket stream implementation
+// WsStream.c - lwIP websocket stream implementation
 //
-// v1.0 / 2020-02-04 / Io Engineering / Terje
+// v1.1 / 2020-07-13 / Io Engineering / Terje
 //
 
 /*
@@ -36,14 +36,14 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 */
 
-#define TCP_SLOW_INTERVAL 500
-
-#include <stdint.h>
-#include <stdbool.h>
-#include <assert.h>
-
-#include "driver.h"
 #include "networking.h"
+
+#if WEBSOCKET_ENABLE
+
+#include <assert.h>
+#include <stdlib.h>
+#include <string.h>
+
 #include "WsStream.h"
 #include "base64.h"
 #include "sha1.h"
@@ -1059,3 +1059,5 @@ void WsStreamPoll (void)
     else if(streamSession.state == WsStateClosing)
         closeSocket(&streamSession, streamSession.pcbConnect);
 }
+
+#endif

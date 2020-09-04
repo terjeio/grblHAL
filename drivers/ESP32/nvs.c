@@ -25,7 +25,7 @@
 #include "esp_log.h"
 
 #include "nvs.h"
-#include "grbl/grbl.h"
+#include "grbl/hal.h"
 
 #ifndef EMULATE_EEPROM
 #error EMULATE_EPROM must be enabled to use flash for settings storage

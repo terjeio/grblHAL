@@ -1,5 +1,5 @@
 # CMake for GrblHAL driver for ESP32
-# 2020-02-10
+# 2020-07-10
 
 cmake_minimum_required(VERSION 3.5)
 
@@ -14,6 +14,7 @@ OPTION(WebUI "WebUI services" OFF)
 OPTION(WebAuth "WebUI authentication" OFF)
 OPTION(MPGMode "MPG mode" OFF)
 OPTION(BoosterPack "Compile for CNC BoosterPack" OFF)
+OPTION(HUANYANG "Compile with Huanyang RS485 Spindle support" OFF)
 
 set(SDCARD_SOURCE sdcard/sdcard.c)
 set(KEYPAD_SOURCE keypad/keypad.c)
@@ -21,6 +22,7 @@ set(TRINAMIC_SOURCE trinamic/trinamic2130.c trinamic/TMC2130_I2C_map.c tmc2130/t
 set(NETWORKING_SOURCE wifi.c dns_server.c web/backend.c web/upload.c networking/TCPStream.c networking/WsStream.c networking/base64.c networking/sha1.c networking/urldecode.c networking/strutils.c networking/utils.c networking/multipartparser.c )
 set(WEBUI_SOURCE webui/server.c webui/response.c webui/commands.c webui/flashfs.c )
 set(BLUETOOTH_SOURCE bluetooth.c )
+set(HUANYANG_SOURCE spindle/huanyang.c spindle/modbus)
 
 set(MAIN_SRCS main.c driver.c nvs.c esp32-hal-uart.c
  i2c.c
@@ -43,6 +45,7 @@ set(MAIN_SRCS main.c driver.c nvs.c esp32-hal-uart.c
  grbl/state_machine.c
  grbl/stepper.c
  grbl/system.c
+ grbl/tool_change.c
 )
 
 if(Networking)
@@ -67,6 +70,10 @@ endif()
 
 if(Bluetooth) 
 list (APPEND MAIN_SRCS ${BLUETOOTH_SOURCE})
+endif()
+
+if(HUANYANG)
+list (APPEND MAIN_SRCS ${HUANYANG_SOURCE})
 endif()
 
 set(INCLUDE_DIRS ".")
@@ -110,6 +117,11 @@ endif()
 
 if(MPGMode)
 target_compile_definitions(grbl.elf PUBLIC MPG_MODE_ENABLE)
+endif()
+
+if(HUANYANG)
+target_compile_definitions(grbl.elf PUBLIC SPINDLE_HUANYANG=1)
+target_compile_definitions(grbl.elf PUBLIC SPINDLE_RPM_CONTROLLED)
 endif()
 
 if(BoosterPack)

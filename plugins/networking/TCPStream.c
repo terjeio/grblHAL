@@ -1,7 +1,7 @@
 //
-// TCPStream.c - lw-IP/FreeRTOS stream implementation, raw "Telnet"
+// TCPStream.c - lwIP stream implementation, raw "Telnet"
 //
-// v1.0 / 2020-02-04 / Io Engineering / Terje
+// v1.1 / 2020-07-13 / Io Engineering / Terje
 //
 
 /*
@@ -36,24 +36,15 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 */
 
-#define TCP_SLOW_INTERVAL 500
-
-#include <stdint.h>
-#include <stdbool.h>
-#include <assert.h>
-
-//#include "driverlib/debug.h"
 
 #include "networking.h"
 
-//#include "FreeRTOS.h"
-//#include "task.h"
+#if TELNET_ENABLE
 
-#include "driver.h"
+#include <assert.h>
+#include <string.h>
+
 #include "TCPStream.h"
-
-#define SOCKET_TIMEOUT 0
-#define BUFCOUNT(head, tail, size) ((head >= tail) ? (head - tail) : (size - tail + head))
 
 typedef enum
 {
@@ -533,3 +524,6 @@ void TCPStreamPoll (void)
         streamSession.lastSendTime = xTaskGetTickCount();
     }
 }
+
+#endif
+

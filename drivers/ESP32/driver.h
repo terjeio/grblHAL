@@ -36,7 +36,7 @@
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 
-#include "grbl/grbl.h"
+#include "grbl/hal.h"
 
 static const DRAM_ATTR float FZERO = 0.0f;
 
@@ -91,6 +91,7 @@ static const DRAM_ATTR float FZERO = 0.0f;
 // NOTE: Only one board may be enabled!
 #define BOARD_BDRING_V4
 //#define BOARD_BDRING_V3P5
+//#define BOARD_BDRING_I2S6A
 #endif
 
 //
@@ -167,15 +168,17 @@ static const DRAM_ATTR float FZERO = 0.0f;
 #define NETWORK_WEBSOCKET_PORT  81
 
 // WiFi Station (STA) settings
-#define NETWORK_HOSTNAME        "Grbl"
-#define NETWORK_IPMODE_STATIC   0
-#if NETWORK_IPMODE_STATIC
-#define NETWORK_IP              "192.168.5.1"
-#define NETWORK_GATEWAY         "192.168.5.1"
-#define NETWORK_MASK            "255.255.255.0"
+#define NETWORK_HOSTNAME    "Grbl"
+#define NETWORK_IPMODE      1 // 0 = static, 1 = DHCP, 2 = AutoIP
+#define NETWORK_IP          "192.168.5.1"
+#define NETWORK_GATEWAY     "192.168.5.1"
+#define NETWORK_MASK        "255.255.255.0"
+
+#if NETWORK_IPMODE < 0 || NETWORK_IPMODE > 2
+#error "Invalid IP mode selected!"
 #endif
 
-#if NETWORK_IPMODE_STATIC && WIFI_SOFTAP
+#if NETWORK_IPMODE == 0 && WIFI_SOFTAP
 #error "Cannot use static IP for station when soft AP is enabled!"
 #endif
 
@@ -207,6 +210,10 @@ static const DRAM_ATTR float FZERO = 0.0f;
 #include "tmc2130/trinamic.h"
 #endif
 
+#ifdef SPINDLE_HUANYANG
+#include "spindle/huanyang.h"
+#endif
+
 typedef struct
 {
     grbl_wifi_mode_t mode;
@@ -221,7 +228,6 @@ typedef struct {
     uint8_t action;
     void *params;
 } i2c_task_t;
-
 
 #if WIFI_ENABLE || BLUETOOTH_ENABLE || TRINAMIC_ENABLE || KEYPAD_ENABLE
 
@@ -243,11 +249,13 @@ extern driver_settings_t driver_settings;
 #endif
 
 #ifdef CNC_BOOSTERPACK
-    #include "boosterpack_map.h"
+  #include "boosterpack_map.h"
 #elif defined(BOARD_BDRING_V4)
-    #include "bdring_v4_map.h"
+  #include "bdring_v4_map.h"
 #elif defined(BOARD_BDRING_V3P5)
-    #include "bdring_v3.5_map.h"
+  #include "bdring_v3.5_map.h"
+#elif defined(BOARD_BDRING_I2S6A)
+  #include "bdring_i2s_6_axis_map.h"
 #else // default board - NOTE: NOT FINAL VERSION!
 
 #if SDCARD_ENABLE
@@ -288,11 +296,13 @@ extern driver_settings_t driver_settings;
 #define Z_LIMIT_PIN     GPIO_NUM_15
 #define LIMIT_MASK      (1ULL << X_LIMIT_PIN|1ULL << Y_LIMIT_PIN|1ULL << Z_LIMIT_PIN) // All limit bits
 
+#ifndef VFD_SPINDLE
 // Define spindle enable and spindle direction output pins.
 #define SPINDLE_ENABLE_PIN      GPIO_NUM_18
 #define SPINDLE_DIRECTION_PIN   GPIO_NUM_5
 #define SPINDLE_MASK            (1ULL << SPINDLE_ENABLE_PIN|1ULL << SPINDLE_DIRECTION_PIN)
 #define SPINDLEPWMPIN           GPIO_NUM_17
+#endif
 
 // Define flood and mist coolant enable output pins.
 
@@ -353,12 +363,16 @@ extern SemaphoreHandle_t i2cBusy;
 #error "Add #define GRBL_ESP32 in grbl/config.h or update your CMakeLists.txt to the latest version!"
 #endif
 
+#if MPG_MODE_ENABLE || MODBUS_ENABLE
+#define SERIAL2_ENABLE 1
+#endif
+
 #if MPG_MODE_ENABLE
   #ifndef MPG_ENABLE_PIN
   #error "MPG_ENABLE_PIN must be defined when MPG mode is enabled!"
   #endif
-  #ifndef MPG_RX_PIN
-  #error "MPG_RX_PIN must be defined when MPG mode is enabled!"
+  #ifndef UART2_RX_PIN
+  #error "UART2_RX_PIN must be defined when MPG mode is enabled!"
   #endif
 #endif
 

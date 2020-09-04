@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<projectDescription>
+	<name>Driver Teensy4</name>
+	<comment></comment>
+	<projects>
+	</projects>
+	<buildSpec>
+		<buildCommand>
+			<name>org.eclipse.cdt.managedbuilder.core.genmakebuilder</name>
+			<triggers>clean,full,incremental,</triggers>
+			<arguments>
+			</arguments>
+		</buildCommand>
+		<buildCommand>
+			<name>org.eclipse.cdt.managedbuilder.core.ScannerConfigBuilder</name>
+			<triggers>full,incremental,</triggers>
+			<arguments>
+			</arguments>
+		</buildCommand>
+	</buildSpec>
+	<natures>
+		<nature>org.eclipse.cdt.core.cnature</nature>
+		<nature>org.eclipse.cdt.core.ccnature</nature>
+		<nature>org.eclipse.cdt.managedbuilder.core.managedBuildNature</nature>
+		<nature>org.eclipse.cdt.managedbuilder.core.ScannerConfigNature</nature>
+	</natures>
+	<variableList>
+		<variable>
+			<name>ARDUINOPATH</name>
+			<value>file:/C:/Program%20Files%20(x86)/Arduino</value>
+		</variable>
+		<variable>
+			<name>COMPILER_LOC</name>
+			<value>file:/C:/Program%20Files%20(x86)/Arduino/hardware/tools/arm/arm-none-eabi</value>
+		</variable>
+		<variable>
+			<name>ETHERNET_LIB</name>
+			<value>file:/C:/users/terjeio/Documents/Arduino/libraries/teensy41_ethernet-master/src</value>
+		</variable>
+		<variable>
+			<name>TEENSY4_CORE</name>
+			<value>file:/C:/Program%20Files%20(x86)/Arduino/hardware/teensy/avr/cores/teensy4</value>
+		</variable>
+	</variableList>
+</projectDescription>

@@ -1,6 +1,7 @@
 /*
   sleep.h - Sleep methods header file
-  Part of Grbl
+
+  Part of GrblHAL
   
   Copyright (c) 2016 Sungeun K. Jeon  
 
@@ -18,8 +19,8 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef sleep_h
-#define sleep_h
+#ifndef _SLEEP_H_
+#define _SLEEP_H_
 
 // Checks running conditions for sleep. If satisfied, enables sleep countdown and executes
 // sleep mode upon elapse.

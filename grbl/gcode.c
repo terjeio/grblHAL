@@ -1,6 +1,7 @@
 /*
   gcode.c - rs274/ngc parser.
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -20,7 +21,13 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "grbl.h"
+#include <math.h>
+#include <string.h>
+#include <stdlib.h>
+
+#include "hal.h"
+#include "motion_control.h"
+#include "protocol.h"
 
 // NOTE: Max line number is defined by the g-code standard to be 99999. It seems to be an
 // arbitrary value, and some GUIs may require more. So we increased it based on a max safe
@@ -29,7 +36,7 @@
 #ifdef N_TOOLS
 #define MAX_TOOL_NUMBER N_TOOLS // Limited by max unsigned 8-bit value
 #else
-#define MAX_TOOL_NUMBER 255 // Limited by max unsigned 8-bit value
+#define MAX_TOOL_NUMBER 4294967295 // Limited by max unsigned 32-bit value
 #endif
 
 #define MACH3_SCALING
@@ -57,9 +64,22 @@ tool_data_t tool_table;
 
 #define FAIL(status) return(status);
 
-static scale_factor_t scale_factor;
 static gc_thread_data thread;
 static output_command_t *output_commands = NULL; // Linked list
+static scale_factor_t scale_factor = {
+    .ijk[X_AXIS] = 1.0f,
+    .ijk[Y_AXIS] = 1.0f,
+    .ijk[Z_AXIS] = 1.0f
+#ifdef A_AXIS
+  , .ijk[A_AXIS] = 1.0f
+#endif
+#ifdef B_AXIS
+  , .ijk[B_AXIS] = 1.0f
+#endif
+#ifdef C_AXIS
+  , .ijk[C_AXIS] = 1.0f
+#endif
+};
 
 // Simple hypotenuse computation function.
 inline static float hypot_f (float x, float y)
@@ -113,6 +133,68 @@ float gc_get_offset (uint_fast8_t idx)
 inline static float gc_get_block_offset (parser_block_t *gc_block, uint_fast8_t idx)
 {
     return gc_block->modal.coord_system.xyz[idx] + gc_state.g92_coord_offset[idx] + gc_state.tool_length_offset[idx];
+}
+
+void gc_set_tool_offset (tool_offset_mode_t mode, uint_fast8_t idx, int32_t offset)
+{
+    bool tlo_changed = false;
+
+    switch(mode) {
+
+        case ToolLengthOffset_Cancel:
+            idx = N_AXIS;
+            do {
+                idx--;
+                tlo_changed |= gc_state.tool_length_offset[idx] != 0.0f;
+                gc_state.tool_length_offset[idx] = 0.0f;
+                gc_state.tool->offset[idx] = 0;
+            } while(idx);
+            break;
+
+        case ToolLengthOffset_EnableDynamic:
+            {
+                float new_offset = offset / settings.axis[idx].steps_per_mm;
+                tlo_changed |= gc_state.tool_length_offset[idx] != new_offset;
+                gc_state.tool_length_offset[idx] = new_offset;
+                gc_state.tool->offset[idx] = offset;
+            }
+            break;
+
+        default:
+            break;
+    }
+
+    gc_state.modal.tool_offset_mode = mode;
+
+    if(tlo_changed) {
+        sys.report.tool_offset = true;
+        system_flag_wco_change();
+    }
+}
+
+plane_t *gc_get_plane_data (plane_t *plane, plane_select_t select)
+{
+    switch (select) {
+
+        case PlaneSelect_XY:
+            plane->axis_0 = X_AXIS;
+            plane->axis_1 = Y_AXIS;
+            plane->axis_linear = Z_AXIS;
+            break;
+
+        case PlaneSelect_ZX:
+            plane->axis_0 = Z_AXIS;
+            plane->axis_1 = X_AXIS;
+            plane->axis_linear = Y_AXIS;
+            break;
+
+        default: // case PlaneSelect_YZ:
+            plane->axis_0 = Y_AXIS;
+            plane->axis_1 = Z_AXIS;
+            plane->axis_linear = X_AXIS;
+    }
+
+    return plane;
 }
 
 void gc_init(bool cold_start)
@@ -210,7 +292,7 @@ static status_code_t init_sync_motion (plan_line_data_t *pl_data, float pitch)
     if(feed_rate == 0.0f)
         FAIL(Status_GcodeSpindleNotRunning); // [Spindle not running]
 
-    if(feed_rate > settings.max_rate[Z_AXIS])
+    if(feed_rate > settings.axis[Z_AXIS].max_rate)
         FAIL(Status_GcodeMaxFeedRateExceeded); // [Feed rate too high]
 
     return Status_OK;
@@ -280,7 +362,7 @@ status_code_t gc_execute_block(char *block, char *message)
     uint_fast8_t char_counter = gc_parser_flags.jog_motion ? 3 /* Start parsing after `$J=` */ : 0;
     char letter;
     float value;
-    uint_fast16_t int_value = 0;
+    uint32_t int_value = 0;
     uint_fast16_t mantissa = 0;
 
     while ((letter = block[char_counter++]) != '\0') { // Loop until no more g-code words in block.
@@ -299,7 +381,7 @@ status_code_t gc_execute_block(char *block, char *message)
         // a good enough comprimise and catch most all non-integer errors. To make it compliant,
         // we would simply need to change the mantissa to int16, but this add compiled flash space.
         // Maybe update this later.
-        int_value = (uint_fast16_t)truncf(value);
+        int_value = (uint32_t)truncf(value);
         mantissa = (uint_fast16_t)roundf(100.0f * (value - int_value)); // Compute mantissa for Gxx.x commands.
         // NOTE: Rounding must be used to catch small floating point errors.
 
@@ -514,7 +596,7 @@ status_code_t gc_execute_block(char *block, char *message)
 
                 switch(int_value) {
 
-                    case 0: case 1: case 2: case 30:
+                    case 0: case 1: case 2: case 30: case 60:
                         word_bit.group = ModalGroup_M4;
                         switch(int_value) {
 
@@ -527,7 +609,7 @@ status_code_t gc_execute_block(char *block, char *message)
                                     gc_block.modal.program_flow = ProgramFlow_OptionalStop;
                                 break;
 
-                            default: // M2, M30 - program end and reset
+                            default: // M2, M30, M60 - program end and reset
                                 gc_block.modal.program_flow = (program_flow_t)int_value;
                         }
                         break;
@@ -698,7 +780,7 @@ status_code_t gc_execute_block(char *block, char *message)
                         if (mantissa > 0)
                             FAIL(Status_GcodeCommandValueNotInteger);
                         word_bit.parameter = Word_L;
-                        gc_block.values.l = int_value;
+                        gc_block.values.l = (uint8_t)int_value;
                         break;
 
                     case 'N':
@@ -940,7 +1022,7 @@ status_code_t gc_execute_block(char *block, char *message)
         if ((int32_t)gc_block.values.q < 1 || (int32_t)gc_block.values.q > MAX_TOOL_NUMBER)
             FAIL(Status_GcodeIllegalToolTableEntry);
 
-        gc_block.values.t = (uint8_t)gc_block.values.q;
+        gc_block.values.t = (uint32_t)gc_block.values.q;
 
         bit_false(value_words, bit(Word_Q));
     } else if (bit_isfalse(value_words, bit(Word_T)))
@@ -1078,25 +1160,7 @@ status_code_t gc_execute_block(char *block, char *message)
     }
 
     // [11. Set active plane ]: N/A
-    switch (gc_block.modal.plane_select) {
-
-        case PlaneSelect_XY:
-            plane.axis_0 = X_AXIS;
-            plane.axis_1 = Y_AXIS;
-            plane.axis_linear = Z_AXIS;
-            break;
-
-        case PlaneSelect_ZX:
-            plane.axis_0 = Z_AXIS;
-            plane.axis_1 = X_AXIS;
-            plane.axis_linear = Y_AXIS;
-            break;
-
-        default: // case PlaneSelect_YZ:
-            plane.axis_0 = Y_AXIS;
-            plane.axis_1 = Z_AXIS;
-            plane.axis_linear = X_AXIS;
-    }
+    gc_get_plane_data(&plane, gc_block.modal.plane_select);
 
     // [12. Set length units ]: N/A
     // Pre-convert XYZ coordinate values to millimeters, if applicable.
@@ -1507,7 +1571,7 @@ status_code_t gc_execute_block(char *block, char *message)
                 if(bit_isfalse(axis_words, bit(Z_AXIS)) || bit_isfalse(value_words, bit(Word_I)|bit(Word_J)|bit(Word_K)|bit(Word_P)))
                     FAIL(Status_GcodeValueWordMissing);
 
-                if(gc_block.values.p < 0.0f || gc_block.values.ijk[J_VALUE] < 0.0f || gc_block.values.ijk[K_VALUE] < 0.0f || gc_block.values.h < 0.0f)
+                if(gc_block.values.p < 0.0f || gc_block.values.ijk[J_VALUE] < 0.0f || gc_block.values.ijk[K_VALUE] < 0.0f)
                     FAIL(Status_NegativeValue);
 
                 if(gc_block.values.ijk[I_VALUE] == 0.0f ||
@@ -2441,7 +2505,7 @@ status_code_t gc_execute_block(char *block, char *message)
         protocol_message(plan_data.message);
 
     // [21. Program flow ]:
-    // M0,M1,M2,M30: Perform non-running program flow actions. During a program pause, the buffer may
+    // M0,M1,M2,M30,M60: Perform non-running program flow actions. During a program pause, the buffer may
     // refill and can only be resumed by the cycle start run-time command.
     gc_state.modal.program_flow = gc_block.modal.program_flow;
 
@@ -2449,8 +2513,10 @@ status_code_t gc_execute_block(char *block, char *message)
 
         protocol_buffer_synchronize(); // Sync and finish all remaining buffered motions before moving on.
 
-        if (gc_state.modal.program_flow == ProgramFlow_Paused || gc_block.modal.program_flow == ProgramFlow_OptionalStop) {
+        if (gc_state.modal.program_flow == ProgramFlow_Paused || gc_block.modal.program_flow == ProgramFlow_OptionalStop || gc_block.modal.program_flow == ProgramFlow_CompletedM60) {
             if (sys.state != STATE_CHECK_MODE) {
+                if(gc_block.modal.program_flow == ProgramFlow_CompletedM60 && hal.pallet_shuttle)
+                    hal.pallet_shuttle();
                 system_set_exec_state_flag(EXEC_FEED_HOLD); // Use feed hold for program pause.
                 protocol_execute_realtime(); // Execute suspend.
             }
@@ -2459,6 +2525,10 @@ status_code_t gc_execute_block(char *block, char *message)
             // LinuxCNC's program end descriptions and testing. Only modal groups [G-code 1,2,3,5,7,12]
             // and [M-code 7,8,9] reset to [G1,G17,G90,G94,G40,G54,M5,M9,M48]. The remaining modal groups
             // [G-code 4,6,8,10,13,14,15] and [M-code 4,5,6] and the modal words [F,S,T,H] do not reset.
+
+            if(sys.state != STATE_CHECK_MODE && gc_block.modal.program_flow == ProgramFlow_CompletedM30 && hal.pallet_shuttle)
+                hal.pallet_shuttle();
+
             gc_state.file_run = false;
             gc_state.modal.motion = MotionMode_Linear;
             gc_block.modal.canned_cycle_active = false;

@@ -1,7 +1,7 @@
 /*
   maslow.c - Maslow router kinematics implementation
 
-  Part of Grbl
+  Part of GrblHAL
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -26,12 +26,18 @@
   It has been adapted for grblHAL by Terje Io.
 */
 
-#include "config.h"
+#include "grbl.h"
 
 #ifdef MASLOW_ROUTER
 
-#include "maslow.h"
 #include "driver.h"
+
+#include "settings.h"
+#include "planner.h"
+#include "eeprom_emulate.h"
+#include "kinematics.h"
+#include "maslow.h"
+#include "report.h"
 
 #define A_MOTOR X_AXIS // Must be X_AXIS
 #define B_MOTOR Y_AXIS // Must be Y_AXIS
@@ -337,14 +343,14 @@ void verifyValidTarget (float* xTarget, float* yTarget)
 // converts current position two-chain intersection (steps) into x / y cartesian in STEPS..
 static void maslow_convert_array_steps_to_mpos (float *position, int32_t *steps)
 {
-    float a_len = ((float)steps[A_MOTOR] / settings.steps_per_mm[A_MOTOR]);
-    float b_len = ((float)steps[B_MOTOR] / settings.steps_per_mm[B_MOTOR]);
+    float a_len = ((float)steps[A_MOTOR] / settings.axis[A_MOTOR].steps_per_mm);
+    float b_len = ((float)steps[B_MOTOR] / settings.axis[B_MOTOR].steps_per_mm);
 
     a_len = (machine.xCordOfMotor_x2_pow - powf(b_len, 2.0f) + powf(a_len, 2.0f)) / machine.xCordOfMotor_x4;
     position[X_AXIS] = a_len - machine.xCordOfMotor;
     a_len = maslow_hal.settings->distBetweenMotors - a_len;
     position[Y_AXIS] = machine.yCordOfMotor - sqrtf(powf(b_len, 2.0f) - powf(a_len, 2.0f));
-    position[Z_AXIS] = steps[Z_AXIS] / settings.steps_per_mm[Z_AXIS];
+    position[Z_AXIS] = steps[Z_AXIS] / settings.axis[Z_AXIS].steps_per_mm;
 
 // back out any correction factor
    position[X_AXIS] /= maslow_hal.settings->XcorrScaling;
@@ -365,8 +371,8 @@ inline static void triangularInverse (int32_t *target_steps, float *target)
     double yyp = pow((double)machine.yCordOfMotor - yyy, 2.0);
 
     //Calculate motor axes length to the bit
-    target_steps[A_MOTOR] = (int32_t)lround(sqrt(pow((double)machine.xCordOfMotor + xxx, 2.0f) + yyp) * settings.steps_per_mm[A_MOTOR]);
-    target_steps[B_MOTOR] = (int32_t)lround(sqrt(pow((double)machine.xCordOfMotor - xxx, 2.0f) + yyp) * settings.steps_per_mm[B_MOTOR]);
+    target_steps[A_MOTOR] = (int32_t)lround(sqrt(pow((double)machine.xCordOfMotor + xxx, 2.0f) + yyp) * settings.axis[A_MOTOR].steps_per_mm);
+    target_steps[B_MOTOR] = (int32_t)lround(sqrt(pow((double)machine.xCordOfMotor - xxx, 2.0f) + yyp) * settings.axis[B_MOTOR].steps_per_mm);
 }
 
 // Transform absolute position from cartesian coordinate system (mm) to maslow coordinate system (step)
@@ -375,7 +381,7 @@ static void maslow_target_to_steps (int32_t *target_steps, float *target)
     uint_fast8_t idx = N_AXIS - 1;
 
     do {
-        target_steps[idx] = lroundf(target[idx] * settings.steps_per_mm[idx]);
+        target_steps[idx] = lroundf(target[idx] * settings.axis[idx].steps_per_mm);
     } while(--idx > Y_AXIS);
 
     triangularInverse(target_steps, target);
@@ -554,21 +560,21 @@ status_code_t maslow_tuning (uint_fast16_t state, char *line, char *lcline)
 
         case 'X':
             selected_motor = A_MOTOR;
-            hal.stream.write("X-Axis Selected\r\n");
+            hal.stream.write("X-Axis Selected" ASCII_EOL);
             break;
 
         case 'Y':
             selected_motor = B_MOTOR;
-            hal.stream.write("Y-Axis Selected\r\n");
+            hal.stream.write("Y-Axis Selected" ASCII_EOL);
             break;
 
         case 'Z':
             selected_motor = Z_AXIS;
             if(maslow_hal.get_debug_data(selected_motor))
-                hal.stream.write("Z-Axis Selected\r\n");
+                hal.stream.write("Z-Axis Selected" ASCII_EOL);
             else {
                 selected_motor = A_MOTOR;
-                hal.stream.write("Z-Axis is not PID controlled, switched to A motor\r\n");
+                hal.stream.write("Z-Axis is not PID controlled, switched to A motor" ASCII_EOL);
             }
             break;
 
@@ -615,21 +621,21 @@ status_code_t maslow_tuning (uint_fast16_t state, char *line, char *lcline)
                         maslow_hal.settings->pid[selected_motor].Kp = parameter;
                         hal.stream.write("Kp == ");
                         hal.stream.write(ftoa(maslow_hal.settings->pid[selected_motor].Kp, 3));
-                        hal.stream.write("\r\n");
+                        hal.stream.write(ASCII_EOL);
                         break;
 
                     case 'D':
                         maslow_hal.settings->pid[selected_motor].Kd = parameter;
                         hal.stream.write("Kd == ");
                         hal.stream.write(ftoa(maslow_hal.settings->pid[selected_motor].Kd, 3));
-                        hal.stream.write("\r\n");
+                        hal.stream.write(ASCII_EOL);
                         break;
 
                     case 'I':
                         maslow_hal.settings->pid[selected_motor].Ki = parameter;
                         hal.stream.write("Ki == ");
                         hal.stream.write(ftoa(maslow_hal.settings->pid[selected_motor].Ki, 3));
-                        hal.stream.write("\r\n");
+                        hal.stream.write(ASCII_EOL);
                         maslow_hal.pid_settings_changed(selected_motor);
                         break;
 
@@ -637,7 +643,7 @@ status_code_t maslow_tuning (uint_fast16_t state, char *line, char *lcline)
                         maslow_hal.settings->pid[selected_motor].Imax = parameter;
                         hal.stream.write("Imax == ");
                         hal.stream.write(ftoa(maslow_hal.settings->pid[selected_motor].Imax, 3));
-                        hal.stream.write("\r\n");
+                        hal.stream.write(ASCII_EOL);
                         maslow_hal.pid_settings_changed(selected_motor);
                         break;
 
@@ -647,7 +653,7 @@ status_code_t maslow_tuning (uint_fast16_t state, char *line, char *lcline)
                             int32_t sz = maslow_hal.set_step_size(selected_motor, (int32_t)parameter);
                             hal.stream.write("S == ");
                             hal.stream.write(ftoa((float)sz, 0));
-                            hal.stream.write("\r\n");
+                            hal.stream.write(ASCII_EOL);
                         }
                         break;
 
@@ -680,7 +686,7 @@ status_code_t maslow_tuning (uint_fast16_t state, char *line, char *lcline)
                                 hal.stream.write(ftoa(xyz[X_AXIS], 3));
                                 hal.stream.write(",");
                                 hal.stream.write(ftoa(xyz[Y_AXIS], 3));
-                                hal.stream.write("]\r\n");
+                                hal.stream.write("]" ASCII_EOL);
                             }
                         }
                         break;
@@ -720,7 +726,7 @@ status_code_t maslow_tuning (uint_fast16_t state, char *line, char *lcline)
     //           hal.stream.write(uitoa(motor[Y_AXIS]->speed));
     //           hal.stream.write("\tzCMD=");
     //           hal.stream.write(uitoa(motor[Z_AXIS]->speed));
-               hal.stream.write("]\r\n");
+               hal.stream.write("]" ASCII_EOL);
             }
            break;
     } else

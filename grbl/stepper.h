@@ -1,6 +1,7 @@
 /*
   stepper.h - stepper motor driver: executes motion plans of planner.c using the stepper motors
-  Part of Grbl
+
+  Part of GrblHAL
 
   Copyright (c) 2019-2020 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -22,11 +23,11 @@
 
 #include "planner.h"
 
-#ifndef stepper_h
-#define stepper_h
+#ifndef _STEPPER_H_
+#define _STEPPER_H_
 
 #ifndef SEGMENT_BUFFER_SIZE
-  #define SEGMENT_BUFFER_SIZE 10
+#define SEGMENT_BUFFER_SIZE 10
 #endif
 
 typedef enum {
@@ -90,6 +91,7 @@ typedef struct {
     #endif
 ;
     bool new_block;                 // Set to true when a new block is started, might be used by driver for advanced functionality
+    bool dir_change;                // Set to true on direction changes, might be used by driver for advanced functionality
     axes_signals_t step_outbits;    // The next stepping-bits to be output
     axes_signals_t dir_outbits;     // The next direction-bits to be output
     uint32_t steps[N_AXIS];

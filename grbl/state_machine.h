@@ -3,7 +3,7 @@
 
   Main state machine
 
-  Part of Grbl
+  Part of GrblHAL
 
   Copyright (c) 2018 Terje Io
 
@@ -21,7 +21,12 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#ifndef _STATE_MACHINE_H_
+#define _STATE_MACHINE_H_
+
 void set_state (uint_fast16_t state);
 void update_state (uint_fast16_t rt_exec);
 bool state_door_reopened (void);
 void state_suspend_manager (void);
+
+#endif
