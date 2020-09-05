@@ -38,7 +38,7 @@
 #endif
 
 static bool block_cycle_start;
-static tool_data_t *current_tool = NULL, *next_tool = NULL;
+static tool_data_t current_tool = {0}, *next_tool = NULL;
 static driver_reset_ptr driver_reset = NULL;
 static plane_t plane;
 static bool (*enqueue_realtime_command)(char data) = NULL;
@@ -86,10 +86,9 @@ static void reset (void)
 
 static void tool_select (tool_data_t *tool, bool next)
 {
-    if(next)
-        next_tool = tool;
-    else
-        current_tool = tool;
+    next_tool = tool;
+    if(!next)
+        memcpy(&current_tool, tool, sizeof(tool_data_t));
 }
 
 // Restore coolant and spindle status, return controlled point to original position.
@@ -114,7 +113,7 @@ static bool restore (void)
 
     if(protocol_buffer_synchronize()) {
         gc_sync_position();
-        current_tool = next_tool;
+        memcpy(&current_tool, next_tool, sizeof(tool_data_t));
     }
 
     return !ABORTED;
@@ -231,7 +230,7 @@ static status_code_t tool_change (parser_state_t *gc_state)
     if(next_tool == NULL)
         return Status_GCodeToolError;
 
-    if(current_tool == next_tool)
+    if(current_tool.tool == next_tool->tool)
         return Status_OK;
 
     // A plane change should invalidate current tool reference offset?
