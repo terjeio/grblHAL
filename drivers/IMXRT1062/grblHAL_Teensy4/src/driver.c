@@ -300,7 +300,7 @@ static input_signal_t inputpin[] = {
 #endif
     { .id = Input_LimitZ,       .port = &LimitZ,       .pin = Z_LIMIT_PIN,       .group = INPUT_GROUP_LIMIT }
 #ifdef Z2_LIMIT_PIN
-  , { .id = Input_LimitZ_Max,   .port = &LimitZ2,      .pin = Z2_LIMIT_PIN,      .group = INPUT_GROUP_LIMIT },
+  , { .id = Input_LimitZ_Max,   .port = &LimitZ2,      .pin = Z2_LIMIT_PIN,      .group = INPUT_GROUP_LIMIT }
 #endif
 #ifdef A_LIMIT_PIN
   , { .id = Input_LimitA,       .port = &LimitA,       .pin = A_LIMIT_PIN,       .group = INPUT_GROUP_LIMIT }
@@ -1779,7 +1779,7 @@ bool driver_init (void)
         options[strlen(options) - 1] = '\0';
 
     hal.info = "IMXRT1062";
-    hal.driver_version = "200823";
+    hal.driver_version = "200907";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif

@@ -3,7 +3,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2017-2019 Terje Io
+  Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2012-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -32,6 +32,18 @@
 #ifdef KINEMATICS_API
 #include "kinematics.h"
 #endif
+
+// To prevent the homing cycle from racking the dual axis, when one limit triggers before the
+// other due to switch failure or noise, the homing cycle will automatically abort if the second
+// motor's limit switch does not trigger within the three distance parameters defined below.
+// Axis length percent will automatically compute a fail distance as a percentage of the max
+// travel of the other non-dual axis, i.e. if dual axis select is X_AXIS at 5.0%, then the fail
+// distance will be computed as 5.0% of y-axis max travel. Fail distance max and min are the
+// limits of how far or little a valid fail distance is.
+#define DUAL_AXIS_HOMING_FAIL_AXIS_LENGTH_PERCENT  5.0f  // Float (percent)
+#define DUAL_AXIS_HOMING_FAIL_DISTANCE_MAX  25.0f  // Float (mm)
+#define DUAL_AXIS_HOMING_FAIL_DISTANCE_MIN  2.5f // Float (mm)
+
 
 // Homing axis search distance multiplier. Computed by this value times the cycle travel.
 #ifndef HOMING_AXIS_SEARCH_SCALAR
@@ -104,19 +116,23 @@ void limits_set_machine_positions (axes_signals_t cycle, bool add_pulloff)
 // mask, which prevents the stepper algorithm from executing step pulses. Homing motions typically
 // circumvent the processes for executing motions in normal operation.
 // NOTE: Only the abort realtime command can interrupt this process.
-static bool limits_homing_cycle (axes_signals_t cycle)
+static bool limits_homing_cycle (axes_signals_t cycle, axes_signals_t auto_square, squaring_mode_t mode)
 {
     if (ABORTED) // Block if system reset has been issued.
         return false;
 
-    bool approach = true;
+    int32_t initial_trigger_position = 0, autosquare_fail_distance = 0;
     uint_fast8_t n_cycle = (2 * settings.homing.locate_cycles + 1);
-    uint_fast8_t step_pin[N_AXIS], limit_state, n_active_axis;
+    uint_fast8_t step_pin[N_AXIS], n_active_axis, dual_motor_axis;
     float target[N_AXIS];
     float max_travel = 0.0f;
     float homing_rate = settings.homing.seek_rate;
-    axes_signals_t axislock;
+    bool approach = true, autosquare_check = false, both_motors = mode == SquaringMode_Both && auto_square.mask;
+    axes_signals_t axislock, limit_state;
     plan_line_data_t plan_data;
+
+    if(mode != SquaringMode_Both)
+        hal.stepper_disable_motors(auto_square, mode);
 
     // Initialize plan data struct for homing motion.
 
@@ -139,9 +155,18 @@ static bool limits_homing_cycle (axes_signals_t cycle)
 #endif
         // Set target based on max_travel setting. Ensure homing switches engaged with search scalar.
         // NOTE: settings.max_travel[] is stored as a negative value.
-        if (bit_istrue(cycle.mask, bit(idx)))
+        if (bit_istrue(cycle.mask, bit(idx))) {
             max_travel = max(max_travel,(-HOMING_AXIS_SEARCH_SCALAR) * settings.axis[idx].max_travel);
+            dual_motor_axis = idx;
+        }
     } while(idx);
+
+    if(mode == SquaringMode_Both && auto_square.mask) {
+        float fail_distance = (-DUAL_AXIS_HOMING_FAIL_AXIS_LENGTH_PERCENT / 100.0f) * settings.axis[dual_motor_axis].max_travel;
+        fail_distance = min(fail_distance, DUAL_AXIS_HOMING_FAIL_DISTANCE_MAX);
+        fail_distance = max(fail_distance, DUAL_AXIS_HOMING_FAIL_DISTANCE_MIN);
+        autosquare_fail_distance = truncf(fail_distance * settings.axis[dual_motor_axis].steps_per_mm);
+    }
 
     // Set search mode with approach at seek rate to quickly engage the specified cycle.mask limit switches.
     do {
@@ -189,13 +214,30 @@ static bool limits_homing_cycle (axes_signals_t cycle)
         do {
 
             if (approach) {
+
                 // Check limit state. Lock out cycle axes when they change.
-                limit_state = hal.limits_get_state().value;
+                limit_state = hal.limits_get_state();
+
+                // Auto squaring check
+                if(both_motors && (limit_state.mask & auto_square.mask)) {
+                    both_motors = false;
+                    limit_state.mask &= ~auto_square.mask;
+                    hal.stepper_disable_motors(auto_square, SquaringMode_A);
+                    if(hal.limits_get_state().mask & auto_square.mask) {
+                        hal.stepper_disable_motors(auto_square, SquaringMode_B);
+                        if(hal.limits_get_state().mask & auto_square.mask) {
+                            limit_state.mask |= auto_square.mask;
+                            hal.stepper_disable_motors((axes_signals_t){0}, SquaringMode_Both);
+                        }
+                    }
+                    if((autosquare_check = (limit_state.mask & auto_square.mask) == 0))
+                        initial_trigger_position = sys_position[dual_motor_axis];
+                }
 
                 idx = N_AXIS;
                 do {
                     idx--;
-                    if ((axislock.mask & step_pin[idx]) && (limit_state & bit(idx))) {
+                    if ((axislock.mask & step_pin[idx]) && (limit_state.mask & bit(idx))) {
 #ifdef KINEMATICS_API
                         axislock.mask &= ~kinematics.limits_get_axis_mask(idx);
 #else
@@ -205,6 +247,13 @@ static bool limits_homing_cycle (axes_signals_t cycle)
                 } while(idx);
 
                 sys.homing_axis_lock.mask = axislock.mask;
+
+                if (autosquare_check && abs(initial_trigger_position - sys_position[dual_motor_axis]) > autosquare_fail_distance) {
+                    system_set_exec_alarm(Alarm_HomingFailAutoSquaringApproach);
+                    mc_reset();
+                    protocol_execute_realtime();
+                    return false;
+                }
             }
 
             st_prep_buffer(); // Check and prep segment buffer. NOTE: Should take no longer than 200us.
@@ -254,6 +303,9 @@ static bool limits_homing_cycle (axes_signals_t cycle)
 
         // After first cycle, homing enters locating phase. Shorten search to pull-off distance.
         if (approach) {
+            // Only one initial pass for auto squared axis when both motors are active
+            if(mode == SquaringMode_Both && auto_square.mask)
+                cycle.mask &= ~auto_square.mask;
             max_travel = settings.homing.pulloff * HOMING_AXIS_LOCATE_SCALAR;
             homing_rate = settings.homing.feed_rate;
         } else {
@@ -261,7 +313,10 @@ static bool limits_homing_cycle (axes_signals_t cycle)
             homing_rate = settings.homing.seek_rate;
         }
 
-    } while (n_cycle-- > 0);
+        if(mode == SquaringMode_Both && auto_square.mask)
+            hal.stepper_disable_motors((axes_signals_t){0}, SquaringMode_Both);
+
+    } while (cycle.mask && n_cycle-- > 0);
 
     // The active cycle axes should now be homed and machine limits have been located. By
     // default, Grbl defines machine space as all negative, as do most CNCs. Since limit switches
@@ -284,29 +339,49 @@ static bool limits_homing_cycle (axes_signals_t cycle)
     return true;
 }
 
-// Perform homing cycle(s) according to configuration
+// Perform homing cycle(s) according to configuration.
+// NOTE: only one auto squared axis can be homed at a time.
 bool limits_go_home (axes_signals_t cycle)
 {
-    axes_signals_t ganged = {
+    bool homed = false;
+
+    axes_signals_t auto_square = {0};
+    axes_signals_t auto_squared = {
       .x = hal.driver_cap.axis_ganged_x,
       .y = hal.driver_cap.axis_ganged_y,
       .z = hal.driver_cap.axis_ganged_z
     };
 
-    bool homed = limits_homing_cycle(cycle);
+    auto_squared.mask &= cycle.mask;
 
-    ganged.mask &= cycle.mask;
-
-    if(homed && ganged.mask && hal.stepper_disable_motors) {
-        sys.homed.mask &= ~ganged.mask;
-        hal.stepper_disable_motors(ganged, SquaringMode_A);
-        if((homed = limits_homing_cycle(cycle))) {
-            sys.homed.mask &= ~ganged.mask;
-            hal.stepper_disable_motors(ganged, SquaringMode_B);
-            homed = limits_homing_cycle(cycle);
-        }
-        hal.stepper_disable_motors((axes_signals_t){0}, SquaringMode_Both);
+    if(auto_squared.mask) {
+        if(!hal.stepper_disable_motors)
+            return false; // Bad driver!
+        auto_square.x = On;
+        while(!(auto_squared.mask & auto_square.mask))
+            auto_square.mask <<= 1;
     }
+
+    homed = limits_homing_cycle(cycle, auto_square, SquaringMode_Both);
+
+    if(homed && auto_square.mask) {
+
+        sys.homed.mask &= ~auto_square.mask;
+        if((homed = limits_homing_cycle(auto_square, auto_square, SquaringMode_A))) {
+            sys.homed.mask &= ~auto_square.mask;
+            homed = limits_homing_cycle(auto_square, auto_square, SquaringMode_B);
+        }
+
+        hal.stepper_disable_motors((axes_signals_t){0}, SquaringMode_Both);
+
+        auto_squared.mask &= ~auto_square.mask;
+
+        if(auto_squared.mask) {
+            while(!(auto_squared.mask & auto_square.mask))
+                auto_square.mask <<= 1;
+            homed = limits_homing_cycle(auto_square, auto_square, SquaringMode_Both);
+        }
+    } while(homed && auto_squared.mask);
 
     return homed;
 }
