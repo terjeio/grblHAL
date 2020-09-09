@@ -49,9 +49,11 @@ static coord_data_t target = {0}, previous;
 // Set tool offset on successful $TPW probe.
 static void on_probe_completed (void)
 {
-    if(sys.tlo_reference_set && sys.flags.probe_succeeded)
+    if(!sys.flags.probe_succeeded)
+        hal.stream.write("[MSG:Probe failed, try again.]" ASCII_EOL);
+    else if(sys.tlo_reference_set)
         gc_set_tool_offset(ToolLengthOffset_EnableDynamic, plane.axis_linear, sys_probe_position[plane.axis_linear] - sys.tlo_reference);
-    // else error?
+//    else error?
 }
 
 // Restore HAL pointers on completion or reset.
@@ -78,7 +80,7 @@ static void change_completed (void)
 
 static void reset (void)
 {
-    sys.tlo_reference_set = false; // For now...
+//    sys.tlo_reference_set = false; // For now...
 
     change_completed();
     driver_reset();
@@ -225,7 +227,7 @@ ISR_CODE static bool trap_stream_cycle_start (char c)
     return drop;
 }
 
-static status_code_t tool_change (parser_state_t *gc_state)
+static status_code_t tool_change (parser_state_t *parser_state)
 {
     if(next_tool == NULL)
         return Status_GCodeToolError;
@@ -234,7 +236,7 @@ static status_code_t tool_change (parser_state_t *gc_state)
         return Status_OK;
 
     // A plane change should invalidate current tool reference offset?
-    gc_get_plane_data(&plane, gc_state->modal.plane_select);
+    gc_get_plane_data(&plane, parser_state->modal.plane_select);
 
     uint8_t homed_req = settings.tool_change.mode == ToolChange_Manual ? bit(plane.axis_linear) : (X_AXIS_BIT|Y_AXIS_BIT|Z_AXIS_BIT);
 
@@ -255,7 +257,7 @@ static status_code_t tool_change (parser_state_t *gc_state)
     hal.spindle_set_state((spindle_state_t){0}, 0.0f);
     hal.coolant_set_state((coolant_state_t){0});
 
-    gc_state->tool_change = true;
+    parser_state->tool_change = true;
 
     // Save current position.
     system_convert_array_steps_to_mpos(previous.values, sys_position);
@@ -290,6 +292,7 @@ static status_code_t tool_change (parser_state_t *gc_state)
     }
 
     protocol_buffer_synchronize();
+    gc_sync_position();
 
     // Enter tool change mode, waits for cycle start to continue.
     system_set_exec_state_flag(EXEC_TOOL_CHANGE);   // Set up program pause for manual tool change
