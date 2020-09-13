@@ -33,7 +33,7 @@
 #include "limits.h"
 #include "report.h"
 #include "state_machine.h"
-#include "eeprom_emulate.h"
+#include "nvs_buffer.h"
 #ifdef KINEMATICS_API
 #include "kinematics.h"
 #endif
@@ -56,12 +56,8 @@ volatile probing_state_t sys_probing_state; // Probing state value. Used to coor
 volatile uint_fast16_t sys_rt_exec_state;   // Global realtime executor bitflag variable for state management. See EXEC bitmasks.
 volatile uint_fast16_t sys_rt_exec_alarm;   // Global realtime executor bitflag variable for setting various alarms.
 
-HAL hal;
-
-static const report_t report_fns = {
-    .status_message = report_status_message,
-    .feedback_message = report_feedback_message
-};
+grbl_t grbl;
+grbl_hal_t hal;
 
 // called from stream drivers while tx is blocking, return false to terminate
 
@@ -102,27 +98,30 @@ static void debug_out (bool on)
 int grbl_enter (void)
 {
 #ifdef N_TOOLS
-    assert(EEPROM_ADDR_GLOBAL + sizeof(settings_t) + 1 < EEPROM_ADDR_TOOL_TABLE);
+    assert(NVS_ADDR_GLOBAL + sizeof(settings_t) + 1 < NVS_ADDR_TOOL_TABLE);
 #else
-    assert(EEPROM_ADDR_GLOBAL + sizeof(settings_t) + 1 < EEPROM_ADDR_PARAMETERS);
+    assert(NVS_ADDR_GLOBAL + sizeof(settings_t) + 1 < NVS_ADDR_PARAMETERS);
 #endif
-    assert(EEPROM_ADDR_PARAMETERS + SETTING_INDEX_NCOORD * (sizeof(coord_data_t) + 1) < EEPROM_ADDR_STARTUP_BLOCK);
-    assert(EEPROM_ADDR_STARTUP_BLOCK + N_STARTUP_LINE * (MAX_STORED_LINE_LENGTH + 1) < EEPROM_ADDR_BUILD_INFO);
+    assert(NVS_ADDR_PARAMETERS + SETTING_INDEX_NCOORD * (sizeof(coord_data_t) + 1) < NVS_ADDR_STARTUP_BLOCK);
+    assert(NVS_ADDR_STARTUP_BLOCK + N_STARTUP_LINE * (MAX_STORED_LINE_LENGTH + 1) < NVS_ADDR_BUILD_INFO);
 
     bool looping = true, driver_ok;
 
-    memset(&hal, 0, sizeof(HAL));  // Clear...
+    // Clear and set core function pointers
+    memset(&grbl, 0, sizeof(grbl_t));
+    grbl.protocol_enqueue_gcode = protocol_enqueue_gcode;
 
+    // Clear and set HAL function pointers
+    memset(&hal, 0, sizeof(grbl_hal_t));
     hal.version = HAL_VERSION; // Update when signatures and/or contract is changed - driver_init() should fail
+    hal.driver_reset = dummy_handler;
+    hal.stream.enqueue_realtime_command = protocol_enqueue_realtime_command;
     hal.limit_interrupt_callback = limit_interrupt_handler;
     hal.control_interrupt_callback = control_interrupt_handler;
     hal.stepper_interrupt_callback = stepper_driver_interrupt_handler;
-    hal.stream.enqueue_realtime_command = protocol_enqueue_realtime_command;
     hal.stream_blocking_callback = stream_tx_blocking;
-    hal.protocol_enqueue_gcode = protocol_enqueue_gcode;
-    hal.driver_reset = dummy_handler;
 
-    memcpy(&hal.report, &report_fns, sizeof(report_t));
+    report_init_fns();
 
 #ifdef KINEMATICS_API
     memset(&kinematics, 0, sizeof(kinematics_t));
@@ -151,10 +150,10 @@ int grbl_enter (void)
     driver_ok &= hal.driver_cap.safety_door;
 #endif
 
-  #ifdef EMULATE_EEPROM
-    eeprom_emu_init();
+  #ifdef BUFFER_NVSDATA
+    nvs_buffer_init();
   #endif
-    settings_init(); // Load Grbl settings from EEPROM
+    settings_init(); // Load Grbl settings from non-volatile storage
 
     memset(sys_position, 0, sizeof(sys_position)); // Clear machine position.
 
@@ -209,7 +208,7 @@ int grbl_enter (void)
     while(looping) {
 
         // Reset report entry points
-        memcpy(&hal.report, &report_fns, sizeof(report_t));
+        report_init_fns();
 
         // Reset system variables, keeping current state and MPG mode.
         bool prior_mpg_mode = sys.mpg_mode;
@@ -245,8 +244,7 @@ int grbl_enter (void)
         mc_backlash_init(); // Init backlash configuration.
 #endif
         // Sync cleared gcode and planner positions to current system position.
-        plan_sync_position();
-        gc_sync_position();
+        sync_position();
 
         if(hal.stepper_disable_motors)
             hal.stepper_disable_motors((axes_signals_t){0}, SquaringMode_Both);

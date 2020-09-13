@@ -25,7 +25,7 @@
 
 // Grbl versioning system
 #define GRBL_VERSION "1.1f"
-#define GRBL_VERSION_BUILD "20200907"
+#define GRBL_VERSION_BUILD "20200911"
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -76,8 +76,8 @@
 #define SLEEP_DURATION 5.0f // Number of minutes before sleep mode is entered.
 #endif
 
-#ifndef EMULATE_EEPROM_DISABLE
-#define EMULATE_EEPROM
+#ifndef BUFFER_NVSDATA_DISABLE
+#define BUFFER_NVSDATA
 #endif
 
 // The following symbols are default values that are unlikely to be changed
@@ -135,7 +135,7 @@
 // System motion line numbers must be zero.
 #define JOG_LINE_NUMBER 0
 
-// Number of blocks Grbl executes upon startup. These blocks are stored in EEPROM, where the size
+// Number of blocks Grbl executes upon startup. These blocks are stored in non-volatile storage, where the size
 // and addresses are defined in settings.h. With the current settings, up to 2 startup blocks may
 // be stored and executed in order. These startup blocks would typically be used to set the g-code
 // parser state depending on user preferences.
@@ -253,7 +253,7 @@
 #define TOOL_LENGTH_OFFSET_AXIS Z_AXIS // Default z-axis. Valid values are X_AXIS, Y_AXIS, or Z_AXIS.
 #endif
 
-// Max length of gcode lines (blocks) stored in EEPROM, do not set > 70 unless less than 6 axes are enabled
+// Max length of gcode lines (blocks) stored in non-volatile storage, do not set > 70 unless less than 6 axes are enabled
 #define MAX_STORED_LINE_LENGTH 70
 
 #endif

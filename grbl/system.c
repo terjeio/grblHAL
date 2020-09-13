@@ -77,7 +77,7 @@ ISR_CODE void control_interrupt_handler (control_signals_t signals)
 // Executes user startup script, if stored.
 void system_execute_startup (char *line)
 {
-    if(hal.eeprom.type != EEPROM_None) {
+    if(hal.nvs.type != NVS_None) {
 
         uint_fast8_t n;
 
@@ -162,7 +162,7 @@ status_code_t system_execute_line (char *line)
                 retval = Status_InvalidStatement;
             else {
                 sys.flags.block_delete_enabled = !sys.flags.block_delete_enabled;
-                hal.report.feedback_message(sys.flags.block_delete_enabled ? Message_Enabled : Message_Disabled);
+                grbl.report.feedback_message(sys.flags.block_delete_enabled ? Message_Enabled : Message_Disabled);
             }
             break;
 
@@ -174,10 +174,10 @@ status_code_t system_execute_line (char *line)
                 // is idle and ready, regardless of alarm locks. This is mainly to keep things
                 // simple and consistent.
                 mc_reset();
-                hal.report.feedback_message(Message_Disabled);
+                grbl.report.feedback_message(Message_Disabled);
             } else if (sys.state == STATE_IDLE) { // Requires idle mode.
                 set_state(STATE_CHECK_MODE);
-                hal.report.feedback_message(Message_Enabled);
+                grbl.report.feedback_message(Message_Enabled);
             } else
                 retval = Status_IdleError;
             break;
@@ -203,7 +203,7 @@ status_code_t system_execute_line (char *line)
                 else if (settings.homing.flags.enabled && settings.homing.flags.init_lock && sys.homed.mask != sys.homing.mask)
                     retval = Status_HomingRequired;
                 else {
-                    hal.report.feedback_message(Message_AlarmUnlock);
+                    grbl.report.feedback_message(Message_AlarmUnlock);
                     set_state(STATE_IDLE);
                 }
                 // Don't run startup script. Prevents stored moves in startup from causing accidents.
@@ -293,12 +293,18 @@ status_code_t system_execute_line (char *line)
         case 'T':
             if(line[2] == 'L' && line[3] == 'R') {
                 if((sys.tlo_reference_set = sys.flags.probe_succeeded)) {
+#ifdef TOOL_LENGTH_OFFSET_AXIS
+                    sys.tlo_reference = sys_probe_position[TOOL_LENGTH_OFFSET_AXIS]; // - gc_state.tool_length_offset[Z_AXIS]));
+#else
                     plane_t plane;
-                    sys.tlo_reference = sys_probe_position[gc_get_plane_data(&plane, gc_state.modal.plane_select)->axis_linear];
+                    gc_get_plane_data(&plane, gc_state.modal.plane_select);
+                    sys.tlo_reference = sys_probe_position[plane.axis_linear];
+//                    - lroundf(gc_state.tool_length_offset[plane.axis_linear] * settings.axis[plane.axis_linear].steps_per_mm);
+#endif
                 }
                 sys.report.tlo_reference = On;
                 retval = Status_OK;
-            } else if(sys.flags.probe_succeeded && line[2] == 'P' && line[3] == 'W')
+            } else if(sys.tlo_reference_set && line[2] == 'P' && line[3] == 'W')
                 retval = tc_probe_workpiece();
             else
                 retval = Status_InvalidStatement;
@@ -337,19 +343,19 @@ status_code_t system_execute_line (char *line)
                     retval = Status_IdleError;
                 else switch (line[5]) {
 
-                  #ifndef DISABLE_RESTORE_EEPROM_DEFAULT_SETTINGS
+                  #ifndef DISABLE_RESTORE_NVS_DEFAULT_SETTINGS
                     case '$':
                         restore.defaults = On;
                         break;
                   #endif
 
-                  #ifndef DISABLE_RESTORE_EEPROM_CLEAR_PARAMETERS
+                  #ifndef DISABLE_RESTORE_NVS_CLEAR_PARAMETERS
                     case '#':
                         restore.parameters = On;
                         break;
                   #endif
 
-                  #ifndef DISABLE_RESTORE_EEPROM_WIPE_ALL
+                  #ifndef DISABLE_RESTORE_NVS_WIPE_ALL
                     case '*':
                         restore.mask = settings_all.mask;
                         break;
@@ -367,7 +373,7 @@ status_code_t system_execute_line (char *line)
                 }
                 if(retval == Status_OK && restore.mask) {
                     settings_restore(restore);
-                    hal.report.feedback_message(Message_RestoreDefaults);
+                    grbl.report.feedback_message(Message_RestoreDefaults);
                     mc_reset(); // Force reset to ensure settings are initialized correctly.
                 }
             }
@@ -380,7 +386,7 @@ status_code_t system_execute_line (char *line)
                 uint_fast8_t counter;
                 for (counter = 0; counter < N_STARTUP_LINE; counter++) {
                     if (!(settings_read_startup_line(counter, line)))
-                        hal.report.status_message(Status_SettingReadFail);
+                        grbl.report.status_message(Status_SettingReadFail);
                     else
                         report_startup_line(counter, line);
                 }
@@ -419,8 +425,8 @@ status_code_t system_execute_line (char *line)
             retval = Status_Unhandled;
 
             // Let user code have a peek at system commands before check for global setting
-            if(hal.driver_sys_command_execute)
-                retval = hal.driver_sys_command_execute(sys.state, line, lcline);
+            if(grbl.on_unknown_sys_command)
+                retval = grbl.on_unknown_sys_command(sys.state, line, lcline);
 
             if (retval == Status_Unhandled) {
                 // Check for global setting, store if so

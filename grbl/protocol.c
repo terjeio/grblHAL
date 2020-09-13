@@ -26,7 +26,7 @@
 
 #include "hal.h"
 #include "nuts_bolts.h"
-#include "eeprom_emulate.h"
+#include "nvs_buffer.h"
 #include "override.h"
 #include "report.h"
 #include "state_machine.h"
@@ -41,8 +41,9 @@ typedef union {
         uint8_t overflow            :1,
                 comment_parentheses :1,
                 comment_semicolon   :1,
+                line_is_comment     :1,
                 block_delete        :1,
-                unassigned          :4;
+                unassigned          :3;
     };
 } line_flags_t;
 
@@ -86,7 +87,7 @@ bool protocol_main_loop(bool cold_start)
         // Check for e-stop active. Blocks everything until cleared.
         set_state(STATE_ESTOP);
         report_alarm_message(Alarm_EStop);
-        hal.report.feedback_message(Message_EStop);
+        grbl.report.feedback_message(Message_EStop);
     } else if (settings.homing.flags.enabled && sys.homing.mask && settings.homing.flags.init_lock && sys.homing.mask != sys.homed.mask) {
         // Check for power-up and set system alarm if homing is enabled to force homing cycle
         // by setting Grbl's alarm state. Alarm locks out all g-code commands, including the
@@ -96,21 +97,21 @@ bool protocol_main_loop(bool cold_start)
         // blocks from crashing into things uncontrollably. Very bad.
         set_state(STATE_ALARM); // Ensure alarm state is active.
         report_alarm_message(Alarm_HomingRequried);
-        hal.report.feedback_message(Message_HomingCycleRequired);
+        grbl.report.feedback_message(Message_HomingCycleRequired);
     } else if (settings.limits.flags.hard_enabled && settings.limits.flags.check_at_init && hal.limits_get_state().value) {
         // Check that no limit switches are engaged to make sure everything is good to go.
         set_state(STATE_ALARM); // Ensure alarm state is active.
         report_alarm_message(Alarm_LimitsEngaged);
-        hal.report.feedback_message(Message_CheckLimits);
+        grbl.report.feedback_message(Message_CheckLimits);
     } else if(cold_start && (settings.flags.force_initialization_alarm || hal.system_control_get_state().reset)) {
         set_state(STATE_ALARM); // Ensure alarm state is set.
-        hal.report.feedback_message(Message_AlarmLock);
+        grbl.report.feedback_message(Message_AlarmLock);
     } else if (sys.state & (STATE_ALARM|STATE_SLEEP)) {
         // Check for and report alarm state after a reset, error, or an initial power up.
         // NOTE: Sleep mode disables the stepper drivers and position can't be guaranteed.
         // Re-initialize the sleep state as an ALARM mode to ensure user homes or acknowledges.
         set_state(STATE_ALARM); // Ensure alarm state is set.
-        hal.report.feedback_message(Message_AlarmLock);
+        grbl.report.feedback_message(Message_AlarmLock);
     } else {
         set_state(STATE_IDLE);
 #ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
@@ -181,16 +182,16 @@ bool protocol_main_loop(bool cold_start)
                 // Direct and execute one line of formatted input, and report status of execution.
                 if (line_flags.overflow) // Report line overflow error.
                     gc_state.last_error = Status_Overflow;
-                else if ((line[0] == '\0' || char_counter == 0) && !user_message.show) // Empty or comment line. For syncing purposes.
+                else if ((line[0] == '\0' || char_counter == 0) && !user_message.show && !line_flags.line_is_comment) // Empty or comment line. For syncing purposes.
                     gc_state.last_error = Status_OK;
                 else if (line[0] == '$') {// Grbl '$' system command
                     if((gc_state.last_error = system_execute_line(line)) == Status_LimitsEngaged) {
                         set_state(STATE_ALARM); // Ensure alarm state is active.
                         report_alarm_message(Alarm_LimitsEngaged);
-                        hal.report.feedback_message(Message_CheckLimits);
+                        grbl.report.feedback_message(Message_CheckLimits);
                     }
-                } else if (line[0] == '[' && hal.user_command_execute)
-                    gc_state.last_error = hal.user_command_execute(line);
+                } else if (line[0] == '[' && grbl.on_user_command)
+                    gc_state.last_error = grbl.on_user_command(line);
                 else if (sys.state & (STATE_ALARM|STATE_ESTOP|STATE_JOG)) // Everything else is gcode. Block if in alarm, eStop or jog mode.
                     gc_state.last_error = Status_SystemGClock;
 #if COMPATIBILITY_LEVEL == 0
@@ -211,7 +212,7 @@ bool protocol_main_loop(bool cold_start)
                     hal.delay_ms(CHECK_MODE_DELAY, NULL);
 #endif
 
-                hal.report.status_message(gc_state.last_error);
+                grbl.report.status_message(gc_state.last_error);
 
                 // Reset tracking data for next line.
                 keep_rt_commands = nocaps = user_message.show = false;
@@ -249,6 +250,8 @@ bool protocol_main_loop(bool cold_start)
                         break;
 
                     case '(':
+                        if(char_counter == 0)
+                            line_flags.line_is_comment = On;
                         if(!keep_rt_commands) {
                             // Enable comments flag and ignore all characters until ')' or EOL unless it is a message.
                             // NOTE: This doesn't follow the NIST definition exactly, but is good enough for now.
@@ -269,6 +272,8 @@ bool protocol_main_loop(bool cold_start)
                         break;
 
                     case ';':
+                        if(char_counter == 0)
+                            line_flags.line_is_comment = On;
                         // NOTE: ';' comment to EOL is a LinuxCNC definition. Not NIST.
                         if(!keep_rt_commands) {
                             if((line_flags.comment_semicolon = !line_flags.comment_parentheses))
@@ -287,7 +292,7 @@ bool protocol_main_loop(bool cold_start)
             if (xcommand[0] == '$') // Grbl '$' system command
                 system_execute_line(xcommand);
             else if (sys.state & (STATE_ALARM|STATE_ESTOP|STATE_JOG)) // Everything else is gcode. Block if in alarm, eStop or jog state.
-                hal.report.status_message(Status_SystemGClock);
+                grbl.report.status_message(Status_SystemGClock);
             else // Parse and execute g-code block.
                 gc_execute_block(xcommand, NULL);
 
@@ -356,9 +361,9 @@ bool protocol_execute_realtime ()
         if (sys.suspend)
             protocol_exec_rt_suspend();
 
-      #ifdef EMULATE_EEPROM
-        if((sys.state == STATE_IDLE || sys.state == STATE_ALARM) && settings_dirty.is_dirty && !gc_state.file_run)
-            eeprom_emu_sync_physical();
+      #ifdef BUFFER_NVSDATA
+        if((sys.state == STATE_IDLE || sys.state == STATE_ALARM || sys.state == STATE_ESTOP) && settings_dirty.is_dirty && !gc_state.file_run)
+            nvs_buffer_sync_physical();
       #endif
     }
 
@@ -420,7 +425,7 @@ bool protocol_exec_rt_system ()
         // Halt everything upon a critical event flag. Currently hard and soft limits flag this.
         if ((alarm_code_t)rt_exec == Alarm_HardLimit || (alarm_code_t)rt_exec == Alarm_SoftLimit || (alarm_code_t)rt_exec == Alarm_EStop) {
             system_set_exec_alarm(rt_exec);
-            hal.report.feedback_message((alarm_code_t)rt_exec == Alarm_EStop ? Message_EStop : Message_CriticalEvent);
+            grbl.report.feedback_message((alarm_code_t)rt_exec == Alarm_EStop ? Message_EStop : Message_CriticalEvent);
             system_clear_exec_state_flag(EXEC_RESET); // Disable any existing reset
             while (bit_isfalse(sys_rt_exec_state, EXEC_RESET)) {
                 // Block everything, except reset and status reports, until user issues reset or power
@@ -433,8 +438,8 @@ bool protocol_exec_rt_system ()
                     report_realtime_status();
                 }
 
-                if(hal.execute_realtime)
-                    hal.execute_realtime(STATE_ESTOP);
+                if(grbl.on_execute_realtime)
+                    grbl.on_execute_realtime(STATE_ESTOP);
             }
             system_clear_exec_alarm(); // Clear alarm
         }
@@ -480,10 +485,10 @@ bool protocol_exec_rt_system ()
             if(hal.stream.suspend_read && hal.stream.suspend_read(false))
                 hal.stream.cancel_read_buffer(); // flush pending blocks (after M6)
 
+            gc_init(false);
             plan_reset();
             st_reset();
-            gc_sync_position();
-            plan_sync_position();
+            sync_position();
             flush_override_buffers();
             set_state(STATE_IDLE);
         }
@@ -516,8 +521,8 @@ bool protocol_exec_rt_system ()
             update_state(rt_exec);
     }
 
-    if(hal.execute_realtime)
-        hal.execute_realtime(sys.state);
+    if(grbl.on_execute_realtime)
+        grbl.on_execute_realtime(sys.state);
 
     if(!sys.flags.delay_overrides) {
 
@@ -616,8 +621,8 @@ bool protocol_exec_rt_system ()
                         break;
 
                     default:
-                        if(hal.driver_rt_command_execute)
-                            hal.driver_rt_command_execute(rt_exec);
+                        if(grbl.on_unknown_accessory_override)
+                            grbl.on_unknown_accessory_override(rt_exec);
                         break;
                 }
 

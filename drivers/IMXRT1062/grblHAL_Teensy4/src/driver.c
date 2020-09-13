@@ -44,6 +44,14 @@
 #include "keypad/keypad.h"
 #endif
 
+#if PLASMA_ENABLE
+#include "plasma/thc.h"
+#endif
+
+#if ODOMETER_ENABLE
+#include "odometer/odometer.h"
+#endif
+
 #if ETHERNET_ENABLE
   #include "enet.h"
   #if TELNET_ENABLE
@@ -78,53 +86,6 @@
   #endif
 #endif
 
-typedef struct {
-    volatile uint32_t DR;
-    volatile uint32_t GDIR;
-    volatile uint32_t PSR;
-    volatile uint32_t ICR1;
-    volatile uint32_t ICR2;
-    volatile uint32_t IMR;
-    volatile uint32_t ISR;
-    volatile uint32_t EDGE_SEL;
-    uint32_t unused[25];
-    volatile uint32_t DR_SET;
-    volatile uint32_t DR_CLEAR;
-    volatile uint32_t DR_TOGGLE;    
-} gpio_reg_t; 
-
-typedef struct {
-    gpio_reg_t *reg;
-    uint32_t bit;
-} gpio_t;
-
-typedef enum {
-    Input_Probe = 0,
-    Input_Reset,
-    Input_FeedHold,
-    Input_CycleStart,
-    Input_SafetyDoor,
-    Input_EStop,
-    Input_ModeSelect,
-    Input_LimitX,
-    Input_LimitX_Max,
-    Input_LimitY,
-    Input_LimitY_Max,
-    Input_LimitZ,
-    Input_LimitZ_Max,
-    Input_LimitA,
-    Input_LimitA_Max,
-    Input_LimitB,
-    Input_LimitB_Max,
-    Input_LimitC,
-    Input_LimitC_Max,
-    Input_KeypadStrobe,
-    Input_QEI_A,
-    Input_QEI_B,
-    Input_QEI_Select,
-    Input_QEI_Index,
-} input_t;
-
 #define INPUT_GROUP_CONTROL    (1 << 0)
 #define INPUT_GROUP_PROBE      (1 << 1)
 #define INPUT_GROUP_LIMIT      (1 << 2)
@@ -132,25 +93,6 @@ typedef enum {
 #define INPUT_GROUP_MPG        (1 << 4)
 #define INPUT_GROUP_QEI        (1 << 5)
 #define INPUT_GROUP_QEI_SELECT (1 << 6)
-
-typedef enum {
-    IRQ_Mode_None    = 0b00,
-    IRQ_Mode_Change  = 0b01,
-    IRQ_Mode_Rising  = 0b10,    
-    IRQ_Mode_Falling = 0b11
-} irq_mode_t;
-
-typedef struct {
-    input_t id;
-    uint8_t group;
-    uint8_t pin;
-    gpio_t *port;
-    gpio_t gpio; // doubled up for now for speed...
-    irq_mode_t irq_mode;
-    uint8_t offset;
-    volatile bool active;
-    volatile bool debounce;
-} input_signal_t;
 
 typedef struct {
     volatile uint_fast8_t head;
@@ -191,7 +133,11 @@ static debounce_queue_t debounce_queue = {0};
 static gpio_t Reset, FeedHold, CycleStart, Probe, LimitX, LimitY, LimitZ;
 
 // Standard outputs
-static gpio_t spindleEnable, spindleDir, Mist, Flood, stepX, stepY, stepZ, dirX, dirY, dirZ;
+static gpio_t Mist, Flood, stepX, stepY, stepZ, dirX, dirY, dirZ;
+
+#if !VFD_SPINDLE
+static gpio_t spindleEnable, spindleDir;
+#endif
 
 // Optional I/O
 #ifdef SAFETY_DOOR_PIN
@@ -337,7 +283,7 @@ static delay_t grbl_delay = { .ms = 0, .callback = NULL };
 static axes_signals_t motors_1 = {AXES_BITMASK}, motors_2 = {AXES_BITMASK};
 #endif
 
-#ifndef VFD_SPINDLE
+#if !VFD_SPINDLE
 static bool pwmEnabled = false;
 static spindle_pwm_t spindle_pwm;
 
@@ -687,10 +633,8 @@ static void stepperCyclesPerTick (uint32_t cycles_per_tick)
 // stepper_t struct is defined in grbl/stepper.h
 static void stepperPulseStart (stepper_t *stepper)
 {
-    if(stepper->dir_change) {
-        stepper->dir_change = false;
+    if(stepper->dir_change)
         set_dir_outputs(stepper->dir_outbits);
-    }
 
     if(stepper->step_outbits.value) {
         set_step_outputs(stepper->step_outbits);
@@ -707,7 +651,6 @@ static void stepperPulseStartDelayed (stepper_t *stepper)
 {
     if(stepper->dir_change) {
 
-        stepper->dir_change = false;
         set_dir_outputs(stepper->dir_outbits);
 
         if(stepper->step_outbits.value) {
@@ -728,6 +671,25 @@ static void stepperPulseStartDelayed (stepper_t *stepper)
         TMR4_CTRL0 |= TMR_CTRL_CM(0b001);
     }
 }
+
+#if PLASMA_ENABLE
+
+#if PLASMA_ENABLE
+static void output_pulse_isr(void);
+#endif
+
+static axes_signals_t pulse_output = {0};
+
+void stepperOutputStep (axes_signals_t step_outbits, axes_signals_t dir_outbits)
+{
+    pulse_output = step_outbits;
+    dir_outbits.value ^= settings.steppers.dir_invert.mask;
+
+    DIGITAL_OUT(dirZ, dir_outbits.z);
+    TMR2_CTRL0 |= TMR_CTRL_CM(0b001);
+}
+
+#endif
 
 #ifdef DUAL_LIMIT_SWITCHES
 
@@ -930,7 +892,7 @@ probe_state_t probeGetState (void)
     return state;
 }
 
-#ifndef VFD_SPINDLE
+#if !VFD_SPINDLE
 
 // Static spindle (off, on cw & on ccw)
 
@@ -1155,7 +1117,7 @@ static void settings_changed (settings_t *settings)
 
 #endif
 
-#ifndef VFD_SPINDLE
+#if !VFD_SPINDLE && !PLASMA_ENABLE && !defined(SPINDLE_RPM_CONTROLLED)
 
         if(hal.driver_cap.variable_spindle && spindle_precompute_pwm_values(&spindle_pwm, F_BUS_ACTUAL / 2)) {
 #if SPINDLEPWMPIN == 12
@@ -1180,7 +1142,7 @@ static void settings_changed (settings_t *settings)
             float delay = settings->steppers.pulse_delay_microseconds - STEP_PULSE_LATENCY;
             if(delay <= STEP_PULSE_LATENCY)
                 delay = STEP_PULSE_LATENCY + 0.2f;
-            pulse_delay = (uint16_t)((float)F_BUS_MHZ * delay);;
+            pulse_delay = (uint16_t)((float)F_BUS_MHZ * delay);
             hal.stepper_pulse_start = stepperPulseStartDelayed;
         } else
             hal.stepper_pulse_start = stepperPulseStart;
@@ -1189,6 +1151,19 @@ static void settings_changed (settings_t *settings)
         TMR4_CSCTRL0 &= ~TMR_CSCTRL_TCF2EN;
         TMR4_CTRL0 &= ~TMR_CTRL_OUTMODE(0b000);
         attachInterruptVector(IRQ_QTIMER4, stepper_pulse_isr);
+
+#if PLASMA_ENABLE
+        plasma_init(); // reclaim hal.stepper_pulse_start
+
+        TMR2_CSCTRL0 &= ~(TMR_CSCTRL_TCF1|TMR_CSCTRL_TCF2);
+        TMR2_COMP10 = pulse_length;
+        TMR2_CSCTRL0 &= ~TMR_CSCTRL_TCF2EN;
+        TMR2_CTRL0 &= ~TMR_CTRL_OUTMODE(0b000);
+#endif
+
+#if ODOMETER_ENABLE
+        odometer_init(); // reclaim hal.stepper_pulse_start
+#endif
 
         /****************************************
          *  Control, limit & probe pins config  *
@@ -1420,8 +1395,8 @@ void qei_reset (uint_fast8_t id)
 static bool driver_setup (settings_t *settings)
 {
 #ifdef DRIVER_SETTINGS
-    if(hal.eeprom.driver_area.address != 0) {
-        if(!hal.eeprom.memcpy_from_with_checksum((uint8_t *)&driver_settings, hal.eeprom.driver_area.address, sizeof(driver_settings)))
+    if(hal.nvs.driver_area.address != 0) {
+        if(!hal.nvs.memcpy_from_with_checksum((uint8_t *)&driver_settings, hal.nvs.driver_area.address, sizeof(driver_settings)))
             hal.driver_settings_restore();
       #if TRINAMIC_ENABLE && defined(BOARD_CNC_BOOSTERPACK) // Trinamic BoosterPack does not support mixed drivers
         driver_settings.trinamic.driver_enable.mask = AXES_BITMASK;
@@ -1450,6 +1425,20 @@ static bool driver_setup (settings_t *settings)
     NVIC_ENABLE_IRQ(IRQ_QTIMER4);
 
     TMR4_ENBL = 1;
+
+#if PLASMA_ENABLE
+    TMR2_ENBL = 0;
+    TMR2_LOAD0 = 0;
+    TMR2_CTRL0 = TMR_CTRL_PCS(0b1000) | TMR_CTRL_ONCE | TMR_CTRL_LENGTH;
+    TMR2_CSCTRL0 = TMR_CSCTRL_TCF1EN;
+
+    attachInterruptVector(IRQ_QTIMER2, output_pulse_isr);
+    NVIC_SET_PRIORITY(IRQ_QTIMER2, 0);
+    NVIC_ENABLE_IRQ(IRQ_QTIMER2);
+
+    TMR2_ENBL = 1;
+#endif
+
 
     pinModeOutput(&stepX, X_STEP_PIN);
     pinModeOutput(&dirX, X_DIRECTION_PIN);
@@ -1548,7 +1537,7 @@ static bool driver_setup (settings_t *settings)
     pinModeOutput(&Flood, COOLANT_FLOOD_PIN);
     pinModeOutput(&Mist, COOLANT_MIST_PIN);
 
-#ifndef VFD_SPINDLE
+#if !VFD_SPINDLE
 
    /******************
     *  Spindle init  *
@@ -1556,6 +1545,8 @@ static bool driver_setup (settings_t *settings)
 
     pinModeOutput(&spindleEnable, SPINDLE_ENABLE_PIN);
     pinModeOutput(&spindleDir, SPINDLE_DIRECTION_PIN);
+
+#if !PLASMA_ENABLE
 
 #if SPINDLEPWMPIN == 12
     TMR1_ENBL = 0;
@@ -1573,7 +1564,11 @@ static bool driver_setup (settings_t *settings)
 
     *(portConfigRegister(SPINDLEPWMPIN)) = 1;
 
-#endif
+#endif // !PLASMA_ENABLE
+
+#endif // !VFD_SPINDLE
+
+
 
   // Set defaults
 
@@ -1625,8 +1620,13 @@ static status_code_t driver_setting (setting_type_t param, float value, char *sv
     }
 #endif
 
+#if PLASMA_ENABLE
+    if(status == Status_Unhandled)
+        status = plasma_setting(param, value, svalue);
+#endif
+
     if(status == Status_OK)
-        hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
+        hal.nvs.memcpy_to_with_checksum(hal.nvs.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
 
     return status;
 }
@@ -1648,6 +1648,10 @@ static void driver_settings_report (setting_type_t setting)
 #if QEI_ENABLE
     encoder_settings_report(setting);
 #endif
+
+#if PLASMA_ENABLE
+    plasma_settings_report(setting);
+#endif
 }
 
 static void driver_settings_restore (void)
@@ -1668,7 +1672,11 @@ static void driver_settings_restore (void)
     encoder_settings_restore();
 #endif
 
-    hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
+#if PLASMA_ENABLE
+    plasma_settings_restore();
+#endif
+
+    hal.nvs.memcpy_to_with_checksum(hal.nvs.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
 }
 
 #endif
@@ -1681,14 +1689,14 @@ bool nvsRead (uint8_t *dest)
 {
 // assert size ? E2END
 
-    eeprom_read_block(dest, 0, hal.eeprom.size);
+    eeprom_read_block(dest, 0, hal.nvs.size);
 
     return true; //?;
 }
 
 bool nvsWrite (uint8_t *source)
 {
-    eeprom_write_block(source, 0, hal.eeprom.size);
+    eeprom_write_block(source, 0, hal.nvs.size);
 
     return true; //?;
 }
@@ -1775,11 +1783,15 @@ bool driver_init (void)
 #if SPINDLE_HUANYANG
     strcat(options, "HUANYANG ");
 #endif
+#if PLASMA_ENABLE
+    strcat(options, "PLASMA ");
+#endif
+
     if(*options != '\0')
         options[strlen(options) - 1] = '\0';
 
     hal.info = "IMXRT1062";
-    hal.driver_version = "200907";
+    hal.driver_version = "200909";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1808,7 +1820,7 @@ bool driver_init (void)
     hal.probe_get_state = probeGetState;
     hal.probe_configure_invert_mask = probeConfigure;
 
-#ifndef VFD_SPINDLE
+#if !VFD_SPINDLE
     hal.spindle_set_state = spindleSetState;
     hal.spindle_get_state = spindleGetState;
   #ifdef SPINDLE_PWM_DIRECT
@@ -1821,7 +1833,7 @@ bool driver_init (void)
     hal.system_control_get_state = systemGetState;
 
 #if ETHERNET_ENABLE
-    hal.report_options = reportIP;
+    grbl.on_report_options = reportIP;
 #endif
 
 #if USB_SERIAL_CDC
@@ -1833,23 +1845,27 @@ bool driver_init (void)
     selectStream(StreamType_Serial);
 
 #if EEPROM_ENABLE
-    eepromInit(); 
-    hal.eeprom.type = EEPROM_Physical;
-    hal.eeprom.get_byte = eepromGetByte;
-    hal.eeprom.put_byte = eepromPutByte;
-    hal.eeprom.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
-    hal.eeprom.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
+    eepromInit();
+  #if EEPROM_IS_FRAM
+    hal.nvs.type = NVS_FRAM;
+  #else
+    hal.nvs.type = NVS_EEPROM;
+  #endif
+    hal.nvs.get_byte = eepromGetByte;
+    hal.nvs.put_byte = eepromPutByte;
+    hal.nvs.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
+    hal.nvs.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
 #else // use Arduino emulated EEPROM in flash
     eeprom_initialize();
-    hal.eeprom.type = EEPROM_Emulated;
-    hal.eeprom.memcpy_from_flash = nvsRead;
-    hal.eeprom.memcpy_to_flash = nvsWrite;
+    hal.nvs.type = NVS_Flash;
+    hal.nvs.memcpy_from_flash = nvsRead;
+    hal.nvs.memcpy_to_flash = nvsWrite;
 #endif
 
 #ifdef DRIVER_SETTINGS
-    hal.eeprom.driver_area.address = GRBL_EEPROM_SIZE;
-    hal.eeprom.size = GRBL_EEPROM_SIZE + sizeof(driver_settings_t) + 1;
-    hal.eeprom.driver_area.size = sizeof(driver_settings_t);
+    hal.nvs.driver_area.address = GRBL_NVS_SIZE;
+    hal.nvs.size = GRBL_NVS_SIZE + sizeof(driver_settings_t) + 1;
+    hal.nvs.driver_area.size = sizeof(driver_settings_t);
     hal.driver_setting = driver_setting;
     hal.driver_settings_report = driver_settings_report;
     hal.driver_settings_restore = driver_settings_restore;
@@ -1864,15 +1880,12 @@ bool driver_init (void)
     hal.show_message = showMessage;
 
 #if QEI_SELECT_ENABLED || KEYPAD_ENABLE || ETHERNET_ENABLE || USB_SERIAL_CDC > 0
-    hal.execute_realtime = execute_realtime;
+    grbl.on_execute_realtime = execute_realtime;
 #endif
 
 #if QEI_ENABLE
     hal.encoder_reset = qei_reset;
     hal.encoder_event_handler = encoder_event;
-  #if COMPATIBILITY_LEVEL <= 1
-    hal.driver_rt_report = encoder_rt_report;
-  #endif
 #endif
 
 #if MODBUS_ENABLE
@@ -1889,8 +1902,21 @@ bool driver_init (void)
     modbus_init(&modbus_stream);
 #endif
 
+#ifdef HAS_BOARD_INIT
+    board_init();
+#endif
+
 #if SPINDLE_HUANYANG
     huanyang_init(&modbus_stream);
+#endif
+
+#if PLASMA_ENABLE
+    hal.stepper_output_step = stepperOutputStep;
+    plasma_init();
+#endif
+
+#if ODOMETER_ENABLE
+    odometer_init();
 #endif
 
 #ifdef DEBUGOUT
@@ -1905,7 +1931,7 @@ bool driver_init (void)
   // Driver capabilities, used for announcing and negotiating (with Grbl) driver functionality.
   // See driver_cap_t union i grbl/hal.h for available flags.
 
-#ifndef VFD_SPINDLE
+#if !VFD_SPINDLE && !PLASMA_ENABLE
   #ifdef SPINDLE_DIRECTION_PIN
     hal.driver_cap.spindle_dir = On;
   #endif
@@ -1988,6 +2014,22 @@ static void stepper_pulse_isr_delayed (void)
     TMR4_COMP10 = pulse_length;
     TMR4_CTRL0 |= TMR_CTRL_CM(0b001);
 }
+
+#if PLASMA_ENABLE
+static void output_pulse_isr(void)
+{
+    axes_signals_t output = {pulse_output.mask ^ settings.steppers.dir_invert.mask};
+
+    TMR2_CSCTRL0 &= ~TMR_CSCTRL_TCF1;
+
+    DIGITAL_OUT(stepZ, output.z);
+
+    if(pulse_output.value) {
+        pulse_output.value = 0;
+        TMR2_CTRL0 |= TMR_CTRL_CM(0b001);
+    }
+}
+#endif
 
 inline static bool enqueue_debounce (input_signal_t *signal)
 {

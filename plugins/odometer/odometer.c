@@ -32,14 +32,21 @@
 #include <string.h>
 #include <stdio.h>
 
+#ifdef ARDUINO
+#include "../grbl/nvs_buffer.h"
+#else
+#include "grbl/nvs_buffer.h"
+#endif
+
 #include "odometer.h"
 
+static nvs_io_t *nvs = NULL;
 static bool odometer_changed = false;
 static uint32_t odometers_address;
 static odometer_data_t odometers;
 static void (*stepper_pulse_start)(stepper_t *stepper);
-static status_code_t (*driver_sys_command_execute)(uint_fast16_t state, char *line, char *lcline);
-void (*state_change_requested)(uint_fast16_t state);
+static status_code_t (*on_unknown_sys_command)(uint_fast16_t state, char *line, char *lcline);
+void (*on_state_change)(uint_fast16_t state);
 
 static void stepperPulseStart (stepper_t *stepper)
 {
@@ -82,17 +89,18 @@ void onStateChanged (uint_fast16_t state)
     else if(odometer_changed) {
         odometer_changed = false;
         odometers.time += (hal.get_elapsed_ticks() - ms);
-        hal.eeprom.memcpy_to_with_checksum(odometers_address, (uint8_t *)&odometers, sizeof(odometer_data_t));
+        nvs->memcpy_to_with_checksum(odometers_address, (uint8_t *)&odometers, sizeof(odometer_data_t));
     }
 
-    if(state_change_requested)
-        state_change_requested(state);
+    if(on_state_change)
+        on_state_change(state);
 }
 
 static void odometer_data_reset (void)
 {
+    // TODO: Write backup to second copy before reset
     memset(&odometers, 0, sizeof(odometer_data_t));
-    hal.eeprom.memcpy_to_with_checksum(odometers_address, (uint8_t *)&odometers, sizeof(odometer_data_t));
+    nvs->memcpy_to_with_checksum(odometers_address, (uint8_t *)&odometers, sizeof(odometer_data_t));
 }
 
 static status_code_t commandExecute (uint_fast16_t state, char *line, char *lcline)
@@ -124,14 +132,17 @@ static status_code_t commandExecute (uint_fast16_t state, char *line, char *lcli
         }
     }
 
-    return retval == Status_Unhandled && driver_sys_command_execute ? driver_sys_command_execute(state, line, lcline) : retval;
+    return retval == Status_Unhandled && on_unknown_sys_command ? on_unknown_sys_command(state, line, lcline) : retval;
 }
 
 void odometer_init()
 {
     static bool init_ok = false;
 
-    if(!init_ok && hal.eeprom.type != EEPROM_Physical)
+    if(!nvs)
+        nvs = nvs_buffer_get_physical();
+
+    if(!init_ok && !(nvs->type == NVS_EEPROM || nvs->type == NVS_FRAM))
         hal.stream.write("[MSG:EEPROM or FRAM is required for odometers]" ASCII_EOL);
 
     else {
@@ -142,16 +153,16 @@ void odometer_init()
         if(!init_ok) {
 
             init_ok = true;
-            odometers_address = hal.eeprom.driver_area.address + sizeof(driver_settings_t) + 1;
+            odometers_address = nvs->driver_area.address + sizeof(driver_settings_t) + 1;
 
-            if(!hal.eeprom.memcpy_from_with_checksum((uint8_t *)&odometers, odometers_address, sizeof(odometer_data_t)))
+            if(!nvs->memcpy_from_with_checksum((uint8_t *)&odometers, odometers_address, sizeof(odometer_data_t)))
                 odometer_data_reset();
 
-            driver_sys_command_execute = hal.driver_sys_command_execute;
-            hal.driver_sys_command_execute = commandExecute;
+            on_unknown_sys_command = grbl.on_unknown_sys_command;
+            grbl.on_unknown_sys_command = commandExecute;
 
-            state_change_requested = hal.state_change_requested;
-            hal.state_change_requested = onStateChanged;
+            on_state_change = grbl.on_state_change;
+            grbl.on_state_change = onStateChanged;
         }
     }
 }

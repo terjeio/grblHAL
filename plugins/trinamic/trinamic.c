@@ -545,17 +545,17 @@ void trinamic_MCodeExecute (uint_fast16_t state, parser_block_t *gc_block)
 
         case Trinamic_DebugReport:
             if(report.sg_status_enable) {
-                if(hal.execute_realtime != report_sg_status) {
-                    hal_execute_realtime = hal.execute_realtime;
-                    hal.execute_realtime = report_sg_status;
+                if(grbl.on_execute_realtime != report_sg_status) {
+                    hal_execute_realtime = grbl.on_execute_realtime;
+                    grbl.on_execute_realtime = report_sg_status;
                     hal_stepper_pulse_start = hal.stepper_pulse_start;
                     hal.stepper_pulse_start = stepper_pulse_start;
                 }
                 stepper[report.sg_status_axis].coolconf.reg.sfilt = report.sfilt;
                 TMC2130_WriteRegister(&stepper[report.sg_status_axis], (TMC2130_datagram_t *)&stepper[report.sg_status_axis].coolconf);
-            } else if(hal.execute_realtime == report_sg_status) {
-                hal.execute_realtime = NULL;
-                hal.execute_realtime = hal_execute_realtime;
+            } else if(grbl.on_execute_realtime == report_sg_status) {
+                grbl.on_execute_realtime = hal_execute_realtime;
+                hal_execute_realtime = NULL;
                 hal.stepper_pulse_start = hal_stepper_pulse_start;
             }
             write_debug_report();

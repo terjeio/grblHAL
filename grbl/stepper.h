@@ -61,6 +61,7 @@ typedef struct st_segment {
     struct st_segment *next;        // Pointer to next element in cirular list of segments
     st_block_t *exec_block;         // Pointer to the block data for the segment
     uint32_t cycles_per_tick;       // Step distance traveled per ISR tick, aka step rate.
+    float current_rate;
     float target_position;          // Target position of segment relative to block start, used by spindle sync code
     uint_fast16_t n_step;           // Number of step events to be executed for this segment
 #ifdef SPINDLE_PWM_DIRECT

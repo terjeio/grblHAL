@@ -47,11 +47,17 @@
 #ifndef USB_SERIAL_WAIT
 #define USB_SERIAL_WAIT     0
 #endif
+#ifndef PLASMA_ENABLE
+#define PLASMA_ENABLE       0
+#endif
 #ifndef SPINDLE_HUANYANG
 #define SPINDLE_HUANYANG    0
 #endif
 #ifndef QEI_ENABLE
 #define QEI_ENABLE          0
+#endif
+#ifndef ODOMETER_ENABLE
+#define ODOMETER_ENABLE     0
 #endif
 
 #ifndef ETHERNET_ENABLE
@@ -168,7 +174,19 @@
 #include "spindle/huanyang.h"
 #endif
 
-#if TRINAMIC_ENABLE || KEYPAD_ENABLE || ETHERNET_ENABLE || QEI_ENABLE
+#ifndef VFD_SPINDLE
+#define VFD_SPINDLE 0
+#endif
+
+#if PLASMA_ENABLE
+#include "plasma/thc.h"
+#endif
+
+#if ODOMETER_ENABLE
+#include "odometer/odometer.h"
+#endif
+
+#if TRINAMIC_ENABLE || KEYPAD_ENABLE || ETHERNET_ENABLE || QEI_ENABLE || PLASMA_ENABLE || ODOMETER_ENABLE
 
 #define DRIVER_SETTINGS
 
@@ -184,6 +202,9 @@ typedef struct {
 #endif
 #if QEI_ENABLE
     encoder_settings_t encoder[QEI_ENABLE];
+#endif
+#if PLASMA_ENABLE
+    plasma_settings_t plasma;
 #endif
 } driver_settings_t;
 
@@ -216,6 +237,76 @@ extern driver_settings_t driver_settings;
   #error "QEI_ENABLE requires encoder input pins A and B to be defined!"
 #endif
 
+typedef enum {
+    Input_Probe = 0,
+    Input_Reset,
+    Input_FeedHold,
+    Input_CycleStart,
+    Input_SafetyDoor,
+    Input_EStop,
+    Input_ModeSelect,
+    Input_LimitX,
+    Input_LimitX_Max,
+    Input_LimitY,
+    Input_LimitY_Max,
+    Input_LimitZ,
+    Input_LimitZ_Max,
+    Input_LimitA,
+    Input_LimitA_Max,
+    Input_LimitB,
+    Input_LimitB_Max,
+    Input_LimitC,
+    Input_LimitC_Max,
+    Input_KeypadStrobe,
+    Input_QEI_A,
+    Input_QEI_B,
+    Input_QEI_Select,
+    Input_QEI_Index,
+    Input_Aux0,
+    Input_Aux1,
+    Input_Aux2,
+    Input_Aux3
+} input_t;
+
+typedef enum {
+    IRQ_Mode_None    = 0b00,
+    IRQ_Mode_Change  = 0b01,
+    IRQ_Mode_Rising  = 0b10,
+    IRQ_Mode_Falling = 0b11
+} irq_mode_t;
+
+typedef struct {
+    volatile uint32_t DR;
+    volatile uint32_t GDIR;
+    volatile uint32_t PSR;
+    volatile uint32_t ICR1;
+    volatile uint32_t ICR2;
+    volatile uint32_t IMR;
+    volatile uint32_t ISR;
+    volatile uint32_t EDGE_SEL;
+    uint32_t unused[25];
+    volatile uint32_t DR_SET;
+    volatile uint32_t DR_CLEAR;
+    volatile uint32_t DR_TOGGLE;
+} gpio_reg_t;
+
+typedef struct {
+    gpio_reg_t *reg;
+    uint32_t bit;
+} gpio_t;
+
+typedef struct {
+    input_t id;
+    uint8_t group;
+    uint8_t pin;
+    gpio_t *port;
+    gpio_t gpio; // doubled up for now for speed...
+    irq_mode_t irq_mode;
+    uint8_t offset;
+    volatile bool active;
+    volatile bool debounce;
+} input_signal_t;
+
 // The following struct is pulled from the Teensy Library core, Copyright (c) 2019 PJRC.COM, LLC.
 
 typedef struct {
@@ -228,6 +319,7 @@ typedef struct {
 //
 
 void selectStream (stream_type_t stream);
+void pinModeOutput (gpio_t *gpio, uint8_t pin);
 
 uint32_t xTaskGetTickCount();
 

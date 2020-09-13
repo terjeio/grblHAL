@@ -312,10 +312,8 @@ inline static __attribute__((always_inline)) void stepperSetDirOutputs (axes_sig
 // Sets stepper direction and pulse pins and starts a step pulse.
 static void stepperPulseStart (stepper_t *stepper)
 {
-    if(stepper->dir_change) {
-        stepper->dir_change = false;
+    if(stepper->dir_change)
         stepperSetDirOutputs(stepper->dir_outbits);
-    }
 
     if(stepper->step_outbits.value) {
         stepperSetStepOutputs(stepper->step_outbits);
@@ -329,7 +327,6 @@ static void stepperPulseStartDelayed (stepper_t *stepper)
 {
     if(stepper->dir_change) {
 
-        stepper->dir_change = false;
         stepperSetDirOutputs(stepper->dir_outbits);
 
         if(stepper->step_outbits.value) {
@@ -1054,7 +1051,7 @@ bool driver_init (void) {
 #endif
 
     hal.info = "LCP1769";
-    hal.driver_version = "200818";
+    hal.driver_version = "200911";
     hal.driver_setup = driver_setup;
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
@@ -1111,17 +1108,21 @@ bool driver_init (void) {
 #endif
 
 #if EEPROM_ENABLE
-    hal.eeprom.type = EEPROM_Physical;
-    hal.eeprom.get_byte = eepromGetByte;
-    hal.eeprom.put_byte = eepromPutByte;
-    hal.eeprom.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
-    hal.eeprom.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
+  #if EEPROM_IS_FRAM
+    hal.nvs.type = NVS_FRAM;
+  #else
+    hal.nvs.type = NVS_EEPROM;
+  #endif
+    hal.nvs.get_byte = eepromGetByte;
+    hal.nvs.put_byte = eepromPutByte;
+    hal.nvs.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
+    hal.nvs.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
 #elif FLASH_ENABLE
-    hal.eeprom.type = EEPROM_Emulated;
-    hal.eeprom.memcpy_from_flash = memcpy_from_flash;
-    hal.eeprom.memcpy_to_flash = memcpy_to_flash;
+    hal.nvs.type = NVS_Flash;
+    hal.nvs.memcpy_from_flash = memcpy_from_flash;
+    hal.nvs.memcpy_to_flash = memcpy_to_flash;
 #else
-    hal.eeprom.type = EEPROM_None;
+    hal.nvs.type = NVS_None;
 #endif
 
     hal.set_bits_atomic = bitsSetAtomic;

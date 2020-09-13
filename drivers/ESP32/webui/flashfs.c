@@ -50,6 +50,14 @@ static file_t file = {
 
 static bool frewind = false;
 static io_stream_t active_stream;
+static driver_reset_ptr driver_reset = NULL;
+static void (*on_realtime_report)(stream_write_ptr stream_write, report_tracking_flags_t report) = NULL;
+static void (*on_state_change)(uint_fast16_t state);
+
+static void flashfs_end_job (void);
+static void flashfs_report (stream_write_ptr stream_write, report_tracking_flags_t report);
+static void trap_state_change_request(uint_fast16_t state);
+
 //static report_t active_reports;
 
 static void file_close (void)
@@ -98,12 +106,21 @@ static int16_t file_read (void)
 static void flashfs_end_job (void)
 {
     file_close();
+
+    if(grbl.on_realtime_report == flashfs_report)
+        grbl.on_realtime_report = on_realtime_report;
+
+    if(grbl.on_state_change == trap_state_change_request)
+        grbl.on_state_change = on_state_change;
+
+    on_realtime_report = NULL;
+    on_state_change = NULL;
+
     memcpy(&hal.stream, &active_stream, sizeof(io_stream_t));   // Restore stream pointers
     hal.stream.reset_read_buffer();                             // and flush input buffer
-    hal.driver_rt_report = NULL;
-    hal.state_change_requested = NULL;
-    hal.report.status_message = report_status_message;
-    hal.report.feedback_message = report_feedback_message;
+
+    report_init_fns();
+
     frewind = false;
 }
 
@@ -147,10 +164,18 @@ static ISR_CODE bool drop_input_stream (char c)
 static void trap_state_change_request(uint_fast16_t state)
 {
     if(state == STATE_CYCLE) {
+
         if(hal.stream.read == await_cycle_start)
             hal.stream.read = flashfs_read;
-        hal.state_change_requested = NULL;
+
+        if(grbl.on_state_change == trap_state_change_request) {
+            grbl.on_state_change = on_state_change;
+            on_state_change = NULL;
+        }
     }
+
+    if(on_state_change)
+        on_state_change(state);
 }
 
 static status_code_t trap_status_report (status_code_t status_code)
@@ -176,7 +201,7 @@ static message_code_t trap_feedback_message (message_code_t message_code)
             file.eol = false;
             report_feedback_message(Message_CycleStartToRerun);
             hal.stream.read = await_cycle_start;
-            hal.state_change_requested = trap_state_change_request;
+            grbl.on_state_change = trap_state_change_request;
         } else
             flashfs_end_job();
     }
@@ -186,10 +211,18 @@ static message_code_t trap_feedback_message (message_code_t message_code)
 
 static void flashfs_report (stream_write_ptr stream_write, report_tracking_flags_t report)
 {
+    char *pct_done = ftoa((float)file.pos / (float)file.size * 100.0f, 1);
+
+    if(sys.state != STATE_IDLE && !strncmp(pct_done, "100.0", 5))
+        strcpy(pct_done, "99.9");
+
     stream_write("|SD:");
     stream_write(ftoa((float)file.pos / (float)file.size * 100.0f, 1));
     stream_write(",");
     stream_write(file.name);
+
+    if(on_realtime_report)
+        on_realtime_report(stream_write, report);
 }
 
 #if M6_ENABLE
@@ -220,7 +253,7 @@ status_code_t flashfs_stream_file (char *filename)
     else {
         if(file_open(filename)) {
             gc_state.last_error = Status_OK;                            // Start with no errors
-            hal.report.status_message(Status_OK);                       // and confirm command to originator
+            grbl.report.status_message(Status_OK);                      // and confirm command to originator
             memcpy(&active_stream, &hal.stream, sizeof(io_stream_t));   // Save current stream pointers
             hal.stream.type = StreamType_FlashFs;                       // then redirect to read from SD card instead
             hal.stream.read = flashfs_read;                             // ...
@@ -230,9 +263,10 @@ status_code_t flashfs_stream_file (char *filename)
 #else
             hal.stream.suspend_read = NULL;                             // ...
 #endif
-            hal.driver_rt_report = flashfs_report;                      // Add percent complete to real time report
-            hal.report.status_message = trap_status_report;             // Redirect status message and feedback message
-            hal.report.feedback_message = trap_feedback_message;        // reports here
+            on_realtime_report = grbl.on_realtime_report;
+            grbl.on_realtime_report = flashfs_report;                   // Add percent complete to real time report
+            grbl.report.status_message = trap_status_report;            // Redirect status message and feedback message
+            grbl.report.feedback_message = trap_feedback_message;       // reports here
             retval = Status_OK;
         } else
             retval = Status_SDReadError;
@@ -251,6 +285,8 @@ void flashfs_reset (void)
         }
         flashfs_end_job();
     }
+
+    driver_reset();
 }
 
 void flashfs_init (void)

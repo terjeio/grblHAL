@@ -40,6 +40,10 @@
 #include "keypad/keypad.h"
 #endif
 
+#if PLASMA_ENABLE
+#include "plasma/thc.h"
+#endif
+
 #if ATC_ENABLE
 #include "atc.h"
 #endif
@@ -108,7 +112,7 @@ driver_settings_t driver_settings;
 static bool pwmEnabled = false;
 static spindle_pwm_t spindle_pwm;
 #ifdef SPINDLE_RPM_CONTROLLED
-static volatile uint32_t pid_count = 0;
+static volatile uint32_t pid_count = 0, elapsed_tics = 0;
 static spindle_control_t spindle_control = { .pid_state = PIDState_Disabled, .pid = {0}};
 #endif
 static void spindle_set_speed (uint_fast16_t pwm_value);
@@ -935,6 +939,11 @@ static void modeEnable (void)
 
 #endif
 
+uint32_t getElapsedTicks (void)
+{
+    return elapsed_tics;
+}
+
 // Configure perhipherals when settings are initialized or changed
 void settings_changed (settings_t *settings)
 {
@@ -1175,8 +1184,8 @@ static bool driver_setup (settings_t *settings)
      ********************************************************/
 
 #ifdef DRIVER_SETTINGS
-    if(hal.eeprom.driver_area.address != 0) {
-        if(!hal.eeprom.memcpy_from_with_checksum((uint8_t *)&driver_settings, hal.eeprom.driver_area.address, sizeof(driver_settings)))
+    if(hal.nvs.driver_area.address != 0) {
+        if(!hal.nvs.memcpy_from_with_checksum((uint8_t *)&driver_settings, hal.nvs.driver_area.address, sizeof(driver_settings)))
             hal.driver_settings_restore();
       #if TRINAMIC_ENABLE && CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
         driver_settings.trinamic.driver_enable.mask = AXES_BITMASK;
@@ -1256,11 +1265,11 @@ static bool driver_setup (settings_t *settings)
 
 #endif
 
-    if(hal.spindle_index_callback || true) {
+//    if(hal.spindle_index_callback || true) {
         RPM_INDEX_PORT->OUT |= RPM_INDEX_BIT;
         RPM_INDEX_PORT->REN |= RPM_INDEX_BIT;
         RPM_INDEX_PORT->IES |= RPM_INDEX_BIT;
-    }
+//    }
 
     NVIC_EnableIRQ(RPM_INDEX_INT);
 
@@ -1355,8 +1364,13 @@ static status_code_t driver_setting (setting_type_t setting, float value, char *
     }
 #endif
 
+#if PLASMA_ENABLE
+    if(status == Status_Unhandled)
+        status = plasma_setting(setting, value, svalue);
+#endif
+
     if(status == Status_OK)
-        hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
+        hal.nvs.memcpy_to_with_checksum(hal.nvs.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
 
     return status;
 }
@@ -1373,6 +1387,10 @@ static void driver_settings_report (setting_type_t setting)
   #endif
     trinamic_settings_report(setting);
 #endif
+
+#if PLASMA_ENABLE
+    plasma_settings_report(setting);
+#endif
 }
 
 void driver_settings_restore (void)
@@ -1384,7 +1402,12 @@ void driver_settings_restore (void)
 #if TRINAMIC_ENABLE
     trinamic_settings_restore();
 #endif
-    hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
+
+#if PLASMA_ENABLE
+    plasma_settings_restore();
+#endif
+
+    hal.nvs.memcpy_to_with_checksum(hal.nvs.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
 }
 
 #endif // DRIVER_SETTINGS
@@ -1470,7 +1493,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "MSP432";
-    hal.driver_version = "200818";
+    hal.driver_version = "200911";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1520,19 +1543,23 @@ bool driver_init (void)
     hal.stream.suspend_read = serialSuspendInput;
 
 #if EEPROM_ENABLE
-    hal.eeprom.type = EEPROM_Physical;
-    hal.eeprom.get_byte = eepromGetByte;
-    hal.eeprom.put_byte = eepromPutByte;
-    hal.eeprom.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
-    hal.eeprom.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
+  #if EEPROM_IS_FRAM
+    hal.nvs.type = NVS_FRAM;
+  #else
+    hal.nvs.type = NVS_EEPROM;
+  #endif
+    hal.nvs.get_byte = eepromGetByte;
+    hal.nvs.put_byte = eepromPutByte;
+    hal.nvs.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
+    hal.nvs.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
 #else
-    hal.eeprom.type = EEPROM_None;
+    hal.nvs.type = NVS_None;
 #endif
 
 #ifdef DRIVER_SETTINGS
-    hal.eeprom.driver_area.address = GRBL_EEPROM_SIZE;
-    hal.eeprom.driver_area.size = sizeof(driver_settings_t);
-    hal.eeprom.size = GRBL_EEPROM_SIZE + sizeof(driver_settings_t) + 1;
+    hal.nvs.driver_area.address = GRBL_NVS_SIZE;
+    hal.nvs.driver_area.size = sizeof(driver_settings_t);
+    hal.nvs.size = GRBL_NVS_SIZE + sizeof(driver_settings_t) + 1;
 
     hal.driver_setting = driver_setting;
     hal.driver_settings_report = driver_settings_report;
@@ -1546,17 +1573,20 @@ bool driver_init (void)
     hal.driver_axis_settings_report = trinamic_axis_settings_report;
 #endif
 
-    hal.driver_rt_report = driver_rt_report;
+    hal.get_elapsed_ticks = getElapsedTicks;
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
 
 #if KEYPAD_ENABLE
-    hal.execute_realtime = keypad_process_keypress;
     hal.driver_setting = driver_setting;
     hal.driver_settings_restore = driver_settings_restore;
     hal.driver_settings_report = driver_settings_report;
+    grbl.on_execute_realtime = keypad_process_keypress;
 #endif
+
+    grbl.on_realtime_report = driver_rt_report;
+
 
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
 
@@ -1605,6 +1635,10 @@ bool driver_init (void)
 
 #if SPINDLE_HUANYANG > 0
     huanyang_init(&modbus_stream);
+#endif
+
+#if PLASMA_ENABLE
+    plasma_init();
 #endif
 
     // no need to move version check before init - compiler will fail any signature mismatch for existing entries
@@ -1842,6 +1876,8 @@ void TRINAMIC_DIAG_IRQHandler (void)
 // Interrupt handler for 1 ms interval timer
 void SysTick_Handler (void)
 {
+
+    elapsed_tics++;
 
 #if MODBUS_ENABLE
 

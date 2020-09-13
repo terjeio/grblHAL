@@ -197,7 +197,7 @@ plane_t *gc_get_plane_data (plane_t *plane, plane_select_t select)
     return plane;
 }
 
-void gc_init(bool cold_start)
+void gc_init (bool cold_start)
 {
 
 #if COMPATIBILITY_LEVEL > 1
@@ -215,6 +215,8 @@ void gc_init(bool cold_start)
     } else {
         memset(&gc_state, 0, offsetof(parser_state_t, g92_coord_offset));
         gc_state.tool_pending = gc_state.tool->tool;
+        if(hal.tool_select)
+            hal.tool_select(gc_state.tool, false);
         // TODO: restore offsets, tool offset mode?
     }
 
@@ -233,11 +235,11 @@ void gc_init(bool cold_start)
 
     // Load default G54 coordinate system.
     if (!settings_read_coord_data(gc_state.modal.coord_system.idx, &gc_state.modal.coord_system.xyz))
-        hal.report.status_message(Status_SettingReadFail);
+        grbl.report.status_message(Status_SettingReadFail);
 
 #if COMPATIBILITY_LEVEL <= 1
     if (cold_start && !settings_read_coord_data(SETTING_INDEX_G92, &gc_state.g92_coord_offset))
-        hal.report.status_message(Status_SettingReadFail);
+        grbl.report.status_message(Status_SettingReadFail);
 #endif
 
 //    if(settings.flags.lathe_mode)
@@ -668,14 +670,14 @@ status_code_t gc_execute_block(char *block, char *message)
                     case 63:
                     case 64:
                     case 65:
-                        if(hal.port.digital_out == NULL || hal.port.num_digital == 0)
+                        if(hal.port.digital_out == NULL || hal.port.num_digital_out == 0)
                             FAIL(Status_GcodeUnsupportedCommand); // [Unsupported M command]
                         word_bit.group = ModalGroup_M10;
                         port_command = int_value;
                         break;
 
                     case 66:
-                        if(hal.port.wait_on_input == NULL || (hal.port.num_digital == 0 && hal.port.num_analog == 0))
+                        if(hal.port.wait_on_input == NULL || (hal.port.num_digital_in == 0 && hal.port.num_analog_in == 0))
                             FAIL(Status_GcodeUnsupportedCommand); // [Unsupported M command]
                         word_bit.group = ModalGroup_M10;
                         port_command = int_value;
@@ -683,7 +685,7 @@ status_code_t gc_execute_block(char *block, char *message)
 
                     case 67:
                     case 68:
-                        if(hal.port.analog_out == NULL || hal.port.num_analog == 0)
+                        if(hal.port.analog_out == NULL || hal.port.num_analog_out == 0)
                             FAIL(Status_GcodeUnsupportedCommand); // [Unsupported M command]
                         word_bit.group = ModalGroup_M10;
                         port_command = int_value;
@@ -1040,7 +1042,7 @@ status_code_t gc_execute_block(char *block, char *message)
                     FAIL(Status_GcodeValueWordMissing);
                 if(gc_block.values.p < 0.0f)
                     FAIL(Status_NegativeValue);
-                if((uint32_t)gc_block.values.p + 1 > hal.port.num_digital)
+                if((uint32_t)gc_block.values.p + 1 > hal.port.num_digital_out)
                     FAIL(Status_GcodeValueOutOfRange);
                 gc_block.output_command.is_digital = true;
                 gc_block.output_command.port = (uint8_t)gc_block.values.p;
@@ -1064,7 +1066,7 @@ status_code_t gc_execute_block(char *block, char *message)
                 if(bit_istrue(value_words, bit(Word_P))) {
                     if(gc_block.values.p < 0.0f)
                         FAIL(Status_NegativeValue);
-                    if((uint32_t)gc_block.values.p + 1 > hal.port.num_digital)
+                    if((uint32_t)gc_block.values.p + 1 > hal.port.num_digital_in)
                         FAIL(Status_GcodeValueOutOfRange);
 
                     gc_block.output_command.is_digital = true;
@@ -1072,7 +1074,7 @@ status_code_t gc_execute_block(char *block, char *message)
                 }
 
                 if(bit_istrue(value_words, bit(Word_E))) {
-                    if((uint32_t)gc_block.values.e + 1 > hal.port.num_analog)
+                    if((uint32_t)gc_block.values.e + 1 > hal.port.num_analog_in)
                         FAIL(Status_GcodeValueOutOfRange);
                     if((wait_mode_t)gc_block.values.l != WaitMode_Immediate)
                         FAIL(Status_GcodeValueOutOfRange);
@@ -1088,7 +1090,7 @@ status_code_t gc_execute_block(char *block, char *message)
             case 68:
                 if(bit_isfalse(value_words, bit(Word_E)|bit(Word_Q)))
                     FAIL(Status_GcodeValueWordMissing);
-                if((uint32_t)gc_block.values.e + 1 > hal.port.num_analog)
+                if((uint32_t)gc_block.values.e + 1 > hal.port.num_analog_out)
                     FAIL(Status_GcodeRPMOutOfRange);
                 gc_block.output_command.is_digital = false;
                 gc_block.output_command.port = (uint8_t)gc_block.values.e;
@@ -1308,11 +1310,9 @@ status_code_t gc_execute_block(char *block, char *message)
     }
 
     // [15. Coordinate system selection ]: *N/A. Error, if cutter radius comp is active.
-    // TODO: An EEPROM read of the coordinate data may require a buffer sync when the cycle
-    // is active. The read pauses the processor temporarily and may cause a rare crash. For
-    // future versions on processors with enough memory, all coordinate data should be stored
-    // in memory and written to EEPROM only when there is not a cycle active.
-    // NOTE: If EEPROM emulation is active then EEPROM reads/writes are buffered and updates
+    // TODO: A read of the coordinate data may require a buffer sync when the cycle
+    // is active. The read pauses the processor temporarily and may cause a rare crash.
+    // NOTE: If NVS buffering is active then non-volatile storage reads/writes are buffered and updates
     // delayed until no cycle is active.
 
     if (bit_istrue(command_words, bit(ModalGroup_G12))) { // Check if called in block
@@ -1363,13 +1363,13 @@ status_code_t gc_execute_block(char *block, char *message)
                 case 20:
                     if (p_value > N_COORDINATE_SYSTEM)
                         FAIL(Status_GcodeUnsupportedCoordSys); // [Greater than N sys]
-                    // Determine coordinate system to change and try to load from EEPROM.
+                    // Determine coordinate system to change and try to load from non-volatile storage.
                     gc_block.values.coord_data.idx = p_value == 0
                                                       ? gc_block.modal.coord_system.idx // Index P0 as the active coordinate system
-                                                      : (p_value - 1); // else adjust index to EEPROM coordinate data indexing.
+                                                      : (p_value - 1);                  // else adjust index to NVS coordinate data indexing.
 
                     if (!settings_read_coord_data(gc_block.values.coord_data.idx, &gc_block.values.coord_data.xyz))
-                        FAIL(Status_SettingReadFail); // [EEPROM read fail]
+                        FAIL(Status_SettingReadFail); // [non-volatile storage read fail]
 
                     // Pre-calculate the coordinate data changes.
                     idx = N_AXIS;
@@ -1475,7 +1475,7 @@ status_code_t gc_execute_block(char *block, char *message)
                 case NonModal_GoHome_0: // G28
                 case NonModal_GoHome_1: // G30
                     // [G28/30 Errors]: Cutter compensation is enabled.
-                    // Retreive G28/30 go-home position data (in machine coordinates) from EEPROM
+                    // Retreive G28/30 go-home position data (in machine coordinates) from non-volatile storage
 
                     if (!settings_read_coord_data(gc_block.non_modal_command == NonModal_GoHome_0 ? SETTING_INDEX_G28 : SETTING_INDEX_G30, &gc_block.values.coord_data.xyz))
                         FAIL(Status_SettingReadFail);
@@ -2357,14 +2357,14 @@ status_code_t gc_execute_block(char *block, char *message)
         case NonModal_SetCoordinateOffset: // G92
             memcpy(gc_state.g92_coord_offset, gc_block.values.xyz, sizeof(gc_state.g92_coord_offset));
 #if COMPATIBILITY_LEVEL <= 1
-            settings_write_coord_data(SETTING_INDEX_G92, &gc_state.g92_coord_offset); // Save G92 offsets to EEPROM
+            settings_write_coord_data(SETTING_INDEX_G92, &gc_state.g92_coord_offset); // Save G92 offsets to non-volatile storage
 #endif
             system_flag_wco_change();
             break;
 
         case NonModal_ResetCoordinateOffset: // G92.1
             clear_vector(gc_state.g92_coord_offset); // Disable G92 offsets by zeroing offset vector.
-            settings_write_coord_data(SETTING_INDEX_G92, &gc_state.g92_coord_offset); // Save G92 offsets to EEPROM
+            settings_write_coord_data(SETTING_INDEX_G92, &gc_state.g92_coord_offset); // Save G92 offsets to non-volatile storage
             system_flag_wco_change();
             break;
 
@@ -2374,7 +2374,7 @@ status_code_t gc_execute_block(char *block, char *message)
             break;
 
         case NonModal_RestoreCoordinateOffset: // G92.3
-            settings_read_coord_data(SETTING_INDEX_G92, &gc_state.g92_coord_offset); // Restore G92 offsets from EEPROM
+            settings_read_coord_data(SETTING_INDEX_G92, &gc_state.g92_coord_offset); // Restore G92 offsets from non-volatile storage
             system_flag_wco_change();
             break;
 
@@ -2560,7 +2560,7 @@ status_code_t gc_execute_block(char *block, char *message)
 
                 float g92_offset_stored[N_AXIS];
                 if(settings_read_coord_data(SETTING_INDEX_G92, &g92_offset_stored) && !isequal_position_vector(g92_offset_stored, gc_state.g92_coord_offset))
-                    settings_write_coord_data(SETTING_INDEX_G92, &gc_state.g92_coord_offset); // Save G92 offsets to EEPROM
+                    settings_write_coord_data(SETTING_INDEX_G92, &gc_state.g92_coord_offset); // Save G92 offsets to non-volatile storage
 
                 if (!(settings_read_coord_data(gc_state.modal.coord_system.idx, &gc_state.modal.coord_system.xyz)))
                     FAIL(Status_SettingReadFail);
@@ -2578,7 +2578,7 @@ status_code_t gc_execute_block(char *block, char *message)
                 output_commands = next;
             }
 
-            hal.report.feedback_message(Message_ProgramEnd);
+            grbl.report.feedback_message(Message_ProgramEnd);
         }
         gc_state.modal.program_flow = ProgramFlow_Running; // Reset program flow.
     }

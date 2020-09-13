@@ -88,6 +88,7 @@ static mpg_event_t mpg_events[N_AXIS] = {0};
 static encoder_t *override_encoder = NULL; // NULL when no Encoder_Universal available
 static axes_signals_t mpg_event = {0};
 static volatile bool mpg_spin_lock = false;
+static void (*on_realtime_report)(stream_write_ptr stream_write, report_tracking_flags_t report);
 
 static char *append (char *s)
 {
@@ -132,7 +133,7 @@ static bool mpg_move_absolute (uint_fast16_t state, axes_signals_t axes)
 
         sprintf(append(gcode), "F%lu", velocity);
 
-        is_moving = hal.protocol_enqueue_gcode(gcode);
+        is_moving = grbl.protocol_enqueue_gcode(gcode);
 #ifdef UART_DEBUG
 serialWriteS(gcode);
 serialWriteS(" ");
@@ -178,7 +179,7 @@ static bool mpg_jog_relative (uint_fast16_t state, axes_signals_t axes)
 
         sprintf(append(gcode), "F%lu", velocity);
 
-        is_moving = hal.protocol_enqueue_gcode(gcode);
+        is_moving = grbl.protocol_enqueue_gcode(gcode);
 
 #ifdef UART_DEBUG
 serialWriteS(gcode);
@@ -272,7 +273,7 @@ void encoder_execute_realtime (uint_fast16_t state)
                     strcpy(gcode, "G90G10L20P0");
                     strcat(gcode, axis_letter[idx]);
                     strcat(gcode, "0");
-                    if(hal.protocol_enqueue_gcode(gcode)) {
+                    if(grbl.protocol_enqueue_gcode(gcode)) {
                         mpg[idx].event.zero = Off;
                         mpg[idx].position = npos[mpg[idx].encoder->id] = mpg[idx].encoder->position = 0;
                         hal.encoder_reset(mpg[idx].encoder->id);
@@ -497,8 +498,10 @@ void encoder_rt_report(stream_write_ptr stream_write, report_tracking_flags_t re
         stream_write("|Enc:");
         stream_write(uitoa(override_encoder->mode));
     }
-}
 
+    if(on_realtime_report)
+        on_realtime_report(stream_write, report);
+}
 
 status_code_t encoder_setting (setting_type_t setting, float value, char *svalue)
 {
@@ -599,6 +602,11 @@ void encoder_init (encoder_t *encoder)
     uint_fast8_t idx;
 
     override_encoder = NULL;
+
+#if COMPATIBILITY_LEVEL <= 1
+    on_realtime_report = grbl.on_realtime_report;
+    grbl.on_realtime_report = encoder_rt_report;
+#endif
 
     for(idx = 0; idx < N_ENCODER; idx++) {
 

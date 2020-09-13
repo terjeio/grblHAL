@@ -27,6 +27,8 @@
 
 #ifdef ARDUINO
 #include "../grbl/hal.h"
+#include "../grbl/state_machine.h"
+#include "../grbl/report.h"
 #else
 #include "grbl/hal.h"
 #include "grbl/state_machine.h"

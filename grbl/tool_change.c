@@ -38,6 +38,7 @@
 #endif
 
 static bool block_cycle_start;
+static volatile bool execute_posted = false;
 static tool_data_t current_tool = {0}, *next_tool = NULL;
 static driver_reset_ptr driver_reset = NULL;
 static plane_t plane;
@@ -70,11 +71,11 @@ static void change_completed (void)
     }
 
     if(execute_realtime) {
-        hal.execute_realtime = execute_realtime;
+        grbl.on_execute_realtime = execute_realtime;
         execute_realtime = NULL;
     }
 
-    hal.on_probe_completed = NULL;
+    grbl.on_probe_completed = NULL;
     gc_state.tool_change = false;
 }
 
@@ -82,24 +83,27 @@ static void reset (void)
 {
 //    sys.tlo_reference_set = false; // For now...
 
+    if(next_tool) { //TODO: move to gc_xxx() function?
+        // Restore previous tool if reset is during change
+#ifdef N_TOOLS
+        if((sys.report.tool = current_tool.tool != next_tool->tool))
+            gc_state.tool = current_tool;
+#else
+        if((sys.report.tool = current_tool.tool != next_tool->tool))
+            memcpy(next_tool, &current_tool, sizeof(tool_data_t));
+#endif
+        gc_state.tool_pending = gc_state.tool->tool;
+        next_tool = NULL;
+    }
+
     change_completed();
     driver_reset();
-}
-
-static void tool_select (tool_data_t *tool, bool next)
-{
-    next_tool = tool;
-    if(!next)
-        memcpy(&current_tool, tool, sizeof(tool_data_t));
 }
 
 // Restore coolant and spindle status, return controlled point to original position.
 static bool restore (void)
 {
     plan_line_data_t plan_data = {0};
-
-    coolant_sync(gc_state.modal.coolant);
-    spindle_restore(gc_state.modal.spindle, gc_state.spindle.rpm);
 
     plan_data.condition.rapid_motion = On;
 
@@ -110,20 +114,36 @@ static bool restore (void)
     target.values[plane.axis_linear] = LINEAR_AXIS_HOME_OFFSET;
     mc_line(target.values, &plan_data);
 
-    previous.values[plane.axis_linear] += gc_get_offset(plane.axis_linear);
-    mc_line(previous.values, &plan_data);
+    if(protocol_buffer_synchronize()) {
+
+        sync_position();
+
+        coolant_sync(gc_state.modal.coolant);
+        spindle_restore(gc_state.modal.spindle, gc_state.spindle.rpm);
+
+        previous.values[plane.axis_linear] += gc_get_offset(plane.axis_linear);
+        mc_line(previous.values, &plan_data);
+    }
 
     if(protocol_buffer_synchronize()) {
-        gc_sync_position();
+        sync_position();
         memcpy(&current_tool, next_tool, sizeof(tool_data_t));
     }
 
     return !ABORTED;
 }
 
+static void execute_warning (uint_fast16_t state)
+{
+    grbl.on_execute_realtime = execute_realtime;
+    execute_realtime = NULL;
+
+    hal.stream.write("[MSG:Perform a probe with $TPW first!]" ASCII_EOL);
+}
+
 static void execute_restore (uint_fast16_t state)
 {
-    hal.execute_realtime = execute_realtime;
+    grbl.on_execute_realtime = execute_realtime;
     execute_realtime = NULL;
 
     // Get current position.
@@ -144,7 +164,7 @@ static void execute_probe (uint_fast16_t state)
     plan_line_data_t plan_data = {0};
     gc_parser_flags_t flags = {0};
 
-    hal.execute_realtime = execute_realtime;
+    grbl.on_execute_realtime = execute_realtime;
     execute_realtime = NULL;
 
     // G59.3 contains offsets to position of TLS.
@@ -203,9 +223,15 @@ static void execute_probe (uint_fast16_t state)
 ISR_CODE static void trap_control_cycle_start (control_signals_t signals)
 {
     if(signals.cycle_start) {
-        if(!block_cycle_start && execute_realtime == NULL) {
-            execute_realtime = hal.execute_realtime;
-            hal.execute_realtime = settings.tool_change.mode == ToolChange_SemiAutomatic ? execute_probe : execute_restore;
+        if(execute_realtime == NULL && !execute_posted) {
+            if(!block_cycle_start) {
+                execute_posted = true;
+                execute_realtime = grbl.on_execute_realtime;
+                grbl.on_execute_realtime = settings.tool_change.mode == ToolChange_SemiAutomatic ? execute_probe : execute_restore;
+            } else {
+                execute_realtime = grbl.on_execute_realtime;
+                grbl.on_execute_realtime = execute_warning;
+            }
         }
         signals.cycle_start = Off;
     } else
@@ -217,14 +243,27 @@ ISR_CODE static bool trap_stream_cycle_start (char c)
     bool drop = false;
 
     if((drop = (c == CMD_CYCLE_START || c == CMD_CYCLE_START_LEGACY))) {
-        if(!block_cycle_start && execute_realtime == NULL) {
-            execute_realtime = hal.execute_realtime;
-            hal.execute_realtime = settings.tool_change.mode == ToolChange_SemiAutomatic ? execute_probe : execute_restore;
+        if(execute_realtime == NULL && !execute_posted) {
+            if(!block_cycle_start) {
+                execute_posted = true;
+                execute_realtime = grbl.on_execute_realtime;
+                grbl.on_execute_realtime = settings.tool_change.mode == ToolChange_SemiAutomatic ? execute_probe : execute_restore;
+            } else {
+                execute_realtime = grbl.on_execute_realtime;
+                grbl.on_execute_realtime = execute_warning;
+            }
         }
     } else
         drop = enqueue_realtime_command(c);
 
     return drop;
+}
+
+static void tool_select (tool_data_t *tool, bool next)
+{
+    next_tool = tool;
+    if(!next)
+        memcpy(&current_tool, tool, sizeof(tool_data_t));
 }
 
 static status_code_t tool_change (parser_state_t *parser_state)
@@ -235,8 +274,22 @@ static status_code_t tool_change (parser_state_t *parser_state)
     if(current_tool.tool == next_tool->tool)
         return Status_OK;
 
+#ifdef TOOL_LENGTH_OFFSET_AXIS
+    plane.axis_linear = TOOL_LENGTH_OFFSET_AXIS;
+  #if TOOL_LENGTH_OFFSET_AXIS == X_AXIS
+    plane.axis_0 = Y_AXIS;
+    plane.axis_1 = Z_AXIS;
+  #elif TOOL_LENGTH_OFFSET_AXIS == Y_AXIS
+    plane.axis_0 = Z_AXIS;
+    plane.axis_1 = X_AXIS;
+  #else
+    plane.axis_0 = X_AXIS;
+    plane.axis_1 = Y_AXIS;
+  #endif
+#else
     // A plane change should invalidate current tool reference offset?
     gc_get_plane_data(&plane, parser_state->modal.plane_select);
+#endif
 
     uint8_t homed_req = settings.tool_change.mode == ToolChange_Manual ? bit(plane.axis_linear) : (X_AXIS_BIT|Y_AXIS_BIT|Z_AXIS_BIT);
 
@@ -244,10 +297,10 @@ static status_code_t tool_change (parser_state_t *parser_state)
         return Status_HomingRequired;
 
     if(settings.tool_change.mode != ToolChange_SemiAutomatic)
-        hal.on_probe_completed = on_probe_completed;
+        grbl.on_probe_completed = on_probe_completed;
 
     // Trap cycle start command and control signal.
-    block_cycle_start = settings.tool_change.mode == ToolChange_Manual;
+    block_cycle_start = settings.tool_change.mode != ToolChange_SemiAutomatic;
     enqueue_realtime_command = hal.stream.enqueue_realtime_command;
     hal.stream.enqueue_realtime_command = trap_stream_cycle_start;
     control_interrupt_callback = hal.control_interrupt_callback;
@@ -257,6 +310,7 @@ static status_code_t tool_change (parser_state_t *parser_state)
     hal.spindle_set_state((spindle_state_t){0}, 0.0f);
     hal.coolant_set_state((coolant_state_t){0});
 
+    execute_posted = false;
     parser_state->tool_change = true;
 
     // Save current position.
@@ -292,7 +346,7 @@ static status_code_t tool_change (parser_state_t *parser_state)
     }
 
     protocol_buffer_synchronize();
-    gc_sync_position();
+    sync_position();
 
     // Enter tool change mode, waits for cycle start to continue.
     system_set_exec_state_flag(EXEC_TOOL_CHANGE);   // Set up program pause for manual tool change
@@ -372,6 +426,7 @@ status_code_t tc_probe_workpiece (void)
     }
 
     if(ok && protocol_buffer_synchronize()) {
+        sync_position();
         block_cycle_start = false;
         hal.stream.write("[MSG:Remove any touch plate and press cycle start to continue.]" ASCII_EOL);
     }

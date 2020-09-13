@@ -5,7 +5,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2019 Terje Io
+  Copyright (c) 2019-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -65,7 +65,7 @@ static status_code_t webui_parse_command (char *cmd)
 
 void webui_init (void)
 {
-    hal.user_command_execute = webui_parse_command;
+    grbl.on_user_command = webui_parse_command;
 
     esp_vfs_spiffs_conf_t conf = {
       .base_path = "/spiffs",

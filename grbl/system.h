@@ -143,8 +143,7 @@ typedef union {
                  probe_disconnected :1,
                  motor_fault        :1,
                  motor_warning      :1,
-                 arc_ok             :1,
-                 unassigned         :3,
+                 unassigned         :4,
                  probe_triggered    :1, // used for probe protection
                  deasserted         :1; // this flag is set if signals are deasserted. Note: do NOT pass on to Grbl control_interrupt_handler if set.
     };
@@ -260,7 +259,7 @@ extern volatile uint_fast16_t sys_rt_exec_alarm;   // Global realtimeate val exe
 // Executes an internal system command, defined as a string starting with a '$'
 status_code_t system_execute_line(char *line);
 
-// Execute the startup script lines stored in EEPROM upon initialization
+// Execute the startup script lines stored in non-volatile storage upon initialization
 void system_execute_startup(char *line);
 
 void system_flag_wco_change();

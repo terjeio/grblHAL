@@ -136,10 +136,8 @@ static void stepperCyclesPerTickPrescaled (uint32_t cycles_per_tick)
 // When delayed pulse the step register is written in the step delay interrupt handler
 static void stepperPulseStart (stepper_t *stepper)
 {
-    if(stepper->dir_change) {
-        stepper->dir_change = false;
+    if(stepper->dir_change)
         set_dir_outputs(stepper->dir_outbits);
-    }
 
     if(stepper->step_outbits.value) {
         set_step_outputs(stepper->step_outbits);
@@ -153,7 +151,6 @@ static void stepperPulseStartDelayed (stepper_t *stepper)
 {
     if(stepper->dir_change) {
 
-        stepper->dir_change = false;
         set_dir_outputs(stepper->dir_outbits);
 
         if(stepper->step_outbits.value) {
@@ -671,7 +668,7 @@ bool driver_init (void)
     serialInit();
 
     hal.info = "MSP430F5529";
-    hal.driver_version = "200818";
+    hal.driver_version = "200911";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = 24000000;
     hal.rx_buffer_size = RX_BUFFER_SIZE;
@@ -715,22 +712,22 @@ bool driver_init (void)
 
 #ifdef EEPROM_ENABLE
     eepromInit();
-    hal.eeprom.type = EEPROM_Physical;
-    hal.eeprom.get_byte = eepromGetByte;
-    hal.eeprom.put_byte = eepromPutByte;
-    hal.eeprom.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
-    hal.eeprom.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
+  #if EEPROM_IS_FRAM
+    hal.nvs.type = NVS_FRAM;
+  #else
+    hal.nvs.type = NVS_EEPROM;
+  #endif
+    hal.nvs.get_byte = eepromGetByte;
+    hal.nvs.put_byte = eepromPutByte;
+    hal.nvs.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
+    hal.nvs.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
 #else
-    hal.eeprom.type = EEPROM_None;
+    hal.nvs.type = NVS_None;
 #endif
 
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
-
-//    hal.userdefined_mcode_check = userMCodeCheck;
-//    hal.userdefined_mcode_validate = userMCodeValidate;
-//    hal.userdefined_mcode_execute = userMCodeExecute;
 
 #ifdef HAS_KEYPAD
     hal.execute_realtime = process_keypress;

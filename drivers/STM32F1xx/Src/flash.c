@@ -4,7 +4,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2019 Terje Io
+  Copyright (c) 2019-2020 Terje Io
 
   This code reads/writes the whole RAM-based emulated EPROM contents from/to flash
 
@@ -33,13 +33,13 @@ static const uint8_t *flash_target = (uint8_t *)(FLASH_BANK1_END - FLASH_PAGE_SI
 
 bool memcpy_from_flash (uint8_t *dest)
 {
-    memcpy(dest, flash_target, hal.eeprom.size);
+    memcpy(dest, flash_target, hal.nvs.size);
     return true;
 }
 
 bool memcpy_to_flash (uint8_t *source)
 {
-    if (!memcmp(source, flash_target, hal.eeprom.size))
+    if (!memcmp(source, flash_target, hal.nvs.size))
         return true;
 
     HAL_FLASH_Unlock();
@@ -56,7 +56,7 @@ bool memcpy_to_flash (uint8_t *source)
     HAL_StatusTypeDef status = HAL_FLASHEx_Erase(&erase, &error);
 
     uint16_t *data = (uint16_t *)source;
-    uint32_t address = (uint32_t)flash_target, remaining = (uint32_t)hal.eeprom.size;
+    uint32_t address = (uint32_t)flash_target, remaining = (uint32_t)hal.nvs.size;
 
     while(remaining && status == HAL_OK) {
         status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, address, *data++);

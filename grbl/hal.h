@@ -28,7 +28,7 @@
 #include "coolant_control.h"
 #include "spindle_control.h"
 #include "stepper.h"
-#include "eeprom.h"
+#include "nvs.h"
 #include "stream.h"
 #include "probe.h"
 #include "plugins.h"
@@ -77,28 +77,6 @@ typedef void (*stream_write_ptr)(const char *s);
 typedef axes_signals_t (*limits_get_state_ptr)(void);
 typedef void (*driver_reset_ptr)(void);
 
-/* TODO: add to HAL so that a different formatting (xml, json etc) of reports may be implemented by driver? */
-typedef struct {
-    status_code_t (*report_status_message)(status_code_t status_code);
-    alarm_code_t (*report_alarm_message)(alarm_code_t alarm_code);
-    message_code_t (*report_feedback_message)(message_code_t message_code);
-    void (*report_init_message)(void);
-    void (*report_grbl_help)(void);
-    void (*report_grbl_settings)(void);
-    void (*report_echo_line_received)(char *line);
-    void (*report_realtime_status)(void);
-    void (*report_probe_parameters)(void);
-    void (*report_ngc_parameters)(void);
-    void (*report_gcode_modes)(void);
-    void (*report_startup_line)(uint8_t n, char *line);
-    void (*report_execute_startup_message)(char *line, status_code_t status_code);
-} HAL_report_t;
-
-typedef struct {
-    status_code_t (*status_message)(status_code_t status_code);
-    message_code_t (*feedback_message)(message_code_t message_code);
-} report_t;
-
 typedef struct {
     stream_type_t type;
     uint16_t (*get_rx_buffer_available)(void);
@@ -113,14 +91,16 @@ typedef struct {
 } io_stream_t;
 
 typedef struct {
-    uint8_t num_digital;
-    uint8_t num_analog;
+    uint8_t num_digital_in;
+    uint8_t num_digital_out;
+    uint8_t num_analog_in;
+    uint8_t num_analog_out;
     void (*digital_out)(uint8_t port, bool on);
     bool (*analog_out)(uint8_t port, float value);
     int32_t (*wait_on_input)(bool digital, uint8_t port, wait_mode_t wait_mode, float timeout);
 } io_port_t;
 
-typedef struct HAL {
+typedef struct {
     uint32_t version;
     char *info;
     char *driver_version;
@@ -166,20 +146,13 @@ typedef struct HAL {
     bool (*driver_release)(void);
     probe_state_t (*probe_get_state)(void);
     void (*probe_configure_invert_mask)(bool is_probe_away, bool probing);
-    void (*execute_realtime)(uint_fast16_t state);
     user_mcode_t (*user_mcode_check)(user_mcode_t mcode);
     status_code_t (*user_mcode_validate)(parser_block_t *gc_block, uint32_t *value_words);
     void (*user_mcode_execute)(uint_fast16_t state, parser_block_t *gc_block);
-    status_code_t (*user_command_execute)(char *line);
-    void (*driver_rt_command_execute)(uint8_t cmd);
-    void (*driver_rt_report)(stream_write_ptr stream_write, report_tracking_flags_t report);
-    void (*driver_feedback_message)(stream_write_ptr stream_write);
-    status_code_t (*driver_sys_command_execute)(uint_fast16_t state, char *line, char *lcline); // return Status_Unhandled
     bool (*get_position)(int32_t (*position)[N_AXIS]);
     void (*tool_select)(tool_data_t *tool, bool next);
     status_code_t (*tool_change)(parser_state_t *gc_state);
     void (*show_message)(const char *msg);
-    void (*report_options)(void);
     driver_reset_ptr driver_reset;
     status_code_t (*driver_setting)(setting_type_t setting, float value, char *svalue);
     void (*driver_settings_restore)(void);
@@ -187,36 +160,75 @@ typedef struct HAL {
     void (*driver_axis_settings_report)(axis_setting_type_t setting_type, uint8_t axis_idx);
     spindle_data_t (*spindle_get_data)(spindle_data_request_t request);
     void (*spindle_reset_data)(void);
-    void (*state_change_requested)(uint_fast16_t state);
-    void (*on_probe_completed)(void);
+
     void (*encoder_event_handler)(encoder_t *encoder, int32_t position);
     void (*encoder_reset)(uint_fast8_t id);
     uint32_t (*get_elapsed_ticks)(void);
     void (*pallet_shuttle)(void);
+    void (*stepper_output_step)(axes_signals_t step_outbits, axes_signals_t dir_outbits);
     void (*reboot)(void);
 #ifdef DEBUGOUT
     void (*debug_out)(bool on);
 #endif
 
-    eeprom_io_t eeprom;
+    nvs_io_t nvs;
 
     io_port_t port;
 
-    // entry points set by grbl at reset
-    report_t report;
-
-    // callbacks - set up by grbl before MCU init
-    bool (*protocol_enqueue_gcode)(char *data);
+    // callbacks - up by core before driver_init() is called
     bool (*stream_blocking_callback)(void);
     void (*stepper_interrupt_callback)(void);
     void (*limit_interrupt_callback)(axes_signals_t state);
     void (*control_interrupt_callback)(control_signals_t signals);
-    void (*spindle_index_callback)(spindle_data_t *rpm);
-
+//    void (*spindle_index_callback)(spindle_data_t *rpm);
+    // driver capabilities flags
     driver_cap_t driver_cap;
-} HAL;
+} grbl_hal_t;
 
-extern HAL hal;
+// TODO: move the following structs to grbl.h?
+
+/* TODO: add to grbl pointers so that a different formatting (xml, json etc) of reports may be implemented by driver?
+typedef struct {
+    status_code_t (*report_status_message)(status_code_t status_code);
+    alarm_code_t (*report_alarm_message)(alarm_code_t alarm_code);
+    message_code_t (*report_feedback_message)(message_code_t message_code);
+    void (*report_init_message)(void);
+    void (*report_grbl_help)(void);
+    void (*report_grbl_settings)(void);
+    void (*report_echo_line_received)(char *line);
+    void (*report_realtime_status)(void);
+    void (*report_probe_parameters)(void);
+    void (*report_ngc_parameters)(void);
+    void (*report_gcode_modes)(void);
+    void (*report_startup_line)(uint8_t n, char *line);
+    void (*report_execute_startup_message)(char *line, status_code_t status_code);
+} grbl_report_t;
+*/
+
+typedef struct {
+    status_code_t (*status_message)(status_code_t status_code);
+    message_code_t (*feedback_message)(message_code_t message_code);
+} report_t;
+
+typedef struct {
+    // report entry points set by core at reset
+    report_t report;
+    // grbl core events - may be subscribed to by drivers or by the core
+    void (*on_state_change)(uint_fast16_t state);
+    void (*on_probe_completed)(void);
+    void (*on_execute_realtime)(uint_fast16_t state);
+    void (*on_unknown_accessory_override)(uint8_t cmd);
+    void (*on_report_options)(void);
+    void (*on_realtime_report)(stream_write_ptr stream_write, report_tracking_flags_t report);
+    void (*on_unknown_feedback_message)(stream_write_ptr stream_write);
+    status_code_t (*on_unknown_sys_command)(uint_fast16_t state, char *line, char *lcline); // return Status_Unhandled
+    status_code_t (*on_user_command)(char *line);
+    // core entry points - set up by core before driver_init() is called
+    bool (*protocol_enqueue_gcode)(char *data);
+} grbl_t;
+
+extern grbl_t grbl;
+extern grbl_hal_t hal;
 extern bool driver_init (void);
 
 #endif

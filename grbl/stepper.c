@@ -262,6 +262,8 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
 
         hal.stepper_pulse_start(&st);
 
+        st.new_block = st.dir_change = false;
+
         if (st.step_count == 0) // Segment is complete. Discard current segment.
             st.exec_segment = NULL;
     }
@@ -296,13 +298,12 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
                 // Execute output commands to be syncronized with motion
                 while(st.exec_block->output_commands) {
                     output_command_t *cmd = st.exec_block->output_commands;
+                    cmd->is_executed = true;
                     if(cmd->is_digital)
                         hal.port.digital_out(cmd->port, cmd->value != 0.0f);
                     else
                         hal.port.analog_out(cmd->port, cmd->value);
-                    cmd = cmd->next;
-                    free(st.exec_block->output_commands);
-                    st.exec_block->output_commands = cmd;
+                    st.exec_block->output_commands = cmd->next;
                 }
 
                 // "Enqueue" any message to be displayed (by foreground process)
@@ -956,6 +957,7 @@ void st_prep_buffer()
       #endif
 
         prep_segment->cycles_per_tick = cycles;
+        prep_segment->current_rate = prep.current_speed;
 
         // Segment complete! Increment segment pointers, so stepper ISR can immediately execute it.
         segment_buffer_head = segment_next_head;

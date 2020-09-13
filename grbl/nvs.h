@@ -1,9 +1,9 @@
 /*
-  eeprom.h - EEPROM methods
+  nvs.h - non-volative storage data structures
 
   Part of GrblHAL
 
-  Copyright (c) 2017-2018 Terje Io
+  Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
   Grbl is free software: you can redistribute it and/or modify
@@ -20,32 +20,34 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef eeprom_h
-#define eeprom_h
+#ifndef _NVS_H_
+#define _NVS_H_
 
-#define GRBL_EEPROM_SIZE 1024
+#define GRBL_NVS_SIZE 1024
 
 typedef enum {
-    EEPROM_None = 0,
-    EEPROM_Physical,
-    EEPROM_Emulated
-} eeprom_type;
+    NVS_None = 0,
+    NVS_EEPROM,
+    NVS_FRAM,
+    NVS_Flash,
+    NVS_Emulated
+} nvs_type;
 
 typedef struct {
     uint16_t address;
     uint16_t size;
-} eeprom_driver_area_t;
+} nvs_driver_area_t;
 
 typedef struct {
-    eeprom_type type;
+    nvs_type type;
     uint16_t size;
-    eeprom_driver_area_t driver_area;
+    nvs_driver_area_t driver_area;
     uint8_t (*get_byte)(uint32_t addr);
     void (*put_byte)(uint32_t addr, uint8_t new_value);
     void (*memcpy_to_with_checksum)(uint32_t destination, uint8_t *source, uint32_t size);
     bool (*memcpy_from_with_checksum)(uint8_t *destination, uint32_t source, uint32_t size);
     bool (*memcpy_from_flash)(uint8_t *dest);
     bool (*memcpy_to_flash)(uint8_t *source);
-} eeprom_io_t;
+} nvs_io_t;
 
 #endif

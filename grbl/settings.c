@@ -1,5 +1,5 @@
 /*
-  settings.c - eeprom configuration handling
+  settings.c - non-volatile storage configuration handling
 
   Part of GrblHAL
 
@@ -31,7 +31,7 @@
 #include "defaults.h"
 #include "report.h"
 #include "limits.h"
-#include "eeprom_emulate.h"
+#include "nvs_buffer.h"
 #include "tool_change.h"
 
 #ifdef ENABLE_SPINDLE_LINEARIZATION
@@ -216,14 +216,14 @@ const settings_t defaults = {
 // Write build info to persistent storage
 void settings_write_build_info (char *line)
 {
-    if(hal.eeprom.type != EEPROM_None)
-        hal.eeprom.memcpy_to_with_checksum(EEPROM_ADDR_BUILD_INFO, (uint8_t *)line, MAX_STORED_LINE_LENGTH);
+    if(hal.nvs.type != NVS_None)
+        hal.nvs.memcpy_to_with_checksum(NVS_ADDR_BUILD_INFO, (uint8_t *)line, MAX_STORED_LINE_LENGTH);
 }
 
 // Read build info from persistent storage.
 bool settings_read_build_info(char *line)
 {
-    if (!(hal.eeprom.type != EEPROM_None && hal.eeprom.memcpy_from_with_checksum((uint8_t *)line, EEPROM_ADDR_BUILD_INFO, MAX_STORED_LINE_LENGTH))) {
+    if (!(hal.nvs.type != NVS_None && hal.nvs.memcpy_from_with_checksum((uint8_t *)line, NVS_ADDR_BUILD_INFO, MAX_STORED_LINE_LENGTH))) {
         // Reset line with default value
         line[0] = 0; // Empty line
         settings_write_build_info(line);
@@ -237,12 +237,12 @@ void settings_write_startup_line (uint8_t idx, char *line)
 {
     assert(idx < N_STARTUP_LINE);
 
-#ifdef FORCE_BUFFER_SYNC_DURING_EEPROM_WRITE
+#ifdef FORCE_BUFFER_SYNC_DURING_NVS_WRITE
     protocol_buffer_synchronize(); // A startup line may contain a motion and be executing.
 #endif
 
-    if(hal.eeprom.type != EEPROM_None)
-        hal.eeprom.memcpy_to_with_checksum(EEPROM_ADDR_STARTUP_BLOCK + idx * (MAX_STORED_LINE_LENGTH + 1), (uint8_t *)line, MAX_STORED_LINE_LENGTH);
+    if(hal.nvs.type != NVS_None)
+        hal.nvs.memcpy_to_with_checksum(NVS_ADDR_STARTUP_BLOCK + idx * (MAX_STORED_LINE_LENGTH + 1), (uint8_t *)line, MAX_STORED_LINE_LENGTH);
 }
 
 // Read startup line to persistent storage.
@@ -250,7 +250,7 @@ bool settings_read_startup_line (uint8_t idx, char *line)
 {
     assert(idx < N_STARTUP_LINE);
 
-    if (!(hal.eeprom.type != EEPROM_None && hal.eeprom.memcpy_from_with_checksum((uint8_t *)line, EEPROM_ADDR_STARTUP_BLOCK + idx * (MAX_STORED_LINE_LENGTH + 1), MAX_STORED_LINE_LENGTH))) {
+    if (!(hal.nvs.type != NVS_None && hal.nvs.memcpy_from_with_checksum((uint8_t *)line, NVS_ADDR_STARTUP_BLOCK + idx * (MAX_STORED_LINE_LENGTH + 1), MAX_STORED_LINE_LENGTH))) {
         // Reset line with default value
         *line = '\0'; // Empty line
         settings_write_startup_line(idx, line);
@@ -264,12 +264,12 @@ void settings_write_coord_data (uint8_t idx, float (*coord_data)[N_AXIS])
 {
     assert(idx <= SETTING_INDEX_NCOORD);
 
-#ifdef FORCE_BUFFER_SYNC_DURING_EEPROM_WRITE
+#ifdef FORCE_BUFFER_SYNC_DURING_NVS_WRITE
     protocol_buffer_synchronize();
 #endif
 
-    if(hal.eeprom.type != EEPROM_None)
-        hal.eeprom.memcpy_to_with_checksum(EEPROM_ADDR_PARAMETERS + idx * (sizeof(coord_data_t) + 1), (uint8_t *)coord_data, sizeof(coord_data_t));
+    if(hal.nvs.type != NVS_None)
+        hal.nvs.memcpy_to_with_checksum(NVS_ADDR_PARAMETERS + idx * (sizeof(coord_data_t) + 1), (uint8_t *)coord_data, sizeof(coord_data_t));
 }
 
 // Read selected coordinate data from persistent storage.
@@ -277,7 +277,7 @@ bool settings_read_coord_data (uint8_t idx, float (*coord_data)[N_AXIS])
 {
     assert(idx <= SETTING_INDEX_NCOORD);
 
-    if (!(hal.eeprom.type != EEPROM_None && hal.eeprom.memcpy_from_with_checksum((uint8_t *)coord_data, EEPROM_ADDR_PARAMETERS + idx * (sizeof(coord_data_t) + 1), sizeof(coord_data_t)))) {
+    if (!(hal.nvs.type != NVS_None && hal.nvs.memcpy_from_with_checksum((uint8_t *)coord_data, NVS_ADDR_PARAMETERS + idx * (sizeof(coord_data_t) + 1), sizeof(coord_data_t)))) {
         // Reset with default zero vector
         memset(coord_data, 0, sizeof(coord_data_t));
         settings_write_coord_data(idx, coord_data);
@@ -292,8 +292,8 @@ bool settings_write_tool_data (tool_data_t *tool_data)
 #ifdef N_TOOLS
     assert(tool_data->tool > 0 && tool_data->tool <= N_TOOLS); // NOTE: idx 0 is a non-persistent entry for tools not in tool table
 
-    if(hal.eeprom.type != EEPROM_None)
-        hal.eeprom.memcpy_to_with_checksum(EEPROM_ADDR_TOOL_TABLE + (tool_data->tool - 1) * (sizeof(tool_data_t) + 1), (uint8_t *)tool_data, sizeof(tool_data_t));
+    if(hal.nvs.type != NVS_None)
+        hal.nvs.memcpy_to_with_checksum(NVS_ADDR_TOOL_TABLE + (tool_data->tool - 1) * (sizeof(tool_data_t) + 1), (uint8_t *)tool_data, sizeof(tool_data_t));
 
     return true;
 #else
@@ -307,7 +307,7 @@ bool settings_read_tool_data (uint32_t tool, tool_data_t *tool_data)
 #ifdef N_TOOLS
     assert(tool > 0 && tool <= N_TOOLS); // NOTE: idx 0 is a non-persistent entry for tools not in tool table
 
-    if (!(hal.eeprom.type != EEPROM_None && hal.eeprom.memcpy_from_with_checksum((uint8_t *)tool_data, EEPROM_ADDR_TOOL_TABLE + (tool - 1) * (sizeof(tool_data_t) + 1), sizeof(tool_data_t)) && tool_data->tool == tool)) {
+    if (!(hal.nvs.type != NVS_None && hal.nvs.memcpy_from_with_checksum((uint8_t *)tool_data, NVS_ADDR_TOOL_TABLE + (tool - 1) * (sizeof(tool_data_t) + 1), sizeof(tool_data_t)) && tool_data->tool == tool)) {
         memset(tool_data, 0, sizeof(tool_data_t));
         tool_data->tool = tool;
     }
@@ -321,16 +321,16 @@ bool settings_read_tool_data (uint32_t tool, tool_data_t *tool_data)
 // Read Grbl global settings from persistent storage.
 bool read_global_settings ()
 {
-    // Check version-byte of eeprom
-    return hal.eeprom.type != EEPROM_None && SETTINGS_VERSION == hal.eeprom.get_byte(0) && hal.eeprom.memcpy_from_with_checksum((uint8_t *)&settings, EEPROM_ADDR_GLOBAL, sizeof(settings_t));
+    // Check version-byte of non-volatile storage
+    return hal.nvs.type != NVS_None && SETTINGS_VERSION == hal.nvs.get_byte(0) && hal.nvs.memcpy_from_with_checksum((uint8_t *)&settings, NVS_ADDR_GLOBAL, sizeof(settings_t));
 }
 
 // Write Grbl global settings and version number to persistent storage
 void write_global_settings ()
 {
-    if(hal.eeprom.type != EEPROM_None) {
-        hal.eeprom.put_byte(0, SETTINGS_VERSION);
-        hal.eeprom.memcpy_to_with_checksum(EEPROM_ADDR_GLOBAL, (uint8_t *)&settings, sizeof(settings_t));
+    if(hal.nvs.type != NVS_None) {
+        hal.nvs.put_byte(0, SETTINGS_VERSION);
+        hal.nvs.memcpy_to_with_checksum(NVS_ADDR_GLOBAL, (uint8_t *)&settings, sizeof(settings_t));
     }
 }
 
@@ -389,7 +389,7 @@ void settings_restore (settings_restore_t restore)
     if(restore.driver_parameters && hal.driver_settings_restore)
         hal.driver_settings_restore();
 
-    eeprom_emu_sync_physical();
+    nvs_buffer_sync_physical();
 }
 
 // A helper method to set settings from command line
@@ -712,8 +712,7 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 break;
 
             case Setting_ParkingEnable:
-                if (bit_istrue(int_value, bit(0)))
-                    settings.parking.flags.value = bit_istrue(int_value, bit(0)) ? (int_value & 0x07) : 0;
+                settings.parking.flags.value = bit_istrue(int_value, bit(0)) ? (int_value & 0x07) : 0;
                 break;
 
             case Setting_ParkingAxis:
@@ -863,8 +862,8 @@ void settings_init() {
     if(!read_global_settings()) {
         settings_restore_t settings = settings_all;
         settings.defaults = 1; // Ensure global settings get restored
-        hal.report.status_message(Status_SettingReadFail);
-        settings_restore(settings); // Force restore all EEPROM data.
+        grbl.report.status_message(Status_SettingReadFail);
+        settings_restore(settings); // Force restore all non-volatile storage data.
         report_init();
 #if COMPATIBILITY_LEVEL <= 1
         report_grbl_settings(true);

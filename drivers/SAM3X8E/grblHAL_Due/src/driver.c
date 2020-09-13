@@ -27,16 +27,16 @@
 #endif
 
 #if SDCARD_ENABLE
-#include "src/sdcard/sdcard.h"
+#include "sdcard/sdcard.h"
 #include "diskio.h"
 #endif
 
 #if EEPROM_ENABLE
-#include "src/eeprom/eeprom.h"
+#include "eeprom/eeprom.h"
 #endif
 
 #if KEYPAD_ENABLE
-#include "src/keypad/keypad.h"
+#include "keypad/keypad.h"
 #endif
 
 #define DEBOUNCE_QUEUE 8 // Must be a power of 2
@@ -395,10 +395,8 @@ static void stepperCyclesPerTick (uint32_t cycles_per_tick)
 // Sets stepper direction and pulse pins and starts a step pulse.
 static void stepperPulseStart (stepper_t *stepper)
 {
-    if(stepper->dir_change) {
-        stepper->dir_change = false;
+    if(stepper->dir_change)
         set_dir_outputs(stepper->dir_outbits);
-    }
 
     if(stepper->step_outbits.value) {
         set_step_outputs(stepper->step_outbits);
@@ -412,7 +410,6 @@ static void stepperPulseStartDelayed (stepper_t *stepper)
 {
     if(stepper->dir_change) {
 
-        stepper->dir_change = false;
         set_dir_outputs(stepper->dir_outbits);
 
         if(stepper->step_outbits.value) {
@@ -1144,8 +1141,8 @@ static bool driver_setup (settings_t *settings)
      ********************************************************/
 
 #ifdef DRIVER_SETTINGS
-    if(hal.eeprom.type != EEPROM_None) {
-        if(!hal.eeprom.memcpy_from_with_checksum((uint8_t *)&driver_settings, hal.eeprom.driver_area.address, sizeof(driver_settings)))
+    if(hal.nvs.type != EEPROM_None) {
+        if(!hal.nvs.memcpy_from_with_checksum((uint8_t *)&driver_settings, hal.nvs.driver_area.address, sizeof(driver_settings)))
             hal.driver_settings_restore();
     }
 #endif
@@ -1391,7 +1388,7 @@ static status_code_t driver_setting (uint_fast16_t param, float value, char *sva
 #endif
 
     if(status == Status_OK)
-        hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
+        hal.nvs.memcpy_to_with_checksum(hal.nvs.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
 
     return status;
 }
@@ -1415,7 +1412,7 @@ static void driver_settings_restore (void)
 #if TRINAMIC_ENABLE
     trinamic_settings_restore();
 #endif
-    hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
+    hal.nvs.memcpy_to_with_checksum(hal.nvs.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
 }
 
 #endif
@@ -1434,7 +1431,7 @@ static nvs_storage_t grblNVS;
 bool nvsRead (uint8_t *dest)
 {
     if(grblNVS.addr != NULL)
-        memcpy(dest, grblNVS.addr, hal.eeprom.size);
+        memcpy(dest, grblNVS.addr, hal.nvs.size);
 
     return grblNVS.addr != NULL;
 }
@@ -1471,10 +1468,10 @@ bool nvsWrite (uint8_t *source)
 
 bool nvsInit (void)
 {
-    if(hal.eeprom.size & ~(IFLASH1_PAGE_SIZE - 1))
-        grblNVS.pages = (hal.eeprom.size & ~(IFLASH1_PAGE_SIZE - 1)) / IFLASH1_PAGE_SIZE + 1;
+    if(hal.nvs.size & ~(IFLASH1_PAGE_SIZE - 1))
+        grblNVS.pages = (hal.nvs.size & ~(IFLASH1_PAGE_SIZE - 1)) / IFLASH1_PAGE_SIZE + 1;
     else
-        grblNVS.pages = hal.eeprom.size / IFLASH1_PAGE_SIZE;
+        grblNVS.pages = hal.nvs.size / IFLASH1_PAGE_SIZE;
 
 //  grblNVS.row_size = IFLASH1_LOCK_REGION_SIZE; // 16K
     grblNVS.page = IFLASH1_NB_OF_PAGES - grblNVS.pages;
@@ -1527,7 +1524,7 @@ bool driver_init (void)
     NVIC_EnableIRQ(SysTick_IRQn);
 
     hal.info = "SAM3X8E";
-	hal.driver_version = "200821";
+	hal.driver_version = "200911";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1591,22 +1588,26 @@ bool driver_init (void)
     hal.stream.suspend_read = serialSuspendInput;
 #endif
 
-    hal.eeprom.size = GRBL_EEPROM_SIZE;
+    hal.nvs.size = GRBL_NVS_SIZE;
 
 #if EEPROM_ENABLE
     eepromInit();
-    hal.eeprom.type = EEPROM_Physical;
-    hal.eeprom.get_byte = eepromGetByte;
-    hal.eeprom.put_byte = eepromPutByte;
-    hal.eeprom.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
-    hal.eeprom.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
+  #if EEPROM_IS_FRAM
+    hal.nvs.type = NVS_FRAM;
+  #else
+    hal.nvs.type = NVS_EEPROM;
+  #endif
+    hal.nvs.get_byte = eepromGetByte;
+    hal.nvs.put_byte = eepromPutByte;
+    hal.nvs.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
+    hal.nvs.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
 #else
     if(nvsInit()) {
-        hal.eeprom.type = EEPROM_Emulated;
-        hal.eeprom.memcpy_from_flash = nvsRead;
-        hal.eeprom.memcpy_to_flash = nvsWrite;
+        hal.nvs.type = NVS_Flash;
+        hal.nvs.memcpy_from_flash = nvsRead;
+        hal.nvs.memcpy_to_flash = nvsWrite;
     } else
-        hal.eeprom.type = EEPROM_None;
+        hal.nvs.type = NVS_None;
 #endif
 
 #if KEYPAD_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
@@ -1614,10 +1615,10 @@ bool driver_init (void)
 #endif
 
 #ifdef DRIVER_SETTINGS
-    if(hal.eeprom.type != EEPROM_None) {
-        hal.eeprom.driver_area.address = GRBL_EEPROM_SIZE;
-        hal.eeprom.driver_area.size = sizeof(driver_settings); // Add assert?
-        hal.eeprom.size = GRBL_EEPROM_SIZE + sizeof(driver_settings) + 1;
+    if(hal.nvs.type != NVS_None) {
+        hal.nvs.driver_area.address = GRBL_NVS_SIZE;
+        hal.nvs.driver_area.size = sizeof(driver_settings); // Add assert?
+        hal.nvs.size = GRBL_NVS_SIZE + sizeof(driver_settings) + 1;
 
         hal.driver_setting = driver_setting;
         hal.driver_settings_report = driver_settings_report;

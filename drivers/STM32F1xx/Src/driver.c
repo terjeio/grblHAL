@@ -68,7 +68,7 @@ static bool probe_invert;
 static axes_signals_t next_step_outbits;
 static spindle_pwm_t spindle_pwm;
 static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
-static status_code_t (*syscmd)(uint_fast16_t state, char *line, char *lcline);
+static status_code_t (*on_unknown_sys_command)(uint_fast16_t state, char *line, char *lcline);
 
 #if STEP_OUTMODE == GPIO_MAP
 
@@ -252,10 +252,8 @@ inline static __attribute__((always_inline)) void stepperSetDirOutputs (axes_sig
 // Sets stepper direction and pulse pins and starts a step pulse.
 static void stepperPulseStart (stepper_t *stepper)
 {
-    if(stepper->dir_change) {
-        stepper->dir_change = false;
+    if(stepper->dir_change)
         stepperSetDirOutputs(stepper->dir_outbits);
-    }
 
     if(stepper->step_outbits.value) {
         stepperSetStepOutputs(stepper->step_outbits);
@@ -270,7 +268,6 @@ static void stepperPulseStartDelayed (stepper_t *stepper)
 {
     if(stepper->dir_change) {
 
-        stepper->dir_change = false;
         stepperSetDirOutputs(stepper->dir_outbits);
 
         if(stepper->step_outbits.value) {
@@ -782,11 +779,11 @@ static status_code_t jtag_enable (uint_fast16_t state, char *line, char *lcline)
 {
     if(!strcmp(line, "$PGM")) {
         __HAL_AFIO_REMAP_SWJ_ENABLE();
-        syscmd = NULL;
+        on_unknown_sys_command = NULL;
         return Status_OK;
     }
 
-    return syscmd ? syscmd(state, line, lcline) : Status_Unhandled;
+    return on_unknown_sys_command ? on_unknown_sys_command(state, line, lcline) : Status_Unhandled;
 }
 
 // Initializes MCU peripherals for Grbl use
@@ -805,8 +802,8 @@ static bool driver_setup (settings_t *settings)
     GPIO_Init.Mode = GPIO_MODE_OUTPUT_PP;
 
 #ifdef DRIVER_SETTINGS
-    if(hal.eeprom.driver_area.address != 0) {
-        if(!hal.eeprom.memcpy_from_with_checksum((uint8_t *)&driver_settings, hal.eeprom.driver_area.address, sizeof(driver_settings)))
+    if(hal.nvs.driver_area.address != 0) {
+        if(!hal.nvs.memcpy_from_with_checksum((uint8_t *)&driver_settings, hal.nvs.driver_area.address, sizeof(driver_settings)))
             hal.driver_settings_restore();
       #if TRINAMIC_ENABLE && CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
         driver_settings.trinamic.driver_enable.mask = AXES_BITMASK;
@@ -904,8 +901,8 @@ static bool driver_setup (settings_t *settings)
 
 #endif
 
-    syscmd = hal.driver_sys_command_execute;
-    hal.driver_sys_command_execute = jtag_enable;
+    on_unknown_sys_command = grbl.on_unknown_sys_command;
+    grbl.on_unknown_sys_command = jtag_enable;
 
 #if TRINAMIC_ENABLE
 
@@ -940,7 +937,7 @@ static status_code_t driver_setting (setting_type_t param, float value, char *sv
 #endif
 
     if(status == Status_OK)
-        hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
+        hal.nvs.memcpy_to_with_checksum(hal.nvs.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
 
     return status;
 }
@@ -963,7 +960,7 @@ static void driver_settings_restore ()
 #if TRINAMIC_ENABLE
     trinamic_settings_restore();
 #endif
-    hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
+    hal.nvs.memcpy_to_with_checksum(hal.nvs.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
 }
 
 #endif
@@ -990,7 +987,7 @@ bool driver_init (void)
     __HAL_AFIO_REMAP_SWJ_NOJTAG();
 
     hal.info = "STM32F103C8";
-    hal.driver_version = "200818";
+    hal.driver_version = "200911";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1049,28 +1046,32 @@ bool driver_init (void)
 #endif
 
 #if EEPROM_ENABLE
-    hal.eeprom.type = EEPROM_Physical;
-    hal.eeprom.get_byte = eepromGetByte;
-    hal.eeprom.put_byte = eepromPutByte;
-    hal.eeprom.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
-    hal.eeprom.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
+  #if EEPROM_IS_FRAM
+    hal.nvs.type = NVS_FRAM;
+  #else
+    hal.nvs.type = NVS_EEPROM;
+  #endif
+    hal.nvs.get_byte = eepromGetByte;
+    hal.nvs.put_byte = eepromPutByte;
+    hal.nvs.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
+    hal.nvs.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
 #elif FLASH_ENABLE
-    hal.eeprom.type = EEPROM_Emulated;
-    hal.eeprom.memcpy_from_flash = memcpy_from_flash;
-    hal.eeprom.memcpy_to_flash = memcpy_to_flash;
+    hal.nvs.type = NVS_Flash;
+    hal.nvs.memcpy_from_flash = memcpy_from_flash;
+    hal.nvs.memcpy_to_flash = memcpy_to_flash;
 #else
-    hal.eeprom.type = EEPROM_None;
+    hal.nvs.type = NVS_None;
 #endif
 
 #ifdef DRIVER_SETTINGS
   #if !TRINAMIC_ENABLE
     assert(EEPROM_ADDR_TOOL_TABLE - (sizeof(driver_settings_t) + 2) > EEPROM_ADDR_GLOBAL + sizeof(settings_t) + 1);
-    hal.eeprom.driver_area.address = EEPROM_ADDR_TOOL_TABLE - (sizeof(driver_settings_t) + 2);
+    hal.nvs.driver_area.address = EEPROM_ADDR_TOOL_TABLE - (sizeof(driver_settings_t) + 2);
   #else
-    hal.eeprom.driver_area.address = GRBL_EEPROM_SIZE;
+    hal.nvs.driver_area.address = GRBL_EEPROM_SIZE;
   #endif
-    hal.eeprom.driver_area.size = sizeof(driver_settings_t);
-    hal.eeprom.size = GRBL_EEPROM_SIZE + sizeof(driver_settings_t) + 1;
+    hal.nvs.driver_area.size = sizeof(driver_settings_t);
+    hal.nvs.size = GRBL_EEPROM_SIZE + sizeof(driver_settings_t) + 1;
 
     hal.driver_setting = driver_setting;
     hal.driver_settings_report = driver_settings_report;

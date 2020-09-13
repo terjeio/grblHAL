@@ -27,6 +27,7 @@
 
 // Initialize reporting subsystem
 void report_init (void);
+void report_init_fns (void);
 
 // Prints system status messages.
 status_code_t report_status_message (status_code_t status_code);

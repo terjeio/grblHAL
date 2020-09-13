@@ -30,11 +30,13 @@
 
 #ifdef MASLOW_ROUTER
 
+#include <math.h>
+
 #include "driver.h"
 
 #include "settings.h"
 #include "planner.h"
-#include "eeprom_emulate.h"
+#include "nvs_buffer.h"
 #include "kinematics.h"
 #include "maslow.h"
 #include "report.h"
@@ -201,7 +203,7 @@ status_code_t maslow_setting (setting_type_t param, float value, char *svalue)
     }
 
     if(status == Status_OK)
-        hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
+        hal.nvs.memcpy_to_with_checksum(hal.nvs.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
 
     return status;
 }
@@ -309,7 +311,7 @@ void maslow_settings_report (setting_type_t setting)
 void maslow_settings_restore (void)
 {
     memcpy(&driver_settings.maslow, &maslow_defaults, sizeof(maslow_settings_t));
-    hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings_t));
+    hal.nvs.memcpy_to_with_checksum(hal.nvs.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings_t));
 
 }
 
@@ -554,7 +556,7 @@ status_code_t maslow_tuning (uint_fast16_t state, char *line, char *lcline)
 
     if(line[1] == 'M') switch(line[2]) {
 
-        case 'C': // commit driver setting changes to EEPROM
+        case 'C': // commit driver setting changes to non-volatile storage
             settings_dirty.is_dirty = settings_dirty.driver_settings = true;
             break;
 
@@ -752,7 +754,7 @@ void maslow_init (void)
     kinematics.convert_array_steps_to_mpos = maslow_convert_array_steps_to_mpos;
     kinematics.segment_line = maslow_segment_line;
 
-    hal.driver_sys_command_execute = maslow_tuning;
+    grbl.on_unknown_sys_command = maslow_tuning;
 }
 
 #endif

@@ -199,7 +199,7 @@ void set_state (uint_fast16_t new_state)
             case STATE_SAFETY_DOOR:
                 if((sys.state & (STATE_ALARM|STATE_ESTOP|STATE_SLEEP|STATE_CHECK_MODE)))
                     return;
-                hal.report.feedback_message(Message_SafetyDoorAjar);
+                grbl.report.feedback_message(Message_SafetyDoorAjar);
                 // no break
             case STATE_SLEEP:
                 sys.parking_state = Parking_Retracting;
@@ -222,8 +222,8 @@ void set_state (uint_fast16_t new_state)
                 break;
         }
 
-        if(hal.state_change_requested)
-            hal.state_change_requested(new_state);
+        if(grbl.on_state_change)
+            grbl.on_state_change(new_state);
     }
 }
 
@@ -244,7 +244,7 @@ void state_suspend_manager (void)
 
         // Handles restoring of spindle state
         if (sys.override.spindle_stop.restore) {
-            hal.report.feedback_message(Message_SpindleRestore);
+            grbl.report.feedback_message(Message_SpindleRestore);
             if (settings.flags.laser_mode) // When in laser mode, ignore spindle spin-up delay. Set to turn on laser when cycle starts.
                 sys.step_control.update_spindle_rpm = On;
             else
@@ -318,8 +318,7 @@ static void state_await_motion_cancel (uint_fast16_t rt_exec)
             sys.step_control.flags = 0;
             plan_reset();
             st_reset();
-            gc_sync_position();
-            plan_sync_position();
+            sync_position();
 #ifdef ENABLE_BACKLASH_COMPENSATION
             mc_sync_backlash_position();
 #endif
@@ -502,7 +501,7 @@ static void state_await_restore (uint_fast16_t rt_exec)
         restart = true;
 
         if (restore_condition.spindle.on != hal.spindle_get_state().on) {
-            hal.report.feedback_message(Message_SpindleRestore);
+            grbl.report.feedback_message(Message_SpindleRestore);
             spindle_restore(restore_condition.spindle, restore_spindle_rpm);
         }
 
@@ -514,7 +513,7 @@ static void state_await_restore (uint_fast16_t rt_exec)
 
         sys.override.spindle_stop.value = 0; // Clear spindle stop override states
 
-        hal.report.feedback_message(Message_None);
+        grbl.report.feedback_message(Message_None);
 
         if(restart) {
             set_state(STATE_IDLE);
@@ -531,7 +530,7 @@ static void state_await_restore (uint_fast16_t rt_exec)
 
 static void restart_retract (void)
 {
-    hal.report.feedback_message(Message_SafetyDoorAjar);
+    grbl.report.feedback_message(Message_SafetyDoorAjar);
 
     stateHandler = state_await_hold;
 

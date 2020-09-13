@@ -776,27 +776,11 @@ inline IRAM_ATTR static control_signals_t systemGetState (void)
     return signals;
 }
 
-#ifdef USE_I2S_OUT
-
 // Sets up the probe pin invert mask to
 // appropriately set the pin logic according to setting for normal-high/normal-low operation
 // and the probing cycle modes for toward-workpiece/away-from-workpiece.
 static void probeConfigure(bool is_probe_away, bool probing)
 {
-    i2s_set_streaming_mode(!probing);
-
-    probe_invert = settings.flags.invert_probe_pin ? 0 : 1;
-
-    if(is_probe_away)
-        probe_invert ^= 1;
-#if PROBE_ISR
-    gpio_set_intr_type(inputpin[INPUT_PROBE].pin, probe_invert ? GPIO_INTR_NEGEDGE : GPIO_INTR_POSEDGE);
-    inputpin[INPUT_PROBE].active = false;
-#endif
-}
-#else
-static void probeConfigure(bool is_probe_away)
-{
 #ifdef USE_I2S_OUT
     i2s_set_streaming_mode(!probing);
 #endif
@@ -810,8 +794,6 @@ static void probeConfigure(bool is_probe_away)
     inputpin[INPUT_PROBE].active = false;
 #endif
 }
-#endif
-
 
 // Returns the probe connected and triggered pin states.
 probe_state_t probeGetState (void)
@@ -1614,7 +1596,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "ESP32";
-    hal.driver_version = "200721";
+    hal.driver_version = "200910";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1720,10 +1702,10 @@ bool driver_init (void)
 #endif
 
 #if WIFI_ENABLE
-    hal.report_options = reportIP;
+    grbl.on_report_options = reportIP;
 #endif
 #if BLUETOOTH_ENABLE
-    hal.report_options = report_bt_MAC;
+    grbl.on_report_options = report_bt_MAC;
 #endif
 
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality

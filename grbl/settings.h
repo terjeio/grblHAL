@@ -1,5 +1,5 @@
 /*
-  settings.h - eeprom configuration handling
+  settings.h - non-volatile storage configuration handling
 
   Part of GrblHAL
 
@@ -28,19 +28,19 @@
 #include "system.h"
 
 // Version of the persistent storage data. Will be used to migrate existing data from older versions of Grbl
-// when firmware is upgraded. Always stored in byte 0 of eeprom
+// when firmware is upgraded. Always stored in byte 0 of non-volatile storage
 #define SETTINGS_VERSION 17  // NOTE: Check settings_reset() when moving to next version.
 
 // Define persistent storage memory address location values for Grbl settings and parameters
 // NOTE: 1KB persistent storage is the minimum required. The upper half is reserved for parameters and
 // the startup script. The lower half contains the global settings and space for future
 // developments.
-#define EEPROM_ADDR_GLOBAL         1U
-#define EEPROM_ADDR_PARAMETERS     512U
-#define EEPROM_ADDR_BUILD_INFO     942U
-#define EEPROM_ADDR_STARTUP_BLOCK  (EEPROM_ADDR_BUILD_INFO - 1 - N_STARTUP_LINE * (MAX_STORED_LINE_LENGTH + 1))
+#define NVS_ADDR_GLOBAL         1U
+#define NVS_ADDR_PARAMETERS     512U
+#define NVS_ADDR_BUILD_INFO     942U
+#define NVS_ADDR_STARTUP_BLOCK  (NVS_ADDR_BUILD_INFO - 1 - N_STARTUP_LINE * (MAX_STORED_LINE_LENGTH + 1))
 #ifdef N_TOOLS
-#define EEPROM_ADDR_TOOL_TABLE     (EEPROM_ADDR_PARAMETERS - 1 - N_TOOLS * (sizeof(tool_data_t) + 1))
+#define NVS_ADDR_TOOL_TABLE     (NVS_ADDR_PARAMETERS - 1 - N_TOOLS * (sizeof(tool_data_t) + 1))
 #endif
 
 // Define persistent storage address indexing for coordinate parameters
@@ -248,6 +248,23 @@ typedef enum {
     Setting_ToolChangeProbingDistance = 342,
     Setting_ToolChangeFeedRate = 343,
     Setting_ToolChangeSeekRate = 344,
+
+    Setting_THC_Mode = 350,
+    Setting_THC_Delay = 351,
+    Setting_THC_Threshold = 352,
+    Setting_THC_PGain = 353,
+    Setting_THC_IGain = 354,
+    Setting_THC_DGain = 355,
+    Setting_THC_VADThreshold = 356,
+    Setting_THC_VoidOverride = 357,
+    Setting_Arc_FailTimeout = 358,
+    Setting_Arc_RetryDelay = 359,
+    Setting_Arc_MaxRetries = 360,
+    Setting_Arc_VoltageScale = 361,
+    Setting_Arc_VoltageOffset = 362,
+    Setting_Arc_HeightPerVolt = 363,
+    Setting_Arc_OkHighVoltage = 364,
+    Setting_Arc_OkLowVoltage = 365,
 
     Setting_EncoderSettingsBase = 400, // NOTE: Reserving settings values >= 400 for encoder settings. Up to 449.
     Setting_EncoderSettingsMax = 449,

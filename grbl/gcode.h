@@ -281,6 +281,7 @@ typedef enum {
 
 typedef struct output_command {
     bool is_digital;
+    bool is_executed;
     uint8_t port;
     int32_t value;
     struct output_command *next;
@@ -501,7 +502,8 @@ typedef struct {
     status_code_t last_error;           // last return value from parser
     // The following variables are not cleared upon warm restart when COMPATIBILITY_LEVEL <= 1
     float g92_coord_offset[N_AXIS];     // Retains the G92 coordinate offset (work coordinates) relative to
-                                        // machine zero in mm. Persistent and loaded from EEPROM on boot when COMPATIBILITY_LEVEL <= 1
+                                        // machine zero in mm. Persistent and loaded from non-volatile storage
+                                        // on boot when COMPATIBILITY_LEVEL <= 1
     float tool_length_offset[N_AXIS];   // Tracks tool length offset when enabled
     tool_data_t *tool;                  // Tracks tool number and tool offset
 } parser_state_t;
@@ -537,6 +539,9 @@ status_code_t gc_execute_block(char *block, char *message);
 // Sets g-code parser position in mm. Input in steps. Called by the system abort and hard
 // limit pull-off routines.
 #define gc_sync_position() system_convert_array_steps_to_mpos (gc_state.position, sys_position)
+
+// Sets g-code parser and planner position in mm.
+#define sync_position() plan_sync_position(); system_convert_array_steps_to_mpos (gc_state.position, sys_position)
 
 void gc_set_laser_ppimode (bool on);
 

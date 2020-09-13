@@ -22,6 +22,7 @@
 */
 
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "hal.h"
@@ -123,7 +124,7 @@ static bool limits_homing_cycle (axes_signals_t cycle, axes_signals_t auto_squar
 
     int32_t initial_trigger_position = 0, autosquare_fail_distance = 0;
     uint_fast8_t n_cycle = (2 * settings.homing.locate_cycles + 1);
-    uint_fast8_t step_pin[N_AXIS], n_active_axis, dual_motor_axis;
+    uint_fast8_t step_pin[N_AXIS], n_active_axis, dual_motor_axis = 0;
     float target[N_AXIS];
     float max_travel = 0.0f;
     float homing_rate = settings.homing.seek_rate;
@@ -290,8 +291,8 @@ static bool limits_homing_cycle (axes_signals_t cycle, axes_signals_t auto_squar
                 }
             }
 
-            if(hal.execute_realtime)
-                hal.execute_realtime(STATE_HOMING);
+            if(grbl.on_execute_realtime)
+                grbl.on_execute_realtime(STATE_HOMING);
 
         } while (axislock.mask & AXES_BITMASK);
 

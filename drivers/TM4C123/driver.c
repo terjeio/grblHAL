@@ -274,14 +274,11 @@ static void stepperPulseStart (stepper_t *stepper)
             stepperPulseStartSyncronized(stepper);
             return;
         }
-        stepper->new_block = false;
         set_dir_outputs(stepper->dir_outbits);
     }
 #else
-    if(stepper->new_block) {
-        stepper->new_block = false;
+    if(stepper->dir_change)
         set_dir_outputs(stepper->dir_outbits);
-    }
 #endif
 
     if(stepper->step_outbits.value) {
@@ -303,13 +300,11 @@ static void stepperPulseStartDelayed (stepper_t *stepper)
             stepperPulseStartSyncronized(stepper);
             return;
         }
-        stepper->new_block = false;
         set_dir_outputs(stepper->dir_outbits);
     }
 #else
     if(stepper->dir_change) {
 
-        stepper->dir_change = false;
         set_dir_outputs(stepper->dir_outbits);
 
         if(stepper->step_outbits.value) {
@@ -353,7 +348,6 @@ static void stepperPulseStartSyncronized (stepper_t *stepper)
             spindle_sync.segments = 0;
             spindle_sync.segment_id = stepper->exec_segment->id + 1; // force recalc
         }
-        stepper->new_block = false;
         set_dir_outputs(stepper->dir_outbits);
     }
 
@@ -828,8 +822,8 @@ static bool driver_setup (settings_t *settings)
 {
 
 #ifdef DRIVER_SETTINGS
-    if(hal.eeprom.driver_area.address != 0) {
-        if(!hal.eeprom.memcpy_from_with_checksum((uint8_t *)&driver_settings, hal.eeprom.driver_area.address, sizeof(driver_settings)))
+    if(hal.nvs.driver_area.address != 0) {
+        if(!hal.nvs.memcpy_from_with_checksum((uint8_t *)&driver_settings, hal.nvs.driver_area.address, sizeof(driver_settings)))
             hal.driver_settings_restore();
       #if TRINAMIC_ENABLE && CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
         driver_settings.trinamic.driver_enable.mask = AXES_BITMASK;
@@ -1095,7 +1089,7 @@ static status_code_t driver_setting (setting_type_t param, float value, char *sv
 #endif
 
     if(status == Status_OK)
-        hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
+        hal.nvs.memcpy_to_with_checksum(hal.nvs.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
 
     return status;
 }
@@ -1118,7 +1112,7 @@ void driver_settings_restore (void)
 #if TRINAMIC_ENABLE
     trinamic_settings_restore();
 #endif
-    hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
+    hal.nvs.memcpy_to_with_checksum(hal.nvs.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
 }
 
 #endif
@@ -1153,7 +1147,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "TM4C123HP6PM";
-    hal.driver_version = "200822";
+    hal.driver_version = "200911";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1201,22 +1195,22 @@ bool driver_init (void)
     hal.stream.cancel_read_buffer = serialRxCancel;
     hal.stream.suspend_read = serialSuspendInput;
 
-    hal.eeprom.type = EEPROM_Physical;
-    hal.eeprom.get_byte = eepromGetByte;
-    hal.eeprom.put_byte = eepromPutByte;
-    hal.eeprom.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
-    hal.eeprom.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
+    hal.nvs.type = NVS_EEPROM;
+    hal.nvs.get_byte = eepromGetByte;
+    hal.nvs.put_byte = eepromPutByte;
+    hal.nvs.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
+    hal.nvs.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
 
 #ifdef DRIVER_SETTINGS
 
   #if !TRINAMIC_ENABLE
-    assert(EEPROM_ADDR_TOOL_TABLE - (sizeof(driver_settings_t) + 2) > EEPROM_ADDR_GLOBAL + sizeof(settings_t) + 1);
-    hal.eeprom.driver_area.address = EEPROM_ADDR_TOOL_TABLE - (sizeof(driver_settings_t) + 2);
+    assert(NVS_ADDR_TOOL_TABLE - (sizeof(driver_settings_t) + 2) > NVS_ADDR_GLOBAL + sizeof(settings_t) + 1);
+    hal.nvs.driver_area.address = NVS_ADDR_TOOL_TABLE - (sizeof(driver_settings_t) + 2);
   #else
-    hal.eeprom.driver_area.address = 1024;
-    hal.eeprom.size = GRBL_EEPROM_SIZE + sizeof(driver_settings_t) + 1;
+    hal.nvs.driver_area.address = GRBL_NVS_SIZE;
+    hal.nvs.size = GRBL_NVS_SIZE + sizeof(driver_settings_t) + 1;
   #endif
-    hal.eeprom.driver_area.size = sizeof(driver_settings_t);
+    hal.nvs.driver_area.size = sizeof(driver_settings_t);
     hal.driver_setting = driver_setting;
     hal.driver_settings_report = driver_settings_report;
     hal.driver_settings_restore = driver_settings_restore;

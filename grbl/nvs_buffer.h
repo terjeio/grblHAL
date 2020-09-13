@@ -1,5 +1,5 @@
 /*
-  eeprom_emulate.h - EEPROM emulation methods
+  nvs_buffer.h - RAM based non-volatile storage buffer/emulation
 
   Part of GrblHAL
 
@@ -20,8 +20,8 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef _EEPROM_EMULATE_H_
-#define _EEPROM_EMULATE_H_
+#ifndef _NVS_BUFFER_H_
+#define _NVS_BUFFER_H_
 
 typedef struct {
     bool is_dirty;
@@ -37,7 +37,8 @@ typedef struct {
 
 extern settings_dirty_t settings_dirty;
 
-bool eeprom_emu_init();
-void eeprom_emu_sync_physical ();
+bool nvs_buffer_init (void);
+void nvs_buffer_sync_physical (void);
+nvs_io_t *nvs_buffer_get_physical (void);
 
 #endif

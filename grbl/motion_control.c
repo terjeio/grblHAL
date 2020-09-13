@@ -837,8 +837,7 @@ status_code_t mc_homing_cycle (axes_signals_t cycle)
         // -------------------------------------------------------------------------------------
 
         // Sync gcode parser and planner positions to homed position.
-        gc_sync_position();
-        plan_sync_position();
+        sync_position();
     }
 
     sys.report.homed = On;
@@ -858,9 +857,7 @@ gc_probe_t mc_probe_cycle (float *target, plan_line_data_t *pl_data, gc_parser_f
         return GCProbe_CheckMode;
 
     // Finish all queued commands and empty planner buffer before starting probe cycle.
-    protocol_buffer_synchronize();
-
-    if (sys.abort)
+    if (!protocol_buffer_synchronize())
         return GCProbe_Abort; // Return if system reset has been issued.
 
     // Initialize probing control variables
@@ -915,8 +912,8 @@ gc_probe_t mc_probe_cycle (float *target, plan_line_data_t *pl_data, gc_parser_f
     if(settings.status_report.probe_coordinates)
         report_probe_parameters();
 
-    if(hal.on_probe_completed)
-        hal.on_probe_completed();
+    if(grbl.on_probe_completed)
+        grbl.on_probe_completed();
 
     // Successful probe cycle or Failed to trigger probe within travel. With or without error.
     return sys.flags.probe_succeeded ? GCProbe_Found : GCProbe_FailEnd;

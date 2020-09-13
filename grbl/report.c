@@ -33,6 +33,7 @@
 
 #include "hal.h"
 #include "report.h"
+#include "nvs_buffer.h"
 
 #ifdef ENABLE_SPINDLE_LINEARIZATION
 #include <stdio.h>
@@ -73,6 +74,11 @@ static char *(*get_rate_value)(float value);
 static uint8_t override_counter = 0; // Tracks when to add override data to status reports.
 static uint8_t wco_counter = 0;      // Tracks when to add work coordinate offset data to status reports.
 alarm_code_t current_alarm = Alarm_None;
+
+static const report_t report_fns = {
+    .status_message = report_status_message,
+    .feedback_message = report_feedback_message
+};
 
 // Append a number of strings to the static buffer
 // NOTE: do NOT use for several int/float conversions as these share the same underlying buffer!
@@ -212,6 +218,11 @@ void report_init (void)
     get_rate_value = settings.flags.report_inches ? get_rate_value_inch : get_rate_value_mm;
 }
 
+void report_init_fns (void)
+{
+    memcpy(&grbl.report, &report_fns, sizeof(report_t));
+}
+
 // Handles the primary confirmation protocol response for streaming interfaces and human-feedback.
 // For every incoming line, this method responds with an 'ok' for a successful command or an
 // 'error:'  to indicate some error event with the line or some critical system error during
@@ -321,8 +332,8 @@ message_code_t report_feedback_message (message_code_t message_code)
             break;
 
         default:
-            if(hal.driver_feedback_message)
-                hal.driver_feedback_message(hal.stream.write_all);
+            if(grbl.on_unknown_feedback_message)
+                grbl.on_unknown_feedback_message(hal.stream.write_all);
             break;
     }
 
@@ -615,7 +626,7 @@ void report_ngc_parameters (void)
     for (idx = 0; idx < SETTING_INDEX_NCOORD; idx++) {
 
         if (!(settings_read_coord_data(idx, &coord_data))) {
-            hal.report.status_message(Status_SettingReadFail);
+            grbl.report.status_message(Status_SettingReadFail);
             return;
         }
 
@@ -814,7 +825,7 @@ void report_execute_startup_message (char *line, status_code_t status_code)
     hal.stream.write(">");
     hal.stream.write(line);
     hal.stream.write(":");
-    hal.report.status_message(status_code);
+    grbl.report.status_message(status_code);
 }
 
 // Prints build info line
@@ -875,15 +886,15 @@ void report_build_info (char *line)
     if(hal.driver_cap.safety_door)
         *append++ = '+';
 
-  #ifdef DISABLE_RESTORE_EEPROM_WIPE_ALL // NOTE: Shown when disabled.
+  #ifdef DISABLE_RESTORE_NVS_WIPE_ALL // NOTE: Shown when disabled.
     *append++ = '*';
   #endif
 
-  #ifdef DISABLE_RESTORE_EEPROM_DEFAULT_SETTINGS // NOTE: Shown when disabled.
+  #ifdef DISABLE_RESTORE_NVS_DEFAULT_SETTINGS // NOTE: Shown when disabled.
     *append++ = '$';
   #endif
 
-  #ifdef DISABLE_RESTORE_EEPROM_CLEAR_PARAMETERS // NOTE: Shown when disabled.
+  #ifdef DISABLE_RESTORE_NVS_CLEAR_PARAMETERS // NOTE: Shown when disabled.
     *append++ = '#';
   #endif
 
@@ -916,7 +927,12 @@ void report_build_info (char *line)
 
 #if COMPATIBILITY_LEVEL == 0
 
+    nvs_io_t *nvs = nvs_buffer_get_physical();
+
     strcpy(buf, "[NEWOPT:");
+
+    if(!(nvs->type == NVS_None || nvs->type == NVS_Emulated))
+        strcat(buf, nvs->type == NVS_Flash ? "FLASH," : (nvs->type == NVS_FRAM ? "FRAM," : "EEPROM,"));
 
     if(hal.driver_cap.program_stop)
         strcat(buf, "OS,");
@@ -990,8 +1006,8 @@ void report_build_info (char *line)
         hal.stream.write("]"  ASCII_EOL);
     }
 
-    if(hal.report_options)
-        hal.report_options();
+    if(grbl.on_report_options)
+        grbl.on_report_options();
 #endif
 
 }
@@ -1158,8 +1174,6 @@ void report_realtime_status (void)
                     *append++ = 'B';
                 if (hal.driver_cap.program_stop ? ctrl_pin_state.stop_disable : sys.flags.optional_stop_disable)
                     *append++ = 'T';
-                if(ctrl_pin_state.arc_ok)
-                    *append++ = 'Q';
             }
             *append = '\0';
             hal.stream.write_all(buf);
@@ -1260,8 +1274,8 @@ void report_realtime_status (void)
             hal.stream.write_all(appendbuf(2, "|TLR:", uitoa(sys.tlo_reference_set)));
     }
 
-    if(hal.driver_rt_report)
-        hal.driver_rt_report(hal.stream.write_all, sys.report);
+    if(grbl.on_realtime_report)
+        grbl.on_realtime_report(hal.stream.write_all, sys.report);
 
     hal.stream.write_all(">" ASCII_EOL);
 
@@ -1318,8 +1332,8 @@ void report_pid_log (void)
     } while(idx != sys.pid_log.idx);
 
     hal.stream.write("]" ASCII_EOL);
-    hal.report.status_message(Status_OK);
+    grbl.report.status_message(Status_OK);
 #else
-    hal.report.status_message(Status_GcodeUnsupportedCommand);
+    grbl.report.status_message(Status_GcodeUnsupportedCommand);
 #endif
 }
