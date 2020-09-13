@@ -10,7 +10,7 @@ __NOTE:__ Arduino drivers has now been converted to Arduino libraries, [installa
 
 ---
 
-Latest build date is 20200911, see the [changelog](changelog.md) for details.
+Latest build date is 20200911, see the [changelog](changelog) for details.
 
 ---
 
@@ -24,7 +24,7 @@ HAL = Hardware Abstraction Layer
 
 The controller is written in highly optimized C utilizing features of the supported processors to achieve precise timing and asynchronous operation. It is able to maintain up to 300kHz<sup>1</sup> of stable, jitter free control pulses.
 
-It accepts standards-compliant g-code and has been tested with the output of several CAM tools with no problems. Arcs, circles and helical motion are fully supported, as well as, all other primary g-code commands. Macro functions, variables, and most canned cycles are not supported, but we think GUIs can do a much better job at translating them into straight g-code anyhow.
+It accepts standards-compliant g-code and has been tested with the output of several CAM tools with no problems. Arcs, circles and helical motion are fully supported, as well as, all other primary g-code commands. Macro functions, variables, and some canned cycles are not supported, but we think GUIs can do a much better job at translating them into straight g-code anyhow.
 
 Grbl includes full acceleration management with look ahead. That means the controller will look up to 16 motions into the future and plan its velocities ahead to deliver smooth acceleration and jerk-free cornering.
 
