@@ -291,8 +291,7 @@ static bool limits_homing_cycle (axes_signals_t cycle, axes_signals_t auto_squar
                 }
             }
 
-            if(grbl.on_execute_realtime)
-                grbl.on_execute_realtime(STATE_HOMING);
+            grbl.on_execute_realtime(STATE_HOMING);
 
         } while (axislock.mask & AXES_BITMASK);
 

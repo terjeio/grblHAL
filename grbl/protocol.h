@@ -40,6 +40,8 @@ bool protocol_main_loop(bool cold_start);
 // Checks and executes a realtime command at various stop points in main program
 bool protocol_execute_realtime();
 bool protocol_exec_rt_system();
+void protocol_execute_noop (uint_fast16_t state);
+bool protocol_enqueue_rt_command (on_execute_realtime_ptr fn);
 
 // Executes the auto cycle feature, if enabled.
 void protocol_auto_cycle_start();

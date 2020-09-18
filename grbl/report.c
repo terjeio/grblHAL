@@ -965,7 +965,7 @@ void report_build_info (char *line)
         strcat(buf, "LATHE,");
 
 #ifdef N_TOOLS
-    if(hal.tool_change)
+    if(hal.driver_cap.atc && hal.tool_change)
         strcat(buf, "ATC,");
     else
 #endif

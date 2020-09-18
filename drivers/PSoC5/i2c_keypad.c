@@ -5,7 +5,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2017-2019 Terje Io
+  Copyright (c) 2017-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -25,16 +25,16 @@
 
 #include "project.h"
 #include "i2c_keypad.h"
-#include "eeprom_emulate.h"
+#include "nvs_buffer.h"
 #include "override.h"
 #include "report.h"
 
 #define KEYBUF_SIZE 16
 
-#ifdef EEPROM_ADDR_TOOL_TABLE
-    #define EEPROM_SETTINGS EEPROM_ADDR_TOOL_TABLE
+#ifdef NVS_ADDR_TOOL_TABLE
+    #define EEPROM_SETTINGS NVS_ADDR_TOOL_TABLE
 #else
-    #define EEPROM_SETTINGS EEPROM_ADDR_PARAMETERS
+    #define EEPROM_SETTINGS NVS_ADDR_PARAMETERS
 #endif
 
 static bool jogging = false, keyreleased = true;
@@ -48,26 +48,26 @@ static void keyclick_int_handler (void);
 
 static void claim_eeprom (void)
 {
-    if(hal.eeprom.driver_area.size == 0) {
-        assert(EEPROM_SETTINGS - (sizeof(jog_settings_t) + 2) > EEPROM_ADDR_GLOBAL + sizeof(settings_t) + 1);
+    if(hal.nvs.driver_area.size == 0) {
+        assert(EEPROM_SETTINGS - (sizeof(jog_settings_t) + 2) > NVS_ADDR_GLOBAL + sizeof(settings_t) + 1);
 
-        hal.eeprom.driver_area.address = EEPROM_SETTINGS - (sizeof(jog_settings_t) + 2);
-        hal.eeprom.driver_area.size = sizeof(jog_settings_t);
+        hal.nvs.driver_area.address = EEPROM_SETTINGS - (sizeof(jog_settings_t) + 2);
+        hal.nvs.driver_area.size = sizeof(jog_settings_t);
     }
 }
 
 // Read selected coordinate data from persistent storage.
 bool keypad_read_settings (void)
 {
-    return hal.eeprom.type != EEPROM_None && hal.eeprom.memcpy_from_with_checksum((uint8_t *)&jog_config, hal.eeprom.driver_area.address, hal.eeprom.driver_area.size);
+    return hal.nvs.type != NVS_None && hal.nvs.memcpy_from_with_checksum((uint8_t *)&jog_config, hal.nvs.driver_area.address, hal.nvs.driver_area.size);
 }
 
 // Read jog configuration data from persistent storage.
 void keypad_write_settings (void)
 {
-    if (hal.eeprom.type != EEPROM_None) {
+    if (hal.nvs.type != NVS_None) {
         claim_eeprom();
-        hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&jog_config, hal.eeprom.driver_area.size);
+        hal.nvs.memcpy_to_with_checksum(hal.nvs.driver_area.address, (uint8_t *)&jog_config, hal.nvs.driver_area.size);
       #ifdef EMULATE_EEPROM
         if(hal.eeprom.type == EEPROM_Emulated)
             settings_dirty.driver_settings = settings_dirty.is_dirty = true;
@@ -319,7 +319,7 @@ void process_keypress (uint_fast16_t state) {
         }
 
         if(!(jogCommand && keyreleased)) { // key still pressed? - do not execute jog command if released!
-            addedGcode = hal.protocol_enqueue_gcode(command);
+            addedGcode = grbl.protocol_enqueue_gcode(command);
             jogging = jogging || (jogCommand && addedGcode);
         }
     }

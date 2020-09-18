@@ -140,6 +140,9 @@ typedef struct {
     uint_fast16_t (*clear_bits_atomic)(volatile uint_fast16_t *value, uint_fast16_t bits);
     uint_fast16_t (*set_value_atomic)(volatile uint_fast16_t *value, uint_fast16_t bits);
 
+    void (*irq_enable)(void);
+    void (*irq_disable)(void);
+
     void (*settings_changed)(settings_t *settings);
 
     // optional entry points, may be unassigned (null)
@@ -210,13 +213,15 @@ typedef struct {
     message_code_t (*feedback_message)(message_code_t message_code);
 } report_t;
 
+typedef void (*on_execute_realtime_ptr)(uint_fast16_t state);
+
 typedef struct {
     // report entry points set by core at reset
     report_t report;
     // grbl core events - may be subscribed to by drivers or by the core
     void (*on_state_change)(uint_fast16_t state);
     void (*on_probe_completed)(void);
-    void (*on_execute_realtime)(uint_fast16_t state);
+    on_execute_realtime_ptr on_execute_realtime;
     void (*on_unknown_accessory_override)(uint8_t cmd);
     void (*on_report_options)(void);
     void (*on_realtime_report)(stream_write_ptr stream_write, report_tracking_flags_t report);

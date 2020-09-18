@@ -34,6 +34,10 @@
 #include "sleep.h"
 #include "protocol.h"
 
+#ifndef RT_QUEUE_SIZE
+#define RT_QUEUE_SIZE 4 // must be a power of 2
+#endif
+
 // Define line flags. Includes comment type tracking and line overflow detection.
 typedef union {
     uint8_t value;
@@ -54,13 +58,22 @@ typedef struct {
     bool show;
 } user_message_t;
 
+typedef struct {
+    volatile uint_fast8_t head;
+    volatile uint_fast8_t tail;
+    on_execute_realtime_ptr fn[RT_QUEUE_SIZE];
+} realtime_queue_t;
+
 static uint_fast16_t char_counter = 0;
 static char line[LINE_BUFFER_SIZE]; // Line to be executed. Zero-terminated.
 static char xcommand[LINE_BUFFER_SIZE];
 static bool keep_rt_commands = false;
 static user_message_t user_message = {NULL, 0, 0, false};
 static const char *msg = "(MSG,";
-static void protocol_exec_rt_suspend();
+static realtime_queue_t realtime_queue = {0};
+
+static void protocol_exec_rt_suspend ();
+static void protocol_execute_rt_commands (void);
 
 // add gcode to execute not originating from normal input stream
 bool protocol_enqueue_gcode (char *gcode)
@@ -143,6 +156,7 @@ bool protocol_main_loop(bool cold_start)
 
     xcommand[0] = '\0';
     user_message.show = keep_rt_commands = false;
+    memset(&realtime_queue, 0, sizeof(realtime_queue_t));
 
     while(true) {
 
@@ -413,13 +427,11 @@ bool protocol_exec_rt_system ()
         report_alarm_message((alarm_code_t)rt_exec);
 
         if(sys_rt_exec_state & EXEC_RESET) {
-
             // Kill spindle and coolant.
             hal.spindle_set_state((spindle_state_t){0}, 0.0f);
             hal.coolant_set_state((coolant_state_t){0});
-
-            if(hal.driver_reset)
-                hal.driver_reset();
+            // Tell driver/plugins about reset.
+            hal.driver_reset();
         }
 
         // Halt everything upon a critical event flag. Currently hard and soft limits flag this.
@@ -438,8 +450,7 @@ bool protocol_exec_rt_system ()
                     report_realtime_status();
                 }
 
-                if(grbl.on_execute_realtime)
-                    grbl.on_execute_realtime(STATE_ESTOP);
+                grbl.on_execute_realtime(STATE_ESTOP);
             }
             system_clear_exec_alarm(); // Clear alarm
         }
@@ -453,7 +464,7 @@ bool protocol_exec_rt_system ()
             // Kill spindle and coolant.
             hal.spindle_set_state((spindle_state_t){0}, 0.0f);
             hal.coolant_set_state((coolant_state_t){0});
-
+            // Tell driver/plugins about reset.
             hal.driver_reset();
 
             sys.abort = !hal.system_control_get_state().e_stop;  // Only place this is set true.
@@ -479,7 +490,7 @@ bool protocol_exec_rt_system ()
             hal.spindle_set_state(gc_state.modal.spindle, 0.0f);
             hal.coolant_set_state(gc_state.modal.coolant);
             sys.report.spindle = sys.report.coolant = On; // Set to report change immediately
-
+            // Tell driver/plugins about reset.
             hal.driver_reset();
 
             if(hal.stream.suspend_read && hal.stream.suspend_read(false))
@@ -507,7 +518,10 @@ bool protocol_exec_rt_system ()
         if (rt_exec & EXEC_PID_REPORT)
             report_pid_log();
 
-        rt_exec &= ~(EXEC_STOP|EXEC_STATUS_REPORT|EXEC_GCODE_REPORT|EXEC_PID_REPORT|EXEC_TLO_REPORT); // clear requests already processed
+        if(rt_exec & EXEC_RT_COMMAND)
+            protocol_execute_rt_commands();
+
+        rt_exec &= ~(EXEC_STOP|EXEC_STATUS_REPORT|EXEC_GCODE_REPORT|EXEC_PID_REPORT|EXEC_TLO_REPORT|EXEC_RT_COMMAND); // clear requests already processed
 
         if(sys.flags.feed_hold_pending) {
             if(rt_exec & EXEC_CYCLE_START)
@@ -521,8 +535,7 @@ bool protocol_exec_rt_system ()
             update_state(rt_exec);
     }
 
-    if(grbl.on_execute_realtime)
-        grbl.on_execute_realtime(sys.state);
+    grbl.on_execute_realtime(sys.state);
 
     if(!sys.flags.delay_overrides) {
 
@@ -659,8 +672,7 @@ bool protocol_exec_rt_system ()
 // The system will enter this loop, create local variables for suspend tasks, and return to
 // whatever function that invoked the suspend, such that Grbl resumes normal operation.
 // This function is written in a way to promote custom parking motions. Simply use this as a
-// template
-
+// template.
 static void protocol_exec_rt_suspend ()
 {
     while (sys.suspend) {
@@ -857,3 +869,39 @@ ISR_CODE bool protocol_enqueue_realtime_command (char c)
 
     return drop;
 }
+
+// Enqueue a function to be called once by the
+// foreground process, typically enqueued from an interrupt handler.
+ISR_CODE bool protocol_enqueue_rt_command (on_execute_realtime_ptr fn)
+{
+    bool ok;
+    uint_fast8_t bptr = (realtime_queue.head + 1) & (RT_QUEUE_SIZE - 1);    // Get next head pointer
+
+    if((ok = bptr != realtime_queue.tail)) {          // If not buffer full
+        realtime_queue.fn[realtime_queue.head] = fn;  // add function pointer to buffer,
+        realtime_queue.head = bptr;                   // update pointer and
+        system_set_exec_state_flag(EXEC_RT_COMMAND);  // flag it for execute
+    }
+
+    return ok;
+}
+
+// Execute enqueued functions.
+static void protocol_execute_rt_commands (void)
+{
+    while(realtime_queue.tail != realtime_queue.head) {
+        uint_fast8_t bptr = realtime_queue.tail;
+        on_execute_realtime_ptr call;
+        if((call = realtime_queue.fn[bptr])) {
+            realtime_queue.fn[bptr] = NULL;
+            call(sys.state);
+        }
+        realtime_queue.tail = (bptr + 1) & (RT_QUEUE_SIZE - 1);
+    }
+}
+
+void protocol_execute_noop (uint_fast16_t state)
+{
+    (void)state;
+}
+

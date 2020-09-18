@@ -1354,8 +1354,8 @@ static bool driver_setup (settings_t *settings)
      ********************************************************/
      
 #ifdef DRIVER_SETTINGS
-    if(hal.eeprom.type != EEPROM_None) {
-        if(!hal.eeprom.memcpy_from_with_checksum((uint8_t *)&driver_settings, hal.eeprom.driver_area.address, sizeof(driver_settings)))
+    if(hal.nvs.type != NVS_None) {
+        if(!hal.nvs.memcpy_from_with_checksum((uint8_t *)&driver_settings, hal.nvs.driver_area.address, sizeof(driver_settings)))
             hal.driver_settings_restore();
         #if TRINAMIC_ENABLE && CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
           driver_settings.trinamic.driver_enable.mask = AXES_BITMASK;
@@ -1527,7 +1527,7 @@ static status_code_t driver_setting (uint_fast16_t param, float value, char *sva
 #endif
 
     if(status == Status_OK)
-        hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
+        hal.nvs.memcpy_to_with_checksum(hal.nvs.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
 
     return status;
 }
@@ -1571,7 +1571,7 @@ static void driver_settings_restore (void)
         trinamic_settings_restore();
 #endif
 
-    hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
+    hal.nvs.memcpy_to_with_checksum(hal.nvs.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
 }
 
 #endif
@@ -1649,26 +1649,30 @@ bool driver_init (void)
     selectStream(StreamType_Serial);
 
 #if EEPROM_ENABLE
-    hal.eeprom.type = EEPROM_Physical;
-    hal.eeprom.get_byte = eepromGetByte;
-    hal.eeprom.put_byte = eepromPutByte;
-    hal.eeprom.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
-    hal.eeprom.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
+  #if EEPROM_IS_FRAM
+    hal.nvs.type = NVS_FRAM;
+  #else
+    hal.nvs.type = NVS_EEPROM;
+  #endif
+    hal.nvs.get_byte = eepromGetByte;
+    hal.nvs.put_byte = eepromPutByte;
+    hal.nvs.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
+    hal.nvs.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
 #else
     if(nvsInit()) {
-        hal.eeprom.type = EEPROM_Emulated;
-        hal.eeprom.memcpy_from_flash = nvsRead;
-        hal.eeprom.memcpy_to_flash = nvsWrite;
+        hal.nvs.type = NVS_Flash;
+        hal.nvs.memcpy_from_flash = nvsRead;
+        hal.nvs.memcpy_to_flash = nvsWrite;
     } else
-        hal.eeprom.type = EEPROM_None;
+        hal.nvs.type = NVS_None;
 #endif
 
 #ifdef DRIVER_SETTINGS
 
-    if(hal.eeprom.type != EEPROM_None) {
-        hal.eeprom.driver_area.address = GRBL_EEPROM_SIZE;
-        hal.eeprom.driver_area.size = sizeof(driver_settings); // Add assert?
-        hal.eeprom.size = GRBL_EEPROM_SIZE + sizeof(driver_settings) + 1;
+    if(hal.nvs.type != NVS_None) {
+        hal.nvs.driver_area.address = GRBL_NVS_SIZE;
+        hal.nvs.driver_area.size = sizeof(driver_settings); // Add assert?
+        hal.nvs.size = GRBL_NVS_SIZE + sizeof(driver_settings) + 1;
 
         hal.driver_setting = driver_setting;
         hal.driver_settings_restore = driver_settings_restore;

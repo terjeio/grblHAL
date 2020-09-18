@@ -3,7 +3,7 @@
 
   Part of GrblHAL driver for MSP432P401R
 
-  Copyright (c) 2018-2019 Terje Io
+  Copyright (c) 2018-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -110,7 +110,7 @@ void i2c_init (void)
     NVIC_SetPriority(I2C_INT, 1);  // set priority
 }
 
-#if ATC_ENABLE
+#if ATC_ENABLE || KEYPAD_ENABLE
 
 static uint8_t *I2C_Receive (uint32_t i2cAddr, uint32_t bytes, bool block)
 {

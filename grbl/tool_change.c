@@ -39,15 +39,16 @@
 
 static bool block_cycle_start;
 static volatile bool execute_posted = false;
+static volatile uint32_t spin_lock = 0;
 static tool_data_t current_tool = {0}, *next_tool = NULL;
 static driver_reset_ptr driver_reset = NULL;
 static plane_t plane;
 static bool (*enqueue_realtime_command)(char data) = NULL;
-static void (*execute_realtime)(uint_fast16_t state) = NULL;
-void (*control_interrupt_callback)(control_signals_t signals) = NULL;
+static void (*control_interrupt_callback)(control_signals_t signals) = NULL;
 static coord_data_t target = {0}, previous;
 
-// Set tool offset on successful $TPW probe.
+// Set tool offset on successful $TPW probe, prompt for retry on failure.
+// Called via probe completed event.
 static void on_probe_completed (void)
 {
     if(!sys.flags.probe_succeeded)
@@ -61,24 +62,28 @@ static void on_probe_completed (void)
 static void change_completed (void)
 {
     if(enqueue_realtime_command) {
+        while(spin_lock);
+        hal.irq_disable();
         hal.stream.enqueue_realtime_command = enqueue_realtime_command;
         enqueue_realtime_command = NULL;
+        hal.irq_enable();
     }
 
     if(control_interrupt_callback) {
+        while(spin_lock);
+        hal.irq_disable();
         hal.control_interrupt_callback = control_interrupt_callback;
         control_interrupt_callback = NULL;
-    }
-
-    if(execute_realtime) {
-        grbl.on_execute_realtime = execute_realtime;
-        execute_realtime = NULL;
+        hal.irq_enable();
     }
 
     grbl.on_probe_completed = NULL;
     gc_state.tool_change = false;
 }
 
+
+// Reset claimed HAL entry points and restore previous tool if needed on soft restart.
+// Called from EXEC_RESET and EXEC_STOP handlers (via HAL).
 static void reset (void)
 {
 //    sys.tlo_reference_set = false; // For now...
@@ -133,19 +138,17 @@ static bool restore (void)
     return !ABORTED;
 }
 
+// Issue warning on cycle start event if touch off by $TPW is pending.
+// Used in Manual and Manual_G59_3 modes ($341=1 or $341=2). Called from the foreground process.
 static void execute_warning (uint_fast16_t state)
 {
-    grbl.on_execute_realtime = execute_realtime;
-    execute_realtime = NULL;
-
     hal.stream.write("[MSG:Perform a probe with $TPW first!]" ASCII_EOL);
 }
 
+// Execute restore position after touch off (on cycle start event).
+// Used in Manual and Manual_G59_3 modes ($341=1 or $341=2). Called from the foreground process.
 static void execute_restore (uint_fast16_t state)
 {
-    grbl.on_execute_realtime = execute_realtime;
-    execute_realtime = NULL;
-
     // Get current position.
     system_convert_array_steps_to_mpos(target.values, sys_position);
 
@@ -157,15 +160,14 @@ static void execute_restore (uint_fast16_t state)
         system_set_exec_state_flag(EXEC_CYCLE_START);
 }
 
+// Execute touch off on cycle start event from @ G59.3 position.
+// Used in SemiAutomatic mode ($341=3) only. Called from the foreground process.
 static void execute_probe (uint_fast16_t state)
 {
     bool ok;
     coord_data_t offset;
     plan_line_data_t plan_data = {0};
     gc_parser_flags_t flags = {0};
-
-    grbl.on_execute_realtime = execute_realtime;
-    execute_realtime = NULL;
 
     // G59.3 contains offsets to position of TLS.
     settings_read_coord_data(SETTING_INDEX_G59_3, &offset.values);
@@ -217,48 +219,47 @@ static void execute_probe (uint_fast16_t state)
 }
 
 // Trap cycle start commands and redirect to foreground process
-// by temporarily claiming the HAL execute_realtime entry point
-// in order to execute probing and spindle/coolant change.
-// TODO: move to state machine with own EXEC_ bit?
+// by adding the function to be called to the realtime execution queue.
 ISR_CODE static void trap_control_cycle_start (control_signals_t signals)
 {
+    spin_lock++;
+
     if(signals.cycle_start) {
-        if(execute_realtime == NULL && !execute_posted) {
-            if(!block_cycle_start) {
-                execute_posted = true;
-                execute_realtime = grbl.on_execute_realtime;
-                grbl.on_execute_realtime = settings.tool_change.mode == ToolChange_SemiAutomatic ? execute_probe : execute_restore;
-            } else {
-                execute_realtime = grbl.on_execute_realtime;
-                grbl.on_execute_realtime = execute_warning;
-            }
+        if(!execute_posted) {
+            if(!block_cycle_start)
+                execute_posted = protocol_enqueue_rt_command(settings.tool_change.mode == ToolChange_SemiAutomatic ? execute_probe : execute_restore);
+            else
+                protocol_enqueue_rt_command(execute_warning);
         }
         signals.cycle_start = Off;
     } else
         control_interrupt_callback(signals);
+
+    spin_lock--;
 }
 
 ISR_CODE static bool trap_stream_cycle_start (char c)
 {
     bool drop = false;
 
+    spin_lock++;
+
     if((drop = (c == CMD_CYCLE_START || c == CMD_CYCLE_START_LEGACY))) {
-        if(execute_realtime == NULL && !execute_posted) {
-            if(!block_cycle_start) {
-                execute_posted = true;
-                execute_realtime = grbl.on_execute_realtime;
-                grbl.on_execute_realtime = settings.tool_change.mode == ToolChange_SemiAutomatic ? execute_probe : execute_restore;
-            } else {
-                execute_realtime = grbl.on_execute_realtime;
-                grbl.on_execute_realtime = execute_warning;
-            }
+        if(!execute_posted) {
+            if(!block_cycle_start)
+                execute_posted = protocol_enqueue_rt_command(settings.tool_change.mode == ToolChange_SemiAutomatic ? execute_probe : execute_restore);
+            else
+                protocol_enqueue_rt_command(execute_warning);
         }
     } else
         drop = enqueue_realtime_command(c);
 
+    spin_lock--;
+
     return drop;
 }
 
+// Set next and/or current tool. Called by gcode.c on on a Tn or M61 command (via HAL).
 static void tool_select (tool_data_t *tool, bool next)
 {
     next_tool = tool;
@@ -266,6 +267,7 @@ static void tool_select (tool_data_t *tool, bool next)
         memcpy(&current_tool, tool, sizeof(tool_data_t));
 }
 
+// Start a tool change sequence. Called by gcode.c on a M6 command (via HAL).
 static status_code_t tool_change (parser_state_t *parser_state)
 {
     if(next_tool == NULL)
@@ -385,7 +387,7 @@ void tc_init (void)
 
 // Perform a probe cycle: set tool length offset and restart job if successful.
 // Note: tool length offset is set by the on_probe_completed event handler.
-// Used by the $TPW system command.
+// Called by the $TPW system command.
 status_code_t tc_probe_workpiece (void)
 {
     if(!(settings.tool_change.mode == ToolChange_Manual || settings.tool_change.mode == ToolChange_Manual_G59_3) || enqueue_realtime_command == NULL)

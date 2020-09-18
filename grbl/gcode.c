@@ -36,7 +36,7 @@
 #ifdef N_TOOLS
 #define MAX_TOOL_NUMBER N_TOOLS // Limited by max unsigned 8-bit value
 #else
-#define MAX_TOOL_NUMBER 4294967295 // Limited by max unsigned 32-bit value
+#define MAX_TOOL_NUMBER 4294967294 // Limited by max unsigned 32-bit value - 1
 #endif
 
 #define MACH3_SCALING
@@ -55,7 +55,7 @@ typedef enum {
 } axis_command_t;
 
 // Declare gc extern struct
-parser_state_t gc_state;
+parser_state_t gc_state, *saved_state = NULL;
 #ifdef N_TOOLS
 tool_data_t tool_table[N_TOOLS + 1];
 #else
@@ -336,8 +336,8 @@ status_code_t gc_execute_block(char *block, char *message)
     plane_t plane;
 
     // Initialize bitflag tracking variables for axis indices compatible operations.
-    uint8_t axis_words = 0; // XYZ tracking
-    uint8_t ijk_words = 0; // IJK tracking
+    uint_fast8_t axis_words = 0; // XYZ tracking
+    uint_fast8_t ijk_words = 0; // IJK tracking
 
     // Initialize command and value words and parser flags variables.
     uint32_t command_words = 0; // Bitfield for tracking G and M command words. Also used for modal group violations.
@@ -690,7 +690,30 @@ status_code_t gc_execute_block(char *block, char *message)
                         word_bit.group = ModalGroup_M10;
                         port_command = int_value;
                         break;
+/*
+                    case 70:
+                        if(!saved_state)
+                            saved_state = malloc(sizeof(parser_state_t));
+                        if(!saved_state)
+                            FAIL(Status_GcodeUnsupportedCommand); // [Unsupported M command]
+                        memcpy(saved_state, &gc_state, sizeof(parser_state_t));
+                        return Status_OK;
 
+                    case 71: // Invalidate saved state
+                        if(saved_state) {
+                            free(saved_state);
+                            saved_state = NULL;
+                        }
+                        return Status_OK; // Should fail if no state is saved...
+
+                    case 72:
+                        if(saved_state) {
+                            // TODO: restore state, need to split out execution part of parser to separate functions first?
+                            free(saved_state);
+                            saved_state = NULL;
+                        }
+                        return Status_OK;
+*/
                     default:
                         if(hal.user_mcode_check && (gc_block.user_mcode = hal.user_mcode_check((user_mcode_t)int_value)))
                             word_bit.group = ModalGroup_M10;
@@ -1021,7 +1044,7 @@ status_code_t gc_execute_block(char *block, char *message)
             FAIL(Status_GcodeValueWordMissing);
         if (floorf(gc_block.values.q) - gc_block.values.q != 0.0f)
             FAIL(Status_GcodeCommandValueNotInteger);
-        if ((int32_t)gc_block.values.q < 1 || (int32_t)gc_block.values.q > MAX_TOOL_NUMBER)
+        if ((uint32_t)gc_block.values.q < 1 || (uint32_t)gc_block.values.q > MAX_TOOL_NUMBER)
             FAIL(Status_GcodeIllegalToolTableEntry);
 
         gc_block.values.t = (uint32_t)gc_block.values.q;

@@ -109,12 +109,16 @@ int grbl_enter (void)
 
     // Clear and set core function pointers
     memset(&grbl, 0, sizeof(grbl_t));
+
+    grbl.on_execute_realtime = protocol_execute_noop;
     grbl.protocol_enqueue_gcode = protocol_enqueue_gcode;
 
     // Clear and set HAL function pointers
     memset(&hal, 0, sizeof(grbl_hal_t));
     hal.version = HAL_VERSION; // Update when signatures and/or contract is changed - driver_init() should fail
     hal.driver_reset = dummy_handler;
+    hal.irq_enable = dummy_handler;
+    hal.irq_disable = dummy_handler;
     hal.stream.enqueue_realtime_command = protocol_enqueue_realtime_command;
     hal.limit_interrupt_callback = limit_interrupt_handler;
     hal.control_interrupt_callback = control_interrupt_handler;

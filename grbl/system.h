@@ -44,6 +44,7 @@
 #define EXEC_PID_REPORT     bit(10)
 #define EXEC_GCODE_REPORT   bit(11)
 #define EXEC_TLO_REPORT     bit(12)
+#define EXEC_RT_COMMAND     bit(13)
 
 // Define system state bit map. The state variable primarily tracks the individual functions
 // of Grbl to manage each without overlapping. It is also used as a messaging flag for

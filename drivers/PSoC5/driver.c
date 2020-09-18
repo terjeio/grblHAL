@@ -418,7 +418,7 @@ bool driver_init (void)
     EEPROM_Start();
 
     hal.info = "PSoC 5";
-    hal.driver_version = "200818";
+    hal.driver_version = "200911";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = 24000000UL;
     hal.rx_buffer_size = RX_BUFFER_SIZE;
@@ -459,11 +459,11 @@ bool driver_init (void)
     hal.stream.cancel_read_buffer = serialRxCancel;
     hal.stream.suspend_read = serialSuspendInput;
 
-    hal.eeprom.type = EEPROM_Physical;
-    hal.eeprom.get_byte = (uint8_t (*)(uint32_t))&EEPROM_ReadByte;
-    hal.eeprom.put_byte = eepromPutByte;
-    hal.eeprom.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
-    hal.eeprom.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
+    hal.nvs.type = NVS_EEPROM;
+    hal.nvs.get_byte = (uint8_t (*)(uint32_t))&EEPROM_ReadByte;
+    hal.nvs.put_byte = eepromPutByte;
+    hal.nvs.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
+    hal.nvs.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
 
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
