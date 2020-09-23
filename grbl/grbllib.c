@@ -102,7 +102,7 @@ int grbl_enter (void)
 #else
     assert(NVS_ADDR_GLOBAL + sizeof(settings_t) + 1 < NVS_ADDR_PARAMETERS);
 #endif
-    assert(NVS_ADDR_PARAMETERS + SETTING_INDEX_NCOORD * (sizeof(coord_data_t) + 1) < NVS_ADDR_STARTUP_BLOCK);
+    assert(NVS_ADDR_PARAMETERS + N_CoordinateSystems * (sizeof(coord_data_t) + 1) < NVS_ADDR_STARTUP_BLOCK);
     assert(NVS_ADDR_STARTUP_BLOCK + N_STARTUP_LINE * (MAX_STORED_LINE_LENGTH + 1) < NVS_ADDR_BUILD_INFO);
 
     bool looping = true, driver_ok;

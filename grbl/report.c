@@ -102,9 +102,9 @@ static char *appendbuf (int argc, ...)
     return buf;
 }
 
-static char *map_coord_system (uint8_t idx)
+static char *map_coord_system (coord_system_id_t id)
 {
-    uint8_t g5x = idx + 54;
+    uint8_t g5x = id + 54;
 
     strcpy(buf, uitoa((uint32_t)(g5x > 59 ? 59 : g5x)));
     if(g5x > 59) {
@@ -268,7 +268,6 @@ message_code_t report_feedback_message (message_code_t message_code)
     switch(message_code) {
 
         case Message_None:
-            hal.stream.write_all("");
             break;
 
         case Message_CriticalEvent:
@@ -599,6 +598,17 @@ void report_probe_parameters (void)
     hal.stream.write("]" ASCII_EOL);
 }
 
+// Prints current home position in terms of machine position.
+// Bitmask for homed axes attached.
+void report_home_position (void)
+{
+    hal.stream.write("[HOME:");
+    hal.stream.write(get_axis_values(sys.home_position));
+    hal.stream.write(":");
+    hal.stream.write(uitoa(sys.homed.mask));
+    hal.stream.write("]" ASCII_EOL);
+}
+
 // Prints current tool offsets.
 void report_tool_offsets (void)
 {
@@ -623,9 +633,9 @@ void report_ngc_parameters (void)
         hal.stream.write("]" ASCII_EOL);
     }
 
-    for (idx = 0; idx < SETTING_INDEX_NCOORD; idx++) {
+    for (idx = 0; idx < N_CoordinateSystems; idx++) {
 
-        if (!(settings_read_coord_data(idx, &coord_data))) {
+        if (!(settings_read_coord_data((coord_system_id_t)idx, &coord_data))) {
             grbl.report.status_message(Status_SettingReadFail);
             return;
         }
@@ -634,16 +644,16 @@ void report_ngc_parameters (void)
 
         switch (idx) {
 
-            case SETTING_INDEX_G28:
+            case CoordinateSystem_G28:
                 hal.stream.write("28");
                 break;
 
-            case SETTING_INDEX_G30:
+            case CoordinateSystem_G30:
                 hal.stream.write("30");
                 break;
 
             default: // G54-G59
-                hal.stream.write(map_coord_system(idx));
+                hal.stream.write(map_coord_system((coord_system_id_t)idx));
                 break;
         }
         hal.stream.write(":");
@@ -668,13 +678,18 @@ void report_ngc_parameters (void)
     }
 #endif
 
+#if COMPATIBILITY_LEVEL < 10
+    if(settings.homing.flags.enabled)
+        report_home_position();
+#endif
+
     report_tool_offsets();      // Print tool length offset value.
     report_probe_parameters();  // Print probe parameters. Not persistent in memory.
-    if(sys.tlo_reference_set) { // Print tool length reference offset. Not persistent in memory.
+    if(sys.tlo_reference_set.mask) { // Print tool length reference offset. Not persistent in memory.
         plane_t plane;
         gc_get_plane_data(&plane, gc_state.modal.plane_select);
         hal.stream.write("[TLR:");
-        hal.stream.write(get_axis_value(sys.tlo_reference / settings.axis[plane.axis_linear].steps_per_mm));
+        hal.stream.write(get_axis_value(sys.tlo_reference[plane.axis_linear] / settings.axis[plane.axis_linear].steps_per_mm));
         hal.stream.write("]" ASCII_EOL);
     }
 }
@@ -703,7 +718,7 @@ void report_gcode_modes (void)
         hal.stream.write(uitoa((uint32_t)gc_state.modal.motion));
 
     hal.stream.write(" G");
-    hal.stream.write(map_coord_system(gc_state.modal.coord_system.idx));
+    hal.stream.write(map_coord_system(gc_state.modal.coord_system.id));
 
 #if COMPATIBILITY_LEVEL < 10
 
@@ -1215,7 +1230,7 @@ void report_realtime_status (void)
 
         if(sys.report.gwco) {
             hal.stream.write_all("|WCS:G");
-            hal.stream.write_all(map_coord_system(gc_state.modal.coord_system.idx));
+            hal.stream.write_all(map_coord_system(gc_state.modal.coord_system.id));
         }
 
         if(sys.report.overrides) {
@@ -1271,7 +1286,7 @@ void report_realtime_status (void)
             hal.stream.write_all(appendbuf(2, "|T:", uitoa(gc_state.tool->tool)));
 
         if(sys.report.tlo_reference)
-            hal.stream.write_all(appendbuf(2, "|TLR:", uitoa(sys.tlo_reference_set)));
+            hal.stream.write_all(appendbuf(2, "|TLR:", uitoa(sys.tlo_reference_set.mask != 0)));
     }
 
     if(grbl.on_realtime_report)

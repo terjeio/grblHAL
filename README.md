@@ -10,7 +10,7 @@ __NOTE:__ Arduino drivers has now been converted to Arduino libraries, [installa
 
 ---
 
-Latest build date is 20200911, see the [changelog](changelog.md) for details.
+Latest build date is 20200923, see the [changelog](changelog.md) for details.
 
 ---
 

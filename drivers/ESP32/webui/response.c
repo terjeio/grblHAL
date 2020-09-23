@@ -21,6 +21,10 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "driver.h"
+
+#if WEBUI_ENABLE
+
 #include <stdio.h>
 #include <string.h>
 #include <sys/unistd.h>
@@ -144,3 +148,5 @@ void webui_print_flush (void)
             httpd_resp_sendstr_chunk(http_request, NULL);
     }
 }
+
+#endif

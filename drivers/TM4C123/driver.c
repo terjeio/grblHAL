@@ -1147,7 +1147,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "TM4C123HP6PM";
-    hal.driver_version = "200911";
+    hal.driver_version = "200923";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1273,6 +1273,8 @@ bool driver_init (void)
 #if LASER_PPI
     hal.driver_cap.laser_ppi_mode = On;
 #endif
+
+    my_plugin_init();
 
     // No need to move version check before init.
     // Compiler will fail any signature mismatch for existing entries.

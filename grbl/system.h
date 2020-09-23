@@ -228,8 +228,8 @@ typedef struct {
     bool suspend;                       // System suspend state flag.
     volatile bool steppers_deenergize;  // Set to true to deenergize stepperes
     bool mpg_mode;                      // To be moved to system_flags_t
-    bool tlo_reference_set;             // True when tool length reference offset is established
-    int32_t tlo_reference;              // Tool length reference offset
+    axes_signals_t tlo_reference_set;   // Axes with tool length reference offset set
+    int32_t tlo_reference[N_AXIS];      // Tool length reference offset
     alarm_code_t alarm_pending;         // Delayed alarm, currently used for probe protection
     system_flags_t flags;               // Assorted state flags
     step_control_t step_control;        // Governs the step segment generator depending on system state.
@@ -240,6 +240,7 @@ typedef struct {
     report_tracking_flags_t report;     // Tracks when to add data to status reports.
     parking_state_t parking_state;      // Tracks parking state
     hold_state_t holding_state;         // Tracks holding state
+    float home_position[N_AXIS];        // Home position for homed axes
     float spindle_rpm;
     char *message;                      // Message to be displayed
 #ifdef PID_LOG

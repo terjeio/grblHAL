@@ -278,6 +278,9 @@ static void state_idle (uint_fast16_t rt_exec)
 
 static void state_cycle (uint_fast16_t rt_exec)
 {
+    if (rt_exec == EXEC_CYCLE_START)
+        return; // no need to perform other tests...
+
     if ((rt_exec & EXEC_TOOL_CHANGE))
         hal.stream.suspend_read(true); // Block reading from input stream until tool change state is acknowledged
 

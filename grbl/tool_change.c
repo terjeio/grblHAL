@@ -29,6 +29,7 @@
 #include "report.h"
 #include "tool_change.h"
 
+// NOTE: only used when settings.homing.flags.force_set_origin is true
 #ifndef LINEAR_AXIS_HOME_OFFSET
 #define LINEAR_AXIS_HOME_OFFSET -1.0f
 #endif
@@ -40,6 +41,7 @@
 static bool block_cycle_start;
 static volatile bool execute_posted = false;
 static volatile uint32_t spin_lock = 0;
+static float tool_change_position;
 static tool_data_t current_tool = {0}, *next_tool = NULL;
 static driver_reset_ptr driver_reset = NULL;
 static plane_t plane;
@@ -53,8 +55,8 @@ static void on_probe_completed (void)
 {
     if(!sys.flags.probe_succeeded)
         hal.stream.write("[MSG:Probe failed, try again.]" ASCII_EOL);
-    else if(sys.tlo_reference_set)
-        gc_set_tool_offset(ToolLengthOffset_EnableDynamic, plane.axis_linear, sys_probe_position[plane.axis_linear] - sys.tlo_reference);
+    else if(sys.tlo_reference_set.mask & bit(plane.axis_linear))
+        gc_set_tool_offset(ToolLengthOffset_EnableDynamic, plane.axis_linear, sys_probe_position[plane.axis_linear] - sys.tlo_reference[plane.axis_linear]);
 //    else error?
 }
 
@@ -86,8 +88,6 @@ static void change_completed (void)
 // Called from EXEC_RESET and EXEC_STOP handlers (via HAL).
 static void reset (void)
 {
-//    sys.tlo_reference_set = false; // For now...
-
     if(next_tool) { //TODO: move to gc_xxx() function?
         // Restore previous tool if reset is during change
 #ifdef N_TOOLS
@@ -112,11 +112,11 @@ static bool restore (void)
 
     plan_data.condition.rapid_motion = On;
 
-    target.values[plane.axis_linear] = LINEAR_AXIS_HOME_OFFSET;
+    target.values[plane.axis_linear] = tool_change_position;
     mc_line(target.values, &plan_data);
 
     memcpy(&target, &previous, sizeof(coord_data_t));
-    target.values[plane.axis_linear] = LINEAR_AXIS_HOME_OFFSET;
+    target.values[plane.axis_linear] = tool_change_position;
     mc_line(target.values, &plan_data);
 
     if(protocol_buffer_synchronize()) {
@@ -156,6 +156,8 @@ static void execute_restore (uint_fast16_t state)
 
     change_completed();
 
+    report_feedback_message(Message_None);
+
     if(ok)
         system_set_exec_state_flag(EXEC_CYCLE_START);
 }
@@ -170,7 +172,7 @@ static void execute_probe (uint_fast16_t state)
     gc_parser_flags_t flags = {0};
 
     // G59.3 contains offsets to position of TLS.
-    settings_read_coord_data(SETTING_INDEX_G59_3, &offset.values);
+    settings_read_coord_data(CoordinateSystem_G59_3, &offset.values);
 
     plan_data.condition.rapid_motion = On;
 
@@ -200,13 +202,14 @@ static void execute_probe (uint_fast16_t state)
         }
 
         if(ok) {
-            if(!sys.tlo_reference_set) {
-                sys.tlo_reference = sys_probe_position[plane.axis_linear];
-                sys.tlo_reference_set = true;
+            if(!(sys.tlo_reference_set.mask & bit(plane.axis_linear))) {
+                sys.tlo_reference[plane.axis_linear] = sys_probe_position[plane.axis_linear];
+                sys.tlo_reference_set.mask |= bit(plane.axis_linear);
                 sys.report.tlo_reference = On;
                 report_feedback_message(Message_ReferenceTLOEstablished);
             } else
-                gc_set_tool_offset(ToolLengthOffset_EnableDynamic, plane.axis_linear, sys_probe_position[plane.axis_linear] - sys.tlo_reference);
+                gc_set_tool_offset(ToolLengthOffset_EnableDynamic, plane.axis_linear,
+                                    sys_probe_position[plane.axis_linear] - sys.tlo_reference[plane.axis_linear]);
 
             ok = restore();
         }
@@ -289,7 +292,6 @@ static status_code_t tool_change (parser_state_t *parser_state)
     plane.axis_1 = Y_AXIS;
   #endif
 #else
-    // A plane change should invalidate current tool reference offset?
     gc_get_plane_data(&plane, parser_state->modal.plane_select);
 #endif
 
@@ -325,20 +327,27 @@ static status_code_t tool_change (parser_state_t *parser_state)
     plan_line_data_t plan_data = {0};
     plan_data.condition.rapid_motion = On;
 
+    // TODO: add?
+    //if(!settings.homing.flags.force_set_origin && bit_istrue(settings.homing.dir_mask.value, bit(plane.axis_linear)))
+    //    tool_change_position = ?
+    //else
+
+    tool_change_position = sys.home_position[plane.axis_linear] - settings.homing.flags.force_set_origin ? LINEAR_AXIS_HOME_OFFSET : 0.0f;
+
     // Rapid to home position of linear axis.
     memcpy(&target, &previous, sizeof(coord_data_t));
-    target.values[plane.axis_linear] = LINEAR_AXIS_HOME_OFFSET;
+    target.values[plane.axis_linear] = tool_change_position;
     if(!mc_line(target.values, &plan_data))
         return Status_Reset;
 
     if(settings.tool_change.mode == ToolChange_Manual_G59_3) {
 
         // G59.3 contains offsets to tool change position.
-        settings_read_coord_data(SETTING_INDEX_G59_3, &target.values);
+        settings_read_coord_data(CoordinateSystem_G59_3, &target.values);
 
         float tmp_pos = target.values[plane.axis_linear];
 
-        target.values[plane.axis_linear] = LINEAR_AXIS_HOME_OFFSET;
+        target.values[plane.axis_linear] = tool_change_position;
         if(!mc_line(target.values, &plan_data))
             return Status_Reset;
 
@@ -367,8 +376,8 @@ void tc_init (void)
     if(!hal.stream.suspend_read) // Tool change requires support for suspending input stream.
         return;
 
-    sys.report.tlo_reference = sys.tlo_reference_set;
-    sys.tlo_reference_set = false;
+    sys.report.tlo_reference = sys.tlo_reference_set.mask != 0;
+    sys.tlo_reference_set.mask = 0;
 
     gc_set_tool_offset(ToolLengthOffset_Cancel, 0, 0.0f);
 

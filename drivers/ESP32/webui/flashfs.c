@@ -19,6 +19,10 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "driver.h"
+
+#if WEBUI_ENABLE
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,8 +33,6 @@
 
 #include "flashfs.h"
 #include <esp_log.h>
-
-#if FLASHFS_ENABLE || true
 
 typedef struct
 {

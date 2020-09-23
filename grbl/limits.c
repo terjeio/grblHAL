@@ -99,14 +99,18 @@ void limits_set_machine_positions (axes_signals_t cycle, bool add_pulloff)
 
     if(settings.homing.flags.force_set_origin) {
         do {
-            if (cycle.mask & bit(--idx))
+            if (cycle.mask & bit(--idx)) {
                 sys_position[idx] = 0;
+                sys.home_position[idx] = 0.0f;
+            }
         } while(idx);
     } else do {
-        if (cycle.mask & bit(--idx))
-            sys_position[idx] = bit_istrue(settings.homing.dir_mask.value, bit(idx))
-                                 ? lroundf((settings.axis[idx].max_travel + pulloff) * settings.axis[idx].steps_per_mm)
-                                 : lroundf(-pulloff * settings.axis[idx].steps_per_mm);
+        if (cycle.mask & bit(--idx)) {
+            sys.home_position[idx] = bit_istrue(settings.homing.dir_mask.value, bit(idx))
+                                      ? settings.axis[idx].max_travel + pulloff
+                                      : - pulloff;
+            sys_position[idx] = sys.home_position[idx] * settings.axis[idx].steps_per_mm;
+        }
     } while(idx);
 }
 #endif

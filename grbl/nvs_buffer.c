@@ -82,9 +82,6 @@ static const emap_t target[] = {
     {PARAMETER_ADDR(9), NVS_GROUP_PARAMETERS, 9},
     {PARAMETER_ADDR(10), NVS_GROUP_PARAMETERS, 10},
     {PARAMETER_ADDR(11), NVS_GROUP_PARAMETERS, 11},
-#if N_COORDINATE_SYSTEM > 9
-#error Increase number of parameter entries!
-#endif
     {STARTLINE_ADDR(0), NVS_GROUP_STARTUP, 0},
     {STARTLINE_ADDR(1), NVS_GROUP_STARTUP, 1},
 #if N_STARTUP_LINE > 2
@@ -261,7 +258,7 @@ void nvs_buffer_sync_physical (void)
             }
         } while(idx);
 
-        idx = SETTING_INDEX_NCOORD;
+        idx = N_CoordinateSystems;
         if(settings_dirty.coord_data) do {
             if(bit_istrue(settings_dirty.coord_data, bit(idx))) {
                 bit_false(settings_dirty.coord_data, bit(idx));

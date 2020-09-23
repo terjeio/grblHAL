@@ -176,5 +176,6 @@ typedef struct {
 
 extern void i2c_init (void);
 extern void i2c_eeprom_transfer (i2c_eeprom_trans_t *i2c, bool read);
+extern void my_plugin_init (void)  __attribute__((weak));
 
 #endif

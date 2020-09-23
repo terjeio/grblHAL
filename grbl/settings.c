@@ -260,9 +260,9 @@ bool settings_read_startup_line (uint8_t idx, char *line)
 }
 
 // Write selected coordinate data to persistent storage.
-void settings_write_coord_data (uint8_t idx, float (*coord_data)[N_AXIS])
+void settings_write_coord_data (coord_system_id_t idx, float (*coord_data)[N_AXIS])
 {
-    assert(idx <= SETTING_INDEX_NCOORD);
+    assert(idx <= N_CoordinateSystems);
 
 #ifdef FORCE_BUFFER_SYNC_DURING_NVS_WRITE
     protocol_buffer_synchronize();
@@ -273,9 +273,9 @@ void settings_write_coord_data (uint8_t idx, float (*coord_data)[N_AXIS])
 }
 
 // Read selected coordinate data from persistent storage.
-bool settings_read_coord_data (uint8_t idx, float (*coord_data)[N_AXIS])
+bool settings_read_coord_data (coord_system_id_t idx, float (*coord_data)[N_AXIS])
 {
-    assert(idx <= SETTING_INDEX_NCOORD);
+    assert(idx <= N_CoordinateSystems);
 
     if (!(hal.nvs.type != NVS_None && hal.nvs.memcpy_from_with_checksum((uint8_t *)coord_data, NVS_ADDR_PARAMETERS + idx * (sizeof(coord_data_t) + 1), sizeof(coord_data_t)))) {
         // Reset with default zero vector
@@ -361,10 +361,10 @@ void settings_restore (settings_restore_t restore)
         float coord_data[N_AXIS];
 
         memset(coord_data, 0, sizeof(coord_data));
-        for (idx = 0; idx <= SETTING_INDEX_NCOORD; idx++)
-            settings_write_coord_data(idx, &coord_data);
+        for (idx = 0; idx <= N_WorkCoordinateSystems; idx++)
+            settings_write_coord_data((coord_system_id_t)idx, &coord_data);
 
-        settings_write_coord_data(SETTING_INDEX_G92, &coord_data); // Clear G92 offsets
+        settings_write_coord_data(CoordinateSystem_G92, &coord_data); // Clear G92 offsets
 
 #ifdef N_TOOLS
         tool_data_t tool_data;

@@ -98,6 +98,7 @@ static bool IOInitDone = false;
 // Inverts the probe pin state depending on user settings and probing cycle mode.
 static bool probe_invert;
 static uint16_t pulse_length;
+static volatile uint32_t elapsed_tics = 0;
 static axes_signals_t next_step_outbits;
 static spindle_data_t spindle_data;
 static spindle_encoder_t spindle_encoder = {0};
@@ -112,7 +113,7 @@ driver_settings_t driver_settings;
 static bool pwmEnabled = false;
 static spindle_pwm_t spindle_pwm;
 #ifdef SPINDLE_RPM_CONTROLLED
-static volatile uint32_t pid_count = 0, elapsed_tics = 0;
+static volatile uint32_t pid_count = 0;
 static spindle_control_t spindle_control = { .pid_state = PIDState_Disabled, .pid = {0}};
 #endif
 static void spindle_set_speed (uint_fast16_t pwm_value);
@@ -1493,7 +1494,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "MSP432";
-    hal.driver_version = "200911";
+    hal.driver_version = "200923";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1640,6 +1641,8 @@ bool driver_init (void)
 #if PLASMA_ENABLE
     plasma_init();
 #endif
+
+	my_plugin_init();
 
     // no need to move version check before init - compiler will fail any signature mismatch for existing entries
     return hal.version == 6;

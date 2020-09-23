@@ -751,8 +751,8 @@ status_code_t mc_homing_cycle (axes_signals_t cycle)
 {
     bool home_all = cycle.mask == 0;
 
-    sys.report.tlo_reference = sys.tlo_reference_set;
-    sys.tlo_reference_set = false;  // Invalidate tool length offset reference
+    sys.report.tlo_reference = sys.tlo_reference_set.mask != 0;
+    sys.tlo_reference_set.mask = 0;  // Invalidate tool length offset reference
 
     if(settings.homing.flags.manual && (home_all ? sys.homing.mask : (cycle.mask & sys.homing.mask)) == 0) {
 

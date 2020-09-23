@@ -21,6 +21,10 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "driver.h"
+
+#if WEBUI_ENABLE
+
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -35,7 +39,6 @@
 #include <esp_log.h>
 #include <esp_spiffs.h>
 
-#include "driver.h"
 #include "grbl/report.h"
 #include "wifi.h"
 #include "webui.h"
@@ -759,3 +762,4 @@ webui_auth_level_t get_auth_required (uint32_t command, char *args)
     return level;
 }
 
+#endif

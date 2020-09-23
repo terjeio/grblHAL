@@ -292,19 +292,25 @@ status_code_t system_execute_line (char *line)
 
         case 'T':
             if(line[2] == 'L' && line[3] == 'R') {
-                if((sys.tlo_reference_set = sys.flags.probe_succeeded)) {
 #ifdef TOOL_LENGTH_OFFSET_AXIS
-                    sys.tlo_reference = sys_probe_position[TOOL_LENGTH_OFFSET_AXIS]; // - gc_state.tool_length_offset[Z_AXIS]));
+                if(sys.flags.probe_succeeded) {
+                    sys.tlo_reference_set.mask = bit(TOOL_LENGTH_OFFSET_AXIS);
+                    sys.tlo_reference[TOOL_LENGTH_OFFSET_AXIS] = sys_probe_position[TOOL_LENGTH_OFFSET_AXIS]; // - gc_state.tool_length_offset[Z_AXIS]));
+                } else
+                    sys.tlo_reference_set.mask = 0;
 #else
-                    plane_t plane;
-                    gc_get_plane_data(&plane, gc_state.modal.plane_select);
-                    sys.tlo_reference = sys_probe_position[plane.axis_linear];
+                plane_t plane;
+                gc_get_plane_data(&plane, gc_state.modal.plane_select);
+                if(sys.flags.probe_succeeded) {
+                    sys.tlo_reference_set.mask |= bit(plane.axis_linear);
+                    sys.tlo_reference[plane.axis_linear] = sys_probe_position[plane.axis_linear];
 //                    - lroundf(gc_state.tool_length_offset[plane.axis_linear] * settings.axis[plane.axis_linear].steps_per_mm);
+                } else
+                    sys.tlo_reference_set.mask = 0;
 #endif
-                }
                 sys.report.tlo_reference = On;
                 retval = Status_OK;
-            } else if(sys.tlo_reference_set && line[2] == 'P' && line[3] == 'W')
+            } else if(sys.tlo_reference_set.mask && line[2] == 'P' && line[3] == 'W')
                 retval = tc_probe_workpiece();
             else
                 retval = Status_InvalidStatement;

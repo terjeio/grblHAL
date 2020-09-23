@@ -1791,7 +1791,7 @@ bool driver_init (void)
         options[strlen(options) - 1] = '\0';
 
     hal.info = "IMXRT1062";
-    hal.driver_version = "200909";
+    hal.driver_version = "200923";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1902,32 +1902,6 @@ bool driver_init (void)
     modbus_init(&modbus_stream);
 #endif
 
-#ifdef HAS_BOARD_INIT
-    board_init();
-#endif
-
-#if SPINDLE_HUANYANG
-    huanyang_init(&modbus_stream);
-#endif
-
-#if PLASMA_ENABLE
-    hal.stepper_output_step = stepperOutputStep;
-    plasma_init();
-#endif
-
-#if ODOMETER_ENABLE
-    odometer_init();
-#endif
-
-#ifdef DEBUGOUT
-    hal.debug_out = debugOut;
-#endif
-
-#ifdef UART_DEBUG
-    serialInit(115200);
-    uart_debug_write(ASCII_EOL "UART Debug:" ASCII_EOL);
-#endif
-
   // Driver capabilities, used for announcing and negotiating (with Grbl) driver functionality.
   // See driver_cap_t union i grbl/hal.h for available flags.
 
@@ -1969,6 +1943,34 @@ bool driver_init (void)
     hal.driver_cap.control_pull_up = On;
     hal.driver_cap.limits_pull_up = On;
     hal.driver_cap.probe_pull_up = On;
+
+#ifdef HAS_BOARD_INIT
+    board_init();
+#endif
+
+#if SPINDLE_HUANYANG
+    huanyang_init(&modbus_stream);
+#endif
+
+#if PLASMA_ENABLE
+    hal.stepper_output_step = stepperOutputStep;
+    plasma_init();
+#endif
+
+#if ODOMETER_ENABLE
+    odometer_init();
+#endif
+
+#ifdef DEBUGOUT
+    hal.debug_out = debugOut;
+#endif
+
+#ifdef UART_DEBUG
+    serialInit(115200);
+    uart_debug_write(ASCII_EOL "UART Debug:" ASCII_EOL);
+#endif
+
+    my_plugin_init();
 
     // No need to move version check before init.
     // Compiler will fail any signature mismatch for existing entries.

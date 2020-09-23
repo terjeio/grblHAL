@@ -1051,7 +1051,7 @@ bool driver_init (void) {
 #endif
 
     hal.info = "LCP1769";
-    hal.driver_version = "200911";
+    hal.driver_version = "200923";
     hal.driver_setup = driver_setup;
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
@@ -1152,6 +1152,8 @@ bool driver_init (void) {
 #if SDCARD_ENABLE
     hal.driver_cap.sd_card = On;
 #endif
+
+    my_plugin_init();
 
     // No need to move version check before init.
     // Compiler will fail any signature mismatch for existing entries.

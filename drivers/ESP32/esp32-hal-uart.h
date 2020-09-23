@@ -55,36 +55,36 @@ extern "C" {
 
 #define DEBUG_PRINT(string) uartWriteS(string)
 
-void uartInit (void);
-uint32_t uartAvailable (void);
-uint16_t uartRXFree (void);
-uint32_t uartAvailableForWrite (void);
-int16_t uartRead (void);
-bool uartSuspendInput (bool suspend);
+void serialInit (void);
+uint32_t serialAvailable (void);
+uint16_t serialRXFree (void);
+uint32_t serialAvailableForWrite (void);
+int16_t serialRead (void);
+bool serialSuspendInput (bool suspend);
 
-bool uartPutC (const char c);
-void uartWriteS (const char *data);
+bool serialPutC (const char c);
+void serialWriteS (const char *data);
 
-void uartFlush (void);
-void uartCancel (void);
+void serialFlush (void);
+void serialCancel (void);
 
 #if SERIAL2_ENABLE
 
-void uart2Init (uint32_t baud_rate);
-void uart2Stop (void);
-void uart2Start (void);
-uint16_t uart2txCount (void);
-uint16_t uart2Available (void);
-uint16_t uart2RXFree (void);
-int16_t uart2Read (void);
-bool uart2SuspendInput (bool suspend);
+void serial2Init (uint32_t baud_rate);
+void serial2Stop (void);
+void serial2Start (void);
+uint16_t serial2txCount (void);
+uint16_t serial2Available (void);
+uint16_t serial2RXFree (void);
+int16_t serial2Read (void);
+bool serial2SuspendInput (bool suspend);
 
-bool uart2PutC (const char c);
-void uart2Write (const char *s, uint16_t length);
+bool serial2PutC (const char c);
+void serial2Write (const char *s, uint16_t length);
 
-void uart2Flush (void);
-void uart2Cancel (void);
-void uart2Direction (bool tx);
+void serial2Flush (void);
+void serial2Cancel (void);
+void serial2Direction (bool tx);
 
 void serialSelect (bool mpg_mode);
 

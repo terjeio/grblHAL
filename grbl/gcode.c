@@ -234,11 +234,11 @@ void gc_init (bool cold_start)
     set_scaling(1.0f);
 
     // Load default G54 coordinate system.
-    if (!settings_read_coord_data(gc_state.modal.coord_system.idx, &gc_state.modal.coord_system.xyz))
+    if (!settings_read_coord_data(gc_state.modal.coord_system.id, &gc_state.modal.coord_system.xyz))
         grbl.report.status_message(Status_SettingReadFail);
 
 #if COMPATIBILITY_LEVEL <= 1
-    if (cold_start && !settings_read_coord_data(SETTING_INDEX_G92, &gc_state.g92_coord_offset))
+    if (cold_start && !settings_read_coord_data(CoordinateSystem_G92, &gc_state.g92_coord_offset))
         grbl.report.status_message(Status_SettingReadFail);
 #endif
 
@@ -544,13 +544,14 @@ status_code_t gc_execute_block(char *block, char *message)
 
                     case 54: case 55: case 56: case 57: case 58: case 59:
                         word_bit.group = ModalGroup_G12;
-                        gc_block.modal.coord_system.idx = int_value - 54; // Shift to array indexing.
-#if N_COORDINATE_SYSTEM > 6
-                        if(int_value == 59) {
-                            gc_block.modal.coord_system.idx += mantissa / 10;
-                            mantissa = 0;
+                        gc_block.modal.coord_system.id = (coord_system_id_t)(int_value - 54); // Shift to array indexing.
+                        if(int_value == 59 && mantissa > 0) {
+                            if(N_WorkCoordinateSystems == 9 && (mantissa == 10 || mantissa == 20 || mantissa == 30)) {
+                                gc_block.modal.coord_system.id += mantissa / 10;
+                                mantissa = 0;
+                            } else
+                                FAIL(Status_GcodeUnsupportedCommand); // [Unsupported G59.x command]
                         }
-#endif
                         break;
 
                     case 61:
@@ -1339,9 +1340,7 @@ status_code_t gc_execute_block(char *block, char *message)
     // delayed until no cycle is active.
 
     if (bit_istrue(command_words, bit(ModalGroup_G12))) { // Check if called in block
-        if (gc_block.modal.coord_system.idx > N_COORDINATE_SYSTEM)
-            FAIL(Status_GcodeUnsupportedCoordSys); // [Greater than N sys]
-        if (gc_state.modal.coord_system.idx != gc_block.modal.coord_system.idx && !settings_read_coord_data(gc_block.modal.coord_system.idx, &gc_block.modal.coord_system.xyz))
+        if (gc_state.modal.coord_system.id != gc_block.modal.coord_system.id && !settings_read_coord_data(gc_block.modal.coord_system.id, &gc_block.modal.coord_system.xyz))
             FAIL(Status_SettingReadFail);
     }
 
@@ -1359,8 +1358,8 @@ status_code_t gc_execute_block(char *block, char *message)
         case NonModal_SetCoordinateData:
 
             // [G10 Errors]: L missing and is not 2 or 20. P word missing. (Negative P value done.)
-            // [G10 L2 Errors]: R word NOT SUPPORTED. P value not 0 to N_COORDINATE_SYSTEM (max 9). Axis words missing.
-            // [G10 L20 Errors]: P must be 0 to N_COORDINATE_SYSTEM (max 9). Axis words missing.
+            // [G10 L2 Errors]: R word NOT SUPPORTED. P value not 0 to N_WorkCoordinateSystems (max 9). Axis words missing.
+            // [G10 L20 Errors]: P must be 0 to N_WorkCoordinateSystems (max 9). Axis words missing.
             // [G10 L1, L10, L11 Errors]: P must be 0 to MAX_TOOL_NUMBER (max 9). Axis words or R word missing.
 
             if (!(axis_words || (gc_block.values.l != 20 && bit_istrue(value_words, bit(Word_R)))))
@@ -1384,14 +1383,14 @@ status_code_t gc_execute_block(char *block, char *message)
                     // no break
 
                 case 20:
-                    if (p_value > N_COORDINATE_SYSTEM)
+                    if (p_value > N_WorkCoordinateSystems)
                         FAIL(Status_GcodeUnsupportedCoordSys); // [Greater than N sys]
                     // Determine coordinate system to change and try to load from non-volatile storage.
-                    gc_block.values.coord_data.idx = p_value == 0
-                                                      ? gc_block.modal.coord_system.idx // Index P0 as the active coordinate system
-                                                      : (p_value - 1);                  // else adjust index to NVS coordinate data indexing.
+                    gc_block.values.coord_data.id = p_value == 0
+                                                     ? gc_block.modal.coord_system.id      // Index P0 as the active coordinate system
+                                                     : (coord_system_id_t)(p_value - 1);    // else adjust index to NVS coordinate data indexing.
 
-                    if (!settings_read_coord_data(gc_block.values.coord_data.idx, &gc_block.values.coord_data.xyz))
+                    if (!settings_read_coord_data(gc_block.values.coord_data.id, &gc_block.values.coord_data.xyz))
                         FAIL(Status_SettingReadFail); // [non-volatile storage read fail]
 
                     // Pre-calculate the coordinate data changes.
@@ -1422,7 +1421,7 @@ status_code_t gc_execute_block(char *block, char *message)
                     }
 
                     float g59_3_offset[N_AXIS];
-                    if(gc_block.values.l == 11 && !settings_read_coord_data(SETTING_INDEX_G59_3, &g59_3_offset))
+                    if(gc_block.values.l == 11 && !settings_read_coord_data(CoordinateSystem_G59_3, &g59_3_offset))
                         FAIL(Status_SettingReadFail);
 
                     idx = N_AXIS;
@@ -1500,7 +1499,7 @@ status_code_t gc_execute_block(char *block, char *message)
                     // [G28/30 Errors]: Cutter compensation is enabled.
                     // Retreive G28/30 go-home position data (in machine coordinates) from non-volatile storage
 
-                    if (!settings_read_coord_data(gc_block.non_modal_command == NonModal_GoHome_0 ? SETTING_INDEX_G28 : SETTING_INDEX_G30, &gc_block.values.coord_data.xyz))
+                    if (!settings_read_coord_data(gc_block.non_modal_command == NonModal_GoHome_0 ? CoordinateSystem_G28 : CoordinateSystem_G30, &gc_block.values.coord_data.xyz))
                         FAIL(Status_SettingReadFail);
 
                     if (axis_words) {
@@ -2330,7 +2329,7 @@ status_code_t gc_execute_block(char *block, char *message)
     }
 
     // [15. Coordinate system selection ]:
-    if (gc_state.modal.coord_system.idx != gc_block.modal.coord_system.idx) {
+    if (gc_state.modal.coord_system.id != gc_block.modal.coord_system.id) {
         memcpy(&gc_state.modal.coord_system, &gc_block.modal.coord_system, sizeof(gc_state.modal.coord_system));
         sys.report.gwco = On;
         system_flag_wco_change();
@@ -2349,9 +2348,9 @@ status_code_t gc_execute_block(char *block, char *message)
     switch(gc_block.non_modal_command) {
 
         case NonModal_SetCoordinateData:
-            settings_write_coord_data(gc_block.values.coord_data.idx, &gc_block.values.coord_data.xyz);
+            settings_write_coord_data(gc_block.values.coord_data.id, &gc_block.values.coord_data.xyz);
             // Update system coordinate system if currently active.
-            if (gc_state.modal.coord_system.idx == gc_block.values.coord_data.idx) {
+            if (gc_state.modal.coord_system.id == gc_block.values.coord_data.id) {
                 memcpy(gc_state.modal.coord_system.xyz, gc_block.values.coord_data.xyz, sizeof(gc_state.modal.coord_system.xyz));
                 system_flag_wco_change();
             }
@@ -2370,24 +2369,24 @@ status_code_t gc_execute_block(char *block, char *message)
             break;
 
         case NonModal_SetHome_0:
-            settings_write_coord_data(SETTING_INDEX_G28, &gc_state.position);
+            settings_write_coord_data(CoordinateSystem_G28, &gc_state.position);
             break;
 
         case NonModal_SetHome_1:
-            settings_write_coord_data(SETTING_INDEX_G30, &gc_state.position);
+            settings_write_coord_data(CoordinateSystem_G30, &gc_state.position);
             break;
 
         case NonModal_SetCoordinateOffset: // G92
             memcpy(gc_state.g92_coord_offset, gc_block.values.xyz, sizeof(gc_state.g92_coord_offset));
 #if COMPATIBILITY_LEVEL <= 1
-            settings_write_coord_data(SETTING_INDEX_G92, &gc_state.g92_coord_offset); // Save G92 offsets to non-volatile storage
+            settings_write_coord_data(CoordinateSystem_G92, &gc_state.g92_coord_offset); // Save G92 offsets to non-volatile storage
 #endif
             system_flag_wco_change();
             break;
 
         case NonModal_ResetCoordinateOffset: // G92.1
             clear_vector(gc_state.g92_coord_offset); // Disable G92 offsets by zeroing offset vector.
-            settings_write_coord_data(SETTING_INDEX_G92, &gc_state.g92_coord_offset); // Save G92 offsets to non-volatile storage
+            settings_write_coord_data(CoordinateSystem_G92, &gc_state.g92_coord_offset); // Save G92 offsets to non-volatile storage
             system_flag_wco_change();
             break;
 
@@ -2397,7 +2396,7 @@ status_code_t gc_execute_block(char *block, char *message)
             break;
 
         case NonModal_RestoreCoordinateOffset: // G92.3
-            settings_read_coord_data(SETTING_INDEX_G92, &gc_state.g92_coord_offset); // Restore G92 offsets from non-volatile storage
+            settings_read_coord_data(CoordinateSystem_G92, &gc_state.g92_coord_offset); // Restore G92 offsets from non-volatile storage
             system_flag_wco_change();
             break;
 
@@ -2562,7 +2561,7 @@ status_code_t gc_execute_block(char *block, char *message)
             gc_state.modal.feed_mode = FeedMode_UnitsPerMin;
 // TODO: check           gc_state.distance_per_rev = 0.0f;
             // gc_state.modal.cutter_comp = CUTTER_COMP_DISABLE; // Not supported.
-            gc_state.modal.coord_system.idx = 0; // G54
+            gc_state.modal.coord_system.id = CoordinateSystem_G54;
             gc_state.modal.spindle = (spindle_state_t){0};
             gc_state.modal.coolant = (coolant_state_t){0};
             gc_state.modal.override_ctrl.feed_rate_disable = Off;
@@ -2582,10 +2581,10 @@ status_code_t gc_execute_block(char *block, char *message)
             if (sys.state != STATE_CHECK_MODE) {
 
                 float g92_offset_stored[N_AXIS];
-                if(settings_read_coord_data(SETTING_INDEX_G92, &g92_offset_stored) && !isequal_position_vector(g92_offset_stored, gc_state.g92_coord_offset))
-                    settings_write_coord_data(SETTING_INDEX_G92, &gc_state.g92_coord_offset); // Save G92 offsets to non-volatile storage
+                if(settings_read_coord_data(CoordinateSystem_G92, &g92_offset_stored) && !isequal_position_vector(g92_offset_stored, gc_state.g92_coord_offset))
+                    settings_write_coord_data(CoordinateSystem_G92, &gc_state.g92_coord_offset); // Save G92 offsets to non-volatile storage
 
-                if (!(settings_read_coord_data(gc_state.modal.coord_system.idx, &gc_state.modal.coord_system.xyz)))
+                if (!(settings_read_coord_data(gc_state.modal.coord_system.id, &gc_state.modal.coord_system.xyz)))
                     FAIL(Status_SettingReadFail);
                 system_flag_wco_change(); // Set to refresh immediately just in case something altered.
                 hal.spindle_set_state(gc_state.modal.spindle, 0.0f);

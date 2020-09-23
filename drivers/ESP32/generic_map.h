@@ -1,7 +1,5 @@
 /*
-  boosterpack_map.h - An embedded CNC Controller with rs274/ngc (g-code) support
-
-  Driver code for ESP32
+  generic_map.h - driver code for ESP32
 
   Part of GrblHAL
 
@@ -21,10 +19,6 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#define BOARD_NAME "CNC BoosterPack"
-
-#define IOEXPAND 0 // Do not change!
-
 #if SDCARD_ENABLE
 
 // Pin mapping when using SPI mode.
@@ -42,63 +36,57 @@
 #define STEP_TIMER_INDEX TIMER_0
 
 // Define step pulse output pins.
-#define X_STEP_PIN      GPIO_NUM_26
-#define Y_STEP_PIN      GPIO_NUM_27
-#define Z_STEP_PIN      GPIO_NUM_14
+#define X_STEP_PIN      GPIO_NUM_12
+#define Y_STEP_PIN      GPIO_NUM_14
+#define Z_STEP_PIN      GPIO_NUM_27
 #define STEP_MASK       (1ULL << X_STEP_PIN|1ULL << Y_STEP_PIN|1ULL << Z_STEP_PIN) // All step bits
 
 // Define step direction output pins. NOTE: All direction pins must be on the same port.
-#define X_DIRECTION_PIN     GPIO_NUM_2
-#define Y_DIRECTION_PIN     GPIO_NUM_15
-#define Z_DIRECTION_PIN     GPIO_NUM_12
+#define X_DIRECTION_PIN     GPIO_NUM_26
+#define Y_DIRECTION_PIN     GPIO_NUM_25
+#define Z_DIRECTION_PIN     GPIO_NUM_33
 #define DIRECTION_MASK      (1ULL << X_DIRECTION_PIN|1ULL << Y_DIRECTION_PIN|1ULL << Z_DIRECTION_PIN) // All direction bits
 
 // Define stepper driver enable/disable output pin(s).
-#define STEPPERS_DISABLE_PIN    IOEXPAND
+#define STEPPERS_DISABLE_PIN    GPIO_NUM_13
 #define STEPPERS_DISABLE_MASK   (1ULL << STEPPERS_DISABLE_PIN)
 
 // Define homing/hard limit switch input pins and limit interrupt vectors.
-#define X_LIMIT_PIN     GPIO_NUM_4
-#define Y_LIMIT_PIN     GPIO_NUM_16
-#define Z_LIMIT_PIN     GPIO_NUM_32
+#define X_LIMIT_PIN     GPIO_NUM_2
+#define Y_LIMIT_PIN     GPIO_NUM_4
+#define Z_LIMIT_PIN     GPIO_NUM_15
 #define LIMIT_MASK      (1ULL << X_LIMIT_PIN|1ULL << Y_LIMIT_PIN|1ULL << Z_LIMIT_PIN) // All limit bits
 
 #ifndef VFD_SPINDLE
 // Define spindle enable and spindle direction output pins.
-#define SPINDLE_ENABLE_PIN      IOEXPAND
-#define SPINDLE_DIRECTION_PIN   IOEXPAND
+#define SPINDLE_ENABLE_PIN      GPIO_NUM_18
+#define SPINDLE_DIRECTION_PIN   GPIO_NUM_5
 #define SPINDLE_MASK            (1ULL << SPINDLE_ENABLE_PIN|1ULL << SPINDLE_DIRECTION_PIN)
 #define SPINDLEPWMPIN           GPIO_NUM_17
-#else
-#define SPINDLE_MASK            0
 #endif
 
 // Define flood and mist coolant enable output pins.
 
-#define COOLANT_FLOOD_PIN   IOEXPAND
-#define COOLANT_MIST_PIN    IOEXPAND
+#define COOLANT_FLOOD_PIN   GPIO_NUM_16
+#define COOLANT_MIST_PIN    GPIO_NUM_21
 #define COOLANT_MASK        (1UL << COOLANT_FLOOD_PIN|1ULL << COOLANT_MIST_PIN)
 
 // Define user-control CONTROLs (cycle start, reset, feed hold) input pins.
-#define RESET_PIN           GPIO_NUM_35
-#define FEED_HOLD_PIN       GPIO_NUM_39
-#define CYCLE_START_PIN     GPIO_NUM_36
-#define SAFETY_DOOR_PIN     GPIO_NUM_34
+#define RESET_PIN           GPIO_NUM_34
+#define FEED_HOLD_PIN       GPIO_NUM_36
+#define CYCLE_START_PIN     GPIO_NUM_39
+#define SAFETY_DOOR_PIN     GPIO_NUM_35
 #define CONTROL_MASK        (1UL << RESET_PIN|1UL << FEED_HOLD_PIN|1UL << CYCLE_START_PIN|1UL << SAFETY_DOOR_PIN)
 
 // Define probe switch input pin.
-#define PROBE_PIN       GPIO_NUM_13
-
-#if KEYPAD_ENABLE
-#define KEYPAD_STROBE_PIN   GPIO_NUM_33
+#if PROBE_ENABLE
+#define PROBE_PIN       GPIO_NUM_32
+#else
+#define PROBE_PIN       0xFF
 #endif
 
-#if MPG_MODE_ENABLE || MODBUS_ENABLE
-#define UART2_RX_PIN            GPIO_NUM_17
-#define UART2_TX_PIN            GPIO_NUM_33
-#define MODBUS_DIRECTION_PIN    GPIO_NUM_25
-//#define MPG_ENABLE_PIN  GPIO_NUM_25
-#define MODBUS_BAUD             19200
+#if KEYPAD_ENABLE
+#error No free pins for keypad!
 #endif
 
 #if IOEXPAND_ENABLE || KEYPAD_ENABLE || EEPROM_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
@@ -113,15 +101,14 @@
 typedef union {
     uint8_t mask;
     struct {
-        uint8_t stepper_enable_z :1,
-                stepper_enable_y :1,
+        uint8_t spindle_on       :1,
+                spindle_dir      :1,
                 mist_on          :1,
                 flood_on         :1,
-                reserved         :1,
-                spindle_dir      :1,
+                stepper_enable_z :1,
                 stepper_enable_x :1,
-                spindle_on       :1;
+                stepper_enable_y :1,
+                reserved         :1;
     };
 } ioexpand_t;
 #endif
-

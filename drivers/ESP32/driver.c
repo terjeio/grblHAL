@@ -155,13 +155,13 @@ static io_stream_t prev_stream = {0};
 
 const io_stream_t serial_stream = {
     .type = StreamType_Serial,
-    .read = uartRead,
-    .write = uartWriteS,
-    .write_all = uartWriteS,
-    .get_rx_buffer_available = uartRXFree,
-    .reset_read_buffer = uartFlush,
-    .cancel_read_buffer = uartCancel,
-    .suspend_read = uartSuspendInput,
+    .read = serialRead,
+    .write = serialWriteS,
+    .write_all = serialWriteS,
+    .get_rx_buffer_available = serialRXFree,
+    .reset_read_buffer = serialFlush,
+    .cancel_read_buffer = serialCancel,
+    .suspend_read = serialSuspendInput,
     .enqueue_realtime_command = protocol_enqueue_realtime_command
 };
 
@@ -179,7 +179,7 @@ void tcpStreamWriteS (const char *data)
     if(services.websocket)
         WsStreamWriteS(data);
 #endif
-    uartWriteS(data);
+    serialWriteS(data);
 }
 
 #if TELNET_ENABLE
@@ -191,7 +191,7 @@ const io_stream_t telnet_stream = {
     .get_rx_buffer_available = TCPStreamRxFree,
     .reset_read_buffer = TCPStreamRxFlush,
     .cancel_read_buffer = TCPStreamRxCancel,
-    .suspend_read = uartSuspendInput,
+    .suspend_read = serialSuspendInput,
     .enqueue_realtime_command = protocol_enqueue_realtime_command
 };
 #endif
@@ -220,7 +220,7 @@ const io_stream_t websocket_stream = {
 void btStreamWriteS (const char *data)
 {
     BTStreamWriteS(data);
-    uartWriteS(data);
+    serialWriteS(data);
 }
 
 const io_stream_t bluetooth_stream = {
@@ -231,7 +231,7 @@ const io_stream_t bluetooth_stream = {
     .get_rx_buffer_available = BTStreamRXFree,
     .reset_read_buffer = BTStreamFlush,
     .cancel_read_buffer = BTStreamCancel,
-    .suspend_read = uartSuspendInput,
+    .suspend_read = serialSuspendInput,
     .enqueue_realtime_command = protocol_enqueue_realtime_command
 };
 
@@ -1042,12 +1042,12 @@ IRAM_ATTR static void modeSelect (bool mpg_mode)
     if(mpg_mode) {
         memcpy(&prev_stream, &hal.stream, sizeof(io_stream_t));
         hal.stream.type = StreamType_MPG;
-        hal.stream.read = uart2Read;
+        hal.stream.read = serial2Read;
         hal.stream.write = serial_stream.write;
-        hal.stream.get_rx_buffer_available = uart2RXFree;
-        hal.stream.reset_read_buffer = uart2Flush;
-        hal.stream.cancel_read_buffer = uart2Cancel;
-        hal.stream.suspend_read = uart2SuspendInput;
+        hal.stream.get_rx_buffer_available = serial2RXFree;
+        hal.stream.reset_read_buffer = serial2Flush;
+        hal.stream.cancel_read_buffer = serial2Cancel;
+        hal.stream.suspend_read = serial2SuspendInput;
     } else if(hal.stream.read != NULL)
         memcpy(&hal.stream, &prev_stream, sizeof(io_stream_t));
 
@@ -1280,14 +1280,13 @@ static void settings_changed (settings_t *settings)
             }
 
             if(inputpin[i].pin != 0xFF) {
-                pullup = pullup && inputpin[i].pin < 34;
 
                 gpio_intr_disable(inputpin[i].pin);
 
                 config.pin_bit_mask = 1ULL << inputpin[i].pin;
                 config.mode = GPIO_MODE_INPUT;
-                config.pull_up_en = pullup ? GPIO_PULLUP_ENABLE : GPIO_PULLUP_DISABLE;
-                config.pull_down_en = pullup ? GPIO_PULLDOWN_DISABLE : GPIO_PULLDOWN_ENABLE;
+                config.pull_up_en = pullup && inputpin[i].pin < 34 ? GPIO_PULLUP_ENABLE : GPIO_PULLUP_DISABLE;
+                config.pull_down_en = pullup || inputpin[i].pin >= 34 ? GPIO_PULLDOWN_DISABLE : GPIO_PULLDOWN_ENABLE;
 
                 inputpin[i].offset = config.pin_bit_mask > (1ULL << 31) ? 1 : 0;
                 inputpin[i].mask = inputpin[i].offset == 0 ? (uint32_t)config.pin_bit_mask : (uint32_t)(config.pin_bit_mask >> 32);
@@ -1418,7 +1417,7 @@ static bool driver_setup (settings_t *settings)
     gpio_config(&gpioConfig);
     gpio_set_level(MPG_ENABLE_PIN, 0);
 
-    uart2Init(BAUD_RATE);
+    serial2Init(BAUD_RATE);
 #endif
 
    /****************************
@@ -1589,14 +1588,14 @@ bool driver_init (void)
 {
     // Enable EEPROM and serial port here for Grbl to be able to configure itself and report any errors
 
-    uartInit();
+    serialInit();
 
 #ifdef I2C_PORT
     I2CInit();
 #endif
 
     hal.info = "ESP32";
-    hal.driver_version = "200910";
+    hal.driver_version = "200923";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1628,7 +1627,7 @@ bool driver_init (void)
     hal.coolant_set_state = coolantSetState;
     hal.coolant_get_state = coolantGetState;
 
-#if PROBE_ENABLE
+#ifdef PROBE_PIN
     hal.probe_get_state = probeGetState;
     hal.probe_configure_invert_mask = probeConfigure;
 #endif
@@ -1687,6 +1686,7 @@ bool driver_init (void)
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
+    hal.get_elapsed_ticks = xTaskGetTickCountFromISR;
 
     hal.show_message = showMessage;
 
@@ -1750,16 +1750,16 @@ bool driver_init (void)
 #endif
 
 #if MODBUS_ENABLE
-    uart2Init(MODBUS_BAUD);
+    serial2Init(MODBUS_BAUD);
     modbus_stream.rx_timeout = 50;
-    modbus_stream.write = uart2Write;
-    modbus_stream.read = uart2Read;
-    modbus_stream.flush_rx_buffer = uart2Flush;
-    modbus_stream.flush_tx_buffer = uart2Flush;
-    modbus_stream.get_rx_buffer_count = uart2Available;
-    modbus_stream.get_tx_buffer_count = uart2txCount;
+    modbus_stream.write = serial2Write;
+    modbus_stream.read = serial2Read;
+    modbus_stream.flush_rx_buffer = serial2Flush;
+    modbus_stream.flush_tx_buffer = serial2Flush;
+    modbus_stream.get_rx_buffer_count = serial2Available;
+    modbus_stream.get_tx_buffer_count = serial2txCount;
   #ifdef MODBUS_DIRECTION_PIN
-    modbus_stream.set_direction = uart2Direction;
+    modbus_stream.set_direction = serial2Direction;
   #endif
     modbus_init(&modbus_stream);
 
@@ -1771,7 +1771,9 @@ bool driver_init (void)
     huanyang_init(&modbus_stream);
 #endif
 
-   // no need to move version check before init - compiler will fail any mismatch for existing entries
+    my_plugin_init();
+
+    // no need to move version check before init - compiler will fail any mismatch for existing entries
     return hal.version == 6;
 }
 

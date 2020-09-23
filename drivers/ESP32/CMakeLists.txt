@@ -36,6 +36,7 @@ set(MAIN_SRCS main.c driver.c nvs.c esp32-hal-uart.c
  grbl/gcode.c
  grbl/limits.c
  grbl/motion_control.c
+ grbl/my_plugin.c
  grbl/nuts_bolts.c
  grbl/override.c
  grbl/planner.c
@@ -88,6 +89,7 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(grbl)
 
 target_compile_definitions(grbl.elf PUBLIC GRBL_ESP32)
+target_compile_definitions(grbl.elf PUBLIC OVERRIDE_MY_MACHINE)
 
 if(Networking)
 target_compile_definitions(grbl.elf PUBLIC NETWORKING_ENABLE)

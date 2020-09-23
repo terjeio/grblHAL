@@ -1040,7 +1040,7 @@ bool driver_init (void) {
     IRQRegister(SysTick_IRQn, SysTick_IRQHandler);
 
     hal.info = "SAMD21";
-    hal.driver_version = "200911";
+    hal.driver_version = "200923";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1174,6 +1174,8 @@ bool driver_init (void) {
 #if SDCARD_ENABLE
     hal.driver_cap.sd_card = On;
 #endif
+
+    my_plugin_init();
 
     // No need to move version check before init.
     // Compiler will fail any signature mismatch for existing entries.

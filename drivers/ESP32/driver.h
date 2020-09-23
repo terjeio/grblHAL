@@ -26,24 +26,37 @@
 #ifndef __DRIVER_H__
 #define __DRIVER_H__
 
-#include "soc/rtc.h"
-#include "driver/gpio.h"
-#include "driver/timer.h"
-#include "driver/ledc.h"
-#include "driver/rmt.h"
-#include "driver/i2c.h"
+#ifndef OVERRIDE_MY_MACHINE
+//
+// Set options from my_machine.h
+//
+#include "my_machine.h"
 
-#include "freertos/queue.h"
-#include "freertos/semphr.h"
+#if NETWORKING_ENABLE
+#define WIFI_ENABLE 1
+#endif
 
-#include "grbl/hal.h"
-
-static const DRAM_ATTR float FZERO = 0.0f;
+#if WEBUI_ENABLE
+#error "WebUI is not available in this setup!"
+#endif
+//
+#else
+//
+// options for cmake (idf.py)
+//
+#ifdef CNC_BOOSTERPACK
+#define BOARD_CNC_BOOSTERPACK  1
+#else
+// NOTE: Only one board may be enabled!
+// If none is enabled pin mappings from generic_map.h will be used
+//#define BOARD_BDRING_V3P5
+#define BOARD_BDRING_V4
+//#define BOARD_BDRING_I2S6A // NOT production ready!
+#endif
 
 //
-// Set config from compile definitions in CMakeLists.txt
+// Set options from CMakeLists.txt
 //
-
 #ifdef WEBUI_ENABLE
 #undef WEBUI_ENABLE
 #define WEBUI_ENABLE 1
@@ -57,13 +70,6 @@ static const DRAM_ATTR float FZERO = 0.0f;
 #ifdef SDCARD_ENABLE
 #undef SDCARD_ENABLE
 #define SDCARD_ENABLE 1
-#endif
-
-#ifdef NETWORKING_ENABLE
-#define WIFI_ENABLE      1
-#define HTTP_ENABLE      1
-#define TELNET_ENABLE    1
-#define WEBSOCKET_ENABLE 1
 #endif
 
 #ifdef BLUETOOTH_ENABLE
@@ -87,85 +93,95 @@ static const DRAM_ATTR float FZERO = 0.0f;
 #define TRINAMIC_I2C    1
 #endif
 
-#ifndef CNC_BOOSTERPACK
-// NOTE: Only one board may be enabled!
-#define BOARD_BDRING_V4
-//#define BOARD_BDRING_V3P5
-//#define BOARD_BDRING_I2S6A
+#ifdef NETWORKING_ENABLE
+#define WIFI_ENABLE      1
+#define HTTP_ENABLE      0
+#define TELNET_ENABLE    1
+#define WEBSOCKET_ENABLE 1
+#define NETWORK_TELNET_PORT     23
+#define NETWORK_HTTP_PORT       80
+#define NETWORK_WEBSOCKET_PORT  81
 #endif
 
-//
-
-// Configuration
-// Set value to 1 to enable, 0 to disable
-
-#ifdef CNC_BOOSTERPACK
-#undef CNC_BOOSTERPACK
-#define CNC_BOOSTERPACK  1
-#define EEPROM_ENABLE    1 // I2C EEPROM (24LC16) support.
-#define IOEXPAND_ENABLE  1 // I2C IO expander for some output signals.
-#else
-#define EEPROM_ENABLE    0 // I2C EEPROM (24LC16) support.
-#define IOEXPAND_ENABLE  0 // I2C IO expander for some output signals.
+#if WEBUI_ENABLE
+#undef HTTP_ENABLE
+#define HTTP_ENABLE 1
 #endif
+
+#define EEPROM_ENABLE 0
+
+#endif
+
+#include "soc/rtc.h"
+#include "driver/gpio.h"
+#include "driver/timer.h"
+#include "driver/ledc.h"
+#include "driver/rmt.h"
+#include "driver/i2c.h"
+
+#include "freertos/queue.h"
+#include "freertos/semphr.h"
+
+#include "grbl/hal.h"
+
+static const DRAM_ATTR float FZERO = 0.0f;
+
 #define PWM_RAMPED       0 // Ramped spindle PWM.
 #define PROBE_ENABLE     1 // Probe input
 #define PROBE_ISR        0 // Catch probe state change by interrupt TODO: needs verification!
-#define WIFI_SOFTAP      0 // Use Soft AP mode for WiFi.
 #define TRINAMIC_DEV     0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
 
-// The following options should be set in CMakeLists.txt to ensure
-// all relevant files are included for compilation
 // DO NOT change settings here!
 
+#ifndef IOEXPAND_ENABLE
+#define IOEXPAND_ENABLE 0 // I2C IO expander for some output signals.
+#endif
+
+#ifndef WIFI_SOFTAP
+#define WIFI_SOFTAP      0
+#endif
+
 #ifndef KEYPAD_ENABLE
-#define KEYPAD_ENABLE    0 // I2C keypad for jogging etc.
+#define KEYPAD_ENABLE    0
 #endif
 
 #ifndef NETWORKING_ENABLE
-#define WIFI_ENABLE      0 // Streaming over WiFi.
-#define HTTP_ENABLE      0 // Enable http daemon - requires WiFi enabled
-#define TELNET_ENABLE    0 // Enable telnet daemon - requires WiFi enabled
-#define WEBSOCKET_ENABLE 0 // Enable websocket daemon - requires WiFi enabled
+#define WIFI_ENABLE      0
+#define HTTP_ENABLE      0
+#define TELNET_ENABLE    0
+#define WEBSOCKET_ENABLE 0
 #endif
 
 #ifndef BLUETOOTH_ENABLE
-#define BLUETOOTH_ENABLE 0 // Streaming over Bluetooth.
+#define BLUETOOTH_ENABLE 0
 #endif
 
 #ifndef AUTH_ENABLE
-#define AUTH_ENABLE      0 // Enable WebUI security
+#define AUTH_ENABLE      0
 #endif
+
 #ifndef SDCARD_ENABLE
-#define SDCARD_ENABLE    0 // Run jobs from SD card.
+#define SDCARD_ENABLE    0
 #endif
+
 #ifndef WEBUI_ENABLE
-#define WEBUI_ENABLE     0 // Enables WebUi - requires WiFi enabled. Note: experimental - only partly implemented!
+#define WEBUI_ENABLE     0
 #endif
+
 #ifndef TRINAMIC_ENABLE
-#define TRINAMIC_ENABLE  0 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
-#define TRINAMIC_I2C     0 // Trinamic I2C - SPI bridge interface.
+#define TRINAMIC_ENABLE  0
+#define TRINAMIC_I2C     0
 #endif
 
 // end configuration
 
-#if WEBUI_ENABLE
+#if !WIFI_ENABLE
+  #if HTTP_ENABLE || TELNET_ENABLE || WEBSOCKET_ENABLE
+  #error "Networking protocols requires networking enabled!"
+  #endif // WIFI_ENABLE
+#else
 
-#undef WIFI_ENABLE
-#undef HTTP_ENABLE
-#undef WEBSOCKET_ENABLE
-
-#define WIFI_ENABLE      1
-#define HTTP_ENABLE      1
-#define WEBSOCKET_ENABLE 1
-
-#endif
-
-#if WIFI_ENABLE
-
-#define NETWORK_TELNET_PORT     23
-#define NETWORK_HTTP_PORT       80
-#define NETWORK_WEBSOCKET_PORT  81
+#if !NETWORK_PARAMETERS_OK
 
 // WiFi Station (STA) settings
 #define NETWORK_HOSTNAME    "Grbl"
@@ -173,14 +189,6 @@ static const DRAM_ATTR float FZERO = 0.0f;
 #define NETWORK_IP          "192.168.5.1"
 #define NETWORK_GATEWAY     "192.168.5.1"
 #define NETWORK_MASK        "255.255.255.0"
-
-#if NETWORK_IPMODE < 0 || NETWORK_IPMODE > 2
-#error "Invalid IP mode selected!"
-#endif
-
-#if NETWORK_IPMODE == 0 && WIFI_SOFTAP
-#error "Cannot use static IP for station when soft AP is enabled!"
-#endif
 
 // WiFi Access Point (AP) settings
 #if WIFI_SOFTAP
@@ -195,8 +203,15 @@ static const DRAM_ATTR float FZERO = 0.0f;
 #define WIFI_MODE WiFiMode_STA; // Do not change!
 #endif
 
-#elif HTTP_ENABLE || TELNET_ENABLE || WEBSOCKET_ENABLE
-#error "Networking protocols reqires WiFi enabled!"
+#if NETWORK_IPMODE < 0 || NETWORK_IPMODE > 2
+#error "Invalid IP mode selected!"
+#endif
+
+#if NETWORK_IPMODE == 0 && WIFI_SOFTAP
+#error "Cannot use static IP for station when soft AP is enabled!"
+#endif
+
+#endif // !NETWORK_PARAMETERS_OK
 #endif // WIFI_ENABLE
 
 #if BLUETOOTH_ENABLE
@@ -234,8 +249,12 @@ typedef struct {
 #define DRIVER_SETTINGS
 
 typedef struct {
+#if WIFI_ENABLE
     wifi_settings_t wifi;
+#endif
+#if BLUETOOTH_ENABLE
     bluetooth_settings_t bluetooth;
+#endif
 #if TRINAMIC_ENABLE
     trinamic_settings_t trinamic;
 #endif
@@ -248,8 +267,10 @@ extern driver_settings_t driver_settings;
 
 #endif
 
-#ifdef CNC_BOOSTERPACK
-  #include "boosterpack_map.h"
+// End configuration
+
+#ifdef BOARD_CNC_BOOSTERPACK
+  #include "cnc_boosterpack_map.h"
 #elif defined(BOARD_BDRING_V4)
   #include "bdring_v4_map.h"
 #elif defined(BOARD_BDRING_V3P5)
@@ -257,110 +278,18 @@ extern driver_settings_t driver_settings;
 #elif defined(BOARD_BDRING_I2S6A)
   #include "bdring_i2s_6_axis_map.h"
 #else // default board - NOTE: NOT FINAL VERSION!
-
-#if SDCARD_ENABLE
-
-// Pin mapping when using SPI mode.
-// With this mapping, SD card can be used both in SPI and 1-line SD mode.
-// Note that a pull-up on CS line is required in SD mode.
-#define PIN_NUM_MISO 19
-#define PIN_NUM_MOSI 23
-#define PIN_NUM_CLK  18
-#define PIN_NUM_CS   5
-
-#endif // SDCARD_ENABLE
-
-// timer definitions
-#define STEP_TIMER_GROUP TIMER_GROUP_0
-#define STEP_TIMER_INDEX TIMER_0
-
-// Define step pulse output pins.
-#define X_STEP_PIN      GPIO_NUM_12
-#define Y_STEP_PIN      GPIO_NUM_14
-#define Z_STEP_PIN      GPIO_NUM_27
-#define STEP_MASK       (1ULL << X_STEP_PIN|1ULL << Y_STEP_PIN|1ULL << Z_STEP_PIN) // All step bits
-
-// Define step direction output pins. NOTE: All direction pins must be on the same port.
-#define X_DIRECTION_PIN     GPIO_NUM_26
-#define Y_DIRECTION_PIN     GPIO_NUM_25
-#define Z_DIRECTION_PIN     GPIO_NUM_33
-#define DIRECTION_MASK      (1ULL << X_DIRECTION_PIN|1ULL << Y_DIRECTION_PIN|1ULL << Z_DIRECTION_PIN) // All direction bits
-
-// Define stepper driver enable/disable output pin(s).
-#define STEPPERS_DISABLE_PIN    GPIO_NUM_13
-#define STEPPERS_DISABLE_MASK   (1ULL << STEPPERS_DISABLE_PIN)
-
-// Define homing/hard limit switch input pins and limit interrupt vectors.
-#define X_LIMIT_PIN     GPIO_NUM_2
-#define Y_LIMIT_PIN     GPIO_NUM_4
-#define Z_LIMIT_PIN     GPIO_NUM_15
-#define LIMIT_MASK      (1ULL << X_LIMIT_PIN|1ULL << Y_LIMIT_PIN|1ULL << Z_LIMIT_PIN) // All limit bits
-
-#ifndef VFD_SPINDLE
-// Define spindle enable and spindle direction output pins.
-#define SPINDLE_ENABLE_PIN      GPIO_NUM_18
-#define SPINDLE_DIRECTION_PIN   GPIO_NUM_5
-#define SPINDLE_MASK            (1ULL << SPINDLE_ENABLE_PIN|1ULL << SPINDLE_DIRECTION_PIN)
-#define SPINDLEPWMPIN           GPIO_NUM_17
+  #include "generic_map.h"
 #endif
 
-// Define flood and mist coolant enable output pins.
-
-#define COOLANT_FLOOD_PIN   GPIO_NUM_16
-#define COOLANT_MIST_PIN    GPIO_NUM_21
-#define COOLANT_MASK        (1UL << COOLANT_FLOOD_PIN|1ULL << COOLANT_MIST_PIN)
-
-// Define user-control CONTROLs (cycle start, reset, feed hold) input pins.
-#define RESET_PIN           GPIO_NUM_34
-#define FEED_HOLD_PIN       GPIO_NUM_36
-#define CYCLE_START_PIN     GPIO_NUM_39
-#define SAFETY_DOOR_PIN     GPIO_NUM_35
-#define CONTROL_MASK        (1UL << RESET_PIN|1UL << FEED_HOLD_PIN|1UL << CYCLE_START_PIN|1UL << SAFETY_DOOR_PIN)
-
-// Define probe switch input pin.
-#if PROBE_ENABLE
-#define PROBE_PIN       GPIO_NUM_32
-#else
-#define PROBE_PIN       0xFF
-#endif
-
-#if KEYPAD_ENABLE
-#error No free pins for keypad!
-#endif
-
-#if IOEXPAND_ENABLE || KEYPAD_ENABLE || EEPROM_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
-// Define I2C port/pins
-#define I2C_PORT  I2C_NUM_1
-#define I2C_SDA   GPIO_NUM_21
-#define I2C_SCL   GPIO_NUM_22
-#define I2C_CLOCK 100000
-#endif
-
-#if IOEXPAND_ENABLE
-typedef union {
-    uint8_t mask;
-    struct {
-        uint8_t spindle_on       :1,
-                spindle_dir      :1,
-                mist_on          :1,
-                flood_on         :1,
-                stepper_enable_z :1,
-                stepper_enable_x :1,
-                stepper_enable_y :1,
-                reserved         :1;
-    };
-} ioexpand_t;
-#endif
-
+#ifndef GRBL_ESP32
+#error "Add #define GRBL_ESP32 in grbl/config.h or update your CMakeLists.txt to the latest version!"
 #endif
 
 #ifdef I2C_PORT
 extern QueueHandle_t i2cQueue;
 extern SemaphoreHandle_t i2cBusy;
-#endif
-
-#ifndef GRBL_ESP32
-#error "Add #define GRBL_ESP32 in grbl/config.h or update your CMakeLists.txt to the latest version!"
+#elif IOEXPAND_ENABLE || KEYPAD_ENABLE || EEPROM_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
+#error "I2C port not available!"
 #endif
 
 #if MPG_MODE_ENABLE || MODBUS_ENABLE

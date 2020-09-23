@@ -21,6 +21,10 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "driver.h"
+
+#if WEBUI_ENABLE
+
 #include <math.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -31,7 +35,6 @@
 
 #include "esp_spiffs.h"
 
-#include "driver.h"
 #include "wifi.h"
 #include "webui.h"
 #include "networking/WsStream.h"
@@ -1065,3 +1068,6 @@ esp_err_t webui_index_html_get_handler (httpd_req_t *req)
     httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
     return httpd_resp_send(req, (const char *)index_html_gz_start, index_html_gz_end - index_html_gz_start);
 }
+
+#endif
+

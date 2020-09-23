@@ -1743,7 +1743,7 @@ bool driver_init (void)
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
-    hal.driver_version = "200910";
+    hal.driver_version = "200923";
     hal.driver_setup = driver_setup;
 #if !USE_32BIT_TIMER
     hal.f_step_timer = hal.f_step_timer / (STEPPER_DRIVER_PRESCALER + 1);
@@ -1816,6 +1816,7 @@ bool driver_init (void)
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
+    hal.get_elapsed_ticks = xTaskGetTickCountFromISR;
 
 #ifdef _USERMCODES_H_
     hal.driver_mcode_check = userMCodeCheck;
@@ -1872,6 +1873,8 @@ bool driver_init (void)
 #if ETHERNET_ENABLE
     hal.driver_cap.ethernet = On;
 #endif
+
+    my_plugin_init();
 
     // no need to move version check before init - compiler will fail any signature mismatch for existing entries
     return hal.version == 6;

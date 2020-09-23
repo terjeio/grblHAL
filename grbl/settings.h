@@ -43,41 +43,6 @@
 #define NVS_ADDR_TOOL_TABLE     (NVS_ADDR_PARAMETERS - 1 - N_TOOLS * (sizeof(tool_data_t) + 1))
 #endif
 
-// Define persistent storage address indexing for coordinate parameters
-#if COMPATIBILITY_LEVEL <= 1
-#define N_COORDINATE_SYSTEM 9  // Number of supported work coordinate systems (from index 1)
-#else
-#define N_COORDINATE_SYSTEM 6  // Number of supported work coordinate systems (from index 1)
-#endif
-#define SETTING_INDEX_NCOORD (N_COORDINATE_SYSTEM + 2)  // Total number of coordinate system stored (from index 0)
-// NOTE: Work coordinate indices are (0=G54, 1=G55, ... , 6=G59)
-#define SETTING_INDEX_G28    N_COORDINATE_SYSTEM        // Home position 1
-#define SETTING_INDEX_G30    (N_COORDINATE_SYSTEM + 1)  // Home position 2
-#if N_COORDINATE_SYSTEM >= 9
-#define SETTING_INDEX_G59_3  (N_COORDINATE_SYSTEM - 1)  // G59.3 position
-#endif
-#define SETTING_INDEX_G92    (N_COORDINATE_SYSTEM + 2)  // Coordinate offset
-
-typedef enum {
-    SettingIndex_G54 = 0,
-    SettingIndex_G55,
-    SettingIndex_G56,
-    SettingIndex_G57,
-    SettingIndex_G58,
-    SettingIndex_G59,
-#if N_COORDINATE_SYSTEM >= 9
-    SettingIndex_G59_1,
-    SettingIndex_G59_2,
-    SettingIndex_G59_3,
-#endif
-    SettingIndex_G28,   // Home position 1
-    SettingIndex_G30,   // Home position 2
-    SettingIndex_G92,   // Coordinate offset
-    SettingIndex_NCoord
-} setting_coord_system_t;
-
-#define N_COORDINATE_SYSTEMS (SettingIndex_NCoord - 3)  // Number of supported work coordinate systems (from index 1)
-
 // Define axis settings numbering scheme. Starts at Setting_AxisSettingsBase, every INCREMENT, over N_SETTINGS.
 #ifdef ENABLE_BACKLASH_COMPENSATION
 #define AXIS_N_SETTINGS          6
@@ -515,10 +480,10 @@ void settings_write_build_info(char *line);
 bool settings_read_build_info(char *line);
 
 // Writes selected coordinate data to persistent storage
-void settings_write_coord_data(uint8_t idx, float (*coord_data)[N_AXIS]);
+void settings_write_coord_data(coord_system_id_t idx, float (*coord_data)[N_AXIS]);
 
 // Reads selected coordinate data from persistent storage
-bool settings_read_coord_data(uint8_t idx, float (*coord_data)[N_AXIS]);
+bool settings_read_coord_data(coord_system_id_t idx, float (*coord_data)[N_AXIS]);
 
 // Writes selected tool data to persistent storage
 bool settings_write_tool_data (tool_data_t *tool_data);

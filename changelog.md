@@ -1,5 +1,21 @@
 ## grblHAL changelog
 
+Build 20200923:
+
+* Added support for STM32F411 based Blackpill boards.
+
+* Initial changes to ESP32 driver to allow compilation with PlatformIO, added my_machine.h for this. Note that my_machine.h is not used if compiling with idf.py.
+
+* Added home position to `$#` ngc report, e.g. `[HOME,0.000,0.000,0.000:7]` - means all axes are homed. Position is reported in machine coordinates. `:7` in the example is an axis bitmap, the reported value is for which axes are homed: bit 0 is Z, 1 is X etc. `:0` = no axes homed.
+
+* "Hardened" the new tool change functionality even more. Initial changes for multi-axis tool reference offset made.  
+An empy message will now be sent when tool change is complete, this to clear any tool change related message in the sender.
+
+* Added call to [weak](https://en.wikipedia.org/wiki/Weak_symbol) `my_plugin_init()` function at startup, name your [plugin](https://github.com/terjeio/grblHAL/tree/master/plugins) init function` my_plugin_init` and there is no need to change any grblHAL source files to bring it alive.  
+Use this feature for your private plugin only, multiple public plugins using this name cannot coexist!
+
+* Some changes to improve code readability and added strict check for `G59.x` gcodes.
+
 Build 20200911:
 
 * Core refactored for better support for non-volatile storage. Some HAL entry points renamed for readability and moved to a new data structure.
@@ -48,7 +64,7 @@ Build 20200811:
 * Part one of large overhaul of configuration system.
 This has been done to allow a global configuration file and/or setting compile time options as compiler symbols/macros with the `-D` compiler command line option.
 * Networking \(cabled ethernet\), SD Card and I2C keypad plugin support added to [Teensy 4.x driver.](drivers/IMXRT1062) A Teensy 4.1 is required for networking.
-* Tool number range changed from 8-bit \(0-255\) to 32-bit \(0-4294967295\). Note that if the optional tool table is enabled the max tool number is limited by number of entries in the tool table.
+* Tool number range changed from 8-bit \(0-255\) to 32-bit \(0-4294967294\). Note that if the optional tool table is enabled the max tool number is limited by number of entries in the tool table.
 * M60 and corresponding pallet shuttle HAL entry point added. No driver support for this yet.
 
 _Configuration system changes:_

@@ -378,9 +378,28 @@ typedef union {
     };
 } coord_data_t;
 
+typedef enum {
+    CoordinateSystem_G54 = 0,
+    CoordinateSystem_G55,
+    CoordinateSystem_G56,
+    CoordinateSystem_G57,
+    CoordinateSystem_G58,
+    CoordinateSystem_G59,
+#if COMPATIBILITY_LEVEL <= 1
+    CoordinateSystem_G59_1,
+    CoordinateSystem_G59_2,
+    CoordinateSystem_G59_3,
+#endif
+    N_WorkCoordinateSystems,
+    CoordinateSystem_G28 = N_WorkCoordinateSystems,
+    CoordinateSystem_G30,
+    CoordinateSystem_G92,
+    N_CoordinateSystems
+} coord_system_id_t;
+
 typedef struct {
     float xyz[N_AXIS];
-    uint8_t idx;
+    coord_system_id_t id;
 } coord_system_t;
 
 typedef struct {

@@ -23,6 +23,10 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "driver.h"
+
+#if WEBUI_ENABLE
+
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -893,3 +897,4 @@ bool httpdaemon_start (network_settings_t *network)
     return httpdaemon != NULL;
 }
 
+#endif
