@@ -248,27 +248,6 @@
 #define DEFAULT_INVERT_PROBE_PIN 0
 #endif
 
-#ifdef DEFAULT_LASER_MODE
-#undef DEFAULT_LASER_MODE
-#define DEFAULT_LASER_MODE 1
-#else
-#define DEFAULT_LASER_MODE 0
-#endif
-
-#ifdef DEFAULT_LASER_MODE
-#undef DEFAULT_LASER_MODE
-#define DEFAULT_LASER_MODE 1
-#else
-#define DEFAULT_LASER_MODE 0
-#endif
-
-#ifdef DEFAULT_LASER_MODE
-#undef DEFAULT_LASER_MODE
-#define DEFAULT_LASER_MODE 1
-#else
-#define DEFAULT_LASER_MODE 0
-#endif
-
 #ifndef DEFAULT_A_STEPS_PER_MM
 #define DEFAULT_A_STEPS_PER_MM 250.0f
 #endif
