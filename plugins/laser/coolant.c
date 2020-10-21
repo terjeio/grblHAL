@@ -123,6 +123,7 @@ static void driverReset (void)
     if(coolant_on) {
         coolant_on = false;
         hal.port.digital_out(LASER_COOLANT_ON_PORT, false);
+        sys.report.coolant = On; // Set to report change immediately
     }
 }
 
@@ -132,6 +133,7 @@ static void onProgramCompleted (void)
     if(coolant_on) {
         coolant_on = false;
         hal.port.digital_out(LASER_COOLANT_ON_PORT, false);
+        sys.report.coolant = On; // Set to report change immediately
     }
 
     if(on_program_completed)
@@ -142,13 +144,13 @@ static void onRealtimeReport (stream_write_ptr stream_write, report_tracking_fla
 {
     static float coolant_temp_prev = 0.0f;
 
-    char buf[20];
+    char buf[20] = "";
 
-    if(report.coolant)
+    if(report.coolant) {
         strcpy(buf, "|Ex:");
         if(coolant_on)
             strcat(buf, "C");
-    else
+    } else
         *buf = '\0';
 
     if(can_monitor) {
@@ -165,7 +167,8 @@ static void onRealtimeReport (stream_write_ptr stream_write, report_tracking_fla
             system_set_exec_alarm(Alarm_AbortCycle);
     }
 
-    stream_write(buf);
+    if(*buf != '\0')
+        stream_write(buf);
 
     if(on_realtime_report)
         on_realtime_report(stream_write, report);
