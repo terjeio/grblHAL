@@ -26,10 +26,8 @@
 
 #include "grbl/grbl.h"
 
-bool bluetooth_init (bluetooth_settings_t *settings);
-status_code_t bluetooth_setting (uint_fast16_t param, float value, char *svalue);
-void bluetooth_settings_report (setting_type_t setting);
-void bluetooth_settings_restore (void);
+bool bluetooth_init (void);
+bool bluetooth_start (void);
 char *bluetooth_get_device_mac (void);
 char *bluetooth_get_client_mac (void);
 

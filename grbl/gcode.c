@@ -215,8 +215,8 @@ void gc_init (bool cold_start)
     } else {
         memset(&gc_state, 0, offsetof(parser_state_t, g92_coord_offset));
         gc_state.tool_pending = gc_state.tool->tool;
-        if(hal.tool_select)
-            hal.tool_select(gc_state.tool, false);
+        if(hal.tool.select)
+            hal.tool.select(gc_state.tool, false);
         // TODO: restore offsets, tool offset mode?
     }
 
@@ -248,10 +248,13 @@ void gc_init (bool cold_start)
 
 
 // Set dynamic laser power mode to PPI (Pulses Per Inch)
-// When active laser power is controlled by external hardware tracking motion and pulsing the laser
-void gc_set_laser_ppimode (bool on)
+// Returns true if driver uses hardware implementation.
+// Driver support for pulsing the laser on signal is required for this to work.
+bool gc_laser_ppi_enable (uint_fast16_t ppi, uint_fast16_t pulse_length)
 {
-    gc_state.is_laser_ppi_mode = on;
+    gc_state.is_laser_ppi_mode = ppi > 0 && pulse_length > 0;
+
+    return grbl.on_laser_ppi_enable && grbl.on_laser_ppi_enable(ppi, pulse_length);
 }
 
 // Add output command to linked list
@@ -289,7 +292,7 @@ static status_code_t init_sync_motion (plan_line_data_t *pl_data, float pitch)
     pl_data->overrides.feed_rate_disable = sys.override.control.feed_rate_disable = On;
     sys.override.spindle_rpm = DEFAULT_SPINDLE_RPM_OVERRIDE;
     // TODO: need for gc_state.distance_per_rev to be reset on modal change?
-    float feed_rate = pl_data->feed_rate * hal.spindle_get_data(SpindleData_RPM).rpm;
+    float feed_rate = pl_data->feed_rate * hal.spindle.get_data(SpindleData_RPM).rpm;
 
     if(feed_rate == 0.0f)
         FAIL(Status_GcodeSpindleNotRunning); // [Spindle not running]
@@ -399,7 +402,7 @@ status_code_t gc_execute_block(char *block, char *message)
                 switch(int_value) {
 
                     case 7: case 8:
-                        if(settings.flags.lathe_mode) {
+                        if(settings.mode == Mode_Lathe) {
                             word_bit.group = ModalGroup_G15;
                             gc_block.modal.diameter_mode = int_value == 7; // TODO: find specs for implementation, only affects X calculation? reporting? current position?
                         } else
@@ -433,7 +436,7 @@ status_code_t gc_execute_block(char *block, char *message)
                         break;
 
                     case 33: case 76:
-                        if(!hal.spindle_get_data)
+                        if(!hal.spindle.get_data)
                             FAIL(Status_GcodeUnsupportedCommand); // [G33 or G76 not supported]
                         if (axis_command)
                             FAIL(Status_GcodeAxisCommandConflict); // [Axis word/command conflict]
@@ -444,7 +447,7 @@ status_code_t gc_execute_block(char *block, char *message)
                         break;
 
                     case 38:
-                        if(!(hal.probe_get_state && ((mantissa == 20) || (mantissa == 30) || (mantissa == 40) || (mantissa == 50))))
+                        if(!(hal.probe.get_state && ((mantissa == 20) || (mantissa == 30) || (mantissa == 40) || (mantissa == 50))))
                             FAIL(Status_GcodeUnsupportedCommand); // [probing not supported by driver or unsupported G38.x command]
                         int_value += (mantissa / 10) + 100;
                         mantissa = 0; // Set to zero to indicate valid non-integer G command.
@@ -498,7 +501,7 @@ status_code_t gc_execute_block(char *block, char *message)
                         break;
 
                     case 95:
-                        if(hal.spindle_get_data) {
+                        if(hal.spindle.get_data) {
                             word_bit.group = ModalGroup_G5;
                             gc_block.modal.feed_mode = FeedMode_UnitsPerRev;
                         } else
@@ -562,7 +565,7 @@ status_code_t gc_execute_block(char *block, char *message)
                         break;
 
                     case 96: case 97:
-                        if(settings.flags.lathe_mode && hal.driver_cap.variable_spindle) {
+                        if(settings.mode == Mode_Lathe && hal.driver_cap.variable_spindle) {
                             word_bit.group = ModalGroup_G14;
                             gc_block.modal.spindle_rpm_mode = (spindle_rpm_mode_t)((int_value - 96) ^ 1);
                         } else
@@ -608,7 +611,7 @@ status_code_t gc_execute_block(char *block, char *message)
                                 break;
 
                             case 1: // M1 - program pause
-                                if(hal.driver_cap.program_stop ? !hal.system_control_get_state().stop_disable : !sys.flags.optional_stop_disable)
+                                if(hal.driver_cap.program_stop ? !hal.control.get_state().stop_disable : !sys.flags.optional_stop_disable)
                                     gc_block.modal.program_flow = ProgramFlow_OptionalStop;
                                 break;
 
@@ -625,10 +628,12 @@ status_code_t gc_execute_block(char *block, char *message)
                         break;
 
                     case 6:
-                        if(hal.stream.suspend_read || hal.tool_change)
-                            word_bit.group = ModalGroup_M6;
-                        else
-                            FAIL(Status_GcodeUnsupportedCommand); // [Unsupported M command]
+                        if(settings.tool_change.mode != ToolChange_Ignore) {
+                            if(hal.stream.suspend_read || hal.tool.change)
+                                word_bit.group = ModalGroup_M6;
+                            else
+                                FAIL(Status_GcodeUnsupportedCommand); // [Unsupported M command]
+                        }
                         break;
 
                     case 7: case 8: case 9:
@@ -716,7 +721,7 @@ status_code_t gc_execute_block(char *block, char *message)
                         return Status_OK;
 */
                     default:
-                        if(hal.user_mcode_check && (gc_block.user_mcode = hal.user_mcode_check((user_mcode_t)int_value)))
+                        if(hal.user_mcode.check && (gc_block.user_mcode = hal.user_mcode.check((user_mcode_t)int_value)))
                             word_bit.group = ModalGroup_M10;
                         else
                             FAIL(Status_GcodeUnsupportedCommand); // [Unsupported M command]
@@ -1045,7 +1050,7 @@ status_code_t gc_execute_block(char *block, char *message)
             FAIL(Status_GcodeValueWordMissing);
         if (floorf(gc_block.values.q) - gc_block.values.q != 0.0f)
             FAIL(Status_GcodeCommandValueNotInteger);
-        if ((uint32_t)gc_block.values.q < 1 || (uint32_t)gc_block.values.q > MAX_TOOL_NUMBER)
+        if ((uint32_t)gc_block.values.q > MAX_TOOL_NUMBER)
             FAIL(Status_GcodeIllegalToolTableEntry);
 
         gc_block.values.t = (uint32_t)gc_block.values.q;
@@ -1171,7 +1176,7 @@ status_code_t gc_execute_block(char *block, char *message)
 
     // [9a. User defined M commands ]:
     if (bit_istrue(command_words, bit(ModalGroup_M10)) && gc_block.user_mcode) {
-        if((int_value = (uint_fast16_t)hal.user_mcode_validate(&gc_block, &value_words)))
+        if((int_value = (uint_fast16_t)hal.user_mcode.validate(&gc_block, &value_words)))
             FAIL((status_code_t)int_value);
         axis_words = ijk_words = 0;
     }
@@ -2066,7 +2071,7 @@ status_code_t gc_execute_block(char *block, char *message)
     }
 
     // If in laser mode, setup laser power based on current and past parser conditions.
-    if (settings.flags.laser_mode) {
+    if (settings.mode == Mode_Laser) {
 
         if (!((gc_block.modal.motion == MotionMode_Linear) || (gc_block.modal.motion == MotionMode_CwArc) || (gc_block.modal.motion == MotionMode_CcwArc)))
           gc_parser_flags.laser_disable = On;
@@ -2095,7 +2100,7 @@ status_code_t gc_execute_block(char *block, char *message)
     plan_data.line_number = gc_state.line_number; // Record data for planner use.
 
     // [1. Comments feedback ]: Extracted in protocol.c if HAL entry point provided
-    if(message && (plan_data.message = malloc(strlen(message) + 1)))
+    if(message && sys.state != STATE_CHECK_MODE && (plan_data.message = malloc(strlen(message) + 1)))
         strcpy(plan_data.message, message);
 
     // [2. Set feed rate mode ]:
@@ -2108,7 +2113,6 @@ status_code_t gc_execute_block(char *block, char *message)
     plan_data.feed_rate = gc_state.feed_rate; // Record data for planner use.
 
     // [4. Set spindle speed ]:
-
     if(gc_state.modal.spindle_rpm_mode == SpindleSpeedMode_CSS) {
         gc_state.spindle.css.surface_speed = gc_block.values.s;
         if((plan_data.condition.is_rpm_pos_adjusted = gc_block.modal.motion != MotionMode_None && gc_block.modal.motion != MotionMode_Seek)) {
@@ -2140,12 +2144,12 @@ status_code_t gc_execute_block(char *block, char *message)
     // else { plan_data.spindle.speed = 0.0; } // Initialized as zero already.
 
     // [5. Select tool ]: Only tracks tool value if ATC or manual tool change is not possible.
-    if(gc_state.tool_pending != gc_block.values.t) {
+    if(gc_state.tool_pending != gc_block.values.t && sys.state != STATE_CHECK_MODE) {
 
         gc_state.tool_pending = gc_block.values.t;
 
         // If M6 not available or M61 commanded set new tool immediately
-        if(set_tool || !(hal.stream.suspend_read || hal.tool_change)) {
+        if(set_tool || settings.tool_change.mode == ToolChange_Ignore || !(hal.stream.suspend_read || hal.tool.change)) {
 #ifdef N_TOOLS
             gc_state.tool = &tool_table[gc_state.tool_pending];
 #else
@@ -2155,11 +2159,11 @@ status_code_t gc_execute_block(char *block, char *message)
         }
 
         // Prepare tool carousel when available
-        if(hal.tool_select) {
+        if(hal.tool.select) {
 #ifdef N_TOOLS
-            hal.tool_select(&tool_table[gc_state.tool_pending], !set_tool);
+            hal.tool.select(&tool_table[gc_state.tool_pending], !set_tool);
 #else
-            hal.tool_select(gc_state.tool, !set_tool);
+            hal.tool.select(gc_state.tool, !set_tool);
 #endif
         } else
             sys.report.tool = On;
@@ -2196,15 +2200,23 @@ status_code_t gc_execute_block(char *block, char *message)
     }
 
     // [6. Change tool ]: Delegated to (possible) driver implementation
-    if (bit_istrue(command_words, bit(ModalGroup_M6)) && !set_tool) {
+    if (bit_istrue(command_words, bit(ModalGroup_M6)) && !set_tool && sys.state != STATE_CHECK_MODE) {
+
         protocol_buffer_synchronize();
+
+        if(plan_data.message) {
+            report_message(plan_data.message, Message_Plain);
+            free(plan_data.message);
+            plan_data.message = NULL;
+        }
+
 #ifdef N_TOOLS
         gc_state.tool = &tool_table[gc_state.tool_pending];
 #else
         gc_state.tool->tool = gc_state.tool_pending;
 #endif
-        if(hal.tool_change) { // ATC
-            if((int_value = (uint_fast16_t)hal.tool_change(&gc_state)) != Status_OK)
+        if(hal.tool.change) { // ATC
+            if((int_value = (uint_fast16_t)hal.tool.change(&gc_state)) != Status_OK)
                 FAIL((status_code_t)int_value);
             sys.report.tool = On;
         } else { // Manual
@@ -2260,7 +2272,7 @@ status_code_t gc_execute_block(char *block, char *message)
         if(gc_block.user_mcode_sync)
             protocol_buffer_synchronize(); // Ensure user defined mcode is executed when specified in program.
 
-        hal.user_mcode_execute(sys.state, &gc_block);
+        hal.user_mcode.execute(sys.state, &gc_block);
     }
 
     // [10. Dwell ]:
@@ -2494,7 +2506,7 @@ status_code_t gc_execute_block(char *block, char *message)
             case MotionMode_ProbeAwayNoError:
                 // NOTE: gc_block.values.xyz is returned from mc_probe_cycle with the updated position value. So
                 // upon a successful probing cycle, the machine position and the returned value should be the same.
-                plan_data.condition.no_feed_override = !settings.flags.allow_probing_feed_override;
+                plan_data.condition.no_feed_override = !settings.probe.allow_feed_override;
                 gc_update_pos = (pos_update_t)mc_probe_cycle(gc_block.values.xyz, &plan_data, gc_parser_flags);
                 break;
 
@@ -2523,8 +2535,10 @@ status_code_t gc_execute_block(char *block, char *message)
         // == GCUpdatePos_None
     }
 
-    if(plan_data.message)
-        protocol_message(plan_data.message);
+    if(plan_data.message) {
+        report_message(plan_data.message, Message_Plain);
+        free(plan_data.message);
+    }
 
     // [21. Program flow ]:
     // M0,M1,M2,M30,M60: Perform non-running program flow actions. During a program pause, the buffer may
@@ -2587,10 +2601,13 @@ status_code_t gc_execute_block(char *block, char *message)
                 if (!(settings_read_coord_data(gc_state.modal.coord_system.id, &gc_state.modal.coord_system.xyz)))
                     FAIL(Status_SettingReadFail);
                 system_flag_wco_change(); // Set to refresh immediately just in case something altered.
-                hal.spindle_set_state(gc_state.modal.spindle, 0.0f);
-                hal.coolant_set_state(gc_state.modal.coolant);
+                hal.spindle.set_state(gc_state.modal.spindle, 0.0f);
+                hal.coolant.set_state(gc_state.modal.coolant);
                 sys.report.spindle = On; // Set to report change immediately
                 sys.report.coolant = On; // ...
+
+                if(grbl.on_program_completed)
+                    grbl.on_program_completed();
             }
 
             // Clear any pending output commands

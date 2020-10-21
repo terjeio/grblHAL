@@ -94,7 +94,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="third_party/fatfs/src/option/ccsbcs.c|third_party/fatfs/port/mmc-dk-tm4c129x.c|third_party/fatfs/port/sample-mmc.c|third_party/fatfs/port/mmc-ek-lm4f232.c|third_party/fatfs/port/mmc-dk-tm4c123g.c|third_party/fatfs/port/fat_usbmsc.c|third_party/fatfs/port/dual-disk-driver.c|third_party/fatfs/src/option/cc950.c|third_party/fatfs/src/option/cc949.c|third_party/fatfs/src/option/cc936.c|third_party/fatfs/src/option/cc932.c|lwip_task.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="lwip_task.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

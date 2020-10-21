@@ -24,13 +24,6 @@
 #ifndef _ODOMETER_H_
 #define _ODOMETER_H_
 
-#include <stdint.h>
-
-typedef struct {
-    uint64_t time;
-    uint64_t distance[N_AXIS];
-} odometer_data_t;
-
 void odometer_init();
 
 #endif

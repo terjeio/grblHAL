@@ -3,7 +3,7 @@
 
   Part of GrblHAL driver for ESP32
 
-  Copyright (c) 2018-2019 Terje Io
+  Copyright (c) 2018-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -108,6 +108,52 @@ void I2CInit (void)
 }
 
 #endif
+
+#if EEPROM_ENABLE
+
+nvs_transfer_result_t i2c_nvs_transfer (nvs_transfer_t *i2c, bool read)
+{
+    if(i2cBusy != NULL && xSemaphoreTake(i2cBusy, 5 / portTICK_PERIOD_MS) == pdTRUE) {
+
+        i2c->address <<= 1;
+        i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+        i2c_master_start(cmd);
+        i2c_master_write_byte(cmd, i2c->address|I2C_MASTER_WRITE, true);
+        if(i2c->word_addr_bytes == 2) {
+            i2c_master_write_byte(cmd, i2c->word_addr >> 8, true);
+            i2c_master_write_byte(cmd, i2c->word_addr & 0xFF, true);
+        } else
+            i2c_master_write_byte(cmd, i2c->word_addr, true);
+
+        if(read) {
+            i2c_master_start(cmd);
+            i2c_master_write_byte(cmd, i2c->address|I2C_MASTER_READ, true);
+            if (i2c->count > 1)
+                i2c_master_read(cmd, i2c->data, i2c->count - 1, I2C_MASTER_ACK);
+            i2c_master_read_byte(cmd, i2c->data + i2c->count - 1, I2C_MASTER_NACK);
+            i2c_master_stop(cmd);
+        } else {
+            i2c_master_write(cmd, i2c->data, i2c->count, true);
+            i2c_master_stop(cmd);
+        }
+
+        i2c_master_cmd_begin(I2C_PORT, cmd, 1000 / portTICK_PERIOD_MS);
+//      printf("EE %d %d %d\n", read, i2c.count, ret);
+        i2c_cmd_link_delete(cmd);
+
+        xSemaphoreGive(i2cBusy);
+
+#if !EEPROM_IS_FRAM
+        if(!read) // Delay 5ms for write to complete
+            vTaskDelay(10 / portTICK_PERIOD_MS);
+#endif
+    }
+
+    return NVS_TransferResult_OK;
+}
+
+#endif
+
 
 #if KEYPAD_ENABLE
 

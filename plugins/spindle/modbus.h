@@ -71,7 +71,6 @@ typedef struct {
 
 void modbus_init (modbus_stream_t *stream);
 bool modbus_send (modbus_message_t *msg, bool block);
-void modbus_poll (void);
 modbus_state_t modbus_get_state (void);
 
 #endif

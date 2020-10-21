@@ -1,33 +1,48 @@
 ## grblHAL changelog
 
+Build 20201020:
+
+__NOTE:__ Settings data format has been changed and settings will be reset to default on update. Backup and restore.
+
+* Added support for STM32F446 based Nucleo-64 boards to STM32F4xx driver.
+* Fix for regression that set laser mode as default - `$32=1`. Check that this is correct after restoring settings from backup. 
+* Added new settings option `$341=4` for ignoring `M6` tool change command.
+* Bug fix for `M61Q0` - returned error previously.
+* Changed clearing of tool length offset reference on homing to be done only if relevant axis is/axes are homed.
+* Fixed check for running startup scripts on homing to check that all axes configured for homing are actually homed.
+* Changes to message display from `(MSG,..)` comments in gcode.  
+`(MSG,..)` strings will be sent back to the sender in sync with gcode execution.
+* Added `*` prefix to NVS storage type in `$I` report if buffered, e.g: `[NEWOPT:*EEPROM,ES,TC]`
+* Increased heap allocation for nearly all drivers.  
+Memory from heap is used for the NVS buffer and for temporary storage of `(MSG,..)` strings.  
+* Added option for adding substates to the `Run` state in the real time report to `$11` setting \(bit 11\).  
+If enabled `Run:2` will be reported when a probing motion is ongoing, this can be used by senders to provide a simple probe protection scheme.  
+* Another refactoring of the settings subsystem, this time for handling plugin settings.
+Plugins settings storage space is now dynamically allocated and handled locally by the plugin code, this allows user defined plugins to add settings too!
+Ten setting codes are reserved for user defined plugins.
+* Added template for [basic plugin with two settings](templates/README.md).
+* HAL pointers refactored for code readability, many moved to separate structures for each subsystem. Added typedefs.
+* Some minor bug fixes and other code readability improvements. Prepared for switch to 16-bit CRC for settings data validation.
+
 Build 20200923:
 
-* Added support for STM32F411 based Blackpill boards.
-
+* Added support for STM32F411 based Blackpill boards to STM32F4xx driver.
 * Initial changes to ESP32 driver to allow compilation with PlatformIO, added my_machine.h for this. Note that my_machine.h is not used if compiling with idf.py.
-
-* Added home position to `$#` ngc report, e.g. `[HOME,0.000,0.000,0.000:7]` - means all axes are homed. Position is reported in machine coordinates. `:7` in the example is an axis bitmap, the reported value is for which axes are homed: bit 0 is Z, 1 is X etc. `:0` = no axes homed.
-
+* Added home position to `$#` ngc report, e.g. `[HOME,0.000,0.000,0.000:7]` - means all axes are homed. Position is reported in machine coordinates. `:7` in the example is an axis bitfield, the reported value is for which axes are homed: bit 0 is Z, 1 is X etc. `:0` = no axes homed.
 * "Hardened" the new tool change functionality even more. Initial changes for multi-axis tool reference offset made.  
 An empy message will now be sent when tool change is complete, this to clear any tool change related message in the sender.
-
-* Added call to [weak](https://en.wikipedia.org/wiki/Weak_symbol) `my_plugin_init()` function at startup, name your [plugin](https://github.com/terjeio/grblHAL/tree/master/plugins) init function` my_plugin_init` and there is no need to change any grblHAL source files to bring it alive.  
+* Added call to [weak](https://en.wikipedia.org/wiki/Weak_symbol) `my_plugin_init()` function at startup, name your [plugin](https://github.com/terjeio/grblHAL/tree/master/plugins) init function `void my_plugin_init (void)` and there is no need to change any grblHAL source files to bring it alive.  
 Use this feature for your private plugin only, multiple public plugins using this name cannot coexist!
-
 * Some changes to improve code readability and added strict check for `G59.x` gcodes.
 
 Build 20200911:
 
 * Core refactored for better support for non-volatile storage. Some HAL entry points renamed for readability and moved to a new data structure.
-
 * Added plugin for axis odometers. This logs total distance traveled and machining time to EEPROM/FRAM.  
 [FRAM](https://www.electronics-notes.com/articles/electronic_components/semiconductor-ic-memory/fram-ferroelectric-ram-memory.php) is recommended for storage as it is faster and can sustain a larger number of write cycles. FRAM chips are sold in packages that is pin compatible with EEPROM.  
 __NOTE:__ Currently for review and for now only for the iMRXT1061 \(Teensy 4.x\) driver. It will _not_ be available in configurations that stores non-volatile data to flash.
-
 * "Hardening" of new [manual tool change](https://github.com/terjeio/grblHAL/wiki/Manual,-semi-automatic-and-automatic-tool-change) functionality. 
-
 * Improved auto squaring algorithm in core.
-
 * Enhanced some plugins so they can coexist.
 
 --- 
@@ -35,9 +50,7 @@ __NOTE:__ Currently for review and for now only for the iMRXT1061 \(Teensy 4.x\)
 Build 20200830:
 
 * Improved tool change functionality, a status report is forced on end of tool change to inform change is completed.
-
 * Fix for iMRXT1062 homing failure when serial over USB is used.
-
 * Standardized serial over USB `#define` macro across drivers to `USB_SERIAL_CDC`.
 
 ---

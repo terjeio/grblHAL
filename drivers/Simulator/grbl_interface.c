@@ -28,7 +28,7 @@
 #include "driver.h"
 #include "simulator.h"
 
-#include "grbl/grbl.h"
+#include "grbl/hal.h"
 
 int block_position[N_AXIS] = {0}; //step count after most recently planned block
 uint32_t block_number = 0;

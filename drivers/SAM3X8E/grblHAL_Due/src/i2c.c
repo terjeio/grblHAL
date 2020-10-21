@@ -50,7 +50,7 @@ typedef enum {
 typedef struct {
     volatile i2c_state_t state;
     uint8_t addr;
-    uint8_t count;
+    uint16_t count;
     uint8_t *data;
 #if KEYPAD_ENABLE
     keycode_callback_ptr keycode_callback;
@@ -96,7 +96,7 @@ void i2c_init (void)
 }
 
 // get bytes (max 8), waits for result
-uint8_t *I2C_Receive (uint32_t i2cAddr, uint8_t *buf, uint32_t bytes, bool block)
+uint8_t *I2C_Receive (uint32_t i2cAddr, uint8_t *buf, uint16_t bytes, bool block)
 {
     i2c.data  = buf ? buf : i2c.buffer;
     i2c.count = bytes;
@@ -113,7 +113,7 @@ uint8_t *I2C_Receive (uint32_t i2cAddr, uint8_t *buf, uint32_t bytes, bool block
     return i2c.buffer;
 }
 
-void I2C_Send (uint32_t i2cAddr, uint8_t *buf, uint8_t bytes, bool block)
+void I2C_Send (uint32_t i2cAddr, uint8_t *buf, uint16_t bytes, bool block)
 {
     i2c.count = bytes;
     i2c.data  = buf ? buf : i2c.buffer;
@@ -127,7 +127,7 @@ void I2C_Send (uint32_t i2cAddr, uint8_t *buf, uint8_t bytes, bool block)
         while(i2cIsBusy);
 }
 
-uint8_t *I2C_ReadRegister (uint32_t i2cAddr, uint8_t *buf, uint8_t bytes, bool block)
+uint8_t *I2C_ReadRegister (uint32_t i2cAddr, uint8_t *buf, uint16_t bytes, bool block)
 {
     while(i2cIsBusy);
 
@@ -148,23 +148,25 @@ uint8_t *I2C_ReadRegister (uint32_t i2cAddr, uint8_t *buf, uint8_t bytes, bool b
 
 #if EEPROM_ENABLE
 
-void i2c_eeprom_transfer (i2c_eeprom_trans_t *eeprom, bool read)
+nvs_transfer_result_t i2c_nvs_transfer (nvs_transfer_t *transfer, bool read)
 {
     static uint8_t txbuf[34];
 
     while(i2cIsBusy);
 
     if(read) {
-        eeprom->data[0] = eeprom->word_addr; // !!
-        I2C_ReadRegister(eeprom->address, eeprom->data, eeprom->count, true);
+        transfer->data[0] = transfer->word_addr; // !!
+        I2C_ReadRegister(transfer->address, transfer->data, transfer->count, true);
     } else {
-        memcpy(&txbuf[1], eeprom->data, eeprom->count);
-        txbuf[0] = eeprom->word_addr;
-        I2C_Send(eeprom->address, txbuf, eeprom->count, true);
+        memcpy(&txbuf[1], transfer->data, transfer->count);
+        txbuf[0] = transfer->word_addr;
+        I2C_Send(transfer->address, txbuf, transfer->count, true);
 #if !EEPROM_IS_FRAM
         hal.delay_ms(5, NULL);
 #endif
     }
+
+    return NVS_TransferResult_OK;
 }
 
 #endif

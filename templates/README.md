@@ -6,7 +6,9 @@ Template code to aid writing custom code for extensions such as additional IO-pi
 
 * [mcodes.c](./mcodes.c) - for additional M-codes, includes example code.
 
+* [my_plugin.c](./my_plugin.c) - a basic plugin with settings handling.
+
 The HAL supports a wide range of extension possibilities, this without touching the core grbl codebase. Some examples can be found in the [plugins](../plugins) folder.
 
 ---
-2019-12-26
+2020-10-05

@@ -1,10 +1,10 @@
 /*
 
-  eeprom.h - plugin for for I2C EEPROM
+  eeprom.h - plugin for for I2C EEPROM or FRAM
 
   Part of GrblHAL
 
-  Copyright (c) 2017-2019 Terje Io
+  Copyright (c) 2017-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -24,10 +24,6 @@
 #ifndef _EEPROM_H_
 #define _EEPROM_H_
 
-void eepromInit (void);
-uint8_t eepromGetByte (uint32_t addr);
-void eepromPutByte (uint32_t addr, uint8_t new_value);
-void eepromWriteBlockWithChecksum (uint32_t destination, uint8_t *source, uint32_t size);
-bool eepromReadBlockWithChecksum (uint8_t *destination, uint32_t source, uint32_t size);
+void i2c_eeprom_init (void);
 
 #endif

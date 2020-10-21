@@ -184,10 +184,6 @@ static input_signal_t inputpin[] = {
 
 static uint32_t vectorTable[sizeof(DeviceVectors) / sizeof(uint32_t)] __attribute__(( aligned (0x100ul) ));
 
-#ifdef DRIVER_SETTINGS
-driver_settings_t driver_settings;
-#endif
-
 static void spindle_set_speed (uint_fast16_t pwm_value);
 
 static void SysTick_IRQHandler (void);
@@ -517,6 +513,23 @@ inline static axes_signals_t limitsGetState()
 
 #ifdef SQUARING_ENABLED
 
+static axes_signals_t getAutoSquaredAxes (void)
+{
+    axes_signals_t ganged = {0};
+
+    #if X_AUTO_SQUARE
+    ganged.x = On;
+#endif
+#if Y_AUTO_SQUARE
+    ganged.y = On;
+#endif
+#if Z_AUTO_SQUARE
+    ganged.z = On;
+#endif
+
+    return ganged;
+}
+
 // Enable/disable motors for auto squaring of ganged axes
 static void StepperDisableMotors (axes_signals_t axes, squaring_mode_t mode)
 {
@@ -589,7 +602,7 @@ static void limitsEnable (bool on, bool homing)
     } while(i);
 
   #ifdef SQUARING_ENABLED
-    hal.limits_get_state = homing ? limitsGetHomeState : limitsGetState;
+    hal.limits.get_state = homing ? limitsGetHomeState : limitsGetState;
   #endif
 
   #if TRINAMIC_ENABLE
@@ -629,7 +642,7 @@ static control_signals_t systemGetState (void)
 // and the probing cycle modes for toward-workpiece/away-from-workpiece.
 static void probeConfigure (bool is_probe_away, bool probing)
 {
-  probe_invert = settings.flags.invert_probe_pin;
+  probe_invert = settings.probe.invert_probe_pin;
 
   if (is_probe_away)
       probe_invert = !probe_invert;
@@ -823,13 +836,6 @@ static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t 
     return prev;
 }
 
-static void showMessage (const char *msg)
-{
-    hal.stream.write("[MSG:");
-    hal.stream.write(msg);
-    hal.stream.write("]\r\n");
-}
-
 static void PIO_Mode (Pio *port, uint32_t bit, bool mode)
 {
     port->PIO_WPMR = PIO_WPMR_WPKEY(0x50494F);
@@ -901,16 +907,16 @@ void settings_changed (settings_t *settings)
         stepperEnable(settings->steppers.deenergize);
 
 #ifdef SQUARING_ENABLED
-        hal.stepper_disable_motors((axes_signals_t){0}, SquaringMode_Both);
+        hal.stepper.disable_motors((axes_signals_t){0}, SquaringMode_Both);
 #endif
 
       #ifndef VFD_SPINDLE
 
         if(hal.driver_cap.variable_spindle && spindle_precompute_pwm_values(&spindle_pwm, hal.f_step_timer)) {
             SPINDLE_PWM_TIMER.TC_RC = spindle_pwm.period;
-            hal.spindle_set_state = spindleSetStateVariable;
+            hal.spindle.set_state = spindleSetStateVariable;
         } else
-            hal.spindle_set_state = spindleSetState;
+            hal.spindle.set_state = spindleSetState;
 
       #endif
 
@@ -919,9 +925,9 @@ void settings_changed (settings_t *settings)
         if(hal.driver_cap.step_pulse_delay && settings->steppers.pulse_delay_microseconds > 0.0f) {
             int32_t delay = (uint32_t)(42.0f * (settings->steppers.pulse_delay_microseconds - 0.6f));
             pulse_delay = delay < 2 ? 2 : delay;
-            hal.stepper_pulse_start = stepperPulseStartDelayed;
+            hal.stepper.pulse_start = stepperPulseStartDelayed;
         } else
-            hal.stepper_pulse_start = stepperPulseStart;
+            hal.stepper.pulse_start = stepperPulseStart;
 
         IRQRegister(STEP_TIMER_IRQn, STEP_IRQHandler);
         STEP_TIMER.TC_RC = pulse_length;
@@ -1117,7 +1123,7 @@ void settings_changed (settings_t *settings)
         }
 
         if(settings->limits.flags.hard_enabled)
-            hal.limits_enable(true, false);
+            hal.limits.enable(true, false);
     }
 }
 
@@ -1135,17 +1141,6 @@ static bool driver_setup (settings_t *settings)
     pmc_enable_periph_clk(ID_TC6);
     pmc_enable_periph_clk(ID_TC7);
     pmc_enable_periph_clk(ID_TC8);
-
-    /********************************************************
-     * Read driver specific setting from persistent storage *
-     ********************************************************/
-
-#ifdef DRIVER_SETTINGS
-    if(hal.nvs.type != EEPROM_None) {
-        if(!hal.nvs.memcpy_from_with_checksum((uint8_t *)&driver_settings, hal.nvs.driver_area.address, sizeof(driver_settings)))
-            hal.driver_settings_restore();
-    }
-#endif
 
  // Stepper init
 
@@ -1339,22 +1334,18 @@ static bool driver_setup (settings_t *settings)
   #endif
 
 #if TRINAMIC_ENABLE
-    trinamic_init();
+    trinamic_start(true);
 #endif
 
  // Set defaults
 
-    IOInitDone = settings->version == 17;
+    IOInitDone = settings->version == 18;
 
     settings_changed(settings);
 
-    hal.stepper_go_idle(true);
-    hal.spindle_set_state((spindle_state_t){0}, 0.0f);
-    hal.coolant_set_state((coolant_state_t){0});
-
-#if KEYPAD_ENABLE
-//    keypad_init();
-#endif
+    hal.stepper.go_idle(true);
+    hal.spindle.set_state((spindle_state_t){0}, 0.0f);
+    hal.coolant.set_state((coolant_state_t){0});
 
 #if SDCARD_ENABLE
     pinMode(SD_CD_PIN, INPUT_PULLUP);
@@ -1371,51 +1362,6 @@ static bool driver_setup (settings_t *settings)
 
     return IOInitDone;
 }
-
-#ifdef DRIVER_SETTINGS
-
-static status_code_t driver_setting (uint_fast16_t param, float value, char *svalue)
-{
-    status_code_t status = Status_Unhandled;
-
-#if KEYPAD_ENABLE
-    status = keypad_setting(param, value, svalue);
-#endif
-
-#if TRINAMIC_ENABLE
-    if(status == Status_Unhandled)
-        status  = trinamic_setting(param, value, svalue);
-#endif
-
-    if(status == Status_OK)
-        hal.nvs.memcpy_to_with_checksum(hal.nvs.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
-
-    return status;
-}
-
-static void driver_settings_report (setting_type_t setting)
-{
-#if KEYPAD_ENABLE
-    keypad_settings_report(setting);
-#endif
-
-#if TRINAMIC_ENABLE
-    trinamic_settings_report(setting);
-#endif
-}
-
-static void driver_settings_restore (void)
-{
-#if KEYPAD_ENABLE
-    keypad_settings_restore();
-#endif
-#if TRINAMIC_ENABLE
-    trinamic_settings_restore();
-#endif
-    hal.nvs.memcpy_to_with_checksum(hal.nvs.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
-}
-
-#endif
 
 // EEPROM emulation - stores settings in flash
 // Note: settings will not survive a reflash unless protected
@@ -1482,14 +1428,11 @@ bool nvsInit (void)
 
 // End EEPROM emulation
 
-#if KEYPAD_ENABLE || USB_SERIAL_CDC
+#if USB_SERIAL_CDC
 static void execute_realtime (uint_fast16_t state)
 {
 #if USB_SERIAL_CDC
     usb_execute_realtime(state);
-#endif
-#if KEYPAD_ENABLE
-    keypad_process_keypress(state);
 #endif
 }
 #endif
@@ -1524,7 +1467,7 @@ bool driver_init (void)
     NVIC_EnableIRQ(SysTick_IRQn);
 
     hal.info = "SAM3X8E";
-	hal.driver_version = "200923";
+	hal.driver_version = "201014";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1534,39 +1477,38 @@ bool driver_init (void)
     hal.delay_ms = driver_delay_ms;
     hal.settings_changed = settings_changed;
 
-    hal.stepper_wake_up = stepperWakeUp;
-    hal.stepper_go_idle = stepperGoIdle;
-    hal.stepper_enable = stepperEnable;
-    hal.stepper_cycles_per_tick = stepperCyclesPerTick;
-    hal.stepper_pulse_start = stepperPulseStart;
+    hal.stepper.wake_up = stepperWakeUp;
+    hal.stepper.go_idle = stepperGoIdle;
+    hal.stepper.enable = stepperEnable;
+    hal.stepper.cycles_per_tick = stepperCyclesPerTick;
+    hal.stepper.pulse_start = stepperPulseStart;
 #ifdef SQUARING_ENABLED
-    hal.stepper_disable_motors = StepperDisableMotors;
+    hal.stepper.get_auto_squared = getAutoSquaredAxes;
+    hal.stepper.disable_motors = StepperDisableMotors;
 #endif
 
-    hal.limits_enable = limitsEnable;
-    hal.limits_get_state = limitsGetState;
+    hal.limits.enable = limitsEnable;
+    hal.limits.get_state = limitsGetState;
 
-    hal.coolant_set_state = coolantSetState;
-    hal.coolant_get_state = coolantGetState;
+    hal.coolant.set_state = coolantSetState;
+    hal.coolant.get_state = coolantGetState;
 //#ifdef PROBE_PIN
-    hal.probe_get_state = probeGetState;
+    hal.probe.configure = probeConfigure;
+    hal.probe.get_state = probeGetState;
 //#endif
-    hal.probe_configure_invert_mask = probeConfigure;
 
 #ifndef VFD_SPINDLE
-    hal.spindle_set_state = spindleSetState;
-    hal.spindle_get_state = spindleGetState;
+    hal.spindle.set_state = spindleSetState;
+    hal.spindle.get_state = spindleGetState;
   #ifdef SPINDLE_PWM_DIRECT
-    hal.spindle_get_pwm = spindleGetPWM;
-    hal.spindle_update_pwm = spindle_set_speed;
+    hal.spindle.get_pwm = spindleGetPWM;
+    hal.spindle.update_pwm = spindle_set_speed;
   #else
-    hal.spindle_update_rpm = spindleUpdateRPM;
+    hal.spindle.update_rpm = spindleUpdateRPM;
   #endif
 #endif
     
-    hal.system_control_get_state = systemGetState;
-
-    hal.show_message = showMessage;
+    hal.control.get_state = systemGetState;
 
 #if USB_SERIAL_CDC
     usb_serialInit();
@@ -1588,19 +1530,12 @@ bool driver_init (void)
     hal.stream.suspend_read = serialSuspendInput;
 #endif
 
-    hal.nvs.size = GRBL_NVS_SIZE;
+#if EEPROM_ENABLE || KEYPAD_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
+    i2c_init();
+#endif
 
 #if EEPROM_ENABLE
-    eepromInit();
-  #if EEPROM_IS_FRAM
-    hal.nvs.type = NVS_FRAM;
-  #else
-    hal.nvs.type = NVS_EEPROM;
-  #endif
-    hal.nvs.get_byte = eepromGetByte;
-    hal.nvs.put_byte = eepromPutByte;
-    hal.nvs.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
-    hal.nvs.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
+    i2c_eeprom_init();
 #else
     if(nvsInit()) {
         hal.nvs.type = NVS_Flash;
@@ -1610,35 +1545,12 @@ bool driver_init (void)
         hal.nvs.type = NVS_None;
 #endif
 
-#if KEYPAD_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
-    i2c_init();
-#endif
-
-#ifdef DRIVER_SETTINGS
-    if(hal.nvs.type != NVS_None) {
-        hal.nvs.driver_area.address = GRBL_NVS_SIZE;
-        hal.nvs.driver_area.size = sizeof(driver_settings); // Add assert?
-        hal.nvs.size = GRBL_NVS_SIZE + sizeof(driver_settings) + 1;
-
-        hal.driver_setting = driver_setting;
-        hal.driver_settings_report = driver_settings_report;
-        hal.driver_settings_restore = driver_settings_restore;
-    }
-#endif
-
-#if TRINAMIC_ENABLE
-    hal.user_mcode_check = trinamic_MCodeCheck;
-    hal.user_mcode_validate = trinamic_MCodeValidate;
-    hal.user_mcode_execute = trinamic_MCodeExecute;
-    hal.driver_rt_report = trinamic_RTReport;
-    hal.driver_axis_settings_report = trinamic_axis_settings_report;
-#endif
-
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
+    hal.get_elapsed_ticks = millis;
 
-#if KEYPAD_ENABLE || USB_SERIAL_CDC
+#if USB_SERIAL_CDC
     hal.execute_realtime = execute_realtime;
 #endif
 
@@ -1665,37 +1577,13 @@ bool driver_init (void)
     hal.driver_cap.control_pull_up = On;
     hal.driver_cap.limits_pull_up = On;
     hal.driver_cap.probe_pull_up = On;
-#ifdef SQUARING_ENABLED 
-  #ifdef X2_STEP_PIN
-    hal.driver_cap.axis_ganged_x = On;
-  #endif
-  #ifdef Y2_STEP_PIN
-    hal.driver_cap.axis_ganged_y = On;
-  #endif
-  #ifdef Z2_STEP_PIN
-    hal.driver_cap.axis_ganged_z = On;
-//    hal.axis_ganged.z = On;
-  #endif
+
+#if TRINAMIC_ENABLE
+    trinamic_init();
 #endif
-/*
-#ifdef X_LIMIT_PIN_MAX
-#if !X_AUTO_SQUARE
-  hal.axis_dual_limit_switches.x = On;
-#endif
-#endif
-#ifdef Y_LIMIT_PIN_MAX
-#if !Y_AUTO_SQUARE
-  hal.axis_dual_limit_switches.y = On;
-#endif
-#endif
-#ifdef Z_LIMIT_PIN_MAX
-#if !Z_AUTO_SQUARE
-  hal.axis_dual_limit_switches.z = On;
-#endif
-#endif
-*/
-#if SDCARD_ENABLE
-    hal.driver_cap.sd_card = On;
+
+#if KEYPAD_ENABLE
+    keypad_init();
 #endif
 
 #if MODBUS_ENABLE
@@ -1720,7 +1608,7 @@ bool driver_init (void)
 
     // No need to move version check before init.
     // Compiler will fail any signature mismatch for existing entries.
-    return hal.version == 6;
+    return hal.version == 7;
 }
 
 /* interrupt handlers */
@@ -1729,7 +1617,7 @@ bool driver_init (void)
 static void STEPPER_IRQHandler (void)
 {
     if(STEPPER_TIMER.TC_SR & STEPPER_TIMER.TC_IMR)
-        hal.stepper_interrupt_callback();
+        hal.stepper.interrupt_callback();
 }
 
 // Step output off
@@ -1795,11 +1683,11 @@ static void DEBOUNCE_IRQHandler (void)
           switch(signal->group) {
 
             case INPUT_GROUP_LIMIT:
-                hal.limit_interrupt_callback(limitsGetState());
+                hal.limits.interrupt_callback(limitsGetState());
                 break;
 
             case INPUT_GROUP_CONTROL:
-                hal.control_interrupt_callback(systemGetState());
+                hal.control.interrupt_callback(systemGetState());
                 break;
         }
     }
@@ -1825,14 +1713,14 @@ inline static void PIO_IRQHandler (input_signal_t *signals, uint32_t isr)
         DEBOUNCE_TIMER.TC_CCR = TC_CCR_SWTRG;
 
     if(grp & INPUT_GROUP_LIMIT)
-        hal.limit_interrupt_callback(limitsGetState());
+        hal.limits.interrupt_callback(limitsGetState());
 
     if(grp & INPUT_GROUP_CONTROL)
-        hal.control_interrupt_callback(systemGetState());
+        hal.control.interrupt_callback(systemGetState());
 
 #if KEYPAD_ENABLE
     if(grp & INPUT_GROUP_KEYPAD)
-        keypad_keyclick_handler(BITBAND_PERI(KEYPAD_PORT->PIO_PDSR, KEYPAD_PIN));
+        keypad_keyclick_handler(!BITBAND_PERI(KEYPAD_PORT->PIO_PDSR, KEYPAD_PIN));
 #endif
 }
 

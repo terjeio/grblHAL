@@ -73,7 +73,7 @@
 #endif
 
 #if EEPROM_ENABLE
-#include "eeprom.h"
+#include "eeprom/eeprom.h"
 #endif
 
 #ifdef I2C_PORT
@@ -109,10 +109,6 @@ typedef struct {
 } pwm_ramp_t;
 
 static pwm_ramp_t pwm_ramp;
-#endif
-
-#ifdef DRIVER_SETTINGS 
-driver_settings_t driver_settings;
 #endif
 
 typedef enum {
@@ -286,7 +282,7 @@ static uint8_t probe_invert;
 #ifdef USE_I2S_OUT
 #define DIGITAL_IN(pin) i2s_out_state(pin)
 #define DIGITAL_OUT(pin, state) i2s_out_write(pin, state)
-uint32_t step_length = I2S_OUT_USEC_PER_PULSE;
+uint32_t i2s_step_length = I2S_OUT_USEC_PER_PULSE, i2s_step_samples = 1;
 #else
 #define DIGITAL_IN(pin) gpio_get_level(pin)
 #define DIGITAL_OUT(pin, state) gpio_set_level(pin, state)
@@ -540,7 +536,7 @@ static void stepperEnable (axes_signals_t enable)
 #ifdef USE_I2S_OUT
 
 // Set stepper pulse output pins
-inline IRAM_ATTR static void i2s_set_step_outputs (axes_signals_t step_outbits)
+inline __attribute__((always_inline)) IRAM_ATTR static void i2s_set_step_outputs (axes_signals_t step_outbits)
 {
     step_outbits.value ^= settings.steppers.step_invert.mask;
     DIGITAL_OUT(X_STEP_PIN, step_outbits.x);
@@ -554,9 +550,6 @@ inline IRAM_ATTR static void i2s_set_step_outputs (axes_signals_t step_outbits)
 #endif
 #ifdef C_AXIS
     DIGITAL_OUT(C_STEP_PIN, step_outbits.c);
-#endif
-#ifdef USE_I2S_OUT
-    i2s_out_push_sample(8 / I2S_OUT_USEC_PER_PULSE);
 #endif
 }
 
@@ -579,13 +572,14 @@ IRAM_ATTR static void I2S_stepperCyclesPerTick (uint32_t cycles_per_tick)
 // Sets stepper direction and pulse pins and starts a step pulse
 IRAM_ATTR static void I2S_stepperPulseStart (stepper_t *stepper)
 {
-    if(stepper->new_block) {
-        stepper->new_block = false;
+    if(stepper->dir_change) {
         set_dir_outputs(stepper->dir_outbits);
-    }
 
-    i2s_out_push_sample(step_length / I2S_OUT_USEC_PER_PULSE);
-    i2s_set_step_outputs((axes_signals_t){0});
+    if(stepper->step_outbits.value) {
+        i2s_set_step_outputs(stepper->step_outbits);
+        i2s_out_push_sample(i2s_step_samples);
+        i2s_set_step_outputs((axes_signals_t){0});
+    }
 }
 
 // Starts stepper driver ISR timer and forces a stepper driver interrupt callback
@@ -663,16 +657,14 @@ IRAM_ATTR static void stepperCyclesPerTick (uint32_t cycles_per_tick)
 // Sets stepper direction and pulse pins and starts a step pulse
 IRAM_ATTR static void stepperPulseStart (stepper_t *stepper)
 {
-    if(stepper->new_block) {
-        stepper->new_block = false;
+    if(stepper->dir_change)
         set_dir_outputs(stepper->dir_outbits);
-    }
 
     if(stepper->step_outbits.value) {
 #ifdef USE_I2S_OUT
         uint64_t step_pulse_start_time = esp_timer_get_time();
         i2s_set_step_outputs(stepper->step_outbits);
-        while (esp_timer_get_time() - step_pulse_start_time < step_length) {
+        while (esp_timer_get_time() - step_pulse_start_time < i2s_step_length) {
             __asm__ __volatile__ ("nop");  // spin here until time to turn off step
         }
         i2s_set_step_outputs((axes_signals_t){0});
@@ -686,21 +678,21 @@ IRAM_ATTR static void stepperPulseStart (stepper_t *stepper)
 
 static void i2s_set_streaming_mode (bool stream)
 {
-    if(!stream && hal.stepper_wake_up == I2S_stepperWakeUp) {
+    if(!stream && hal.stepper.wake_up == I2S_stepperWakeUp) {
         i2s_out_set_passthrough();
         i2s_out_delay();
     }
 
     if(stream) {
-        hal.stepper_wake_up = I2S_stepperWakeUp;
-        hal.stepper_go_idle = I2S_stepperGoIdle;
-        hal.stepper_cycles_per_tick = I2S_stepperCyclesPerTick;
-        hal.stepper_pulse_start = I2S_stepperPulseStart;
+        hal.stepper.wake_up = I2S_stepperWakeUp;
+        hal.stepper.go_idle = I2S_stepperGoIdle;
+        hal.stepper.cycles_per_tick = I2S_stepperCyclesPerTick;
+        hal.stepper.pulse_start = I2S_stepperPulseStart;
     } else {
-        hal.stepper_wake_up = stepperWakeUp;
-        hal.stepper_go_idle = stepperGoIdle;
-        hal.stepper_cycles_per_tick = stepperCyclesPerTick;
-        hal.stepper_pulse_start = stepperPulseStart;
+        hal.stepper.wake_up = stepperWakeUp;
+        hal.stepper.go_idle = stepperGoIdle;
+        hal.stepper.cycles_per_tick = stepperCyclesPerTick;
+        hal.stepper.pulse_start = stepperPulseStart;
     }
 }
 
@@ -785,7 +777,7 @@ static void probeConfigure(bool is_probe_away, bool probing)
     i2s_set_streaming_mode(!probing);
 #endif
 
-    probe_invert = settings.flags.invert_probe_pin ? 0 : 1;
+    probe_invert = settings.probe.invert_probe_pin ? 0 : 1;
 
     if(is_probe_away)
         probe_invert ^= 1;
@@ -994,13 +986,6 @@ static coolant_state_t coolantGetState (void)
     return state;
 }
 
-static void showMessage (const char *msg)
-{
-    hal.stream.write("[MSG:");
-    hal.stream.write(msg);
-    hal.stream.write("]\r\n");
-}
-
 // Helper functions for setting/clearing/inverting individual bits atomically (uninterruptable)
 IRAM_ATTR static void bitsSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t bits)
 {
@@ -1089,10 +1074,10 @@ void debounceTimerCallback (TimerHandle_t xTimer)
 //    printf("Debounce %d %d\n", grp, limitsGetState().value);
 
       if(grp & INPUT_GROUP_LIMIT)
-            hal.limit_interrupt_callback(limitsGetState());
+            hal.limits.interrupt_callback(limitsGetState());
 
       if(grp & INPUT_GROUP_CONTROL)
-          hal.control_interrupt_callback(systemGetState());
+          hal.control.interrupt_callback(systemGetState());
 }
 
 
@@ -1144,7 +1129,7 @@ static void settings_changed (settings_t *settings)
       #endif
 
       #ifndef VFD_SPINDLE
-        hal.spindle_set_state = hal.driver_cap.variable_spindle ? spindleSetStateVariable : spindleSetState;
+        hal.spindle.set_state = hal.driver_cap.variable_spindle ? spindleSetStateVariable : spindleSetState;
       #endif
 
 #if WIFI_ENABLE
@@ -1152,15 +1137,15 @@ static void settings_changed (settings_t *settings)
         static bool wifi_ok = false;
 
         if(!wifi_ok)
-            wifi_ok = wifi_init(&driver_settings.wifi);
+            wifi_ok = wifi_start();
 
         // TODO: start/stop services...
 #endif
 
 #if BLUETOOTH_ENABLE
         static bool bluetooth_ok = false;
-        if(!bluetooth_ok && driver_settings.bluetooth.device_name[0] != '\0')
-            bluetooth_ok = bluetooth_init(&driver_settings.bluetooth);
+        if(!bluetooth_ok)
+            bluetooth_ok = bluetooth_start();
         // else report error?
 #endif
 
@@ -1171,9 +1156,10 @@ static void settings_changed (settings_t *settings)
          *********************/
 
 #ifdef USE_I2S_OUT
-        step_length = (uint32_t)(settings->steppers.pulse_microseconds);
-        if(step_length < I2S_OUT_USEC_PER_PULSE)
-            step_length = I2S_OUT_USEC_PER_PULSE;
+        i2s_step_length = (uint32_t)(settings->steppers.pulse_microseconds);
+        if(i2s_step_length < I2S_OUT_USEC_PER_PULSE)
+            i2s_step_length = I2S_OUT_USEC_PER_PULSE;
+        i2s_step_samples = i2s_step_length / I2S_OUT_USEC_PER_PULSE; // round up?
 #else
         initRMT(settings);
 #endif
@@ -1310,16 +1296,8 @@ static void settings_changed (settings_t *settings)
 }
 
 #if WIFI_ENABLE
-static void reportIP (void)
+static void reportConnection (void)
 {
-    hal.stream.write("[WIFI MAC:");
-    hal.stream.write(wifi_get_mac());
-    hal.stream.write("]"  ASCII_EOL);
-
-    hal.stream.write("[IP:");
-    hal.stream.write(wifi_get_ip());
-    hal.stream.write("]"  ASCII_EOL);
-
     if(services.telnet || services.websocket) {
         hal.stream.write("[NETCON:");
         hal.stream.write(services.telnet ? "Telnet" : "Websocket");
@@ -1328,38 +1306,11 @@ static void reportIP (void)
 }
 #endif
 
-#if BLUETOOTH_ENABLE
-static void report_bt_MAC (void)
-{
-    char *client_mac;
-
-    hal.stream.write("[BT DEVICE MAC:");
-    hal.stream.write(bluetooth_get_device_mac());
-    hal.stream.write("]" ASCII_EOL);
-
-    if((client_mac = bluetooth_get_client_mac())) {
-        hal.stream.write("[BT CLIENT MAC:");
-        hal.stream.write(client_mac);
-        hal.stream.write("]" ASCII_EOL);
-    }
-}
-#endif
-
 // Initializes MCU peripherals for Grbl use
 static bool driver_setup (settings_t *settings)
 {
-    /********************************************************
-     * Read driver specific setting from persistent storage *
-     ********************************************************/
-     
-#ifdef DRIVER_SETTINGS
-    if(hal.nvs.type != NVS_None) {
-        if(!hal.nvs.memcpy_from_with_checksum((uint8_t *)&driver_settings, hal.nvs.driver_area.address, sizeof(driver_settings)))
-            hal.driver_settings_restore();
-        #if TRINAMIC_ENABLE && CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
-          driver_settings.trinamic.driver_enable.mask = AXES_BITMASK;
-        #endif
-    }
+#if TRINAMIC_ENABLE && CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
+    driver_settings.trinamic.driver_enable.mask = AXES_BITMASK;
 #endif
 
     /******************
@@ -1477,12 +1428,12 @@ static bool driver_setup (settings_t *settings)
     ioexpand_init();
 #endif
 
-#if KEYPAD_ENABLE
-//    keypad_init();
-#endif
-
 #if TRINAMIC_ENABLE
-    trinamic_init();
+  #if CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
+    trinamic_start(false);
+  #else
+    trinamic_start(true);
+  #endif
 #endif
 
 #if WEBUI_ENABLE
@@ -1491,89 +1442,14 @@ static bool driver_setup (settings_t *settings)
 
   // Set defaults
 
-    IOInitDone = settings->version == 17;
+    IOInitDone = settings->version == 18;
 
     settings_changed(settings);
 
-    hal.stepper_go_idle(true);
+    hal.stepper.go_idle(true);
 
     return IOInitDone;
 }
-
-#ifdef DRIVER_SETTINGS
-
-static status_code_t driver_setting (uint_fast16_t param, float value, char *svalue)
-{
-    status_code_t status = Status_Unhandled;
-
-#if BLUETOOTH_ENABLE
-    status = bluetooth_setting(param, value, svalue);
-#endif
-
-#if WIFI_ENABLE
-    if(status == Status_Unhandled)
-        status = wifi_setting(param, value, svalue);
-#endif
-
-#if KEYPAD_ENABLE
-    if(status == Status_Unhandled)
-        status = keypad_setting(param, value, svalue);
-#endif
-
-#if TRINAMIC_ENABLE
-    if(status == Status_Unhandled)
-        status = trinamic_setting(param, value, svalue);
-#endif
-
-    if(status == Status_OK)
-        hal.nvs.memcpy_to_with_checksum(hal.nvs.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
-
-    return status;
-}
-
-static void driver_settings_report (setting_type_t setting)
-{
-#if KEYPAD_ENABLE
-    keypad_settings_report(setting);
-#endif
-
-#if BLUETOOTH_ENABLE
-    bluetooth_settings_report(setting);
-#endif
-
-#if WIFI_ENABLE
-    wifi_settings_report(setting);
-#endif
-
-#if TRINAMIC_ENABLE
-    trinamic_settings_report(setting);
-#endif
-}
-
-static void driver_settings_restore (void)
-{
-    memset(&driver_settings, 0, sizeof(driver_settings_t));
-
-#if WIFI_ENABLE
-    wifi_settings_restore();
-#endif
-
-#if BLUETOOTH_ENABLE
-    bluetooth_settings_restore();
-#endif
-
-#if KEYPAD_ENABLE
-    keypad_settings_restore();
-#endif
-
-#if TRINAMIC_ENABLE
-        trinamic_settings_restore();
-#endif
-
-    hal.nvs.memcpy_to_with_checksum(hal.nvs.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
-}
-
-#endif
 
 #if MODBUS_ENABLE
 static void vModBusPollCallback (TimerHandle_t xTimer)
@@ -1595,7 +1471,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "ESP32";
-    hal.driver_version = "200923";
+    hal.driver_version = "201014";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1606,57 +1482,49 @@ bool driver_init (void)
     hal.settings_changed = settings_changed;
 
 #ifndef USE_I2S_OUT
-    hal.stepper_wake_up = stepperWakeUp;
-    hal.stepper_go_idle = stepperGoIdle;
-    hal.stepper_enable = stepperEnable;
-    hal.stepper_cycles_per_tick = stepperCyclesPerTick;
-    hal.stepper_pulse_start = stepperPulseStart;
+    hal.stepper.wake_up = stepperWakeUp;
+    hal.stepper.go_idle = stepperGoIdle;
+    hal.stepper.enable = stepperEnable;
+    hal.stepper.cycles_per_tick = stepperCyclesPerTick;
+    hal.stepper.pulse_start = stepperPulseStart;
 #else
-    hal.stepper_wake_up = I2S_stepperWakeUp;
-    hal.stepper_go_idle = I2S_stepperGoIdle;
-    hal.stepper_enable = stepperEnable;
-    hal.stepper_cycles_per_tick = I2S_stepperCyclesPerTick;
-    hal.stepper_pulse_start = I2S_stepperPulseStart;
+    hal.stepper.wake_up = I2S_stepperWakeUp;
+    hal.stepper.go_idle = I2S_stepperGoIdle;
+    hal.stepper.enable = stepperEnable;
+    hal.stepper.cycles_per_tick = I2S_stepperCyclesPerTick;
+    hal.stepper.pulse_start = I2S_stepperPulseStart;
     i2s_out_init();
-    i2s_out_set_pulse_callback(hal.stepper_interrupt_callback);
+    i2s_out_set_pulse_callback(hal.stepper.interrupt_callback);
 #endif
 
-    hal.limits_enable = limitsEnable;
-    hal.limits_get_state = limitsGetState;
+    hal.limits.enable = limitsEnable;
+    hal.limits.get_state = limitsGetState;
 
-    hal.coolant_set_state = coolantSetState;
-    hal.coolant_get_state = coolantGetState;
+    hal.coolant.set_state = coolantSetState;
+    hal.coolant.get_state = coolantGetState;
 
 #ifdef PROBE_PIN
-    hal.probe_get_state = probeGetState;
-    hal.probe_configure_invert_mask = probeConfigure;
+    hal.probe.get_state = probeGetState;
+    hal.probe.configure = probeConfigure;
 #endif
 
 #ifndef VFD_SPINDLE
-    hal.spindle_set_state = spindleSetState;
-    hal.spindle_get_state = spindleGetState;
+    hal.spindle.set_state = spindleSetState;
+    hal.spindle.get_state = spindleGetState;
   #ifdef SPINDLE_PWM_DIRECT
-    hal.spindle_get_pwm = spindleGetPWM;
-    hal.spindle_update_pwm = spindle_set_speed;
+    hal.spindle.get_pwm = spindleGetPWM;
+    hal.spindle.update_pwm = spindle_set_speed;
   #else
-    hal.spindle_update_rpm = spindleUpdateRPM; // NOTE: fails in laser mode as ESP32 does not handle FPU access in ISRs!
+    hal.spindle.update_rpm = spindleUpdateRPM; // NOTE: fails in laser mode as ESP32 does not handle FPU access in ISRs!
   #endif
 #endif
 
-    hal.system_control_get_state = systemGetState;
+    hal.control.get_state = systemGetState;
 
     selectStream(StreamType_Serial);
 
 #if EEPROM_ENABLE
-  #if EEPROM_IS_FRAM
-    hal.nvs.type = NVS_FRAM;
-  #else
-    hal.nvs.type = NVS_EEPROM;
-  #endif
-    hal.nvs.get_byte = eepromGetByte;
-    hal.nvs.put_byte = eepromPutByte;
-    hal.nvs.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
-    hal.nvs.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
+    i2c_eeprom_init();
 #else
     if(nvsInit()) {
         hal.nvs.type = NVS_Flash;
@@ -1666,50 +1534,18 @@ bool driver_init (void)
         hal.nvs.type = NVS_None;
 #endif
 
-#ifdef DRIVER_SETTINGS
-
-    if(hal.nvs.type != NVS_None) {
-        hal.nvs.driver_area.address = GRBL_NVS_SIZE;
-        hal.nvs.driver_area.size = sizeof(driver_settings); // Add assert?
-        hal.nvs.size = GRBL_NVS_SIZE + sizeof(driver_settings) + 1;
-
-        hal.driver_setting = driver_setting;
-        hal.driver_settings_restore = driver_settings_restore;
-        hal.driver_settings_report = driver_settings_report;
-  #if TRINAMIC_ENABLE
-        hal.driver_axis_settings_report = trinamic_axis_settings_report;
-  #endif
-    }
-#endif
-
 //    hal.reboot = esp_restart; crashes the MCU...
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
     hal.get_elapsed_ticks = xTaskGetTickCountFromISR;
 
-    hal.show_message = showMessage;
-
 #ifdef DEBUGOUT
     hal.debug_out = debug_out;
 #endif
 
-#if KEYPAD_ENABLE
-    hal.execute_realtime = keypad_process_keypress;
-#endif
-
-#if TRINAMIC_ENABLE
-    hal.user_mcode_check = trinamic_MCodeCheck;
-    hal.user_mcode_validate = trinamic_MCodeValidate;
-    hal.user_mcode_execute = trinamic_MCodeExecute;
-    hal.driver_rt_report = trinamic_RTReport;
-#endif
-
 #if WIFI_ENABLE
-    grbl.on_report_options = reportIP;
-#endif
-#if BLUETOOTH_ENABLE
-    grbl.on_report_options = report_bt_MAC;
+    grbl.on_report_options = reportConnection;
 #endif
 
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
@@ -1739,15 +1575,6 @@ bool driver_init (void)
 #if MPG_MODE_ENABLE
     hal.driver_cap.mpg_mode = On;
 #endif
-#if SDCARD_ENABLE
-    hal.driver_cap.sd_card = On;
-#endif
-#if BLUETOOTH_ENABLE
-    hal.driver_cap.bluetooth = On;
-#endif
-#if WIFI_ENABLE
-    hal.driver_cap.wifi = On;
-#endif
 
 #if MODBUS_ENABLE
     serial2Init(MODBUS_BAUD);
@@ -1767,6 +1594,22 @@ bool driver_init (void)
         xTimerStart(xModBusTimer, 0);
 #endif
 
+#if WIFI_ENABLE
+    wifi_init();
+#endif
+
+#if BLUETOOTH_ENABLE
+    bluetooth_init();
+#endif
+
+#if TRINAMIC_ENABLE
+    trinamic_init();
+#endif
+
+#if KEYPAD_ENABLE
+    keypad_init();
+#endif
+
 #ifdef SPINDLE_HUANYANG
     huanyang_init(&modbus_stream);
 #endif
@@ -1774,7 +1617,7 @@ bool driver_init (void)
     my_plugin_init();
 
     // no need to move version check before init - compiler will fail any mismatch for existing entries
-    return hal.version == 6;
+    return hal.version == 7;
 }
 
 /* interrupt handlers */
@@ -1785,7 +1628,7 @@ IRAM_ATTR static void stepper_driver_isr (void *arg)
     TIMERG0.int_clr_timers.t0 = 1;
     TIMERG0.hw_timer[STEP_TIMER_INDEX].config.alarm_en = TIMER_ALARM_EN;
 
-    hal.stepper_interrupt_callback();
+    hal.stepper.interrupt_callback();
 }
 
   //GPIO intr process
@@ -1817,10 +1660,10 @@ IRAM_ATTR static void gpio_isr (void *arg)
   }
 
   if(grp & INPUT_GROUP_LIMIT)
-      hal.limit_interrupt_callback(limitsGetState());
+      hal.limits.interrupt_callback(limitsGetState());
 
   if(grp & INPUT_GROUP_CONTROL)
-      hal.control_interrupt_callback(systemGetState());
+      hal.control.interrupt_callback(systemGetState());
 
 #if MPG_MODE_ENABLE
 

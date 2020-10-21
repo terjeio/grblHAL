@@ -146,21 +146,13 @@ typedef struct {
 // Init wrapper for physical interface
 void TMC_DriverInit (TMC_io_driver_t *driver);
 
-void trinamic_init (void);
+bool trinamic_init (void);
+void trinamic_start (bool allow_mixed);
 void trinamic_configure (void);
 void trinamic_homing (bool enable);
 axes_signals_t trinamic_stepper_enable (axes_signals_t enable);
-status_code_t trinamic_setting (setting_type_t setting, float value, char *svalue);
-void trinamic_settings_restore (void);
-void trinamic_settings_report (setting_type_t setting_type);
-void trinamic_axis_settings_report (axis_setting_type_t setting, uint8_t axis_idx);
 void trinamic_fault_handler (void);
 void trinamic_warn_handler (void);
-
-user_mcode_t trinamic_MCodeCheck (user_mcode_t mcode);
-status_code_t trinamic_MCodeValidate (parser_block_t *gc_block, uint32_t *value_words);
-void trinamic_MCodeExecute (uint_fast16_t state, parser_block_t *gc_block);
-void trinamic_RTReport (stream_write_ptr stream_write, report_tracking_flags_t report);
 
 #endif
 

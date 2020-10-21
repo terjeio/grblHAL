@@ -24,11 +24,8 @@
 
 #include "driver.h"
 
-bool grbl_enet_init (network_settings_t *network);
+bool grbl_enet_init (void);
+bool grbl_enet_start (void);
 void grbl_enet_poll (void);
-char *enet_ip_address (void);
-status_code_t ethernet_setting (setting_type_t param, float value, char *svalue);
-void ethernet_settings_report (setting_type_t setting);
-void ethernet_settings_restore (void);
 
 #endif

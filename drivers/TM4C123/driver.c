@@ -49,14 +49,6 @@ static void trinamic_diag1_isr (void);
 #include "atc.h"
 #endif
 
-#if LASER_PPI || ATC_ENABLE
-#include "usermcodes.h"
-#endif
-
-#ifdef DRIVER_SETTINGS
-driver_settings_t driver_settings;
-#endif
-
 // prescale step counter to 20Mhz (80 / (STEPPER_DRIVER_PRESCALER + 1))
 #define STEPPER_DRIVER_PRESCALER 3
 
@@ -78,9 +70,9 @@ typedef struct {
 static pwm_ramp_t pwm_ramp;
 #endif
 
-#if LASER_PPI
+#if PPI_ENABLE
 
-laser_ppi_t laser;
+#include "laser/ppi.h"
 
 static void ppi_timeout_isr (void);
 
@@ -229,10 +221,6 @@ static void stepperWakeUp (void)
 {
     TimerLoadSet(PULSE_TIMER_BASE, TIMER_A, pulse_length);
 
-#if LASER_PPI
-    laser.next_pulse = 0;
-#endif
-
     // Enable stepper drivers.
     stepperEnable((axes_signals_t){AXES_BITMASK});
 
@@ -375,46 +363,6 @@ static void stepperPulseStartSyncronized (stepper_t *stepper)
 }
 #endif
 
-#if LASER_PPI
-
-static void spindle_on ();
-
-// Sets stepper direction and pulse pins and starts a step pulse with an initial delay
-// When delayed pulse the step register is written in the step delay interrupt handler
-static void stepperPulseStartPPI (stepper_t *stepper)
-{
-    static uint_fast16_t current_pwm = 0;
-
-    if(stepper->new_block) {
-        stepper->new_block = false;
-        set_dir_outputs(stepper->dir_outbits);
-        uint_fast16_t steps_per_pulse = stepper->exec_block->steps_per_mm * 25.4f / laser.ppi;
-        if(laser.next_pulse && laser.steps_per_pulse)
-            laser.next_pulse = laser.next_pulse * steps_per_pulse / laser.steps_per_pulse;
-        laser.steps_per_pulse = steps_per_pulse;
-    }
-
-    if(stepper->step_outbits.value) {
-        if(stepper->spindle_pwm != current_pwm) {
-            current_pwm = spindle_set_speed(stepper->spindle_pwm);
-            laser.next_pulse = 0;
-        }
-
-        if(laser.next_pulse == 0) {
-            laser.next_pulse = laser.steps_per_pulse;
-            if(current_pwm != spindle_pwm.off_value) {
-                spindle_on();
-                TimerEnable(LASER_PPI_TIMER_BASE, TIMER_A);
-                // TODO: T2CCP0 - use timer timeout to switch off CCP output w/o using interrupt? single shot PWM?
-            }
-        } else
-            laser.next_pulse--;
-
-        set_step_outputs(stepper->step_outbits);
-        TimerEnable(PULSE_TIMER_BASE, TIMER_A);
-    }
-}
-#endif
 
 // Enable/disable limit pins interrupt
 static void limitsEnable (bool on, bool homing)
@@ -472,7 +420,7 @@ inline static control_signals_t systemGetState (void)
 // and the probing cycle modes for toward-workpiece/away-from-workpiece.
 static void probeConfigure (bool is_probe_away, bool probing)
 {
-  probe_invert = settings.flags.invert_probe_pin ? 0 : PROBE_PIN;
+  probe_invert = settings.probe.invert_probe_pin ? 0 : PROBE_PIN;
 
   if (is_probe_away)
       probe_invert ^= PROBE_PIN;
@@ -664,6 +612,17 @@ static spindle_state_t spindleGetState (void)
     return state;
 }
 
+#if PPI_ENABLE
+
+static void spindlePulseOn (uint_fast16_t pulse_length)
+{
+    spindle_on();
+    TimerLoadSet(PPI_ENABLE_TIMER_BASE, TIMER_A, pulse_length);
+    TimerEnable(PPI_ENABLE_TIMER_BASE, TIMER_A);
+}
+
+#endif
+
 // end spindle code
 
 // Start/stop coolant (and mist if enabled)
@@ -684,13 +643,6 @@ static coolant_state_t coolantGetState (void)
     state.value ^= settings.coolant_invert.mask;
 
     return state;
-}
-
-static void showMessage (const char *msg)
-{
-    hal.stream.write("[MSG:");
-    hal.stream.write(msg);
-    hal.stream.write("]\r\n");
 }
 
 // Helper functions for setting/clearing/inverting individual bits atomically (uninterruptable)
@@ -749,26 +701,21 @@ static void settings_changed (settings_t *settings)
         if(hal.driver_cap.variable_spindle) {
             TimerPrescaleSet(SPINDLE_PWM_TIMER_BASE, TIMER_A, spindle_pwm.period >> 16);
             TimerLoadSet(SPINDLE_PWM_TIMER_BASE, TIMER_A, spindle_pwm.period & 0xFFFF);
-            hal.spindle_set_state = spindleSetStateVariable;
+            hal.spindle.set_state = spindleSetStateVariable;
         } else
-            hal.spindle_set_state = spindleSetState;
+            hal.spindle.set_state = spindleSetState;
 
         pulse_length = (uint32_t)(10.0f * (settings->steppers.pulse_microseconds - STEP_PULSE_LATENCY)) - 1;
 
         if(hal.driver_cap.step_pulse_delay && settings->steppers.pulse_delay_microseconds > 0.0f) {
             int32_t delay = (uint32_t)(10.0f * (settings->steppers.pulse_delay_microseconds - 1.2f)) - 1;
             pulse_delay = delay < 2 ? 2 : delay;
-            hal.stepper_pulse_start = stepperPulseStartDelayed;
+            hal.stepper.pulse_start = stepperPulseStartDelayed;
         } else
-            hal.stepper_pulse_start = stepperPulseStart;
+            hal.stepper.pulse_start = stepperPulseStart;
 
         TimerIntRegister(PULSE_TIMER_BASE, TIMER_A, stepper_pulse_isr);
         TimerIntEnable(PULSE_TIMER_BASE, TIMER_TIMA_TIMEOUT);
-
-      #if LASER_PPI
-        if(!settings->flags.laser_mode)
-            laser_ppi_mode(false);
-      #endif
 
        /*************************
         *  Control pins config  *
@@ -820,17 +767,6 @@ static void settings_changed (settings_t *settings)
 // Initializes MCU peripherals for Grbl use
 static bool driver_setup (settings_t *settings)
 {
-
-#ifdef DRIVER_SETTINGS
-    if(hal.nvs.driver_area.address != 0) {
-        if(!hal.nvs.memcpy_from_with_checksum((uint8_t *)&driver_settings, hal.nvs.driver_area.address, sizeof(driver_settings)))
-            hal.driver_settings_restore();
-      #if TRINAMIC_ENABLE && CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
-        driver_settings.trinamic.driver_enable.mask = AXES_BITMASK;
-      #endif
-    }
-#endif
-
     // System init
 
 #ifndef BACKCHANNEL
@@ -895,26 +831,25 @@ static bool driver_setup (settings_t *settings)
     GPIOPinWrite(STEPPERS_VDD_PORT, STEPPERS_VDD_PIN, STEPPERS_VDD_PIN);
 #endif
 
-#if LASER_PPI
+#if PPI_ENABLE
 
    /********************************
     *  PPI mode pulse width timer  *
     ********************************/
 
-    laser.ppi = 600.0f;
-    laser.pulse_length = 1500;
-
-    SysCtlPeripheralEnable(LASER_PPI_TIMER_PERIPH);
+    SysCtlPeripheralEnable(PPI_ENABLE_TIMER_PERIPH);
     SysCtlDelay(26); // wait a bit for peripherals to wake up
-    TimerConfigure(LASER_PPI_TIMER_BASE, TIMER_CFG_SPLIT_PAIR|TIMER_CFG_A_ONE_SHOT);
-    IntPrioritySet(LASER_PPI_TIMER_INT, 0x40); // lower priority than for Timer2 (which resets the step-dir signal)
-    TimerControlStall(LASER_PPI_TIMER_BASE, TIMER_A, true); //TIMER5 will stall in debug mode
-    TimerIntClear(LASER_PPI_TIMER_BASE, 0xFFFF);
-    IntPendClear(LASER_PPI_TIMER_INT);
-    TimerPrescaleSet(LASER_PPI_TIMER_BASE, TIMER_A, 79); // for 1uS per count
-    TimerIntRegister(LASER_PPI_TIMER_BASE, TIMER_A, ppi_timeout_isr);
-    TimerLoadSet(LASER_PPI_TIMER_BASE, TIMER_A, laser.pulse_length);
-    TimerIntEnable(LASER_PPI_TIMER_BASE, TIMER_TIMA_TIMEOUT|TIMER_TIMA_MATCH);
+    TimerConfigure(PPI_ENABLE_TIMER_BASE, TIMER_CFG_SPLIT_PAIR|TIMER_CFG_A_ONE_SHOT);
+    IntPrioritySet(PPI_ENABLE_TIMER_INT, 0x40); // lower priority than for Timer2 (which resets the step-dir signal)
+    TimerControlStall(PPI_ENABLE_TIMER_BASE, TIMER_A, true); //TIMER5 will stall in debug mode
+    TimerIntClear(PPI_ENABLE_TIMER_BASE, 0xFFFF);
+    IntPendClear(PPI_ENABLE_TIMER_INT);
+    TimerPrescaleSet(PPI_ENABLE_TIMER_BASE, TIMER_A, 79); // for 1uS per count
+    TimerIntRegister(PPI_ENABLE_TIMER_BASE, TIMER_A, ppi_timeout_isr);
+    TimerLoadSet(PPI_ENABLE_TIMER_BASE, TIMER_A, 1500);
+    TimerIntEnable(PPI_ENABLE_TIMER_BASE, TIMER_TIMA_TIMEOUT|TIMER_TIMA_MATCH);
+
+    ppi_init();
 
 #endif
 
@@ -1036,7 +971,11 @@ static bool driver_setup (settings_t *settings)
 
 #if TRINAMIC_ENABLE
 
-    trinamic_init();
+    #if CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
+    trinamic_start(false);
+  #else
+    trinamic_start(true);
+  #endif
 
     // Configure input pin for DIAG1 signal (with pullup) and enable interrupt
     GPIOPinTypeGPIOInput(TRINAMIC_DIAG_IRQ_PORT, TRINAMIC_DIAG_IRQ_PIN);
@@ -1062,60 +1001,16 @@ static bool driver_setup (settings_t *settings)
 
   // Set defaults
 
-    IOInitDone = settings->version == 17;
+    IOInitDone = settings->version == 18;
 
     settings_changed(settings);
 
-    hal.stepper_go_idle(true);
-    hal.spindle_set_state((spindle_state_t){0}, 0.0f);
-    hal.coolant_set_state((coolant_state_t){0});
+    hal.stepper.go_idle(true);
+    hal.spindle.set_state((spindle_state_t){0}, 0.0f);
+    hal.coolant.set_state((coolant_state_t){0});
 
     return IOInitDone;
 }
-
-#ifdef DRIVER_SETTINGS
-
-static status_code_t driver_setting (setting_type_t param, float value, char *svalue)
-{
-    status_code_t status = Status_Unhandled;
-
-#if KEYPAD_ENABLE
-    status = keypad_setting(param, value, svalue);
-#endif
-
-#if TRINAMIC_ENABLE
-    if(status == Status_Unhandled)
-        status = trinamic_setting(param, value, svalue);
-#endif
-
-    if(status == Status_OK)
-        hal.nvs.memcpy_to_with_checksum(hal.nvs.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
-
-    return status;
-}
-
-static void driver_settings_report (setting_type_t setting)
-{
-#if KEYPAD_ENABLE
-    keypad_settings_report(setting);
-#endif
-#if TRINAMIC_ENABLE
-    trinamic_settings_report(setting);
-#endif
-}
-
-void driver_settings_restore (void)
-{
-#if KEYPAD_ENABLE
-    keypad_settings_restore();
-#endif
-#if TRINAMIC_ENABLE
-    trinamic_settings_restore();
-#endif
-    hal.nvs.memcpy_to_with_checksum(hal.nvs.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
-}
-
-#endif
 
 // Initialize HAL pointers, setup serial comms and enable EEPROM
 // NOTE: Grbl is not yet configured (from EEPROM data), driver_setup() will be called when done
@@ -1147,7 +1042,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "TM4C123HP6PM";
-    hal.driver_version = "200923";
+    hal.driver_version = "201014";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1157,35 +1052,35 @@ bool driver_init (void)
     hal.delay_ms = driver_delay_ms;
     hal.settings_changed = settings_changed;
 
-    hal.stepper_wake_up = stepperWakeUp;
-    hal.stepper_go_idle = stepperGoIdle;
-    hal.stepper_enable = stepperEnable;
-    hal.stepper_cycles_per_tick = stepperCyclesPerTick;
-    hal.stepper_pulse_start = stepperPulseStart;
+    hal.stepper.wake_up = stepperWakeUp;
+    hal.stepper.go_idle = stepperGoIdle;
+    hal.stepper.enable = stepperEnable;
+    hal.stepper.cycles_per_tick = stepperCyclesPerTick;
+    hal.stepper.pulse_start = stepperPulseStart;
 
-    hal.limits_enable = limitsEnable;
-    hal.limits_get_state = limitsGetState;
+    hal.limits.enable = limitsEnable;
+    hal.limits.get_state = limitsGetState;
 
-    hal.coolant_set_state = coolantSetState;
-    hal.coolant_get_state = coolantGetState;
+    hal.coolant.set_state = coolantSetState;
+    hal.coolant.get_state = coolantGetState;
 
-    hal.probe_get_state = probeGetState;
-    hal.probe_configure_invert_mask = probeConfigure;
+    hal.probe.get_state = probeGetState;
+    hal.probe.configure = probeConfigure;
 
-    hal.spindle_set_state = spindleSetState;
-    hal.spindle_get_state = spindleGetState;
+    hal.spindle.set_state = spindleSetState;
+    hal.spindle.get_state = spindleGetState;
 #ifdef SPINDLE_PWM_DIRECT
-    hal.spindle_get_pwm = spindleGetPWM;
-    hal.spindle_update_pwm = spindle_set_speed;
+    hal.spindle.get_pwm = spindleGetPWM;
+    hal.spindle.update_pwm = spindle_set_speed;
 #else
-    hal.spindle_update_rpm = spindleUpdateRPM;
+    hal.spindle.update_rpm = spindleUpdateRPM;
 #endif
 #ifdef SPINDLE_SYNC_ENABLE
-    hal.spindle_get_data = spindleGetData;
-    hal.spindle_reset_data = spindleDataReset;
+    hal.spindle.get_data = spindleGetData;
+    hal.spindle.reset_data = spindleDataReset;
 #endif
 
-    hal.system_control_get_state = systemGetState;
+    hal.control.get_state = systemGetState;
 
     hal.stream.read = serialGetC;
     hal.stream.write = serialWriteS;
@@ -1195,57 +1090,19 @@ bool driver_init (void)
     hal.stream.cancel_read_buffer = serialRxCancel;
     hal.stream.suspend_read = serialSuspendInput;
 
-    hal.nvs.type = NVS_EEPROM;
-    hal.nvs.get_byte = eepromGetByte;
-    hal.nvs.put_byte = eepromPutByte;
-    hal.nvs.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
-    hal.nvs.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
-
-#ifdef DRIVER_SETTINGS
-
-  #if !TRINAMIC_ENABLE
-    assert(NVS_ADDR_TOOL_TABLE - (sizeof(driver_settings_t) + 2) > NVS_ADDR_GLOBAL + sizeof(settings_t) + 1);
-    hal.nvs.driver_area.address = NVS_ADDR_TOOL_TABLE - (sizeof(driver_settings_t) + 2);
-  #else
-    hal.nvs.driver_area.address = GRBL_NVS_SIZE;
-    hal.nvs.size = GRBL_NVS_SIZE + sizeof(driver_settings_t) + 1;
-  #endif
-    hal.nvs.driver_area.size = sizeof(driver_settings_t);
-    hal.driver_setting = driver_setting;
-    hal.driver_settings_report = driver_settings_report;
-    hal.driver_settings_restore = driver_settings_restore;
-#endif
-
-#if TRINAMIC_ENABLE
-    hal.user_mcode_check = trinamic_MCodeCheck;
-    hal.user_mcode_validate = trinamic_MCodeValidate;
-    hal.user_mcode_execute = trinamic_MCodeExecute;
-    hal.driver_rt_report = trinamic_RTReport;
-    hal.driver_axis_settings_report = trinamic_axis_settings_report;
-#endif
+    eeprom_init();
 
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
 
-#ifdef _USERMCODES_H_
-    hal.user_mcode_check = userMCodeCheck;
-    hal.user_mcode_validate = userMCodeValidate;
-    hal.user_mcode_execute = userMCodeExecute;
-#endif
-
-    hal.show_message = showMessage;
-
-#if KEYPAD_ENABLE
-    hal.execute_realtime = keypad_process_keypress;
-    hal.driver_setting = driver_setting;
-    hal.driver_settings_restore = driver_settings_restore;
-    hal.driver_settings_report = driver_settings_report;
-#endif
-
 #ifdef _ATC_H_
     hal.tool_select = atc_tool_selected;
     hal.tool_change = atc_tool_change;
+#endif
+
+#if PPI_ENABLE
+    hal.spindle.pulse_on = spindlePulseOn;
 #endif
 
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
@@ -1270,15 +1127,20 @@ bool driver_init (void)
     hal.driver_cap.control_pull_up = On;
     hal.driver_cap.limits_pull_up = On;
     hal.driver_cap.probe_pull_up = On;
-#if LASER_PPI
-    hal.driver_cap.laser_ppi_mode = On;
+
+#if TRINAMIC_ENABLE
+    trinamic_init();
+#endif
+
+#if KEYPAD_ENABLE
+    keypad_init();
 #endif
 
     my_plugin_init();
 
     // No need to move version check before init.
     // Compiler will fail any signature mismatch for existing entries.
-    return hal.version == 6;
+    return hal.version == 7;
 }
 
 /* interrupt handlers */
@@ -1287,7 +1149,7 @@ bool driver_init (void)
 static void stepper_driver_isr (void)
 {
     TimerIntClear(STEPPER_TIMER_BASE, TIMER_TIMA_TIMEOUT); // clear interrupt flag
-    hal.stepper_interrupt_callback();
+    hal.stepper.interrupt_callback();
 }
 
 /* The Stepper Port Reset Interrupt: This interrupt handles the falling edge of the step
@@ -1326,29 +1188,22 @@ static void software_debounce_isr (void)
     axes_signals_t state = limitsGetState();
 
     if(state.value) //TODO: add check for limit swicthes having same state as when limit_isr were invoked?
-        hal.limit_interrupt_callback(state);
+        hal.limits.interrupt_callback(state);
 }
 
-#if LASER_PPI
-
-void laser_ppi_mode (bool on)
-{
-    if(on)
-        hal.stepper_pulse_start = stepperPulseStartPPI;
-    else
-        hal.stepper_pulse_start = settings.steppers.pulse_delay_microseconds > 0.0f ? stepperPulseStartDelayed : stepperPulseStart;
-    gc_set_laser_ppimode(on);
-}
+#if PPI_ENABLE
 
 // Switches off the spindle (laser) after laser.pulse_length time has elapsed
 static void ppi_timeout_isr (void)
 {
-    TimerIntClear(LASER_PPI_TIMER_BASE, TIMER_TIMA_TIMEOUT); // clear interrupt flag
+    TimerIntClear(PPI_ENABLE_TIMER_BASE, TIMER_TIMA_TIMEOUT); // clear interrupt flag
     spindle_off();
 }
+
 #endif
 
 #if TRINAMIC_ENABLE && TRINAMIC_I2C
+
 static void trinamic_warn_isr (void)
 {
     uint32_t iflags = GPIOIntStatus(TRINAMIC_WARN_IRQ_PORT, true);
@@ -1358,6 +1213,7 @@ static void trinamic_warn_isr (void)
     if(iflags & TRINAMIC_WARN_IRQ_PIN)
         trinamic_warn_handler();
 }
+
 #endif
 
 static void limit_isr (void)
@@ -1366,7 +1222,7 @@ static void limit_isr (void)
 
     GPIOIntClear(LIMIT_PORT, iflags);
     if(iflags & HWLIMIT_MASK)
-        hal.limit_interrupt_callback(limitsGetState());
+        hal.limits.interrupt_callback(limitsGetState());
     else if(iflags & PROBE_PIN)
         probeState = probe_invert != 0;
 }
@@ -1391,10 +1247,9 @@ static void control_isr (void)
 
     if(iflags) {
         GPIOIntClear(CONTROL_PORT, iflags);
-        hal.control_interrupt_callback(systemGetState());
+        hal.control.interrupt_callback(systemGetState());
     }
 }
-
 
 #if KEYPAD_ENABLE
 

@@ -300,6 +300,10 @@ typedef enum {
 // NOTE: Not used by core, may be used by driver code
 typedef enum {
     UserMCode_Ignore = 0,
+    LaserPPI_Enable = 112,
+    LaserPPI_Rate = 113,
+    LaserPPI_PulseLength = 114,
+    Laser_Coolant = 115,
     Trinamic_DebugReport = 122,
     Trinamic_StepperCurrent = 906,
     Trinamic_ModeToggle = 569,
@@ -562,7 +566,10 @@ status_code_t gc_execute_block(char *block, char *message);
 // Sets g-code parser and planner position in mm.
 #define sync_position() plan_sync_position(); system_convert_array_steps_to_mpos (gc_state.position, sys_position)
 
-void gc_set_laser_ppimode (bool on);
+// Set dynamic laser power mode to PPI (Pulses Per Inch)
+// Driver support for pulsing the laser on signal is required for this to work.
+// Returns true if driver uses hardware implementation.
+bool gc_laser_ppi_enable (uint_fast16_t ppi, uint_fast16_t pulse_length);
 
 // Gets axes scaling state.
 axes_signals_t gc_get_g51_state (void);

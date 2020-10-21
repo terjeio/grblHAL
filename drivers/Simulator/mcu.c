@@ -25,7 +25,7 @@
 
 #include "mcu.h"
 #include "simulator.h"
-#include "grbl/grbl.h"
+#include "grbl/hal.h"
 
 static volatile bool irq_enable = false;
 static bool booted = false;

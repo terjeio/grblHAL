@@ -112,13 +112,13 @@
 #define PROBE_PIN           (15U)
 
 // Define auxillary input pins
-#define AUXINPUT0_PIN       (30U)
-#define AUXINPUT1_PIN       (36U)
-#define AUXINPUT2_PIN       (34U)
-#define AUXINPUT3_PIN       (35U)
+#define AUXINPUT0_PIN       (36u) // ST0
+#define AUXINPUT1_PIN       (30u) // ST1
+#define AUXINPUT2_PIN       (34u) // ST2
+#define AUXINPUT3_PIN       (35u) // ST3
 
 #if KEYPAD_ENABLE
-#define KEYPAD_STROBE_PIN   (41U)
+#define KEYPAD_STROBE_PIN   (41u) // I2C ST
 #endif
 
 #if EEPROM_ENABLE || KEYPAD_ENABLE
@@ -128,8 +128,7 @@
 #endif
 
 #if QEI_ENABLE
-#define QEI_A_PIN      (30)
-#define QEI_B_PIN      (34)
-// #define QEI_INDEX_PIN  GPIO2_PIN
-#define QEI_SELECT_PIN (35u)
+#define QEI_A_PIN      (30u) // ST1
+#define QEI_B_PIN      (34u) // ST2
+#define QEI_SELECT_PIN (35u) // ST3
 #endif

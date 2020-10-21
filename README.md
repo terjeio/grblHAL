@@ -2,7 +2,14 @@
 
 grblHAL has [many extensions](https://github.com/terjeio/grblHAL/wiki) that may cause issues with some senders. As a workaround for these a [compile time option](https://github.com/terjeio/grblHAL/wiki/Changes-from-grbl-1.1#workaround) has been added that disables extensions selectively. 
 
-Windows users may try [my sender](https://github.com/terjeio/Grbl-GCode-Sender), binary releases can be found [here](https://github.com/terjeio/Grbl-GCode-Sender/releases). It has been written to complement grblHAL and has features such as proper keyboard jogging, automatic reconfiguration of DRO display for up to 6 axes, lathe mode including conversational G-Code generation, 3D rendering, macro support etc. etc.
+Windows users may try [ioSender](https://github.com/terjeio/Grbl-GCode-Sender), binary releases can be found [here](https://github.com/terjeio/Grbl-GCode-Sender/releases).
+It has been written to complement grblHAL and has features such as proper keyboard jogging, advanced probing, automatic reconfiguration of DRO display for up to 6 axes, lathe mode including conversational G-Code generation, 3D rendering, macro support etc. etc.
+
+---
+
+Latest build date is 20201020, see the [changelog](changelog.md) for details.
+
+__NOTE:__ Settings data format has been changed and settings will be reset to default on update. Backup and restore.
 
 ---
 
@@ -10,19 +17,18 @@ __NOTE:__ Arduino drivers has now been converted to Arduino libraries, [installa
 
 ---
 
-Latest build date is 20200923, see the [changelog](changelog.md) for details.
+grblHAL is a no-compromise, high performance, low cost alternative to parallel-port-based motion control for CNC milling and is based on the [Arduino version of grbl](https://github.com/gnea/grbl). It is mainly aimed at ARM processors \(or other 32-bit MCUs\) with ample amounts of RAM and flash \(compared to AVR 328p\) and requires a [hardware driver](drivers/ReadMe.md) to be functional.
+Currently drivers are available for 13 different processors/processor families all of which share the same core.
 
----
-
-grblHAL is a no-compromise, high performance, low cost alternative to parallel-port-based motion control for CNC milling based on the [Arduino version of grbl](https://github.com/gnea/grbl). It is mainly aimed at ARM processors \(or other 32-bit MCUs\) with ample amounts of RAM and flash \(compared to AVR 328p\) and requires a [hardware driver](drivers/ReadMe.md) to be functional.
-Currently drivers are available for 13 different processors all of which share the same core.
-
-The driver interface \(HAL\) has entry points for extending the supported M-codes (adding user defined M-codes) as well as an entry point for the driver to execute G-code when Grbl is in idle or jog state.
-It also supports [plugins](plugins/README.md) for extensions, a growing number is already available.
+grblHAL has an open architecture allowing [plugins](plugins/README.md) to extend functionality.
+User made plugins can be added to grblHAL without changing a single file in the source<sup>1</sup>, and allows for a wide range extensions to be added.
+New M-codes can be added, space for plugin specific settings can be allocated, events can be subscribed to etc. etc.  
+Adding code to drive an ATC, extra outputs or even adding a UI<sup>2</sup> has never been easier. You can even add your own [driver](templates/arm-driver) if you feel so inclined.
 
 HAL = Hardware Abstraction Layer
 
-The controller is written in highly optimized C utilizing features of the supported processors to achieve precise timing and asynchronous operation. It is able to maintain up to 300kHz<sup>1</sup> of stable, jitter free control pulses.
+The controller is written in highly optimized C utilizing features of the supported processors to achieve precise timing and asynchronous operation.
+It is able to maintain up to 300kHz<sup>3</sup> of stable, jitter free control pulses.
 
 It accepts standards-compliant g-code and has been tested with the output of several CAM tools with no problems. Arcs, circles and helical motion are fully supported, as well as, all other primary g-code commands. Macro functions, variables, and some canned cycles are not supported, but we think GUIs can do a much better job at translating them into straight g-code anyhow.
 
@@ -30,7 +36,9 @@ Grbl includes full acceleration management with look ahead. That means the contr
 
 This is a port/rewrite of [grbl 1.1f](https://github.com/gnea/grbl) and should be compatible with GCode senders compliant with the specifications for that version. It should be possible to change default compile-time configurations if problems arise, eg. the default serial buffer sizes has been increased in some of the [drivers](drivers/ReadMe.md) provided.
 
-<sup>1</sup> Driver/processor dependent.
+<sup>1</sup> This feature is only to be used for private plugins, if shared then a single call must be added to the driver code of the target processors.   
+<sup>2</sup> I do not usually recommend doing this, and I will not accept pull requests for any. However I may add a link to the github repository for any that might be made.  
+<sup>3</sup> Driver/processor dependent.
 
 ***
 
@@ -66,4 +74,4 @@ List of Supported G-Codes:
 ```
 
 ---
-2020-09-13
+2020-10-20

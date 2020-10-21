@@ -46,8 +46,8 @@
 #ifndef KEYPAD_ENABLE
 #define KEYPAD_ENABLE           0
 #endif
-#ifndef LASER_PPI
-#define LASER_PPI               0
+#ifndef PPI_ENABLE
+#define PPI_ENABLE              0
 #endif
 #ifndef TRINAMIC_ENABLE
 #define TRINAMIC_ENABLE         0
@@ -122,48 +122,16 @@
 
 // End configuration
 
-#if TRINAMIC_ENABLE || KEYPAD_ENABLE
-#define DRIVER_SETTINGS
-#endif
-
-#ifdef DRIVER_SETTINGS
-
 #if TRINAMIC_ENABLE
 #include "tmc2130/trinamic.h"
 #endif
 
-typedef struct {
-#if TRINAMIC_ENABLE
-    trinamic_settings_t trinamic;
-#endif
-#if KEYPAD_ENABLE
-    jog_settings_t jog;
-#endif
-} driver_settings_t;
 
-extern driver_settings_t driver_settings;
-
-#endif
-
-
-#if LASER_PPI
-
-#define LASER_PPI_TIM TIMER2
-#define LASER_PPI_TIMER_PERIPH timerPeriph(LASER_PPI_TIM)
-#define LASER_PPI_TIMER_BASE timerBase(LASER_PPI_TIM)
-#define LASER_PPI_TIMER_INT timerINT(LASER_PPI_TIM, A)
-
-typedef struct {
-    float ppi;
-    uint_fast16_t steps_per_pulse;
-    uint_fast16_t pulse_length; // uS
-    uint32_t next_pulse;
-} laser_ppi_t;
-
-extern laser_ppi_t laser;
-
-void laser_ppi_mode (bool on);
-
+#if PPI_ENABLE
+#define PPI_ENABLE_TIM TIMER2
+#define PPI_ENABLE_TIMER_PERIPH timerPeriph(PPI_ENABLE_TIM)
+#define PPI_ENABLE_TIMER_BASE timerBase(PPI_ENABLE_TIM)
+#define PPI_ENABLE_TIMER_INT timerINT(PPI_ENABLE_TIM, A)
 #endif
 
 #endif

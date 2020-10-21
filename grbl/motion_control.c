@@ -32,9 +32,9 @@
 #include "nuts_bolts.h"
 #include "protocol.h"
 #include "limits.h"
-#include "report.h"
 #include "state_machine.h"
 #include "motion_control.h"
+#include "tool_change.h"
 #ifdef KINEMATICS_API
 #include "kinematics.h"
 #endif
@@ -189,10 +189,10 @@ bool mc_line (float *target, plan_line_data_t *pl_data)
 
         // Plan and queue motion into planner buffer
         // bool plan_status; // Not used in normal operation.
-        if(!plan_buffer_line(target, pl_data) && settings.flags.laser_mode && pl_data->condition.spindle.on && !pl_data->condition.spindle.ccw) {
+        if(!plan_buffer_line(target, pl_data) && settings.mode == Mode_Laser && pl_data->condition.spindle.on && !pl_data->condition.spindle.ccw) {
             // Correctly set spindle state, if there is a coincident position passed.
             // Forces a buffer sync while in M3 laser mode only.
-            hal.spindle_set_state(pl_data->condition.spindle, pl_data->spindle.rpm);
+            hal.spindle.set_state(pl_data->condition.spindle, pl_data->spindle.rpm);
         }
 #ifdef KINEMATICS_API
       }
@@ -534,7 +534,7 @@ void mc_canned_drill (motion_mode_t motion, float *target, plan_line_data_t *pl_
                 mc_dwell(canned->dwell);
 
             if(canned->spindle_off)
-                hal.spindle_set_state((spindle_state_t){0}, 0.0f);
+                hal.spindle.set_state((spindle_state_t){0}, 0.0f);
 
             // rapid retract
             switch(motion) {
@@ -623,7 +623,7 @@ void mc_thread (plan_line_data_t *pl_data, float *position, gc_thread_data *thre
 
     // TODO: Add to initial move to compensate for acceleration distance?
     /*
-    float acc_distance = pl_data->feed_rate * hal.spindle_get_data(SpindleData_RPM).rpm / settings.acceleration[Z_AXIS];
+    float acc_distance = pl_data->feed_rate * hal.spindle.get_data(SpindleData_RPM).rpm / settings.acceleration[Z_AXIS];
     acc_distance = acc_distance * acc_distance * settings.acceleration[Z_AXIS] * 0.5f;
      */
 
@@ -751,13 +751,12 @@ status_code_t mc_homing_cycle (axes_signals_t cycle)
 {
     bool home_all = cycle.mask == 0;
 
-    sys.report.tlo_reference = sys.tlo_reference_set.mask != 0;
-    sys.tlo_reference_set.mask = 0;  // Invalidate tool length offset reference
-
     if(settings.homing.flags.manual && (home_all ? sys.homing.mask : (cycle.mask & sys.homing.mask)) == 0) {
 
         if(home_all)
             cycle.mask = AXES_BITMASK;
+
+        tc_clear_tlo_reference(cycle);
 
         sys.homed.mask |= cycle.mask;
 #ifdef KINEMATICS_API
@@ -770,7 +769,7 @@ status_code_t mc_homing_cycle (axes_signals_t cycle)
         // Check and abort homing cycle, if hard limits are already enabled. Helps prevent problems
         // with machines with limits wired on both ends of travel to one limit pin.
         // TODO: Move the pin-specific LIMIT_PIN call to limits.c as a function.
-        if (settings.limits.flags.two_switches && hal.limits_get_state().value) {
+        if (settings.limits.flags.two_switches && hal.limits.get_state().value) {
             mc_reset(); // Issue system reset and ensure spindle and coolant are shutdown.
             system_set_exec_alarm(Alarm_HardLimit);
             return Status_Unhandled;
@@ -781,7 +780,7 @@ status_code_t mc_homing_cycle (axes_signals_t cycle)
         hal.stream.enqueue_realtime_command(CMD_STATUS_REPORT); // Force a status report and
         delay_sec(0.1f, DelayMode_Dwell);                       // delay a bit to get it sent (or perhaps wait a bit for a request?)
 #endif
-        hal.limits_enable(false, true); // Disable hard limits pin change register for cycle duration
+        hal.limits.enable(false, true); // Disable hard limits pin change register for cycle duration
 
         // Turn off spindle and coolant (and update parser state)
         gc_state.spindle.rpm = 0.0f;
@@ -814,7 +813,7 @@ status_code_t mc_homing_cycle (axes_signals_t cycle)
         // If hard limits feature enabled, re-enable hard limits pin change register after homing cycle.
         // NOTE: always call at end of homing regadless of setting, may be used to disable
         // sensorless homing or switch back to limit switches input (if different from homing switches)
-        hal.limits_enable(settings.limits.flags.hard_enabled, false);
+        hal.limits.enable(settings.limits.flags.hard_enabled, false);
     }
 
     if(cycle.mask) {
@@ -842,7 +841,7 @@ status_code_t mc_homing_cycle (axes_signals_t cycle)
 
     sys.report.homed = On;
 
-    return settings.limits.flags.hard_enabled && settings.limits.flags.check_at_init && hal.limits_get_state().value
+    return settings.limits.flags.hard_enabled && settings.limits.flags.check_at_init && hal.limits.get_state().value
             ? Status_LimitsEngaged
             : Status_OK;
 }
@@ -862,15 +861,15 @@ gc_probe_t mc_probe_cycle (float *target, plan_line_data_t *pl_data, gc_parser_f
 
     // Initialize probing control variables
     sys.flags.probe_succeeded = Off; // Re-initialize probe history before beginning cycle.
-    hal.probe_configure_invert_mask(parser_flags.probe_is_away, true);
+    hal.probe.configure(parser_flags.probe_is_away, true);
 
     // After syncing, check if probe is already triggered or not connected. If so, halt and issue alarm.
     // NOTE: This probe initialization error applies to all probing cycles.
-    probe_state_t probe = hal.probe_get_state();
+    probe_state_t probe = hal.probe.get_state();
     if (probe.triggered || !probe.connected) { // Check probe state.
         system_set_exec_alarm(Alarm_ProbeFailInitial);
         protocol_execute_realtime();
-        hal.probe_configure_invert_mask(false, false); // Re-initialize invert mask before returning.
+        hal.probe.configure(false, false); // Re-initialize invert mask before returning.
         return GCProbe_FailInit; // Nothing else to do but bail.
     }
 
@@ -900,7 +899,7 @@ gc_probe_t mc_probe_cycle (float *target, plan_line_data_t *pl_data, gc_parser_f
         sys.flags.probe_succeeded = On; // Indicate to system the probing cycle completed successfully.
 
     sys_probing_state = Probing_Off;                // Ensure probe state monitor is disabled.
-    hal.probe_configure_invert_mask(false, false);  // Re-initialize invert mask.
+    hal.probe.configure(false, false);  // Re-initialize invert mask.
     protocol_execute_realtime();                    // Check and execute run-time commands
 
     // Reset the stepper and planner buffers to remove the remainder of the probe motion.
@@ -977,7 +976,7 @@ ISR_CODE void mc_reset ()
             st_go_idle(); // Force kill steppers. Position has likely been lost.
         }
 
-        if(hal.system_control_get_state().e_stop)
+        if(hal.control.get_state().e_stop)
             system_set_exec_alarm(Alarm_EStop);
     }
 }

@@ -2,8 +2,8 @@
 
 | Processor ->                         | iMXRT1062       | STM32F4xx       |STM32F1xx<sup>11</sup>| SAM3X8E         | SAMD21          | ESP32           |MSP432           |LPC1768/1769       | TMC123        | TMC129x       | MSP432E401Y   | PSoC&nbsp;5 |MSP430F5529   |
 |--------------------------------------|-----------------|-----------------|----------------------|-----------------|-----------------|-----------------|-----------------|-------------------|---------------|---------------|---------------|-------------|--------------|
-| Board                                |Teensy 4.x       | Blackpill       | Bluepill             | Due             | MKRZERO         |                 | LaunchPad       | Re-Arm            | LaunchPad     | LaunchPad     | LaunchPad     | CY8CKIT-059 | LaunchPad    |
-| MCU speed \(MHz\)                    | 600             | 84/100          | 72                   | 84              | 48              | 2x240           | 48              | 100/120           | 80            | 120           | 120           | 80          | 25 \(16 bit\)|
+| Board                                |Teensy 4.x       |Blackpill / Nucleo-F411RE / Nucleo-F446RE| Bluepill   | Due             | MKRZERO         |                 | LaunchPad       | Re-Arm            | LaunchPad     | LaunchPad     | LaunchPad     | CY8CKIT-059 | LaunchPad    |
+| MCU speed \(MHz\)                    | 600             | 84/100/180      | 72                   | 84              | 48              | 2x240           | 48              | 100/120           | 80            | 120           | 120           | 80          | 25 \(16 bit\)|
 | Floating point unit                  | yes             | yes             | no                   | no              | no              | yes             | yes             | no                | yes           | yes           | yes           | no          | no           |
 | Non-volatile storage                 |Flash<sup>1</sup>|Flash<sup>1</sup>| Flash<sup>1</sup>    |Flash<sup>1</sup>|Flash<sup>1</sup>|Flash<sup>1</sup>|Flash<sup>1</sup>| Flash<sup>1</sup> | EEPROM        | EEPROM        | EEPROM        | EEPROM      |no<sup>1</sup>|
 | Number of axes                       | up to 5         | up to 6         | up to 6              | up to 6         | 3               | 3               | 3               | up to 5           | 3             | up to 6       | up to 6       |3<sup>2</sup>| 3            |
@@ -52,4 +52,4 @@ Please note that some of the capabilities should be fairly easy to port from one
 The fastest and most deterministic MCUs seems to be iMRXT1062, MSP432E401Y and TMC129x, ESP32 is not bad but it is a bit unstable - maybe due to outstanding [bugs](https://github.com/espressif/esp-idf/issues) in the [ESP-IDF](https://github.com/espressif/esp-idf) and the system architecture - program code is stored off chip in external serial flash.
 
 ---
-2020-08-15
+2020-10-06

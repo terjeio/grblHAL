@@ -4,6 +4,7 @@
 	<comment></comment>
 	<projects>
 		<project>CMSIS_CORE_LPC17xx</project>
+		<project>lpc_chip_175x_6x</project>
 	</projects>
 	<buildSpec>
 		<buildCommand>

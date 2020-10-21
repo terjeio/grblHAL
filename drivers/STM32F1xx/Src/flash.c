@@ -29,7 +29,7 @@
 #include "grbl/hal.h"
 #include "stm32f1xx_hal_flash_ex.h"
 
-static const uint8_t *flash_target = (uint8_t *)(FLASH_BANK1_END - FLASH_PAGE_SIZE + 1);    // Last page start adress
+static const uint8_t *flash_target = (uint8_t *)(FLASH_BANK1_END - FLASH_PAGE_SIZE * 2 + 1);    // Last page start adress
 
 bool memcpy_from_flash (uint8_t *dest)
 {
@@ -47,7 +47,7 @@ bool memcpy_to_flash (uint8_t *source)
     FLASH_EraseInitTypeDef erase = {
         .Banks = FLASH_BANK_1,
         .TypeErase = FLASH_TYPEERASE_PAGES,
-        .NbPages = 1,
+        .NbPages = 2,
         .PageAddress = (uint32_t)flash_target
     };
 

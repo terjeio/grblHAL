@@ -48,6 +48,6 @@ void I2C_GetKeycode (uint32_t i2cAddr, keycode_callback_ptr callback);
 
 #endif
 
-uint8_t *I2C_Receive (uint32_t i2cAddr, uint8_t *buf, uint32_t bytes, bool block);
-void I2C_Send (uint32_t i2cAddr, uint8_t *buf, uint8_t bytes, bool block);
-uint8_t *I2C_ReadRegister (uint32_t i2cAddr, uint8_t *buf, uint8_t bytes, bool block);
+uint8_t *I2C_Receive (uint32_t i2cAddr, uint8_t *buf, uint16_t bytes, bool block);
+void I2C_Send (uint32_t i2cAddr, uint8_t *buf, uint16_t bytes, bool block);
+uint8_t *I2C_ReadRegister (uint32_t i2cAddr, uint8_t *buf, uint16_t bytes, bool block);

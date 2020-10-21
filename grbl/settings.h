@@ -29,19 +29,8 @@
 
 // Version of the persistent storage data. Will be used to migrate existing data from older versions of Grbl
 // when firmware is upgraded. Always stored in byte 0 of non-volatile storage
-#define SETTINGS_VERSION 17  // NOTE: Check settings_reset() when moving to next version.
+#define SETTINGS_VERSION 18  // NOTE: Check settings_reset() when moving to next version.
 
-// Define persistent storage memory address location values for Grbl settings and parameters
-// NOTE: 1KB persistent storage is the minimum required. The upper half is reserved for parameters and
-// the startup script. The lower half contains the global settings and space for future
-// developments.
-#define NVS_ADDR_GLOBAL         1U
-#define NVS_ADDR_PARAMETERS     512U
-#define NVS_ADDR_BUILD_INFO     942U
-#define NVS_ADDR_STARTUP_BLOCK  (NVS_ADDR_BUILD_INFO - 1 - N_STARTUP_LINE * (MAX_STORED_LINE_LENGTH + 1))
-#ifdef N_TOOLS
-#define NVS_ADDR_TOOL_TABLE     (NVS_ADDR_PARAMETERS - 1 - N_TOOLS * (sizeof(tool_data_t) + 1))
-#endif
 
 // Define axis settings numbering scheme. Starts at Setting_AxisSettingsBase, every INCREMENT, over N_SETTINGS.
 #ifdef ENABLE_BACKLASH_COMPENSATION
@@ -68,14 +57,12 @@ typedef enum {
     Setting_JunctionDeviation = 11,
     Setting_ArcTolerance = 12,
     Setting_ReportInches = 13,
-#if COMPATIBILITY_LEVEL <= 1
     Setting_ControlInvertMask = 14,
     Setting_CoolantInvertMask = 15,
     Setting_SpindleInvertMask = 16,
     Setting_ControlPullUpDisableMask = 17,
     Setting_LimitPullUpDisableMask = 18,
     Setting_ProbePullUpDisable = 19,
-#endif
     Setting_SoftLimitsEnable = 20,
     Setting_HardLimitsEnable = 21,
     Setting_HomingEnable = 22,
@@ -84,14 +71,11 @@ typedef enum {
     Setting_HomingSeekRate = 25,
     Setting_HomingDebounceDelay = 26,
     Setting_HomingPulloff = 27,
-#if COMPATIBILITY_LEVEL <= 1
     Setting_G73Retract = 28,
     Setting_PulseDelayMicroseconds = 29,
-#endif
     Setting_RpmMax = 30,
     Setting_RpmMin = 31,
     Setting_Mode = 32,
-#if COMPATIBILITY_LEVEL <= 1 // TODO: 33-36 is defined in grbl-LPC, add separate level or always include?
     Setting_PWMFreq = 33,
     Setting_PWMOffValue = 34,
     Setting_PWMMinValue = 35,
@@ -135,7 +119,6 @@ typedef enum {
     Setting_LinearSpindlePiece3 = 68,
     Setting_LinearSpindlePiece4 = 69,
 //
-#endif
 
 // Optional driver implemented settings for additional streams
     Setting_NetworkServices = 70,
@@ -231,8 +214,25 @@ typedef enum {
     Setting_Arc_OkHighVoltage = 364,
     Setting_Arc_OkLowVoltage = 365,
 
+    Settings_IoPort_InvertIn  = 370,
+    Settings_IoPort_Pullup_Disable = 371,
+    Settings_IoPort_InvertOut = 372,
+    Settings_IoPort_OD_Enable = 373,
+
     Setting_EncoderSettingsBase = 400, // NOTE: Reserving settings values >= 400 for encoder settings. Up to 449.
     Setting_EncoderSettingsMax = 449,
+
+    // Reserved for user plugins - do NOT use for public plugins
+    Setting_UserDefined_0 = 450,
+    Setting_UserDefined_1 = 451,
+    Setting_UserDefined_2 = 452,
+    Setting_UserDefined_3 = 453,
+    Setting_UserDefined_4 = 454,
+    Setting_UserDefined_5 = 455,
+    Setting_UserDefined_6 = 456,
+    Setting_UserDefined_7 = 457,
+    Setting_UserDefined_8 = 458,
+    Setting_UserDefined_9 = 459,
 
     Setting_SettingsMax
 //
@@ -269,27 +269,35 @@ typedef union {
 
 extern const settings_restore_t settings_all;
 
+typedef char stored_line_t[MAX_STORED_LINE_LENGTH];
+
 typedef union {
     uint16_t value;
     struct {
         uint16_t report_inches                :1,
-                 laser_mode                   :1,
-                 invert_probe_pin             :1,
-                 disable_probe_pullup         :1,
                  restore_overrides            :1,
                  safety_door_ignore_when_idle :1,
                  sleep_enable                 :1,
                  disable_laser_during_hold    :1,
                  force_initialization_alarm   :1,
                  legacy_rt_commands           :1,
-                 allow_probing_feed_override  :1,
-                 unassigned2                  :1,
                  restore_after_feed_hold      :1,
-                 probe_detection_enabled      :1,
-                 unassigned3                  :1,
-                 lathe_mode                   :1;
+                 unassigned                   :8;
     };
 } settingflags_t;
+
+typedef union {
+    uint8_t value;
+    struct {
+        uint8_t invert_probe_pin         :1,
+                disable_probe_pullup     :1,
+                invert_connected_pin     :1,
+                disable_connected_pullup :1,
+                allow_feed_override      :1,
+                enable_protection        :1,
+                unassigned               :2;
+    };
+} probeflags_t;
 
 typedef union {
     uint16_t mask;
@@ -305,7 +313,8 @@ typedef union {
                  sync_on_wco_change :1,
                  parser_state       :1,
                  alarm_substate     :1,
-                 unassigned         :5;
+                 run_substate       :1,
+                 unassigned         :4;
     };
 } reportmask_t;
 
@@ -389,7 +398,7 @@ typedef struct {
     axes_signals_t deenergize;
     float pulse_microseconds;
     float pulse_delay_microseconds;
-    uint8_t idle_lock_time; // If max value 255, steppers do not disable.
+    uint16_t idle_lock_time; // If value = 255, steppers do not disable.
 } stepper_settings_t;
 
 typedef struct {
@@ -420,11 +429,40 @@ typedef struct {
     axes_signals_t disable_pullup;
 } limit_settings_t;
 
+typedef union {
+    uint8_t value;
+    uint8_t mask;
+    struct {
+        uint8_t bit0 :1,
+                bit1 :1,
+                bit2 :1,
+                bit3 :1,
+                bit4 :1,
+                bit5 :1,
+                bit6 :1,
+                bit7 :1;
+    };
+} ioport_bus_t;
+
+typedef struct {
+    ioport_bus_t invert_in;
+    ioport_bus_t pullup_disable_in;
+    ioport_bus_t invert_out;
+    ioport_bus_t od_enable_out;
+} ioport_signals_t;
+
+typedef enum {
+    Mode_Standard = 0,
+    Mode_Laser,
+    Mode_Lathe
+} machine_mode_t;
+
 typedef enum {
     ToolChange_Disabled = 0,
     ToolChange_Manual,
     ToolChange_Manual_G59_3,
-    ToolChange_SemiAutomatic // Must be last
+    ToolChange_SemiAutomatic,
+    ToolChange_Ignore
 } toolchange_mode_t;
 
 typedef struct {
@@ -441,6 +479,7 @@ typedef struct {
     float junction_deviation;
     float arc_tolerance;
     float g73_retract;
+    machine_mode_t mode;
     tool_change_settings_t tool_change;
     axis_settings_t axis[N_AXIS];
     control_signals_t control_invert;
@@ -450,10 +489,12 @@ typedef struct {
     stepper_settings_t steppers;
     reportmask_t status_report; // Mask to indicate desired report data.
     settingflags_t flags;       // Contains default boolean settings
+    probeflags_t probe;
     homing_settings_t homing;
     limit_settings_t limits;
     parking_settings_t parking;
     position_pid_t position;    // Used for synchronized motion
+    ioport_signals_t ioport;
 } settings_t;
 
 extern settings_t settings;
@@ -480,10 +521,10 @@ void settings_write_build_info(char *line);
 bool settings_read_build_info(char *line);
 
 // Writes selected coordinate data to persistent storage
-void settings_write_coord_data(coord_system_id_t idx, float (*coord_data)[N_AXIS]);
+void settings_write_coord_data(coord_system_id_t id, float (*coord_data)[N_AXIS]);
 
 // Reads selected coordinate data from persistent storage
-bool settings_read_coord_data(coord_system_id_t idx, float (*coord_data)[N_AXIS]);
+bool settings_read_coord_data(coord_system_id_t id, float (*coord_data)[N_AXIS]);
 
 // Writes selected tool data to persistent storage
 bool settings_write_tool_data (tool_data_t *tool_data);

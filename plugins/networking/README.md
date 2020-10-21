@@ -6,12 +6,24 @@ This plugin contains code for "stream based" network protocol support on top of 
 
 #### Protocols supported:
 
-* Telnet ("raw" mode)  
-* Websocket - work in progress, initial test results are promising.  
+* Telnet \("raw" mode\)
+* Websocket
 
 #### Dependencies:
 
 [lwIP library](http://savannah.nongnu.org/projects/lwip/)
+
+Driver capable of networking and having the required "middleware" layer on top of lwIP.
+
+These drivers has this "middleware" layer, further details for how to configure networking can be found on the driver page:
+
+* [iMXRT1062](../../drivers/IMXRT1062/README.md) for Teensy 4.1, cabled Ethernet.
+
+* [MSP432E401Y](../../drivers/MSP432E401Y/README.md) for MSP432E401Y LaunchPad, cabled Ethernet.
+
+* [TM4C129](../../drivers/TM4C129/README.md) for EK-TM4C1294XL Launchpad, cabled Ethernet.
+
+* [ESP32](../../drivers/ESP32/README.md), wireless \(wifi\).
 
 #### Credits:
 
@@ -31,4 +43,4 @@ __NOTE:__ this plugin is only for the protocol layer. Driver specific code is re
 ![Test](../../media/websocket.png)
 
 ---
-2019-11-23
+2020-10-20

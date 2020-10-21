@@ -1,6 +1,6 @@
 /*
 
-  odometer.c - axis odometers including run time
+  odometer.c - axis odometers including run time + spindle run time
 
   Part of GrblHAL
 
@@ -33,47 +33,57 @@
 #include <stdio.h>
 
 #ifdef ARDUINO
+#include "../grbl/protocol.h"
 #include "../grbl/nvs_buffer.h"
 #else
+#include "grbl/protocol.h"
 #include "grbl/nvs_buffer.h"
 #endif
 
-#include "odometer.h"
+typedef struct {
+    uint64_t motors;
+    uint64_t spindle;
+    float distance[N_AXIS];
+} odometer_data_t;
 
-static nvs_io_t *nvs = NULL;
+static uint32_t steps[N_AXIS] = {0};
 static bool odometer_changed = false;
-static uint32_t odometers_address;
-static odometer_data_t odometers;
-static void (*stepper_pulse_start)(stepper_t *stepper);
-static status_code_t (*on_unknown_sys_command)(uint_fast16_t state, char *line, char *lcline);
-void (*on_state_change)(uint_fast16_t state);
+static uint32_t odometers_address, odometers_address_prv;
+static odometer_data_t odometers, odometers_prv;
+static nvs_io_t nvs;
+static stepper_pulse_start_ptr stepper_pulse_start;
+static on_unknown_sys_command_ptr on_unknown_sys_command;
+static on_state_change_ptr on_state_change;
+static spindle_set_state_ptr spindle_set_state_;
+static settings_changed_ptr settings_changed;
+static on_report_options_ptr on_report_options;
 
 static void stepperPulseStart (stepper_t *stepper)
 {
     odometer_changed = true;
 
     if(stepper->step_outbits.x)
-        odometers.distance[X_AXIS]++;
+        steps[X_AXIS]++;
 
     if(stepper->step_outbits.y)
-        odometers.distance[Y_AXIS]++;
+        steps[Y_AXIS]++;
 
     if(stepper->step_outbits.z)
-        odometers.distance[Z_AXIS]++;
+        steps[Z_AXIS]++;
 
 #ifdef A_AXIS
     if(stepper->step_outbits.a)
-        odometers.distance[A_AXIS]++;
+        steps[A_AXIS]++;
 #endif
 
 #ifdef B_AXIS
     if(stepper->step_outbits.b)
-        odometers.distance[B_AXIS]++;
+        steps[B_AXIS]++;
 #endif
 
 #ifdef C_AXIS
     if(stepper->step_outbits.b)
-        odometers.distance[C_AXIS]++;
+        steps[C_AXIS]++;
 #endif
 
     stepper_pulse_start(stepper);
@@ -87,20 +97,93 @@ void onStateChanged (uint_fast16_t state)
         ms = hal.get_elapsed_ticks();
 
     else if(odometer_changed) {
+
+        uint_fast8_t idx = N_AXIS;
+
         odometer_changed = false;
-        odometers.time += (hal.get_elapsed_ticks() - ms);
-        nvs->memcpy_to_with_checksum(odometers_address, (uint8_t *)&odometers, sizeof(odometer_data_t));
+        odometers.motors += (hal.get_elapsed_ticks() - ms);
+
+        do {
+            if(steps[--idx]) {
+                odometers.distance[idx] += (float)steps[idx] / settings.axis[idx].steps_per_mm;
+                steps[idx] = 0;
+            }
+        } while(idx);
+
+        nvs.memcpy_to_nvs(odometers_address, (uint8_t *)&odometers, sizeof(odometer_data_t), true);
     }
 
     if(on_state_change)
         on_state_change(state);
 }
 
-static void odometer_data_reset (void)
+// Called by foreground process.
+static void odometers_write (uint_fast16_t state)
 {
-    // TODO: Write backup to second copy before reset
+    nvs.memcpy_to_nvs(odometers_address, (uint8_t *)&odometers, sizeof(odometer_data_t), true);
+}
+
+ISR_CODE static void onSpindleSetState (spindle_state_t state, float rpm)
+{
+    static uint32_t ms = 0;
+
+    spindle_set_state_(state, rpm);
+
+    if(state.on)
+        ms = hal.get_elapsed_ticks();
+    else if(ms) {
+        odometers.spindle += (hal.get_elapsed_ticks() - ms);
+        ms = 0;
+        // Write odometer data in foreground process.
+        protocol_enqueue_rt_command(odometers_write);
+    }
+}
+
+// Reclaim entry points that may have been changed on settings change.
+static void onSettingsChanged (settings_t *settings)
+{
+    settings_changed(settings);
+
+    if(hal.spindle.set_state != onSpindleSetState) {
+        spindle_set_state_ = hal.spindle.set_state;
+        hal.spindle.set_state = onSpindleSetState;
+    }
+
+    if(hal.stepper.pulse_start != stepperPulseStart) {
+        stepper_pulse_start = hal.stepper.pulse_start;
+        hal.stepper.pulse_start = stepperPulseStart;
+    }
+}
+
+static void odometer_data_reset (bool backup)
+{
+    if(backup) {
+        memcpy(&odometers_prv, &odometers, sizeof(odometer_data_t));
+        nvs.memcpy_to_nvs(odometers_address_prv, (uint8_t *)&odometers_prv, sizeof(odometer_data_t), true);
+    }
     memset(&odometers, 0, sizeof(odometer_data_t));
-    nvs->memcpy_to_with_checksum(odometers_address, (uint8_t *)&odometers, sizeof(odometer_data_t));
+    nvs.memcpy_to_nvs(odometers_address, (uint8_t *)&odometers, sizeof(odometer_data_t), true);
+}
+
+static void odometers_report (odometer_data_t *odometers)
+{
+    char buf[40];
+    uint_fast8_t idx;
+    uint32_t hr = odometers->spindle / 3600000, min = (odometers->spindle / 60000) % 60;
+
+    sprintf(buf, "SPINDLEHRS %ld:%.2ld", hr, min);
+    report_message(buf, Message_Plain);
+
+    hr = odometers->motors / 3600000;
+    min = (odometers->motors / 60000) % 60;
+
+    sprintf(buf, "MOTORHRS %ld:%.2ld", hr, min);
+    report_message(buf, Message_Plain);
+
+    for(idx = 0 ; idx < N_AXIS ; idx++) {
+        sprintf(buf, "ODOMETER%s %s", axis_letter[idx], ftoa(odometers->distance[idx] / 1000.0f, 1)); // meters
+        report_message(buf, Message_Plain);
+    }
 }
 
 static status_code_t commandExecute (uint_fast16_t state, char *line, char *lcline)
@@ -110,24 +193,20 @@ static status_code_t commandExecute (uint_fast16_t state, char *line, char *lcli
     if(line[1] == 'O') {
 
         if(!strcmp(&line[1], "ODOMETERS")) {
+            odometers_report(&odometers);
+            retval = Status_OK;
+        }
 
-            char buf[40];
-            uint_fast8_t idx;
-            uint32_t hr = odometers.time / 3600000, min = (odometers.time / 60000) % 60;
-
-            sprintf(buf, "[MSG: ODOMETERHRS %ld:%.2ld]" ASCII_EOL, hr, min);
-            hal.stream.write(buf);
-
-            for(idx = 0 ; idx < N_AXIS ; idx++) {
-                sprintf(buf, "[MSG: ODOMETER%s %s]" ASCII_EOL, axis_letter[idx], ftoa(odometers.distance[idx] / settings.axis[idx].steps_per_mm / 1000.0f, 1)); // meters
-                hal.stream.write(buf);
-            }
-
+        if(!strcmp(&line[1], "ODOMETERS=PREV")) {
+            if(nvs.memcpy_from_nvs((uint8_t *)&odometers_prv, odometers_address_prv, sizeof(odometer_data_t), true) == NVS_TransferResult_OK)
+                odometers_report(&odometers_prv);
+            else
+                report_message("Previous odometer values not available", Message_Warning);
             retval = Status_OK;
         }
 
         if(!strcmp(&line[1], "ODOMETERS=RST")) {
-            odometer_data_reset();
+            odometer_data_reset(true);
             retval = Status_OK;
         }
     }
@@ -135,35 +214,55 @@ static status_code_t commandExecute (uint_fast16_t state, char *line, char *lcli
     return retval == Status_Unhandled && on_unknown_sys_command ? on_unknown_sys_command(state, line, lcline) : retval;
 }
 
+static void onReportOptions (void)
+{
+    on_report_options();
+    hal.stream.write("[PLUGIN:ODOMETERS v0.01]"  ASCII_EOL);
+}
+
+static void odometer_warning1 (uint_fast16_t state)
+{
+    report_message("EEPROM or FRAM is required for odometers!", Message_Warning);
+}
+
+static void odometer_warning2 (uint_fast16_t state)
+{
+    report_message("Not enough NVS storage for odometers!", Message_Warning);
+}
+
 void odometer_init()
 {
-    static bool init_ok = false;
+    memcpy(&nvs, nvs_buffer_get_physical(), sizeof(nvs_io_t));
 
-    if(!nvs)
-        nvs = nvs_buffer_get_physical();
-
-    if(!init_ok && !(nvs->type == NVS_EEPROM || nvs->type == NVS_FRAM))
-        hal.stream.write("[MSG:EEPROM or FRAM is required for odometers]" ASCII_EOL);
-
+    if(!(nvs.type == NVS_EEPROM || nvs.type == NVS_FRAM))
+        protocol_enqueue_rt_command(odometer_warning1);
+    else if(NVS_SIZE - GRBL_NVS_SIZE - hal.nvs.driver_area.size < (sizeof(odometer_data_t) * 2 + 2))
+        protocol_enqueue_rt_command(odometer_warning2);
     else {
 
-        stepper_pulse_start = hal.stepper_pulse_start;
-        hal.stepper_pulse_start = stepperPulseStart;
+        odometers_address = NVS_SIZE - (sizeof(odometer_data_t) + 1);
+        odometers_address_prv = odometers_address - (sizeof(odometer_data_t) + 1);
 
-        if(!init_ok) {
+        if(nvs.memcpy_from_nvs((uint8_t *)&odometers, odometers_address, sizeof(odometer_data_t), true) != NVS_TransferResult_OK)
+            odometer_data_reset(false);
 
-            init_ok = true;
-            odometers_address = nvs->driver_area.address + sizeof(driver_settings_t) + 1;
+        on_unknown_sys_command = grbl.on_unknown_sys_command;
+        grbl.on_unknown_sys_command = commandExecute;
 
-            if(!nvs->memcpy_from_with_checksum((uint8_t *)&odometers, odometers_address, sizeof(odometer_data_t)))
-                odometer_data_reset();
+        on_state_change = grbl.on_state_change;
+        grbl.on_state_change = onStateChanged;
 
-            on_unknown_sys_command = grbl.on_unknown_sys_command;
-            grbl.on_unknown_sys_command = commandExecute;
+        on_report_options = grbl.on_report_options;
+        grbl.on_report_options = onReportOptions;
 
-            on_state_change = grbl.on_state_change;
-            grbl.on_state_change = onStateChanged;
-        }
+        settings_changed = hal.settings_changed;
+        hal.settings_changed = onSettingsChanged;
+
+        spindle_set_state_ = hal.spindle.set_state;
+        hal.spindle.set_state = onSpindleSetState;
+
+        stepper_pulse_start = hal.stepper.pulse_start;
+        hal.stepper.pulse_start = stepperPulseStart;
     }
 }
 

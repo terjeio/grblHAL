@@ -42,7 +42,7 @@ void serialInit (void)
 
     __HAL_RCC_GPIOA_CLK_ENABLE();
 
-#ifdef NUCLEO_F411
+#if defined(NUCLEO_F411) || defined(NUCLEO_F446)
 
   #define USART USART2
   #define USART_IRQHandler USART2_IRQHandler

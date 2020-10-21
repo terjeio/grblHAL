@@ -48,6 +48,11 @@
 #include "plasma/thc.h"
 #endif
 
+#if PPI_ENABLE
+#include "laser/ppi.h"
+static void ppi_timeout_isr (void);
+#endif
+
 #if ODOMETER_ENABLE
 #include "odometer/odometer.h"
 #endif
@@ -60,8 +65,6 @@
   #if WEBSOCKET_ENABLE
     #include "networking/WsStream.h"
   #endif
-        static bool enet_ok = false;
-
 #endif
 
 #if USB_SERIAL_CDC == 1
@@ -257,7 +260,7 @@ static input_signal_t inputpin[] = {
 #if MPG_MODE_ENABLE
   ,  { .id = Input_ModeSelect,  .port = &ModeSelect,   .pin = MODE_PIN,          .group = INPUT_GROUP_MPG }
 #endif
-#if KEYPAD_ENABLE && defined(KEYPAD_PIN)
+#if KEYPAD_ENABLE && defined(KEYPAD_STROBE_PIN)
   , { .id = Input_KeypadStrobe, .port = &KeypadStrobe, .pin = KEYPAD_STROBE_PIN, .group = INPUT_GROUP_KEYPAD }
 #endif
 #if QEI_ENABLE
@@ -274,8 +277,13 @@ static input_signal_t inputpin[] = {
 
 #define DIGITAL_OUT(gpio, on) { if(on) gpio.reg->DR_SET = gpio.bit; else gpio.reg->DR_CLEAR = gpio.bit; } 
 
+#if USB_SERIAL_CDC || QEI_ENABLE
+#define ADD_MSEVENT 1
 static volatile bool ms_event = false;
-static bool IOInitDone = false, probe_invert = false;
+#else
+#define ADD_MSEVENT 0
+#endif
+static bool IOInitDone = false, probe_invert = false, qei_enable = false;
 static uint16_t pulse_length, pulse_delay;
 static axes_signals_t next_step_outbits;
 static delay_t grbl_delay = { .ms = 0, .callback = NULL };
@@ -288,10 +296,6 @@ static bool pwmEnabled = false;
 static spindle_pwm_t spindle_pwm;
 
 static void spindle_set_speed (uint_fast16_t pwm_value);
-#endif
-
-#ifdef DRIVER_SETTINGS
-driver_settings_t driver_settings;
 #endif
 
 #if MODBUS_ENABLE
@@ -762,6 +766,23 @@ inline static axes_signals_t limitsGetState()
 
 #ifdef SQUARING_ENABLED
 
+static axes_signals_t getAutoSquaredAxes (void)
+{
+    axes_signals_t ganged = {0};
+
+    #if X_AUTO_SQUARE
+    ganged.x = On;
+#endif
+#if Y_AUTO_SQUARE
+    ganged.y = On;
+#endif
+#if Z_AUTO_SQUARE
+    ganged.z = On;
+#endif
+
+    return ganged;
+}
+
 // Enable/disable motors for auto squaring of ganged axes
 static void StepperDisableMotors (axes_signals_t axes, squaring_mode_t mode)
 {
@@ -837,7 +858,7 @@ static void limitsEnable (bool on, bool homing)
     } while(i);
 
 #ifdef SQUARING_ENABLED
-    hal.limits_get_state = homing ? limitsGetHomeState : limitsGetState;
+    hal.limits.get_state = homing ? limitsGetHomeState : limitsGetState;
 #endif
 }
 
@@ -859,7 +880,7 @@ inline static control_signals_t systemGetState (void)
 #endif
     signals.feed_hold = (FeedHold.reg->DR & FeedHold.bit) != 0;
     signals.cycle_start = (CycleStart.reg->DR & CycleStart.bit) != 0;
-#ifdef SAFETY_DOOR_PIN
+#if defined(ENABLE_SAFETY_DOOR_INPUT_PIN) && defined(SAFETY_DOOR_PIN)
     signals.safety_door_ajar = (SafetyDoor.reg->DR & SafetyDoor.bit) != 0;
 #endif
 
@@ -874,7 +895,7 @@ inline static control_signals_t systemGetState (void)
 // and the probing cycle modes for toward-workpiece/away-from-workpiece.
 static void probeConfigure (bool is_probe_away, bool probing)
 {
-    probe_invert = !settings.flags.invert_probe_pin;
+    probe_invert = !settings.probe.invert_probe_pin;
 
     if (is_probe_away)
         probe_invert = !probe_invert;
@@ -1022,6 +1043,23 @@ static spindle_state_t spindleGetState (void)
     return state;
 }
 
+#if PPI_ENABLE
+
+static void spindlePulseOn (uint_fast16_t pulse_length)
+{
+    static uint_fast16_t plen = 0;
+
+    if(plen != pulse_length) {
+        plen = pulse_length;
+        PPI_TIMER.CH[0].COMP1 = (uint16_t)((pulse_length * F_BUS_MHZ) / 128);
+    }
+
+    spindle_on();
+    PPI_TIMER.CH[0].CTRL |= TMR_CTRL_CM(0b001);
+}
+
+#endif
+
 // end spindle code
 
 #endif
@@ -1050,19 +1088,9 @@ static coolant_state_t coolantGetState (void)
     return state;
 }
 
-static void showMessage (const char *msg)
-{
-    hal.stream.write("[MSG:");
-    hal.stream.write(msg);
-    hal.stream.write("]" ASCII_EOL);
-}
-
 #if ETHERNET_ENABLE
 static void reportIP (void)
 {
-    hal.stream.write("[IP:");
-    hal.stream.write(enet_ip_address());
-    hal.stream.write("]" ASCII_EOL);
     if(services.telnet || services.websocket) {
         hal.stream.write("[NETCON:");
         hal.stream.write(services.telnet ? "Telnet" : "Websocket");
@@ -1107,30 +1135,24 @@ static void settings_changed (settings_t *settings)
         stepperEnable(settings->steppers.deenergize);
 
 #ifdef SQUARING_ENABLED
-        hal.stepper_disable_motors((axes_signals_t){0}, SquaringMode_Both);
+        hal.stepper.disable_motors((axes_signals_t){0}, SquaringMode_Both);
 #endif
 
-#if ETHERNET_ENABLE
-
-        if(!enet_ok)
-            enet_ok = grbl_enet_init(&driver_settings.network);
-
-#endif
-
-#if !VFD_SPINDLE && !PLASMA_ENABLE && !defined(SPINDLE_RPM_CONTROLLED)
+#if !PLASMA_ENABLE && !defined(SPINDLE_RPM_CONTROLLED)
 
         if(hal.driver_cap.variable_spindle && spindle_precompute_pwm_values(&spindle_pwm, F_BUS_ACTUAL / 2)) {
-#if SPINDLEPWMPIN == 12
+  #if SPINDLEPWMPIN == 12
             TMR1_COMP11 = spindle_pwm.period;
             TMR1_CMPLD11 = spindle_pwm.period;
-#else // 13
+  #else // 13
             TMR2_COMP10 = spindle_pwm.period;
             TMR2_CMPLD10 = spindle_pwm.period;
-#endif
-            hal.spindle_set_state = spindleSetStateVariable;
+  #endif
+            hal.spindle.set_state = spindleSetStateVariable;
         } else
-            hal.spindle_set_state = spindleSetState;
-
+            hal.spindle.set_state = spindleSetState;
+#elif !VFD_SPINDLE
+        hal.spindle.set_state = spindleSetState;
 #endif
 
         // Stepper pulse timeout setup.
@@ -1143,9 +1165,9 @@ static void settings_changed (settings_t *settings)
             if(delay <= STEP_PULSE_LATENCY)
                 delay = STEP_PULSE_LATENCY + 0.2f;
             pulse_delay = (uint16_t)((float)F_BUS_MHZ * delay);
-            hal.stepper_pulse_start = stepperPulseStartDelayed;
+            hal.stepper.pulse_start = stepperPulseStartDelayed;
         } else
-            hal.stepper_pulse_start = stepperPulseStart;
+            hal.stepper.pulse_start = stepperPulseStart;
 
         TMR4_COMP10 = pulse_length;
         TMR4_CSCTRL0 &= ~TMR_CSCTRL_TCF2EN;
@@ -1153,16 +1175,10 @@ static void settings_changed (settings_t *settings)
         attachInterruptVector(IRQ_QTIMER4, stepper_pulse_isr);
 
 #if PLASMA_ENABLE
-        plasma_init(); // reclaim hal.stepper_pulse_start
-
         TMR2_CSCTRL0 &= ~(TMR_CSCTRL_TCF1|TMR_CSCTRL_TCF2);
         TMR2_COMP10 = pulse_length;
         TMR2_CSCTRL0 &= ~TMR_CSCTRL_TCF2EN;
         TMR2_CTRL0 &= ~TMR_CTRL_OUTMODE(0b000);
-#endif
-
-#if ODOMETER_ENABLE
-        odometer_init(); // reclaim hal.stepper_pulse_start
 #endif
 
         /****************************************
@@ -1262,28 +1278,33 @@ static void settings_changed (settings_t *settings)
 #endif
 #if KEYPAD_ENABLE
                 case Input_KeypadStrobe:
+                    pullup = true;
                     signal->irq_mode = IRQ_Mode_Change;
                     break;
 #endif
 #if QEI_ENABLE
                 case Input_QEI_A:
-                    signal->irq_mode = IRQ_Mode_Change;
+                    if(qei_enable)
+                        signal->irq_mode = IRQ_Mode_Change;
                     break;
 
                 case Input_QEI_B:
-                    signal->irq_mode = IRQ_Mode_Change;
+                    if(qei_enable)
+                        signal->irq_mode = IRQ_Mode_Change;
                     break;
 
   #if QEI_INDEX_ENABLED
                 case Input_QEI_Index:
-                    signal->irq_mode = IRQ_Mode_None;
+                    if(qei_enable)
+                        signal->irq_mode = IRQ_Mode_None;
                     break;
   #endif
 
   #if QEI_SELECT_ENABLED
                 case Input_QEI_Select:
                     signal->debounce = hal.driver_cap.software_debounce;
-                    signal->irq_mode = IRQ_Mode_Falling;
+                    if(qei_enable)
+                        signal->irq_mode = IRQ_Mode_Falling;
                     break;
   #endif
 #endif
@@ -1348,7 +1369,7 @@ void pinModeOutput (gpio_t *gpio, uint8_t pin)
 
 #if QEI_ENABLE
 
-void qei_update (void)
+static void qei_update (void)
 {
     const uint8_t encoder_valid_state[] = {0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0};
 
@@ -1367,21 +1388,21 @@ void qei_update (void)
         if (qei.state == 0x42 || qei.state == 0xD4 || qei.state == 0x2B || qei.state == 0xBD) {
             qei.count--;
             if(qei.vel_timeout == 0) {
-                qei.encoder.event.position_changed = hal.encoder_event_handler != NULL;
-                hal.encoder_event_handler(&qei.encoder, qei.count);
+                qei.encoder.event.position_changed = hal.encoder.on_event != NULL;
+                hal.encoder.on_event(&qei.encoder, qei.count);
             }
         } else if(qei.state == 0x81 || qei.state == 0x17 || qei.state == 0xE8 || qei.state == 0x7E) {
             qei.count++;
             if(qei.vel_timeout == 0) {
-                qei.encoder.event.position_changed = hal.encoder_event_handler != NULL;
-                hal.encoder_event_handler(&qei.encoder, qei.count);
+                qei.encoder.event.position_changed = hal.encoder.on_event != NULL;
+                hal.encoder.on_event(&qei.encoder, qei.count);
             }
         }
     }
 
 }
 
-void qei_reset (uint_fast8_t id)
+static void qei_reset (uint_fast8_t id)
 {
     qei.vel_timeout = 0;
     qei.count = qei.vel_count = 0;
@@ -1389,19 +1410,20 @@ void qei_reset (uint_fast8_t id)
     qei.vel_timeout = qei.encoder.axis != 0xFF ? QEI_VELOCITY_TIMEOUT : 0;
 }
 
+// dummy handler, called on events if plugin init fails
+static void encoder_event (encoder_t *encoder, int32_t position)
+{
+    UNUSED(position);
+    encoder->event.events = 0;
+}
+
 #endif
 
 // Initializes MCU peripherals for Grbl use
 static bool driver_setup (settings_t *settings)
 {
-#ifdef DRIVER_SETTINGS
-    if(hal.nvs.driver_area.address != 0) {
-        if(!hal.nvs.memcpy_from_with_checksum((uint8_t *)&driver_settings, hal.nvs.driver_area.address, sizeof(driver_settings)))
-            hal.driver_settings_restore();
-      #if TRINAMIC_ENABLE && defined(BOARD_CNC_BOOSTERPACK) // Trinamic BoosterPack does not support mixed drivers
-        driver_settings.trinamic.driver_enable.mask = AXES_BITMASK;
-      #endif
-    }
+#if TRINAMIC_ENABLE && defined(BOARD_CNC_BOOSTERPACK) // Trinamic BoosterPack does not support mixed drivers
+    driver_settings.trinamic.driver_enable.mask = AXES_BITMASK;
 #endif
 
     /******************
@@ -1438,7 +1460,6 @@ static bool driver_setup (settings_t *settings)
 
     TMR2_ENBL = 1;
 #endif
-
 
     pinModeOutput(&stepX, X_STEP_PIN);
     pinModeOutput(&dirX, X_DIRECTION_PIN);
@@ -1514,7 +1535,7 @@ static bool driver_setup (settings_t *settings)
         TMR3_ENBL = 0;
         TMR3_LOAD0 = 0;
         TMR3_CTRL0 = TMR_CTRL_PCS(0b1111) | TMR_CTRL_ONCE | TMR_CTRL_LENGTH;
-        TMR3_COMP10 = (40000 * 128) / F_BUS_MHZ; // 150 MHz -> 40ms
+        TMR3_COMP10 = (uint16_t)((40000UL * F_BUS_MHZ) / 128); // 150 MHz -> 40ms
         TMR3_CSCTRL0 = TMR_CSCTRL_TCF1EN;
 
         attachInterruptVector(IRQ_QTIMER3, debounce_isr);
@@ -1564,122 +1585,54 @@ static bool driver_setup (settings_t *settings)
 
     *(portConfigRegister(SPINDLEPWMPIN)) = 1;
 
+  #if PPI_ENABLE
+
+    PPI_TIMER.ENBL = 0;
+    PPI_TIMER.CH[0].LOAD = 0;
+    PPI_TIMER.CH[0].COMP1 = (uint16_t)((1500UL * F_BUS_MHZ) / 128);
+    PPI_TIMER.CH[0].CTRL = TMR_CTRL_PCS(0b1111) | TMR_CTRL_ONCE | TMR_CTRL_LENGTH;
+    PPI_TIMER.CH[0].CSCTRL = TMR_CSCTRL_TCF1EN;
+
+    attachInterruptVector(PPI_TIMERIRQ, ppi_timeout_isr);
+    NVIC_SET_PRIORITY(PPI_TIMERIRQ, 3);
+    NVIC_ENABLE_IRQ(PPI_TIMERIRQ);
+
+    PPI_TIMER.ENBL = 1;
+
+    ppi_init();
+
+  #endif // PPI_ENABLE
+
 #endif // !PLASMA_ENABLE
 
 #endif // !VFD_SPINDLE
 
-
-
   // Set defaults
 
-    IOInitDone = settings->version == 17;
+    IOInitDone = settings->version == 18;
 
-    settings_changed(settings);
-
-    hal.stepper_go_idle(true);
+    hal.settings_changed(settings);
+    hal.stepper.go_idle(true);
 
 #if IOPORTS_ENABLE
     ioports_init();
-#endif
-
-#if QEI_ENABLE
-    encoder_init(&qei.encoder);
 #endif
 
 #if SDCARD_ENABLE
     sdcard_init();
 #endif
 
+#if ETHERNET_ENABLE
+    grbl_enet_start();
+#endif
+
+#if QEI_ENABLE
+    if(qei_enable)
+        encoder_start(&qei.encoder);
+#endif
+
     return IOInitDone;
 }
-
-#ifdef DRIVER_SETTINGS
-
-static status_code_t driver_setting (setting_type_t param, float value, char *svalue)
-{
-    status_code_t status = Status_Unhandled;
-
-#if ETHERNET_ENABLE
-    status = ethernet_setting(param, value, svalue);
-#endif
-
-#if KEYPAD_ENABLE
-    if(status == Status_Unhandled)
-        status = keypad_setting(param, value, svalue);
-#endif
-
-#if TRINAMIC_ENABLE
-    if(status == Status_Unhandled)
-        status = trinamic_setting(param, value, svalue);
-#endif
-
-#if QEI_ENABLE
-    if(status == Status_Unhandled) {
-        if((status = encoder_setting(param, value, svalue)) != Status_Unhandled)
-            encoder_init(&qei.encoder); // Reinit encoders on setting changes
-    }
-#endif
-
-#if PLASMA_ENABLE
-    if(status == Status_Unhandled)
-        status = plasma_setting(param, value, svalue);
-#endif
-
-    if(status == Status_OK)
-        hal.nvs.memcpy_to_with_checksum(hal.nvs.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
-
-    return status;
-}
-
-static void driver_settings_report (setting_type_t setting)
-{
-#if ETHERNET_ENABLE
-    ethernet_settings_report(setting);
-#endif
-
-#if KEYPAD_ENABLE
-    keypad_settings_report(setting);
-#endif
-
-#if TRINAMIC_ENABLE
-    trinamic_settings_report(setting);
-#endif
-
-#if QEI_ENABLE
-    encoder_settings_report(setting);
-#endif
-
-#if PLASMA_ENABLE
-    plasma_settings_report(setting);
-#endif
-}
-
-static void driver_settings_restore (void)
-{
-#if ETHERNET_ENABLE
-    ethernet_settings_restore();
-#endif
-
-#if KEYPAD_ENABLE
-    keypad_settings_restore();
-#endif
-
-#if TRINAMIC_ENABLE
-    trinamic_settings_restore();
-#endif
-
-#if QEI_ENABLE
-    encoder_settings_restore();
-#endif
-
-#if PLASMA_ENABLE
-    plasma_settings_restore();
-#endif
-
-    hal.nvs.memcpy_to_with_checksum(hal.nvs.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
-}
-
-#endif
 
 #if EEPROM_ENABLE == 0
 
@@ -1705,22 +1658,36 @@ bool nvsWrite (uint8_t *source)
 
 #endif
 
-#if QEI_SELECT_ENABLED || KEYPAD_ENABLE || ETHERNET_ENABLE || USB_SERIAL_CDC > 0
+#if ETHERNET_ENABLE || ADD_MSEVENT
 
 static void execute_realtime (uint_fast16_t state)
 {
+#if ADD_MSEVENT
     if(ms_event) {
+
         ms_event = false;
-  #if USB_SERIAL_CDC > 0
-    usb_execute_realtime(state);
+
+  #if USB_SERIAL_CDC
+        usb_execute_realtime(state);
   #endif
-  #if KEYPAD_ENABLE
-    keypad_process_keypress(state);
-  #endif
-  #if QEI_SELECT_ENABLED
-    encoder_execute_realtime(state);
+
+  #if QEI_ENABLE
+        if(qei.vel_timeout && !(--qei.vel_timeout)) {
+            qei.encoder.velocity = abs(qei.count - qei.vel_count) * 1000 / (millis() - qei.vel_timestamp);
+            qei.vel_timestamp = millis();
+            qei.vel_timeout = QEI_VELOCITY_TIMEOUT;
+            if((qei.encoder.event.position_changed = !qei.dbl_click_timeout || qei.encoder.velocity == 0))
+                hal.encoder.on_event(&qei.encoder, qei.count);
+            qei.vel_count = qei.count;
+        }
+
+        if(qei.dbl_click_timeout && !(--qei.dbl_click_timeout)) {
+            qei.encoder.event.click = On;
+            hal.encoder.on_event(&qei.encoder, qei.count);
+        }
   #endif
     }
+#endif // ADD_MSEVENT
 
 #if ETHERNET_ENABLE
     grbl_enet_poll();
@@ -1791,7 +1758,7 @@ bool driver_init (void)
         options[strlen(options) - 1] = '\0';
 
     hal.info = "IMXRT1062";
-    hal.driver_version = "200923";
+    hal.driver_version = "201014";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1802,35 +1769,39 @@ bool driver_init (void)
     hal.delay_ms = driver_delay_ms;
     hal.settings_changed = settings_changed;
 
-    hal.stepper_wake_up = stepperWakeUp;
-    hal.stepper_go_idle = stepperGoIdle;
-    hal.stepper_enable = stepperEnable;
-    hal.stepper_cycles_per_tick = stepperCyclesPerTick;
-    hal.stepper_pulse_start = stepperPulseStart;
+    hal.stepper.wake_up = stepperWakeUp;
+    hal.stepper.go_idle = stepperGoIdle;
+    hal.stepper.enable = stepperEnable;
+    hal.stepper.cycles_per_tick = stepperCyclesPerTick;
+    hal.stepper.pulse_start = stepperPulseStart;
 #ifdef SQUARING_ENABLED
-    hal.stepper_disable_motors = StepperDisableMotors;
+    hal.stepper.get_auto_squared = getAutoSquaredAxes;
+    hal.stepper.disable_motors = StepperDisableMotors;
 #endif
 
-    hal.limits_enable = limitsEnable;
-    hal.limits_get_state = limitsGetState;
+    hal.limits.enable = limitsEnable;
+    hal.limits.get_state = limitsGetState;
 
-    hal.coolant_set_state = coolantSetState;
-    hal.coolant_get_state = coolantGetState;
+    hal.coolant.set_state = coolantSetState;
+    hal.coolant.get_state = coolantGetState;
 
-    hal.probe_get_state = probeGetState;
-    hal.probe_configure_invert_mask = probeConfigure;
+    hal.probe.configure = probeConfigure;
+    hal.probe.get_state = probeGetState;
 
 #if !VFD_SPINDLE
-    hal.spindle_set_state = spindleSetState;
-    hal.spindle_get_state = spindleGetState;
+    hal.spindle.set_state = spindleSetState;
+    hal.spindle.get_state = spindleGetState;
   #ifdef SPINDLE_PWM_DIRECT
-    hal.spindle_get_pwm = spindleGetPWM;
-    hal.spindle_update_pwm = spindle_set_speed;
+    hal.spindle.get_pwm = spindleGetPWM;
+    hal.spindle.update_pwm = spindle_set_speed;
   #else
-    hal.spindle_update_rpm = spindleUpdateRPM;
+    hal.spindle.update_rpm = spindleUpdateRPM;
+  #endif
+  #if PPI_ENABLE
+    hal.spindle.pulse_on = spindlePulseOn;
   #endif
 #endif
-    hal.system_control_get_state = systemGetState;
+    hal.control.get_state = systemGetState;
 
 #if ETHERNET_ENABLE
     grbl.on_report_options = reportIP;
@@ -1845,30 +1816,13 @@ bool driver_init (void)
     selectStream(StreamType_Serial);
 
 #if EEPROM_ENABLE
-    eepromInit();
-  #if EEPROM_IS_FRAM
-    hal.nvs.type = NVS_FRAM;
-  #else
-    hal.nvs.type = NVS_EEPROM;
-  #endif
-    hal.nvs.get_byte = eepromGetByte;
-    hal.nvs.put_byte = eepromPutByte;
-    hal.nvs.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
-    hal.nvs.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
+    i2c_init();
+    i2c_eeprom_init();
 #else // use Arduino emulated EEPROM in flash
     eeprom_initialize();
     hal.nvs.type = NVS_Flash;
     hal.nvs.memcpy_from_flash = nvsRead;
     hal.nvs.memcpy_to_flash = nvsWrite;
-#endif
-
-#ifdef DRIVER_SETTINGS
-    hal.nvs.driver_area.address = GRBL_NVS_SIZE;
-    hal.nvs.size = GRBL_NVS_SIZE + sizeof(driver_settings_t) + 1;
-    hal.nvs.driver_area.size = sizeof(driver_settings_t);
-    hal.driver_setting = driver_setting;
-    hal.driver_settings_report = driver_settings_report;
-    hal.driver_settings_restore = driver_settings_restore;
 #endif
 
     hal.reboot = reboot;
@@ -1877,15 +1831,13 @@ bool driver_init (void)
     hal.set_value_atomic = valueSetAtomic;
     hal.get_elapsed_ticks = millis;
 
-    hal.show_message = showMessage;
-
-#if QEI_SELECT_ENABLED || KEYPAD_ENABLE || ETHERNET_ENABLE || USB_SERIAL_CDC > 0
+#if ETHERNET_ENABLE || ADD_MSEVENT
     grbl.on_execute_realtime = execute_realtime;
 #endif
 
 #if QEI_ENABLE
-    hal.encoder_reset = qei_reset;
-    hal.encoder_event_handler = encoder_event;
+    hal.encoder.reset = qei_reset;
+    hal.encoder.on_event = encoder_event;
 #endif
 
 #if MODBUS_ENABLE
@@ -1920,46 +1872,12 @@ bool driver_init (void)
 #ifdef SAFETY_DOOR_PIN
     hal.driver_cap.safety_door = On;
 #endif
-#if ETHERNET_ENABLE
-    hal.driver_cap.ethernet = On;
-#endif
-#if SDCARD_ENABLE
-    hal.driver_cap.sd_card = On;
-#endif
-
-#if X_AUTO_SQUARE
-    hal.driver_cap.axis_ganged_x = On;
-#endif
-#if Y_AUTO_SQUARE
-    hal.driver_cap.axis_ganged_y = On;
-#endif
-#if Z_AUTO_SQUARE
-    hal.driver_cap.axis_ganged_z = On;
-#endif
-
     hal.driver_cap.software_debounce = On;
     hal.driver_cap.step_pulse_delay = On;
     hal.driver_cap.amass_level = 3;
     hal.driver_cap.control_pull_up = On;
     hal.driver_cap.limits_pull_up = On;
     hal.driver_cap.probe_pull_up = On;
-
-#ifdef HAS_BOARD_INIT
-    board_init();
-#endif
-
-#if SPINDLE_HUANYANG
-    huanyang_init(&modbus_stream);
-#endif
-
-#if PLASMA_ENABLE
-    hal.stepper_output_step = stepperOutputStep;
-    plasma_init();
-#endif
-
-#if ODOMETER_ENABLE
-    odometer_init();
-#endif
 
 #ifdef DEBUGOUT
     hal.debug_out = debugOut;
@@ -1970,11 +1888,40 @@ bool driver_init (void)
     uart_debug_write(ASCII_EOL "UART Debug:" ASCII_EOL);
 #endif
 
+#ifdef HAS_BOARD_INIT
+    board_init();
+#endif
+
+#if ETHERNET_ENABLE
+    grbl_enet_init();
+#endif
+
+#if KEYPAD_ENABLE
+    keypad_init();
+#endif
+
+#if QEI_ENABLE
+    qei_enable = encoder_init(QEI_ENABLE);
+#endif
+
+#if SPINDLE_HUANYANG
+    huanyang_init(&modbus_stream);
+#endif
+
+#if PLASMA_ENABLE
+    hal.stepper.output_step = stepperOutputStep;
+    plasma_init();
+#endif
+
     my_plugin_init();
+
+#if ODOMETER_ENABLE
+    odometer_init(); // NOTE: this *must* be last plugin to be initialized as it claims storage at the end of NVS.
+#endif
 
     // No need to move version check before init.
     // Compiler will fail any signature mismatch for existing entries.
-    return hal.version == 6;
+    return hal.version == 7;
 }
 
 /* interrupt handlers */
@@ -1984,7 +1931,7 @@ static void stepper_driver_isr (void)
 {
     if(PIT_TFLG0 & PIT_TFLG_TIF) {
         PIT_TFLG0 |= PIT_TFLG_TIF;
-        hal.stepper_interrupt_callback();
+        hal.stepper.interrupt_callback();
     }
 }
 
@@ -2033,6 +1980,15 @@ static void output_pulse_isr(void)
 }
 #endif
 
+#if PPI_ENABLE
+// Switches off the spindle (laser) after laser.pulse_length time has elapsed
+static void ppi_timeout_isr (void)
+{
+    PPI_TIMER.CH[0].CSCTRL &= ~TMR_CSCTRL_TCF1;
+    spindle_off();
+}
+#endif
+
 inline static bool enqueue_debounce (input_signal_t *signal)
 {
     bool ok;
@@ -2076,20 +2032,20 @@ static void debounce_isr (void)
     }
 
     if(grp & INPUT_GROUP_LIMIT)
-        hal.limit_interrupt_callback(limitsGetState());
+        hal.limits.interrupt_callback(limitsGetState());
 
     if(grp & INPUT_GROUP_CONTROL)
-        hal.control_interrupt_callback(systemGetState());
+        hal.control.interrupt_callback(systemGetState());
 
 #if QEI_SELECT_ENABLED
 
     if(grp & INPUT_GROUP_QEI_SELECT) {
         if(!qei.dbl_click_timeout)
-            qei.dbl_click_timeout = driver_settings.encoder[0].dbl_click_window;
-        else if(qei.dbl_click_timeout < driver_settings.encoder[0].dbl_click_window - 40) {
+            qei.dbl_click_timeout = qei.encoder.settings->dbl_click_window;
+        else if(qei.dbl_click_timeout < qei.encoder.settings->dbl_click_window - 40) {
             qei.dbl_click_timeout = 0;
             qei.encoder.event.dbl_click = On;
-            hal.encoder_event_handler(&qei.encoder, qei.count);
+            hal.encoder.on_event(&qei.encoder, qei.count);
         }
     }
 
@@ -2150,20 +2106,20 @@ static void gpio_isr (void)
     }
 
     if(grp & INPUT_GROUP_LIMIT)
-        hal.limit_interrupt_callback(limitsGetState());
+        hal.limits.interrupt_callback(limitsGetState());
 
     if(grp & INPUT_GROUP_CONTROL)
-        hal.control_interrupt_callback(systemGetState());
+        hal.control.interrupt_callback(systemGetState());
 
 #if QEI_SELECT_ENABLED
 
     if(grp & INPUT_GROUP_QEI_SELECT) {
         if(!qei.dbl_click_timeout)
-            qei.dbl_click_timeout = driver_settings.encoder[0].dbl_click_window;
-        else if(qei.dbl_click_timeout < driver_settings.encoder[0].dbl_click_window - 40) {
+            qei.dbl_click_timeout = qei.encoder.settings->dbl_click_window;
+        else if(qei.dbl_click_timeout < qei.encoder.settings->dbl_click_window - 40) {
             qei.dbl_click_timeout = 0;
             qei.encoder.event.dbl_click = On;
-            hal.encoder_event_handler(&qei.encoder, qei.count);
+            hal.encoder.on_event(&qei.encoder, qei.count);
         }
     }
 
@@ -2183,39 +2139,17 @@ static void gpio_isr (void)
 
 #if KEYPAD_ENABLE
     if(grp & INPUT_GROUP_KEYPAD)
-        keypad_keyclick_handler(KeypadStrobe.reg->DR & KeypadStrobe.bit);
+        keypad_keyclick_handler(!(KeypadStrobe.reg->DR & KeypadStrobe.bit));
 #endif
 }
 
 // Interrupt handler for 1 ms interval timer
 static void systick_isr (void)
 {
-    ms_event = true;
-
-#if USB_SERIAL_CDC == 2 || ETHERNET_ENABLE
     systick_isr_org();
-#endif
 
-#if MODBUS_ENABLE
-    modbus_poll();
-#endif
-
-#if QEI_ENABLE
-
-    if(qei.vel_timeout && !(--qei.vel_timeout)) {
-        qei.encoder.velocity = abs(qei.count - qei.vel_count) * 1000 / (millis() - qei.vel_timestamp);
-        qei.vel_timestamp = millis();
-        qei.vel_timeout = QEI_VELOCITY_TIMEOUT;
-        if((qei.encoder.event.position_changed = !qei.dbl_click_timeout || qei.encoder.velocity == 0))
-            hal.encoder_event_handler(&qei.encoder, qei.count);
-        qei.vel_count = qei.count;
-    }
-
-    if(qei.dbl_click_timeout && !(--qei.dbl_click_timeout)) {
-        qei.encoder.event.click = On;
-        hal.encoder_event_handler(&qei.encoder, qei.count);
-    }
-
+#if ADD_MSEVENT
+    ms_event = true;
 #endif
 
     if(grbl_delay.ms && !(--grbl_delay.ms)) {

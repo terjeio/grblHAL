@@ -18,7 +18,15 @@ If compiling for STM32F411, change/add some symbols in project properties _C\/C+
 
 * if the oscillator frequency is different from the default 25 MHz then add the symbol `HSE_VALUE` and set the value to the frequency in Hz. E.g. `8000000` for 8 Mhz.
 
+If compiling for STM32F446, change/add some symbols in project properties _C\/C++ General > Paths and Symbols > Symbols_.
+
+* change the symbol `STM32F401xC` to `STM32F446xx`.
+
+* if for the [Nucleo F4446RE development board](https://www.st.com/en/evaluation-tools/nucleo-f446re.html) then add the symbol `NUCLEO_F446`.
+
+* if the oscillator frequency is different from the default 25 MHz then add the symbol `HSE_VALUE` and set the value to the frequency in Hz. E.g. `8000000` for 8 Mhz.
+
 __NOTE:__ Internal flash page for parameters is not at the end of the flash memory due to size restrictions. This means each firmware upgrade will erase any saved parameters. 
 
 ---
-2020-09-21
+2020-10-06

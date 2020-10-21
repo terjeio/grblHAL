@@ -23,14 +23,18 @@
 #ifndef _GRBL_H_
 #define _GRBL_H_
 
-// Grbl versioning system
-#define GRBL_VERSION "1.1f"
-#define GRBL_VERSION_BUILD "20200922"
-
 #include <stdint.h>
 #include <stdbool.h>
 
 #include "config.h"
+
+// Grbl versioning system
+#if COMPATIBILITY_LEVEL == 0
+#define GRBL_VERSION "1.1f"
+#else
+#define GRBL_VERSION "1.1f"
+#endif
+#define GRBL_VERSION_BUILD "20201020"
 
 // The following symbols are set here if not already set by the compiler or in config.h
 // Do NOT change here!
@@ -131,6 +135,7 @@
 #define CMD_OVERRIDE_COOLANT_MIST_TOGGLE 0xA1
 #define CMD_PID_REPORT 0xA2
 #define CMD_TOOL_ACK 0xA3
+#define CMD_PROBE_CONNECTED_TOGGLE 0xA4
 
 // System motion line numbers must be zero.
 #define JOG_LINE_NUMBER 0

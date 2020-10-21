@@ -256,6 +256,29 @@ alarm_code_t report_alarm_message (alarm_code_t alarm_code)
     return alarm_code;
 }
 
+// Prints feedback message, typically from gcode.
+void report_message (const char *msg, message_type_t type)
+{
+    hal.stream.write("[MSG:");
+
+    switch(type) {
+
+        case Message_Info:
+            hal.stream.write("Info: ");
+            break;
+
+        case Message_Warning:
+            hal.stream.write("Warning: ");
+            break;
+
+        default:
+            break;
+    }
+
+    hal.stream.write(msg);
+    hal.stream.write("]" ASCII_EOL);
+}
+
 // Prints feedback messages. This serves as a centralized method to provide additional
 // user feedback for things that are not of the status/alarm message protocol. These are
 // messages such as setup warnings, switch toggling, and how to exit alarms.
@@ -392,8 +415,8 @@ void report_grbl_settings (bool all)
     report_uint_setting(Setting_DirInvertMask, settings.steppers.dir_invert.mask);
     report_uint_setting(Setting_InvertStepperEnable, settings.steppers.enable_invert.mask);
     report_uint_setting(Setting_LimitPinsInvertMask, settings.limits.invert.mask);
-    if(hal.probe_configure_invert_mask)
-        report_uint_setting(Setting_InvertProbePin, settings.flags.invert_probe_pin);
+    if(hal.probe.configure)
+        report_uint_setting(Setting_InvertProbePin, settings.probe.invert_probe_pin);
     if(all)
         report_uint_setting(Setting_StatusReportMask, (uint32_t)settings.status_report.mask);
     else
@@ -408,8 +431,8 @@ void report_grbl_settings (bool all)
         report_uint_setting(Setting_SpindleInvertMask, settings.spindle.invert.mask);
         report_uint_setting(Setting_ControlPullUpDisableMask, settings.control_disable_pullup.mask);
         report_uint_setting(Setting_LimitPullUpDisableMask, settings.limits.disable_pullup.mask);
-        if(hal.probe_configure_invert_mask)
-            report_uint_setting(Setting_ProbePullUpDisable, settings.flags.disable_probe_pullup);
+        if(hal.probe.configure)
+            report_uint_setting(Setting_ProbePullUpDisable, settings.probe.disable_probe_pullup);
     }
 
     report_uint_setting(Setting_SoftLimitsEnable, settings.limits.flags.soft_enabled);
@@ -431,7 +454,7 @@ void report_grbl_settings (bool all)
 
     report_float_setting(Setting_RpmMax, settings.spindle.rpm_max, N_DECIMAL_RPMVALUE);
     report_float_setting(Setting_RpmMin, settings.spindle.rpm_min, N_DECIMAL_RPMVALUE);
-    report_uint_setting(Setting_Mode, settings.flags.laser_mode ? 1 : (settings.flags.lathe_mode ? 2 : 0));
+    report_uint_setting(Setting_Mode, (uint32_t)settings.mode);
 
     if(all) {
 
@@ -453,9 +476,9 @@ void report_grbl_settings (bool all)
         for(idx = 0 ; idx < N_AXIS ; idx++)
             report_uint_setting((setting_type_t)(Setting_HomingCycle_1 + idx), settings.homing.cycle[idx].mask);
 
-        if(hal.driver_settings_report) {
+        if(hal.driver_settings.report) {
             for(idx = Setting_JogStepSpeed; idx < Setting_ParkingPulloutIncrement; idx++)
-                hal.driver_settings_report((setting_type_t)idx);
+                hal.driver_settings.report((setting_type_t)idx);
         }
 
         report_float_setting(Setting_ParkingPulloutIncrement, settings.parking.pullout_increment, N_DECIMAL_SETTINGVALUE);
@@ -467,7 +490,7 @@ void report_grbl_settings (bool all)
         report_uint_setting(Setting_SleepEnable, settings.flags.sleep_enable);
         report_uint_setting(Setting_HoldActions, (settings.flags.disable_laser_during_hold ? bit(0) : 0) | (settings.flags.restore_after_feed_hold ? bit(1) : 0));
         report_uint_setting(Setting_ForceInitAlarm, settings.flags.force_initialization_alarm);
-        report_uint_setting(Setting_ProbingFeedOverride, settings.flags.allow_probing_feed_override);
+        report_uint_setting(Setting_ProbingFeedOverride, settings.probe.allow_feed_override);
 
       #ifdef ENABLE_SPINDLE_LINEARIZATION
         for(idx = 0 ; idx < SPINDLE_NPWM_PIECES ; idx++) {
@@ -482,9 +505,9 @@ void report_grbl_settings (bool all)
 
     }
 
-    if(hal.driver_settings_report) {
+    if(hal.driver_settings.report) {
         for(idx = Setting_NetworkServices; idx < Setting_SpindlePGain; idx++)
-            hal.driver_settings_report((setting_type_t)idx);
+            hal.driver_settings.report((setting_type_t)idx);
     }
 
 #ifdef SPINDLE_RPM_CONTROLLED
@@ -508,7 +531,7 @@ void report_grbl_settings (bool all)
 
     // Print axis settings
     uint_fast8_t set_idx, val = (uint_fast8_t)Setting_AxisSettingsBase;
-    uint_fast8_t max_set = hal.driver_settings_report ? AXIS_SETTINGS_INCREMENT : AXIS_N_SETTINGS;
+    uint_fast8_t max_set = hal.driver_settings.report ? AXIS_SETTINGS_INCREMENT : AXIS_N_SETTINGS;
     for (set_idx = 0; set_idx < max_set; set_idx++) {
 
         for (idx = 0; idx < N_AXIS; idx++) {
@@ -538,8 +561,8 @@ void report_grbl_settings (bool all)
 #endif
 
                 default:
-                    if(hal.driver_axis_settings_report)
-                        hal.driver_axis_settings_report((axis_setting_type_t)set_idx, idx);
+                    if(hal.driver_settings.axis_report)
+                        hal.driver_settings.axis_report((axis_setting_type_t)set_idx, idx);
                     break;
             }
         }
@@ -575,9 +598,29 @@ void report_grbl_settings (bool all)
                     report_float_setting(Setting_ToolChangeSeekRate, settings.tool_change.seek_rate, 1);
                 break;
 
+            case Settings_IoPort_InvertIn:
+                if(hal.port.num_digital_in)
+                    report_uint_setting(Settings_IoPort_InvertIn, settings.ioport.invert_in.mask);
+                break;
+
+            case Settings_IoPort_Pullup_Disable:
+                if(hal.port.num_digital_in)
+                    report_uint_setting(Settings_IoPort_Pullup_Disable, settings.ioport.pullup_disable_in.mask);
+                break;
+
+            case Settings_IoPort_InvertOut:
+                if(hal.port.num_digital_out)
+                    report_uint_setting(Settings_IoPort_InvertOut, settings.ioport.invert_out.mask);
+                break;
+
+            case Settings_IoPort_OD_Enable:
+                if(hal.port.num_digital_out)
+                    report_uint_setting(Settings_IoPort_OD_Enable, settings.ioport.od_enable_out.mask);
+                break;
+
             default:
-                if(hal.driver_settings_report)
-                    hal.driver_settings_report((setting_type_t)idx);
+                if(hal.driver_settings.report)
+                    hal.driver_settings.report((setting_type_t)idx);
                 break;
         }
     }
@@ -727,7 +770,7 @@ void report_gcode_modes (void)
 
 #endif
 
-    if(settings.flags.lathe_mode)
+    if(settings.mode == Mode_Lathe)
         hal.stream.write(gc_state.modal.diameter_mode ? " G7" : " G8");
 
     hal.stream.write(" G");
@@ -740,7 +783,7 @@ void report_gcode_modes (void)
     hal.stream.write(" G");
     hal.stream.write(uitoa((uint32_t)(94 - gc_state.modal.feed_mode)));
 
-    if(settings.flags.lathe_mode && hal.driver_cap.variable_spindle)
+    if(settings.mode == Mode_Lathe && hal.driver_cap.variable_spindle)
         hal.stream.write(gc_state.modal.spindle_rpm_mode == SpindleSpeedMode_RPM ? " G97" : " G96");
 
 #if COMPATIBILITY_LEVEL < 10
@@ -782,6 +825,10 @@ void report_gcode_modes (void)
 
             case ProgramFlow_CompletedM30:
                 hal.stream.write(" M30");
+                break;
+
+            case ProgramFlow_CompletedM60:
+                hal.stream.write(" M60");
                 break;
 
             default:
@@ -883,7 +930,7 @@ void report_build_info (char *line)
     if(settings.limits.flags.two_switches)
         *append++ = 'T';
 
-    if(settings.flags.allow_probing_feed_override)
+    if(settings.probe.allow_feed_override)
         *append++ = 'A';
 
     if(settings.spindle.disable_with_zero_speed)
@@ -946,8 +993,11 @@ void report_build_info (char *line)
 
     strcpy(buf, "[NEWOPT:");
 
-    if(!(nvs->type == NVS_None || nvs->type == NVS_Emulated))
+    if(!(nvs->type == NVS_None || nvs->type == NVS_Emulated)) {
+        if(hal.nvs.type == NVS_Emulated)
+            strcat(buf, "*");
         strcat(buf, nvs->type == NVS_Flash ? "FLASH," : (nvs->type == NVS_FRAM ? "FRAM," : "EEPROM,"));
+    }
 
     if(hal.driver_cap.program_stop)
         strcat(buf, "OS,");
@@ -976,11 +1026,11 @@ void report_build_info (char *line)
     if(hal.driver_cap.wifi)
         strcat(buf, "WIFI,");
 
-    if(settings.flags.lathe_mode)
+    if(settings.mode == Mode_Lathe)
         strcat(buf, "LATHE,");
 
 #ifdef N_TOOLS
-    if(hal.driver_cap.atc && hal.tool_change)
+    if(hal.driver_cap.atc && hal.tool.change)
         strcat(buf, "ATC,");
     else
 #endif
@@ -1021,10 +1071,9 @@ void report_build_info (char *line)
         hal.stream.write("]"  ASCII_EOL);
     }
 
-    if(grbl.on_report_options)
-        grbl.on_report_options();
-#endif
+    grbl.on_report_options();
 
+#endif
 }
 
 
@@ -1045,11 +1094,20 @@ void report_echo_line_received (char *line)
  // especially during g-code programs with fast, short line segments and high frequency reports (5-20Hz).
 void report_realtime_status (void)
 {
+    static bool probing = false;
+
     int32_t current_position[N_AXIS]; // Copy current state of the system position variable
     float print_position[N_AXIS];
+    probe_state_t probe_state = {
+        .connected = On,
+        .triggered = Off
+    };
 
     memcpy(current_position, sys_position, sizeof(sys_position));
     system_convert_array_steps_to_mpos(print_position, current_position);
+
+    if(hal.probe.get_state)
+        probe_state = hal.probe.get_state();
 
     // Report current machine state and sub-states
     hal.stream.write_all("<");
@@ -1062,8 +1120,14 @@ void report_realtime_status (void)
 
         case STATE_CYCLE:
             hal.stream.write_all("Run");
+            if(sys_probing_state == Probing_Active && settings.status_report.run_substate)
+                probing = true;
+            else if (probing)
+                probing = probe_state.triggered;
             if(sys.flags.feed_hold_pending)
                 hal.stream.write_all(":1");
+            else if(probing)
+                hal.stream.write_all(":2");
             break;
 
         case STATE_HOLD:
@@ -1134,30 +1198,23 @@ void report_realtime_status (void)
             hal.stream.write_all(appendbuf(2, "|Ln:", uitoa((uint32_t)cur_block->line_number)));
     }
 
-    spindle_state_t sp_state = hal.spindle_get_state();
+    spindle_state_t sp_state = hal.spindle.get_state();
 
     // Report realtime feed speed
     if(settings.status_report.feed_speed) {
         if(hal.driver_cap.variable_spindle) {
             hal.stream.write_all(appendbuf(2, "|FS:", get_rate_value(st_get_realtime_rate())));
             hal.stream.write_all(appendbuf(2, ",", uitoa(sp_state.on ? (uint32_t)sys.spindle_rpm : 0)));
-            if(hal.spindle_get_data /* && sys.mpg_mode */)
-                hal.stream.write_all(appendbuf(2, ",", uitoa((uint32_t)hal.spindle_get_data(SpindleData_RPM).rpm)));
+            if(hal.spindle.get_data /* && sys.mpg_mode */)
+                hal.stream.write_all(appendbuf(2, ",", uitoa((uint32_t)hal.spindle.get_data(SpindleData_RPM).rpm)));
         } else
             hal.stream.write_all(appendbuf(2, "|F:", get_rate_value(st_get_realtime_rate())));
     }
 
     if(settings.status_report.pin_state) {
 
-        axes_signals_t lim_pin_state = hal.limits_get_state();
-        control_signals_t ctrl_pin_state = hal.system_control_get_state();
-        probe_state_t probe_state = {
-            .connected = On,
-            .triggered = Off
-        };
-
-        if(hal.probe_get_state)
-            probe_state = hal.probe_get_state();
+        axes_signals_t lim_pin_state = hal.limits.get_state();
+        control_signals_t ctrl_pin_state = hal.control.get_state();
 
         if (lim_pin_state.value | ctrl_pin_state.value | probe_state.triggered | !probe_state.connected | sys.flags.block_delete_enabled) {
 
@@ -1212,8 +1269,8 @@ void report_realtime_status (void)
             override_counter--;
         else {
             sys.report.overrides = On;
-            sys.report.spindle = sys.report.spindle || hal.spindle_get_state().on;
-            sys.report.coolant = sys.report.coolant || hal.coolant_get_state().value != 0;
+            sys.report.spindle = sys.report.spindle || hal.spindle.get_state().on;
+            sys.report.coolant = sys.report.coolant || hal.coolant.get_state().value != 0;
             override_counter = sys.state & (STATE_HOMING|STATE_CYCLE|STATE_HOLD|STATE_JOG|STATE_SAFETY_DOOR)
                                  ? (REPORT_OVERRIDE_REFRESH_BUSY_COUNT - 1) // Reset counter for slow refresh
                                  : (REPORT_OVERRIDE_REFRESH_IDLE_COUNT - 1);
@@ -1241,7 +1298,7 @@ void report_realtime_status (void)
 
         if(sys.report.spindle || sys.report.coolant || sys.report.tool || gc_state.tool_change) {
 
-            coolant_state_t cl_state = hal.coolant_get_state();
+            coolant_state_t cl_state = hal.coolant.get_state();
 
             char *append = &buf[3];
 
@@ -1279,7 +1336,7 @@ void report_realtime_status (void)
                 hal.stream.write_all(appendbuf(2, ",", uitoa(sys.homed.mask)));
         }
 
-        if(sys.report.xmode && settings.flags.lathe_mode)
+        if(sys.report.xmode && settings.mode == Mode_Lathe)
             hal.stream.write_all(gc_state.modal.diameter_mode ? "|D:1" : "|D:0");
 
         if(sys.report.tool)

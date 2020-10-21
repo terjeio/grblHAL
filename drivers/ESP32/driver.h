@@ -50,7 +50,7 @@
 // NOTE: Only one board may be enabled!
 // If none is enabled pin mappings from generic_map.h will be used
 //#define BOARD_BDRING_V3P5
-#define BOARD_BDRING_V4
+//#define BOARD_BDRING_V4
 //#define BOARD_BDRING_I2S6A // NOT production ready!
 #endif
 
@@ -243,29 +243,6 @@ typedef struct {
     uint8_t action;
     void *params;
 } i2c_task_t;
-
-#if WIFI_ENABLE || BLUETOOTH_ENABLE || TRINAMIC_ENABLE || KEYPAD_ENABLE
-
-#define DRIVER_SETTINGS
-
-typedef struct {
-#if WIFI_ENABLE
-    wifi_settings_t wifi;
-#endif
-#if BLUETOOTH_ENABLE
-    bluetooth_settings_t bluetooth;
-#endif
-#if TRINAMIC_ENABLE
-    trinamic_settings_t trinamic;
-#endif
-#if KEYPAD_ENABLE
-    jog_settings_t jog;
-#endif
-} driver_settings_t;
-
-extern driver_settings_t driver_settings;
-
-#endif
 
 // End configuration
 

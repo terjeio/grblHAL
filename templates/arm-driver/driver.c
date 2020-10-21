@@ -213,7 +213,7 @@ inline static control_signals_t systemGetState (void)
 // Sets up the probe pin invert mask to
 // appropriately set the pin logic according to setting for normal-high/normal-low operation
 // and the probing cycle modes for toward-workpiece/away-from-workpiece.
-static void probeConfigure(bool is_probe_away)
+static void probeConfigure (bool is_probe_away, bool probing)
 {
   probe_invert = settings.flags.invert_probe_pin ? 0 : PROBE_PIN;
 
@@ -221,24 +221,26 @@ static void probeConfigure(bool is_probe_away)
       probe_invert ^= PROBE_PIN;
 }
 
-// Returns the probe pin state. Triggered = true.
-bool probeGetState (void)
+// Returns the probe connected and triggered pin states.
+probe_state_t probeGetState (void)
 {
-    bool triggered;
+    probe_state_t state = {
+        .connected = On
+    };
 
-//    triggered = (GPIO_READ(PROBE_PORT, PROBE_PIN) ^ probe_invert) != 0;
+//    state.triggered = (GPIO_READ(PROBE_PORT, PROBE_PIN) ^ probe_invert) != 0;
 
-    return triggered;
+    return state;
 }
 
 // Static spindle (off, on cw & on ccw)
 
-inline static void spindle_off ()
+inline static void spindle_off (void)
 {
     // GPIO_WRITE(SPINDLE_PORT, SPINDLE_ENABLE_PIN) = settings.spindle.invert.on ? SPINDLE_ENABLE_PIN : 0;
 }
 
-inline static void spindle_on ()
+inline static void spindle_on (void)
 {
     // GPIO_WRITE(SPINDLE_PORT, SPINDLE_ENABLE_PIN) = settings.spindle.invert.on ? 0 : SPINDLE_ENABLE_PIN);
 }
@@ -400,19 +402,19 @@ static void settings_changed (settings_t *settings)
 
         if(hal.driver_cap.variable_spindle) {
             // Set spindle PWM timer timeout value to spindle_pwm.period here
-            hal.spindle_set_state = spindleSetStateVariable;
+            hal.spindle.set_state = spindleSetStateVariable;
         } else
-            hal.spindle_set_state = spindleSetState;
+            hal.spindle.set_state = spindleSetState;
 
         // Stepper pulse timeout setup.
         // When the stepper pulse is delayed either two timers or a timer that supports multiple
         // compare registers is required.
         if(settings->steppers.pulse_delay_microseconds) {
             // Configure step pulse timer(s) for delayed pulse here.
-            hal.stepper_pulse_start = stepperPulseStartDelayed;
+            hal.stepper.pulse_start = stepperPulseStartDelayed;
         } else {
             // Configure step pulse timer for pulse off here.
-            hal.stepper_pulse_start = stepperPulseStart;
+            hal.stepper.pulse_start = stepperPulseStart;
         }
 
        /*************************
@@ -440,17 +442,6 @@ static void settings_changed (settings_t *settings)
 // Initializes MCU peripherals for Grbl use
 static bool driver_setup (settings_t *settings)
 {
-
-#ifdef DRIVER_SETTINGS
-    if(hal.eeprom.driver_area.address != 0) {
-        if(!hal.eeprom.memcpy_from_with_checksum((uint8_t *)&driver_settings, hal.eeprom.driver_area.address, sizeof(driver_settings)))
-            hal.driver_settings_restore();
-      #if TRINAMIC_ENABLE && CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
-        driver_settings.trinamic.driver_enable.mask = AXES_BITMASK;
-      #endif
-    }
-#endif
-
     // System init
 
     // Enable peripherals to use here (if required).
@@ -503,13 +494,13 @@ static bool driver_setup (settings_t *settings)
 
   // Set defaults
 
-    IOInitDone = settings->version == 15;
+    IOInitDone = settings->version == 17;
 
     settings_changed(settings);
 
-    hal.stepper_go_idle(true);
-    hal.spindle_set_state((spindle_state_t){0}, 0.0f);
-    hal.coolant_set_state((coolant_state_t){0});
+    hal.stepper.go_idle(true);
+    hal.spindle.set_state((spindle_state_t){0}, 0.0f);
+    hal.coolant.set_state((coolant_state_t){0});
 
     return IOInitDone;
 }
@@ -540,37 +531,41 @@ bool driver_init (void)
     serialInit();
 
     hal.info = "my driver name"; // Typically set to MCU or board name
+	hal.driver_version = "YYMMDD"; // Set to build date
+#ifdef BOARD_NAME
+    hal.board = BOARD_NAME;
+#endif
     hal.driver_setup = driver_setup;
     hal.f_step_timer = SystemCoreClock; // NOTE: SystemCoreClock is a CMSIS definition, ...
     hal.rx_buffer_size = RX_BUFFER_SIZE;
     hal.delay_ms = driver_delay_ms;
     hal.settings_changed = settings_changed;
 
-    hal.stepper_wake_up = stepperWakeUp;
-    hal.stepper_go_idle = stepperGoIdle;
-    hal.stepper_enable = stepperEnable;
-    hal.stepper_cycles_per_tick = stepperCyclesPerTick;
-    hal.stepper_pulse_start = stepperPulseStart;
+    hal.stepper.wake_up = stepperWakeUp;
+    hal.stepper.go_idle = stepperGoIdle;
+    hal.stepper.enable = stepperEnable;
+    hal.stepper.cycles_per_tick = stepperCyclesPerTick;
+    hal.stepper.pulse_start = stepperPulseStart;
 
-    hal.limits_enable = limitsEnable;
-    hal.limits_get_state = limitsGetState;
+    hal.limits.enable = limitsEnable;
+    hal.limits.get_state = limitsGetState;
 
-    hal.coolant_set_state = coolantSetState;
-    hal.coolant_get_state = coolantGetState;
+    hal.coolant.set_state = coolantSetState;
+    hal.coolant.get_state = coolantGetState;
 
-    hal.probe_get_state = probeGetState;
-    hal.probe_configure_invert_mask = probeConfigure;
+    hal.probe.get_state = probeGetState;
+    hal.probe.configure = probeConfigure;
 
-    hal.spindle_set_state = spindleSetState;
-    hal.spindle_get_state = spindleGetState;
+    hal.spindle.set_state = spindleSetState;
+    hal.spindle.get_state = spindleGetState;
 #ifdef SPINDLE_PWM_DIRECT
-    hal.spindle_get_pwm = spindleGetPWM;
-    hal.spindle_update_pwm = spindle_set_speed;
+    hal.spindle.get_pwm = spindleGetPWM;
+    hal.spindle.update_pwm = spindle_set_speed;
 #else
-    hal.spindle_update_rpm = spindleUpdateRPM;
+    hal.spindle._update_rpm = spindleUpdateRPM;
 #endif
 
-    hal.system_control_get_state = systemGetState;
+    hal.control.get_state = systemGetState;
 
     hal.stream.read = serialGetC;
     hal.stream.write = serialWriteS;
@@ -580,13 +575,9 @@ bool driver_init (void)
     hal.stream.cancel_read_buffer = serialRxCancel;
     hal.stream.suspend_read = serialSuspendInput;
 
-    // If EEPROM is available for settings storage uncomment the following lines:
+    // If EEPROM is available for settings storage uncomment the following line:
 
-    // hal.eeprom.type = EEPROM_Physical;
-    // hal.eeprom.get_byte = eepromGetByte;
-    // hal.eeprom.put_byte = eepromPutByte;
-    // hal.eeprom.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
-    // hal.eeprom.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
+    // eeprom_init();
 
     // end EEPROM available
 
@@ -602,6 +593,7 @@ bool driver_init (void)
   // Driver capabilities, used for announcing and negotiating (with Grbl) driver functionality.
   // See driver_cap_t union i grbl/hal.h for available flags.
 
+    hal.driver_cap.safety_door = On;
     hal.driver_cap.spindle_dir = On;
     hal.driver_cap.variable_spindle = On;
     hal.driver_cap.mist_control = On;
@@ -615,7 +607,7 @@ bool driver_init (void)
 
     // No need to move version check before init.
     // Compiler will fail any signature mismatch for existing entries.
-    return hal.version == 6;
+    return hal.version == 7;
 }
 
 /* interrupt handlers */
@@ -624,7 +616,7 @@ bool driver_init (void)
 static void stepper_driver_isr (void)
 {
     // STEPPERTIMER_IRQ_CLEAR(); // Clear stepper timer interrupt.
-    hal.stepper_interrupt_callback();
+    hal.stepper.interrupt_callback();
 }
 
 /* The Stepper Port Reset Interrupt: This interrupt handles the falling edge of the step
@@ -658,14 +650,14 @@ static void stepper_pulse_isr_delayed (void)
 static void limit_isr (void)
 {
 //  GPIO_IRQ_CLEAR(LIMIT_PORT);
-    hal.limit_interrupt_callback(limitsGetState());
+    hal.limits.interrupt_callback(limitsGetState());
 }
 
 // Control pins ISR.
 static void control_isr (void)
 {
 //  GPIO_IRQ_CLEAR(CONTROL_PORT);
-    hal.control_interrupt_callback(systemGetState());
+    hal.control.interrupt_callback(systemGetState());
 }
 
 // Interrupt handler for 1 ms interval timer

@@ -30,7 +30,7 @@
 #include "grbl/settings.h"
 #endif
 
-#define KEYBUF_SIZE 16 // must be a power of 2
+#define KEYBUF_SIZE 8 // must be a power of 2
 #define KEYPAD_I2CADDR 0x49
 
 #define JOG_XR   'R'
@@ -55,13 +55,18 @@ typedef enum {
 } jogmode_t;
 
 typedef void (*keycode_callback_ptr)(const char c);
+typedef bool (*on_keypress_preview_ptr)(const char c, uint_fast16_t state);
+typedef void (*on_jogmode_changed_ptr)(jogmode_t jogmode);
 
-void keypad_process_keypress (uint_fast16_t state);
+typedef struct {
+    on_keypress_preview_ptr on_keypress_preview;
+    on_jogmode_changed_ptr on_jogmode_changed;
+} keypad_t;
+
+extern keypad_t keypad;
+
+bool keypad_init (void);
 void keypad_keyclick_handler (bool keydown);
 void keypad_enqueue_keycode (char c);
-
-status_code_t keypad_setting (setting_type_t setting, float value, char *svalue);
-void keypad_settings_restore (void);
-void keypad_settings_report (setting_type_t setting_type);
 
 #endif

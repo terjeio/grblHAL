@@ -32,6 +32,10 @@
 #include "grbl/nuts_bolts.h"
 #include "eeprom/eeprom.h"
 
+#ifdef EEPROM_ENABLE
+#include "eeprom/eeprom.h"
+#endif
+
 static volatile uint16_t debounce_count = 0;
 static bool pwmEnabled = false, IOInitDone = false;
 static uint16_t pulse_length;
@@ -92,7 +96,7 @@ static void stepperWakeUp ()
 
     STEPPER_TIMER_CCR0 = 0xFFFF;        // Set a long initial delay,
     STEPPER_TIMER_CTL |= TACLR|MC0;     // start stepper ISR timer in up mode
-    hal.stepper_interrupt_callback();   // and start the show
+    hal.stepper.interrupt_callback();   // and start the show
 }
 
 // Disables stepper driver interrupts
@@ -223,7 +227,7 @@ inline static control_signals_t systemGetState (void)
 // and the probing cycle modes for toward-workpiece/away-from-workpiece.
 static void probeConfigure(bool is_probe_away, bool probing)
 {
-  probe_invert = settings.flags.invert_probe_pin ? 0 : PROBE_PIN;
+  probe_invert = settings.probe.invert_probe_pin ? 0 : PROBE_PIN;
 
   if (is_probe_away)
       probe_invert ^= PROBE_PIN;
@@ -378,13 +382,6 @@ static coolant_state_t coolantGetState (void)
     return state;
 }
 
-static void showMessage (const char *msg)
-{
-    hal.stream.write("[MSG:");
-    hal.stream.write(msg);
-    hal.stream.write("]\r\n");
-}
-
 // Helper functions for setting/clearing/inverting individual bits atomically (uninterruptable)
 static void bitsSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t bits)
 {
@@ -427,9 +424,9 @@ static void settings_changed (settings_t *settings)
         if(hal.driver_cap.step_pulse_delay && settings->steppers.pulse_delay_microseconds > 0.0f) {
             t = (uint16_t)(5.0f * (settings->steppers.pulse_delay_microseconds - 2.0f));
             PULSE_TIMER_CCR1 = t < 2 ? 2 : t;
-            hal.stepper_pulse_start = stepperPulseStartDelayed;
+            hal.stepper.pulse_start = stepperPulseStartDelayed;
         } else
-            hal.stepper_pulse_start = stepperPulseStart;
+            hal.stepper.pulse_start = stepperPulseStart;
 
         PULSE_TIMER_CCR0 = pulse_length;
 
@@ -437,9 +434,9 @@ static void settings_changed (settings_t *settings)
             PWM_TIMER_CCR0 = spindle_pwm.period;
             PWM_TIMER_CCTL1 = settings->spindle.invert.pwm ? OUT : 0;   // Set PWM output according to invert setting and
             PWM_TIMER_CTL |= TACLR|MC0|MC1;                             // start PWM timer (with no pulse output)
-            hal.spindle_set_state = spindleSetStateVariable;
+            hal.spindle.set_state = spindleSetStateVariable;
         } else
-            hal.spindle_set_state = spindleSetState;
+            hal.spindle.set_state = spindleSetState;
 
         /*************************
          *  Control pins config  *
@@ -614,7 +611,7 @@ static bool driver_setup (settings_t *settings)
     COOLANT_MIST_DIR |= COOLANT_MIST_PIN;
 
     if(hal.driver_cap.amass_level == 0)
-        hal.stepper_cycles_per_tick = &stepperCyclesPerTickPrescaled;
+        hal.stepper.cycles_per_tick = &stepperCyclesPerTickPrescaled;
 
    /******************
     *  Spindle init  *
@@ -629,7 +626,7 @@ static bool driver_setup (settings_t *settings)
         PWM_TIMER_CTL |= TASSEL1;
         PWM_TIMER_EX0 = TAIDEX_3;
     } else
-        hal.spindle_set_state = spindleSetState;
+        hal.spindle.set_state = spindleSetState;
 
 #ifdef HAS_KEYPAD
 
@@ -643,13 +640,13 @@ static bool driver_setup (settings_t *settings)
 
   // Set defaults
 
-    IOInitDone = settings->version == 17;
+    IOInitDone = settings->version == 18;
 
     settings_changed(settings);
 
-    hal.stepper_go_idle(true);
-    hal.spindle_set_state((spindle_state_t){0}, 0.0f);
-    hal.coolant_set_state((coolant_state_t){0});
+    hal.stepper.go_idle(true);
+    hal.spindle.set_state((spindle_state_t){0}, 0.0f);
+    hal.coolant.set_state((coolant_state_t){0});
 
     return IOInitDone;
 }
@@ -668,38 +665,38 @@ bool driver_init (void)
     serialInit();
 
     hal.info = "MSP430F5529";
-    hal.driver_version = "200911";
+    hal.driver_version = "201014";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = 24000000;
     hal.rx_buffer_size = RX_BUFFER_SIZE;
     hal.delay_ms = driver_delay_ms;
     hal.settings_changed = settings_changed;
 
-    hal.stepper_wake_up = stepperWakeUp;
-    hal.stepper_go_idle = stepperGoIdle;
-    hal.stepper_enable = stepperEnable;
-    hal.stepper_cycles_per_tick = stepperCyclesPerTick;
-    hal.stepper_pulse_start = stepperPulseStart;
+    hal.stepper.wake_up = stepperWakeUp;
+    hal.stepper.go_idle = stepperGoIdle;
+    hal.stepper.enable = stepperEnable;
+    hal.stepper.cycles_per_tick = stepperCyclesPerTick;
+    hal.stepper.pulse_start = stepperPulseStart;
 
-    hal.limits_enable = limitsEnable;
-    hal.limits_get_state = limitsGetState;
+    hal.limits.enable = limitsEnable;
+    hal.limits.get_state = limitsGetState;
 
-    hal.coolant_set_state = coolantSetState;
-    hal.coolant_get_state = coolantGetState;
+    hal.coolant.set_state = coolantSetState;
+    hal.coolant.get_state = coolantGetState;
 
-    hal.probe_get_state = probeGetState;
-    hal.probe_configure_invert_mask = probeConfigure;
+    hal.probe.get_state = probeGetState;
+    hal.probe.configure = probeConfigure;
 
-    hal.spindle_set_state = spindleSetStateVariable;
-    hal.spindle_get_state = spindleGetState;
+    hal.spindle.set_state = spindleSetStateVariable;
+    hal.spindle.get_state = spindleGetState;
 #ifdef SPINDLE_PWM_DIRECT
-    hal.spindle_get_pwm = spindleGetPWM;
-    hal.spindle_update_pwm = spindle_set_speed;
+    hal.spindle.get_pwm = spindleGetPWM;
+    hal.spindle.update_pwm = spindle_set_speed;
 #else
     hal.spindle_update_rpm = spindleUpdateRPM;
 #endif
 
-    hal.system_control_get_state = systemGetState;
+    hal.control.get_state = systemGetState;
 
     hal.stream.read = serialGetC;
     hal.stream.write = serialWriteS;
@@ -708,19 +705,9 @@ bool driver_init (void)
     hal.stream.reset_read_buffer = serialRxFlush;
     hal.stream.cancel_read_buffer = serialRxCancel;
 
-    hal.show_message = showMessage;
-
 #ifdef EEPROM_ENABLE
-    eepromInit();
-  #if EEPROM_IS_FRAM
-    hal.nvs.type = NVS_FRAM;
-  #else
-    hal.nvs.type = NVS_EEPROM;
-  #endif
-    hal.nvs.get_byte = eepromGetByte;
-    hal.nvs.put_byte = eepromPutByte;
-    hal.nvs.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
-    hal.nvs.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
+    i2c_init();
+    i2c_eeprom_init();
 #else
     hal.nvs.type = NVS_None;
 #endif
@@ -751,8 +738,10 @@ bool driver_init (void)
 
     __bis_SR_register(GIE); // Enable interrupts
 
+    my_plugin_init();
+
     // no need to move version check before init - compiler will fail any signature mismatch for existing entries
-    return hal.version == 6;
+    return hal.version == 7;
 }
 
 /* interrupt handlers */
@@ -766,7 +755,7 @@ __interrupt void stepper_driver_isr (void)
     if(!busy) {
         busy = true;
         _EINT();
-        hal.stepper_interrupt_callback();
+        hal.stepper.interrupt_callback();
         busy = false;
     }
 }
@@ -809,7 +798,7 @@ __interrupt void software_debounce_isr (void)
         SFRIE1 &= ~WDTIE;
         axes_signals_t state = limitsGetState();
         if(state.value) //TODO: add check for limit swicthes having same state as when limit_isr were invoked?
-            hal.limit_interrupt_callback(state);
+            hal.limits.interrupt_callback(state);
     }
 }
 
@@ -820,7 +809,7 @@ __interrupt void control_isr (void)
 
     if(iflags) {
         CONTROL_PORT_IFG &= ~iflags;
-        hal.control_interrupt_callback(systemGetState());
+        hal.control.interrupt_callback(systemGetState());
     }
 }
 
@@ -838,7 +827,7 @@ __interrupt void limit_isr (void)
             SFRIE1 |= WDTIE;        // and enable interrupt
             debounce_count = 3;     // Debounce = 3x watchdog timeout
         } else
-            hal.limit_interrupt_callback(limitsGetState());
+            hal.limits.interrupt_callback(limitsGetState());
     }
 }
 

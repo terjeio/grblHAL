@@ -479,7 +479,7 @@
 //#define DEFAULT_SPINDLE_ENABLE_OFF_WITH_ZERO_SPEED 0
 //#define DEFAULT_STEP_PULSE_MICROSECONDS 10.0f
 //#define DEFAULT_STEP_PULSE_DELAY 5.0f // uncomment to set default > 0.0f
-//#define DEFAULT_STEPPER_IDLE_LOCK_TIME 25 // msec (0-254, 255 keeps steppers enabled)
+//#define DEFAULT_STEPPER_IDLE_LOCK_TIME 25 // msec (0-65535, 255 keeps steppers enabled)
 //#define DEFAULT_JUNCTION_DEVIATION 0.01f // mm
 //#define DEFAULT_ARC_TOLERANCE 0.002f // mm
 //#define DEFAULT_REPORT_INCHES

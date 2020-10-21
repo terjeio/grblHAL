@@ -30,6 +30,7 @@
 
 #include "hal.h"
 #include "nvs_buffer.h"
+#include "protocol.h"
 
 static uint8_t *nvsbuffer = NULL;
 static nvs_io_t physical_nvs;
@@ -49,10 +50,10 @@ typedef struct {
 #define NVS_GROUP_STARTUP 3
 #define NVS_GROUP_BUILD 4
 
-#define PARAMETER_ADDR(n) (NVS_ADDR_PARAMETERS + n * (sizeof(coord_data_t) + 1))
-#define STARTLINE_ADDR(n) (NVS_ADDR_STARTUP_BLOCK + n * (MAX_STORED_LINE_LENGTH + 1))
+#define PARAMETER_ADDR(n) (NVS_ADDR_PARAMETERS + n * (sizeof(coord_data_t) + NVS_CRC_BYTES))
+#define STARTLINE_ADDR(n) (NVS_ADDR_STARTUP_BLOCK + n * (sizeof(stored_line_t) + NVS_CRC_BYTES))
 #ifdef N_TOOLS
-#define TOOL_ADDR(n) (NVS_ADDR_TOOL_TABLE + n * (sizeof(tool_data_t) + 1))
+#define TOOL_ADDR(n) (NVS_ADDR_TOOL_TABLE + n * (sizeof(tool_data_t) + NVS_CRC_BYTES))
 #endif
 
 static const emap_t target[] = {
@@ -104,22 +105,24 @@ inline static void ram_put_byte (uint32_t addr, uint8_t new_value)
 
 // Extensions added as part of Grbl
 
-static void memcpy_to_ram_with_checksum (uint32_t destination, uint8_t *source, uint32_t size)
+static nvs_transfer_result_t memcpy_to_ram (uint32_t destination, uint8_t *source, uint32_t size, bool with_checksum)
 {
-    if(hal.nvs.driver_area.address && destination > hal.nvs.driver_area.address + hal.nvs.driver_area.size) {
-        physical_nvs.memcpy_to_with_checksum(destination, source, size);
-        return;
-    }
+    if(hal.nvs.driver_area.address && destination > hal.nvs.driver_area.address + hal.nvs.driver_area.size)
+        return physical_nvs.memcpy_to_nvs(destination, source, size, with_checksum);
 
     uint32_t dest = destination;
-    uint8_t checksum = calc_checksum(source, size);
+    uint8_t checksum = with_checksum ? calc_checksum(source, size) : 0;
 
     dirty = false;
 
     for(; size > 0; size--)
         ram_put_byte(dest++, *(source++));
 
-    ram_put_byte(dest, checksum);
+    if(with_checksum)
+        ram_put_byte(dest, checksum);
+
+    if(source == hal.nvs.driver_area.mem_address)
+        dirty = true;
 
     if(dirty && physical_nvs.type != NVS_None) {
 
@@ -161,56 +164,63 @@ static void memcpy_to_ram_with_checksum (uint32_t destination, uint8_t *source, 
             }
         }
     }
+
+    return NVS_TransferResult_OK;
 }
 
-static bool memcpy_from_ram_with_checksum (uint8_t *destination, uint32_t source, uint32_t size)
+static nvs_transfer_result_t memcpy_from_ram (uint8_t *destination, uint32_t source, uint32_t size, bool with_checksum)
 {
     if(hal.nvs.driver_area.address && source > hal.nvs.driver_area.address + hal.nvs.driver_area.size)
-        return physical_nvs.memcpy_from_with_checksum(destination, source, size);
+        return physical_nvs.memcpy_from_nvs(destination, source, size, with_checksum);
 
-    uint8_t checksum = calc_checksum(&nvsbuffer[source], size);
+    uint8_t checksum = with_checksum ? calc_checksum(&nvsbuffer[source], size) : 0;
 
     for(; size > 0; size--)
         *(destination++) = ram_get_byte(source++);
 
-    return checksum == ram_get_byte(source);
+    return with_checksum ? (checksum == ram_get_byte(source) ? NVS_TransferResult_OK : NVS_TransferResult_Failed) : NVS_TransferResult_OK;
+}
+
+static void nvs_warning (uint_fast16_t state)
+{
+    report_message("Not enough heap for NVS buffer!", Message_Warning);
+}
+
+// Try to allocate RAM from heap for buffer/emulation.
+bool nvs_buffer_alloc (void)
+{
+    nvsbuffer = malloc(NVS_SIZE);
+
+    return nvsbuffer != NULL;
 }
 
 //
-// Try to allocate RAM for buffer/emulation and switch over to RAM based copy.
+// Switch over to RAM based copy.
 // Changes to RAM based copy will be written to physical storage when Grbl is in IDLE state.
-// NOTE: enough free heap memory is required.
 bool nvs_buffer_init (void)
 {
-    if(hal.nvs.size == 0)
-        hal.nvs.size = GRBL_NVS_SIZE;
+    if(nvsbuffer) {
 
-    uint_fast16_t idx = hal.nvs.size;
-
-    memcpy(&physical_nvs, &hal.nvs, sizeof(nvs_io_t)); // save pointers to physical storage handler functions
-
-    if((nvsbuffer = malloc(hal.nvs.size)) != 0) {
+        memcpy(&physical_nvs, &hal.nvs, sizeof(nvs_io_t)); // save pointers to physical storage handler functions
 
         if(physical_nvs.type == NVS_Flash)
             physical_nvs.memcpy_from_flash(nvsbuffer);
         else if(physical_nvs.type != NVS_None) {
+
             // Initialize physical storage on settings version mismatch
-            if(physical_nvs.get_byte(0) != SETTINGS_VERSION)
+           	if(physical_nvs.get_byte(0) != SETTINGS_VERSION)
                 settings_init();
 
             // Copy physical storage content to RAM
-            do {
-                idx--;
-                ram_put_byte(idx, physical_nvs.get_byte(idx));
-            } while(idx);
+            physical_nvs.memcpy_from_nvs(nvsbuffer, 0, GRBL_NVS_SIZE + hal.nvs.driver_area.size, false);
         }
 
         // Switch hal to use RAM version of non-volatile storage data
         hal.nvs.type = NVS_Emulated;
         hal.nvs.get_byte = &ram_get_byte;
         hal.nvs.put_byte = &ram_put_byte;
-        hal.nvs.memcpy_to_with_checksum = &memcpy_to_ram_with_checksum;
-        hal.nvs.memcpy_from_with_checksum = &memcpy_from_ram_with_checksum;
+        hal.nvs.memcpy_to_nvs = &memcpy_to_ram;
+        hal.nvs.memcpy_from_nvs = &memcpy_from_ram;
         hal.nvs.memcpy_from_flash = NULL;
         hal.nvs.memcpy_to_flash = NULL;
 
@@ -222,12 +232,42 @@ bool nvs_buffer_init (void)
                 grbl.report.status_message(Status_SettingReadFail);
             }
         }
-    }
+    } else
+        protocol_enqueue_rt_command(nvs_warning);
 
     // Clear settings dirty flags
     memset(&settings_dirty, 0, sizeof(settings_dirty_t));
 
     return nvsbuffer != NULL;
+}
+
+// Allocate NVS block for driver settings.
+// NOTE: allocation has to be done before content is copied from physical storage.
+uint32_t nvs_alloc (size_t size)
+{
+    static uint8_t *mem_address;
+
+    uint32_t addr = 0;
+
+    // Check if already switched to emulation or buffer allocation failed, return NULL if so.
+    if(hal.nvs.type == NVS_Emulated || nvsbuffer == NULL)
+        return 0;
+
+    if(hal.nvs.driver_area.address == 0) {
+        hal.nvs.driver_area.address = GRBL_NVS_SIZE;
+        hal.nvs.driver_area.mem_address = mem_address = nvsbuffer + GRBL_NVS_SIZE;
+    }
+
+    size += NVS_CRC_BYTES; // add room for checksum.
+    if(hal.nvs.driver_area.size + size < (NVS_SIZE - GRBL_NVS_SIZE)) {
+        mem_address = (uint8_t *)((uint32_t)(mem_address - 1) | 0x03) + 1; // Align to word boundary
+        addr = mem_address - nvsbuffer;
+        mem_address += size;
+        hal.nvs.driver_area.size = mem_address - hal.nvs.driver_area.mem_address;
+        hal.nvs.size = GRBL_NVS_SIZE + hal.nvs.driver_area.size + 1;
+    }
+
+    return addr;
 }
 
 // Write RAM changes to physical storage
@@ -236,41 +276,39 @@ void nvs_buffer_sync_physical (void)
     if(!settings_dirty.is_dirty)
         return;
 
-    if(physical_nvs.memcpy_to_with_checksum) {
+    if(physical_nvs.memcpy_to_nvs) {
 
-        if(settings_dirty.build_info) {
-            settings_dirty.build_info = false;
-            physical_nvs.memcpy_to_with_checksum(NVS_ADDR_BUILD_INFO, (uint8_t *)(nvsbuffer + NVS_ADDR_BUILD_INFO), MAX_STORED_LINE_LENGTH);
-        }
+        if(settings_dirty.build_info)
+            settings_dirty.build_info = physical_nvs.memcpy_to_nvs(NVS_ADDR_BUILD_INFO, (uint8_t *)(nvsbuffer + NVS_ADDR_BUILD_INFO), sizeof(stored_line_t) + NVS_CRC_BYTES, false) != NVS_TransferResult_OK;
 
-        if(settings_dirty.global_settings) {
-            settings_dirty.global_settings = false;
-            physical_nvs.memcpy_to_with_checksum(NVS_ADDR_GLOBAL, (uint8_t *)(nvsbuffer + NVS_ADDR_GLOBAL), sizeof(settings_t));
-        }
+        if(settings_dirty.global_settings)
+            settings_dirty.global_settings = physical_nvs.memcpy_to_nvs(NVS_ADDR_GLOBAL, (uint8_t *)(nvsbuffer + NVS_ADDR_GLOBAL), sizeof(settings_t) + NVS_CRC_BYTES, false) != NVS_TransferResult_OK;
 
         uint_fast8_t idx = N_STARTUP_LINE, offset;
         if(settings_dirty.startup_lines) do {
             idx--;
             if(bit_istrue(settings_dirty.startup_lines, bit(idx))) {
                 bit_false(settings_dirty.startup_lines, bit(idx));
-                offset = NVS_ADDR_STARTUP_BLOCK + idx * (MAX_STORED_LINE_LENGTH + 1);
-                physical_nvs.memcpy_to_with_checksum(offset, (uint8_t *)(nvsbuffer + offset), MAX_STORED_LINE_LENGTH);
+                offset = NVS_ADDR_STARTUP_BLOCK + idx * (sizeof(stored_line_t) + NVS_CRC_BYTES);
+                if(physical_nvs.memcpy_to_nvs(offset, (uint8_t *)(nvsbuffer + offset), sizeof(stored_line_t) + NVS_CRC_BYTES, false) == NVS_TransferResult_OK)
+                    bit_false(settings_dirty.startup_lines, bit(idx));
             }
         } while(idx);
 
         idx = N_CoordinateSystems;
         if(settings_dirty.coord_data) do {
             if(bit_istrue(settings_dirty.coord_data, bit(idx))) {
-                bit_false(settings_dirty.coord_data, bit(idx));
-                offset = NVS_ADDR_PARAMETERS + idx * (sizeof(coord_data_t) + 1);
-                physical_nvs.memcpy_to_with_checksum(offset, (uint8_t *)(nvsbuffer + offset), sizeof(coord_data_t));
+                offset = NVS_ADDR_PARAMETERS + idx * (sizeof(coord_data_t) + NVS_CRC_BYTES);
+                if(physical_nvs.memcpy_to_nvs(offset, (uint8_t *)(nvsbuffer + offset), sizeof(coord_data_t) + NVS_CRC_BYTES, false) == NVS_TransferResult_OK)
+                    bit_false(settings_dirty.coord_data, bit(idx));
             }
         } while(idx--);
 
         if(settings_dirty.driver_settings) {
-            settings_dirty.driver_settings = false;
             if(hal.nvs.driver_area.size > 0)
-                physical_nvs.memcpy_to_with_checksum(hal.nvs.driver_area.address, (uint8_t *)(nvsbuffer + hal.nvs.driver_area.address), hal.nvs.driver_area.size);
+                settings_dirty.driver_settings = physical_nvs.memcpy_to_nvs(hal.nvs.driver_area.address, (uint8_t *)(nvsbuffer + hal.nvs.driver_area.address), hal.nvs.driver_area.size, false) != NVS_TransferResult_OK;
+            else
+                settings_dirty.driver_settings = false;
         }
 
 #ifdef N_TOOLS
@@ -278,20 +316,72 @@ void nvs_buffer_sync_physical (void)
         if(settings_dirty.tool_data) do {
             idx--;
             if(bit_istrue(settings_dirty.tool_data, bit(idx))) {
-                bit_false(settings_dirty.tool_data, bit(idx));
-                offset = NVS_ADDR_TOOL_TABLE + idx * (sizeof(tool_data_t) + 1);
-                physical_nvs.memcpy_to_with_checksum(offset, (uint8_t *)(nvsbuffer + offset), sizeof(tool_data_t));
+                offset = NVS_ADDR_TOOL_TABLE + idx * (sizeof(tool_data_t) + NVS_CRC_BYTES);
+                if(physical_nvs.memcpy_to_nvs(offset, (uint8_t *)(nvsbuffer + offset), sizeof(tool_data_t) + NVS_CRC_BYTES, false) == NVS_TransferResult_OK)
+                    bit_false(settings_dirty.tool_data, bit(idx));
             }
         } while(idx);
 #endif
+        settings_dirty.is_dirty = settings_dirty.coord_data ||
+                                   settings_dirty.global_settings ||
+                                    settings_dirty.driver_settings ||
+                                     settings_dirty.startup_lines ||
+#ifdef N_TOOLS
+                                      settings_dirty.tool_data ||
+#endif
+                                       settings_dirty.build_info;
 
-    } else if(physical_nvs.memcpy_to_flash)
+    } else if(physical_nvs.memcpy_to_flash) {
         physical_nvs.memcpy_to_flash(nvsbuffer);
-
-    settings_dirty.is_dirty = false;
+        settings_dirty.is_dirty = false;
+    }
 }
 
 nvs_io_t *nvs_buffer_get_physical (void)
 {
     return hal.nvs.type == NVS_Emulated ? &physical_nvs : &hal.nvs;
 }
+
+#ifndef DEBUGOUT
+
+#include "report.h"
+
+void nvs_memmap (void)
+{
+    char buf[30];
+
+    report_message("NVS Area: addr size", Message_Plain);
+
+    strcpy(buf, "Global: ");
+    strcat(buf, uitoa(NVS_ADDR_GLOBAL));
+    strcat(buf, " ");
+    strcat(buf, uitoa(sizeof(settings_t) + NVS_CRC_BYTES));
+    report_message(buf, Message_Plain);
+
+    strcpy(buf, "Parameters: ");
+    strcat(buf, uitoa(NVS_ADDR_PARAMETERS));
+    strcat(buf, " ");
+    strcat(buf, uitoa(N_CoordinateSystems * (sizeof(coord_data_t) + NVS_CRC_BYTES)));
+    report_message(buf, Message_Plain);
+
+    strcpy(buf, "Startup block: ");
+    strcat(buf, uitoa(NVS_ADDR_STARTUP_BLOCK));
+    strcat(buf, " ");
+    strcat(buf, uitoa(N_STARTUP_LINE * (sizeof(stored_line_t) + NVS_CRC_BYTES)));
+    report_message(buf, Message_Plain);
+
+    strcpy(buf, "Build info: ");
+    strcat(buf, uitoa(NVS_ADDR_BUILD_INFO));
+    strcat(buf, " ");
+    strcat(buf, uitoa(sizeof(stored_line_t) + NVS_CRC_BYTES));
+    report_message(buf, Message_Plain);
+
+    strcpy(buf, "Driver: ");
+    strcat(buf, uitoa(hal.nvs.driver_area.address));
+    strcat(buf, " ");
+    strcat(buf, uitoa(hal.nvs.driver_area.size));
+    report_message(buf, Message_Plain);
+}
+
+#endif
+

@@ -26,7 +26,6 @@
 #include "hal.h"
 #include "motion_control.h"
 #include "protocol.h"
-#include "report.h"
 #include "tool_change.h"
 
 // NOTE: only used when settings.homing.flags.force_set_origin is true
@@ -43,18 +42,18 @@ static volatile bool execute_posted = false;
 static volatile uint32_t spin_lock = 0;
 static float tool_change_position;
 static tool_data_t current_tool = {0}, *next_tool = NULL;
-static driver_reset_ptr driver_reset = NULL;
 static plane_t plane;
-static bool (*enqueue_realtime_command)(char data) = NULL;
-static void (*control_interrupt_callback)(control_signals_t signals) = NULL;
 static coord_data_t target = {0}, previous;
+static driver_reset_ptr driver_reset = NULL;
+static enqueue_realtime_command_ptr enqueue_realtime_command = NULL;
+static control_signals_callback_ptr control_interrupt_callback = NULL;
 
 // Set tool offset on successful $TPW probe, prompt for retry on failure.
 // Called via probe completed event.
 static void on_probe_completed (void)
 {
     if(!sys.flags.probe_succeeded)
-        hal.stream.write("[MSG:Probe failed, try again.]" ASCII_EOL);
+        report_message("Probe failed, try again.", Message_Plain);
     else if(sys.tlo_reference_set.mask & bit(plane.axis_linear))
         gc_set_tool_offset(ToolLengthOffset_EnableDynamic, plane.axis_linear, sys_probe_position[plane.axis_linear] - sys.tlo_reference[plane.axis_linear]);
 //    else error?
@@ -74,7 +73,7 @@ static void change_completed (void)
     if(control_interrupt_callback) {
         while(spin_lock);
         hal.irq_disable();
-        hal.control_interrupt_callback = control_interrupt_callback;
+        hal.control.interrupt_callback = control_interrupt_callback;
         control_interrupt_callback = NULL;
         hal.irq_enable();
     }
@@ -92,7 +91,7 @@ static void reset (void)
         // Restore previous tool if reset is during change
 #ifdef N_TOOLS
         if((sys.report.tool = current_tool.tool != next_tool->tool))
-            gc_state.tool = current_tool;
+            memcpy(gc_state.tool, &current_tool, sizeof(tool_data_t));
 #else
         if((sys.report.tool = current_tool.tool != next_tool->tool))
             memcpy(next_tool, &current_tool, sizeof(tool_data_t));
@@ -142,7 +141,7 @@ static bool restore (void)
 // Used in Manual and Manual_G59_3 modes ($341=1 or $341=2). Called from the foreground process.
 static void execute_warning (uint_fast16_t state)
 {
-    hal.stream.write("[MSG:Perform a probe with $TPW first!]" ASCII_EOL);
+    report_message("Perform a probe with $TPW first!", Message_Plain);
 }
 
 // Execute restore position after touch off (on cycle start event).
@@ -166,6 +165,7 @@ static void execute_restore (uint_fast16_t state)
 // Used in SemiAutomatic mode ($341=3) only. Called from the foreground process.
 static void execute_probe (uint_fast16_t state)
 {
+#if COMPATIBILITY_LEVEL <= 1
     bool ok;
     coord_data_t offset;
     plan_line_data_t plan_data = {0};
@@ -219,6 +219,7 @@ static void execute_probe (uint_fast16_t state)
 
     if(ok)
         system_set_exec_state_flag(EXEC_CYCLE_START);
+#endif
 }
 
 // Trap cycle start commands and redirect to foreground process
@@ -276,8 +277,13 @@ static status_code_t tool_change (parser_state_t *parser_state)
     if(next_tool == NULL)
         return Status_GCodeToolError;
 
-    if(current_tool.tool == next_tool->tool)
+    if(current_tool.tool == next_tool->tool || settings.tool_change.mode == ToolChange_Ignore)
         return Status_OK;
+
+#if COMPATIBILITY_LEVEL > 1
+    if(settings.tool_change.mode == ToolChange_Manual_G59_3 || settings.tool_change.mode == ToolChange_SemiAutomatic)
+        return Status_GcodeUnsupportedCommand;
+#endif
 
 #ifdef TOOL_LENGTH_OFFSET_AXIS
     plane.axis_linear = TOOL_LENGTH_OFFSET_AXIS;
@@ -307,12 +313,12 @@ static status_code_t tool_change (parser_state_t *parser_state)
     block_cycle_start = settings.tool_change.mode != ToolChange_SemiAutomatic;
     enqueue_realtime_command = hal.stream.enqueue_realtime_command;
     hal.stream.enqueue_realtime_command = trap_stream_cycle_start;
-    control_interrupt_callback = hal.control_interrupt_callback;
-    hal.control_interrupt_callback = trap_control_cycle_start;
+    control_interrupt_callback = hal.control.interrupt_callback;
+    hal.control.interrupt_callback = trap_control_cycle_start;
 
     // Stop spindle and coolant.
-    hal.spindle_set_state((spindle_state_t){0}, 0.0f);
-    hal.coolant_set_state((coolant_state_t){0});
+    hal.spindle.set_state((spindle_state_t){0}, 0.0f);
+    hal.coolant.set_state((coolant_state_t){0});
 
     execute_posted = false;
     parser_state->tool_change = true;
@@ -340,6 +346,7 @@ static status_code_t tool_change (parser_state_t *parser_state)
     if(!mc_line(target.values, &plan_data))
         return Status_Reset;
 
+#if COMPATIBILITY_LEVEL <= 1
     if(settings.tool_change.mode == ToolChange_Manual_G59_3) {
 
         // G59.3 contains offsets to tool change position.
@@ -355,6 +362,7 @@ static status_code_t tool_change (parser_state_t *parser_state)
         if(!mc_line(target.values, &plan_data))
             return Status_Reset;
     }
+#endif
 
     protocol_buffer_synchronize();
     sync_position();
@@ -382,15 +390,33 @@ void tc_init (void)
     gc_set_tool_offset(ToolLengthOffset_Cancel, 0, 0.0f);
 
     if(settings.tool_change.mode == ToolChange_Disabled) {
-        hal.tool_select = NULL;
-        hal.tool_change = NULL;
+        hal.tool.select = NULL;
+        hal.tool.change = NULL;
     } else {
         if(driver_reset == NULL) {
             driver_reset = hal.driver_reset;
             hal.driver_reset = reset;
         }
-        hal.tool_select = tool_select;
-        hal.tool_change = tool_change;
+        hal.tool.select = tool_select;
+        hal.tool.change = tool_change;
+    }
+}
+
+void tc_clear_tlo_reference (axes_signals_t homing_cycle)
+{
+    if(settings.tool_change.mode != ToolChange_Disabled) {
+
+        plane_t plane;
+
+#ifdef TOOL_LENGTH_OFFSET_AXIS
+        plane.axis_linear = TOOL_LENGTH_OFFSET_AXIS;
+#else
+        gc_get_plane_data(&plane, gc_state.modal.plane_select);
+#endif
+        if(homing_cycle.mask & (settings.mode == Mode_Lathe ? (X_AXIS_BIT|Z_AXIS_BIT) : bit(plane.axis_linear))) {
+            sys.report.tlo_reference = sys.tlo_reference_set.mask != 0;
+            sys.tlo_reference_set.mask = 0;  // Invalidate tool length offset reference
+        }
     }
 }
 
@@ -439,7 +465,7 @@ status_code_t tc_probe_workpiece (void)
     if(ok && protocol_buffer_synchronize()) {
         sync_position();
         block_cycle_start = false;
-        hal.stream.write("[MSG:Remove any touch plate and press cycle start to continue.]" ASCII_EOL);
+        report_message("Remove any touch plate and press cycle start to continue.", Message_Plain);
     }
 
     return ok ? Status_OK : Status_GCodeToolError;

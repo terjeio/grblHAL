@@ -146,26 +146,26 @@ static stream_rx_buffer_t rxbuffer = {0}, rxbackup;
 void serialInit (uint32_t baud_rate)
 {
 //    uart_hardware_t *hardware = &UART;
-	float base = (float)UART_CLOCK / (float)baud_rate;
-	float besterr = 1e20;
-	int bestdiv = 1;
-	int bestosr = 4;
-	for (int osr = 4; osr <= 32; osr++) {
-		float div = base / (float)osr;
-		int divint = (int)(div + 0.5f);
-		if (divint < 1)
+    float base = (float)UART_CLOCK / (float)baud_rate;
+    float besterr = 1e20;
+    int bestdiv = 1;
+    int bestosr = 4;
+    for (int osr = 4; osr <= 32; osr++) {
+        float div = base / (float)osr;
+        int divint = (int)(div + 0.5f);
+        if (divint < 1)
             divint = 1;
-		else if (divint > 8191)
+        else if (divint > 8191)
             divint = 8191;
-		float err = ((float)divint - div) / div;
-		if (err < 0.0f)
+        float err = ((float)divint - div) / div;
+        if (err < 0.0f)
             err = -err;
-		if (err <= besterr) {
-			besterr = err;
-			bestdiv = divint;
-			bestosr = osr;
-		}
-	}
+        if (err <= besterr) {
+            besterr = err;
+            bestdiv = divint;
+            bestosr = osr;
+        }
+    }
 
     *UART.ccm_register |= UART.ccm_value;
 
@@ -179,7 +179,7 @@ void serialInit (uint32_t baud_rate)
     if (UART.tx_pin.select_reg)
         *(UART.tx_pin.select_reg) = UART.tx_pin.select_val;        
 
-	UART.port->BAUD = LPUART_BAUD_OSR(bestosr - 1) | LPUART_BAUD_SBR(bestdiv) | (bestosr <= 8 ? LPUART_BAUD_BOTHEDGE : 0);
+    UART.port->BAUD = LPUART_BAUD_OSR(bestosr - 1) | LPUART_BAUD_SBR(bestdiv) | (bestosr <= 8 ? LPUART_BAUD_BOTHEDGE : 0);
     UART.port->PINCFG = 0;
 
     // Enable the transmitter, receiver and enable receiver interrupt

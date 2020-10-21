@@ -110,10 +110,10 @@ static file_t file = {
 
 static bool frewind = false;
 static io_stream_t active_stream;
-static driver_reset_ptr driver_reset = NULL;
-static status_code_t (*on_unknown_sys_command)(uint_fast16_t state, char *line, char *lcline);
-static void (*on_realtime_report)(stream_write_ptr stream_write, report_tracking_flags_t report) = NULL;
-static void (*state_change_requested)(uint_fast16_t state);
+static driver_reset_ptr driver_reset;
+static on_unknown_sys_command_ptr on_unknown_sys_command;
+static on_realtime_report_ptr on_realtime_report;
+static on_state_change_ptr state_change_requested;
 
 static void sdcard_end_job (void);
 static void sdcard_report (stream_write_ptr stream_write, report_tracking_flags_t report);
@@ -495,6 +495,24 @@ static status_code_t sdcard_parse (uint_fast16_t state, char *line, char *lcline
             retval = Status_OK;
             break;
 
+        case '<':
+            if (!(state == STATE_IDLE || state == STATE_CHECK_MODE))
+                retval = Status_SystemGClock;
+            else {
+                if(file_open(&lcline[3])) {
+                    int16_t c;
+                    char buf[2] = {0};
+                    while((c = file_read()) != -1) {
+                        buf[0] = (char)c;
+                        hal.stream.write(buf);
+                    }
+                    file_close();
+                    retval = Status_OK;
+                } else
+                    retval = Status_SDReadError;
+            }
+            break;
+
         case '=':
             if (!(state == STATE_IDLE || state == STATE_CHECK_MODE))
                 retval = Status_SystemGClock;
@@ -545,6 +563,8 @@ static void sdcard_reset (void)
 
 void sdcard_init (void)
 {
+    hal.driver_cap.sd_card = On;
+
     driver_reset = hal.driver_reset;
     hal.driver_reset = sdcard_reset;
 

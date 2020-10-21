@@ -29,6 +29,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "nvs.h"
+
 // Jogging
 
 typedef struct {
@@ -57,7 +59,8 @@ typedef union {
                 dns        :1,
                 mdns       :1,
                 ssdp       :1,
-                unassigned :2;
+                webdav     :1,
+                unassigned :1;
     };
 } network_services_t;
 
@@ -171,11 +174,13 @@ typedef struct {
     uint8_t word_addr_bytes;
     uint16_t word_addr;
     volatile uint_fast16_t count;
+    bool add_checksum;
+    uint8_t checksum;
     uint8_t *data;
-} i2c_eeprom_trans_t;
+} nvs_transfer_t;
 
 extern void i2c_init (void);
-extern void i2c_eeprom_transfer (i2c_eeprom_trans_t *i2c, bool read);
+extern nvs_transfer_result_t i2c_nvs_transfer (nvs_transfer_t *i2c, bool read);
 extern void my_plugin_init (void)  __attribute__((weak));
 
 #endif

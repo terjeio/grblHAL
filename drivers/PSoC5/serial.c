@@ -5,7 +5,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2017 Terje Io
+  Copyright (c) 2017-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,8 +23,8 @@
 
 #include "project.h"
 #include "serial.h"
-#include "stream.h"
-#include "hal.h"
+#include "grbl/stream.h"
+#include "grbl/hal.h"
 
 static void uart_rx_interrupt_handler (void);
 

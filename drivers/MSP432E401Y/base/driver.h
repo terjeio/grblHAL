@@ -113,33 +113,11 @@
 #define USE_I2C
 #endif
 
-#if TRINAMIC_ENABLE || KEYPAD_ENABLE || ETHERNET_ENABLE
-#define DRIVER_SETTINGS
-#endif
-
 #if TRINAMIC_ENABLE
 #include "tmc2130/trinamic.h"
 #if CNC_BOOSTERPACK_A4998
 #undef CNC_BOOSTERPACK_A4998
 #endif
-#endif
-
-#ifdef DRIVER_SETTINGS
-
-typedef struct {
-#if ETHERNET_ENABLE
-    network_settings_t network;
-#endif
-#if TRINAMIC_ENABLE
-    trinamic_settings_t trinamic;
-#endif
-#if KEYPAD_ENABLE
-    jog_settings_t jog;
-#endif
-} driver_settings_t;
-
-extern driver_settings_t driver_settings;
-
 #endif
 
 #define GPIOBase(t) gpioB(t)

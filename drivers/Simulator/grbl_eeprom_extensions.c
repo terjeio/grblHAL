@@ -23,7 +23,7 @@
 
 #include "eeprom.h"
 
-#include "grbl/grbl.h"
+#include "grbl/hal.h"
 
 void memcpy_to_eeprom_with_checksum(uint32_t destination, uint8_t *source, uint32_t size)
 {

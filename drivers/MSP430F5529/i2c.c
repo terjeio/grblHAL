@@ -82,7 +82,7 @@ static void WaitForACK (void)
 //    while (UCB1CTL0 & UCTXSTP);               // Ensure stop condition got sent
 }
 */
-void i2c_eeprom_transfer (i2c_eeprom_trans_t *i2c, bool read)
+nvs_transfer_result_t i2c_nvs_transfer (nvs_transfer_t *i2c, bool read)
 {
     UCB1I2CSA = i2c->address;            // Set EEPROM address and MSB part of data address
     UCB1IFG &= ~(UCTXIFG|UCRXIFG);          // Clear interrupt flags
@@ -120,6 +120,8 @@ void i2c_eeprom_transfer (i2c_eeprom_trans_t *i2c, bool read)
 #endif
     }
     while (UCB1CTL1 & UCTXSTP);             // Ensure stop condition got sent
+
+    return NVS_TransferResult_OK;
 }
 
 #endif

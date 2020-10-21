@@ -126,23 +126,6 @@ void IRQUnRegister(int32_t IRQnum);
 #include "spindle/huanyang.h"
 #endif
 
-#if TRINAMIC_ENABLE || KEYPAD_ENABLE
-
-#define DRIVER_SETTINGS
-
-typedef struct {
-#if TRINAMIC_ENABLE
-    trinamic_settings_t trinamic;
-#endif
-#if KEYPAD_ENABLE
-    jog_settings_t jog;
-#endif
-} driver_settings_t;
-
-extern driver_settings_t driver_settings;
-
-#endif
-
 #if EEPROM_ENABLE || KEYPAD_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
 
 // Define I2C port/pins

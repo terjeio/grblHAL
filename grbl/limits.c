@@ -30,6 +30,7 @@
 #include "protocol.h"
 #include "motion_control.h"
 #include "limits.h"
+#include "tool_change.h"
 #ifdef KINEMATICS_API
 #include "kinematics.h"
 #endif
@@ -137,7 +138,7 @@ static bool limits_homing_cycle (axes_signals_t cycle, axes_signals_t auto_squar
     plan_line_data_t plan_data;
 
     if(mode != SquaringMode_Both)
-        hal.stepper_disable_motors(auto_square, mode);
+        hal.stepper.disable_motors(auto_square, mode);
 
     // Initialize plan data struct for homing motion.
 
@@ -221,18 +222,18 @@ static bool limits_homing_cycle (axes_signals_t cycle, axes_signals_t auto_squar
             if (approach) {
 
                 // Check limit state. Lock out cycle axes when they change.
-                limit_state = hal.limits_get_state();
+                limit_state = hal.limits.get_state();
 
                 // Auto squaring check
                 if(both_motors && (limit_state.mask & auto_square.mask)) {
                     both_motors = false;
                     limit_state.mask &= ~auto_square.mask;
-                    hal.stepper_disable_motors(auto_square, SquaringMode_A);
-                    if(hal.limits_get_state().mask & auto_square.mask) {
-                        hal.stepper_disable_motors(auto_square, SquaringMode_B);
-                        if(hal.limits_get_state().mask & auto_square.mask) {
+                    hal.stepper.disable_motors(auto_square, SquaringMode_A);
+                    if(hal.limits.get_state().mask & auto_square.mask) {
+                        hal.stepper.disable_motors(auto_square, SquaringMode_B);
+                        if(hal.limits.get_state().mask & auto_square.mask) {
                             limit_state.mask |= auto_square.mask;
-                            hal.stepper_disable_motors((axes_signals_t){0}, SquaringMode_Both);
+                            hal.stepper.disable_motors((axes_signals_t){0}, SquaringMode_Both);
                         }
                     }
                     if((autosquare_check = (limit_state.mask & auto_square.mask) == 0))
@@ -277,7 +278,7 @@ static bool limits_homing_cycle (axes_signals_t cycle, axes_signals_t auto_squar
                     system_set_exec_alarm(Alarm_HomingFailDoor);
 
                 // Homing failure condition: Limit switch still engaged after pull-off motion
-                if (!approach && (hal.limits_get_state().value & cycle.mask))
+                if (!approach && (hal.limits.get_state().value & cycle.mask))
                     system_set_exec_alarm(Alarm_FailPulloff);
 
                 // Homing failure condition: Limit switch not found during approach.
@@ -318,7 +319,7 @@ static bool limits_homing_cycle (axes_signals_t cycle, axes_signals_t auto_squar
         }
 
         if(mode == SquaringMode_Both && auto_square.mask)
-            hal.stepper_disable_motors((axes_signals_t){0}, SquaringMode_Both);
+            hal.stepper.disable_motors((axes_signals_t){0}, SquaringMode_Both);
 
     } while (cycle.mask && n_cycle-- > 0);
 
@@ -349,22 +350,22 @@ bool limits_go_home (axes_signals_t cycle)
 {
     bool homed = false;
 
-    axes_signals_t auto_square = {0};
-    axes_signals_t auto_squared = {
-      .x = hal.driver_cap.axis_ganged_x,
-      .y = hal.driver_cap.axis_ganged_y,
-      .z = hal.driver_cap.axis_ganged_z
-    };
+    axes_signals_t auto_square = {0}, auto_squared = {0};
+
+    if(hal.stepper.get_auto_squared)
+        auto_squared = hal.stepper.get_auto_squared();
 
     auto_squared.mask &= cycle.mask;
 
     if(auto_squared.mask) {
-        if(!hal.stepper_disable_motors)
+        if(!hal.stepper.disable_motors)
             return false; // Bad driver!
         auto_square.x = On;
         while(!(auto_squared.mask & auto_square.mask))
             auto_square.mask <<= 1;
     }
+
+    tc_clear_tlo_reference(cycle);
 
     homed = limits_homing_cycle(cycle, auto_square, SquaringMode_Both);
 
@@ -376,7 +377,7 @@ bool limits_go_home (axes_signals_t cycle)
             homed = limits_homing_cycle(auto_square, auto_square, SquaringMode_B);
         }
 
-        hal.stepper_disable_motors((axes_signals_t){0}, SquaringMode_Both);
+        hal.stepper.disable_motors((axes_signals_t){0}, SquaringMode_Both);
 
         auto_squared.mask &= ~auto_square.mask;
 

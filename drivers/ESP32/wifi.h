@@ -37,7 +37,8 @@ typedef struct {
     char ap_status[20];
 } ap_list_t;
 
-bool wifi_init (wifi_settings_t *settings);
+bool wifi_init (void);
+bool wifi_start (void);
 bool wifi_stop (void);
 bool wifi_ap_connect (char *ssid, char *password);
 ap_list_t *wifi_get_aplist (void);
@@ -45,10 +46,7 @@ void wifi_release_aplist (void);
 char *wifi_get_ip (void);
 char *wifi_get_mac (void);
 bool wifi_dns_running (void);
-
-status_code_t wifi_setting (uint_fast16_t param, float value, char *svalue);
-void wifi_settings_report (setting_type_t setting);
-void wifi_settings_restore (void);
+wifi_settings_t *get_wifi_settings (void);
 
 char *iptoa(void *ip);
 

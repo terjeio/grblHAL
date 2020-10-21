@@ -242,7 +242,6 @@ typedef struct {
     hold_state_t holding_state;         // Tracks holding state
     float home_position[N_AXIS];        // Home position for homed axes
     float spindle_rpm;
-    char *message;                      // Message to be displayed
 #ifdef PID_LOG
     pid_data_t pid_log;
 #endif

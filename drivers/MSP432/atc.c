@@ -23,10 +23,14 @@
 */
 
 #include <msp.h>
+#include <math.h>
+#include <string.h>
+
+#include "grbl/hal.h"
+#include "grbl/protocol.h"
+#include "grbl/motion_control.h"
 
 #define ATC_I2C_ADDRESS (0x4A)
-
-#include "grbl/grbl.h"
 
 typedef struct {
     float x;
@@ -181,9 +185,9 @@ static bool spindle_nut (plan_line_data_t *plan_data, float zpos, bool open)
     atc_move(target, plan_data);
 
     // spin up spindle briefely and lock spindle
-    hal.spindle_set_state((spindle_state_t){ .on = On, .ccw = Off }, 100.0f);
+    hal.spindle.set_state((spindle_state_t){ .on = On, .ccw = Off }, 100.0f);
     hal.delay_ms(500, NULL);
-    hal.spindle_set_state((spindle_state_t){0}, 0.0f);
+    hal.spindle.set_state((spindle_state_t){0}, 0.0f);
     lock_spindle(true);
     do {
         hal.delay_ms(50, NULL);
@@ -267,11 +271,11 @@ static status_code_t atc_tool_change (parser_state_t *gc_state)
     system_convert_array_steps_to_mpos(previous.values, sys_position);
 
     // G59.3 contains offsets to position of socket wrench center (X, Y) and spindle nut offset above ATC base plate
-    settings_read_coord_data(SETTING_INDEX_G59_3, &offset.values); // G59.3 - fail if not set?
+    settings_read_coord_data(CoordinateSystem_G59_3, &offset.values); // G59.3 - fail if not set?
 
     // Stop spindle and coolant
-    hal.spindle_set_state((spindle_state_t){0}, 0.0f);
-    hal.coolant_set_state((coolant_state_t){0});
+    hal.spindle.set_state((spindle_state_t){0}, 0.0f);
+    hal.coolant.set_state((coolant_state_t){0});
 
     plan_data.feed_rate = 100.0f;
     plan_data.condition.rapid_motion = On;
@@ -334,7 +338,7 @@ static status_code_t atc_tool_change (parser_state_t *gc_state)
 
     // Spin up spindle
     protocol_buffer_synchronize();
-    hal.spindle_set_state((spindle_state_t){ .on = On, .ccw = Off }, 100.0f);
+    hal.spindle.set_state((spindle_state_t){ .on = On, .ccw = Off }, 100.0f);
     hal.delay_ms(200, NULL);
 
     // Engage tool
@@ -345,7 +349,7 @@ static status_code_t atc_tool_change (parser_state_t *gc_state)
         return Status_Reset;
 
     protocol_buffer_synchronize();
-    hal.spindle_set_state((spindle_state_t){0}, 0.0f);
+    hal.spindle.set_state((spindle_state_t){0}, 0.0f);
     hal.delay_ms(200, NULL);
     plan_data.condition.rapid_motion = On;
 
@@ -400,10 +404,10 @@ static status_code_t atc_tool_change (parser_state_t *gc_state)
 
 void atc_init (void)
 {
-    if(driver_reset = NULL) {
+    if(driver_reset == NULL) {
         driver_reset = hal.driver_reset;
         hal.driver_reset = atc_reset;
     }
-    hal.tool_select = atc_tool_select;
-    hal.tool_change = atc_tool_change;
+    hal.tool.select = atc_tool_select;
+    hal.tool.change = atc_tool_change;
 }

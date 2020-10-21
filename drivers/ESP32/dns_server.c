@@ -29,6 +29,8 @@ Contains the freeRTOS task for the DNS server that processes the requests.
 
 #if WIFI_ENABLE
 
+#include "wifi.h"
+
 #include <lwip/sockets.h>
 #include <string.h>
 #include <freertos/FreeRTOS.h>
@@ -81,7 +83,7 @@ void dns_server(void *pvParameters) {
     ip4_addr_t ip_resolved;
 //    inet_pton(AF_INET, DEFAULT_AP_IP, &ip_resolved);
 
-    memcpy(&ip_resolved, driver_settings.wifi.ap.network.ip, sizeof(ip4_addr_t));
+    memcpy(&ip_resolved, get_wifi_settings()->ap.network.ip, sizeof(ip4_addr_t));
 
     /* Create UDP socket */
     socket_fd = socket(AF_INET, SOCK_DGRAM, 0);

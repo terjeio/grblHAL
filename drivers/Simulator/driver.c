@@ -27,7 +27,7 @@
 #include "grbl_eeprom_extensions.h"
 #include "platform.h"
 
-#include "grbl/grbl.h"
+#include "grbl/hal.h"
 
 static bool probe_invert;
 static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
@@ -212,7 +212,7 @@ static control_signals_t systemGetState (void)
     return signals;
 }
 
-static void probeConfigureInvertMask (bool is_probe_away)
+static void probeConfigureInvertMask (bool is_probe_away, bool probing)
 {
   probe_invert = settings.flags.invert_probe_pin;
 
@@ -361,7 +361,7 @@ bool driver_setup (settings_t *settings)
     hal.spindle_set_state((spindle_state_t){0}, 0.0f);
     hal.coolant_set_state((coolant_state_t){0});
 
-    return settings->version == 16;
+    return settings->version == 17;
 }
 
 // used to inject a sleep in grbl main loop, 
@@ -390,7 +390,7 @@ bool driver_init ()
     hal.delay_ms = driver_delay_ms;
     hal.settings_changed = settings_changed;
 
-    hal.execute_realtime = sim_process_realtime;
+    grbl.on_execute_realtime = sim_process_realtime;
 
     hal.stepper_wake_up = stepperWakeUp;
     hal.stepper_go_idle = stepperGoIdle;
@@ -431,11 +431,11 @@ bool driver_init ()
     hal.stream.write_all = serialWriteS;
     hal.stream.suspend_read = serialSuspendInput;
 
-    hal.eeprom.type = EEPROM_Physical;
-    hal.eeprom.get_byte = eeprom_get_char;
-    hal.eeprom.put_byte = eeprom_put_char;
-    hal.eeprom.memcpy_to_with_checksum = memcpy_to_eeprom_with_checksum;
-    hal.eeprom.memcpy_from_with_checksum = memcpy_from_eeprom_with_checksum;
+    hal.nvs.type = NVS_EEPROM;
+    hal.nvs.get_byte = eeprom_get_char;
+    hal.nvs.put_byte = eeprom_put_char;
+    hal.nvs.memcpy_to_with_checksum = memcpy_to_eeprom_with_checksum;
+    hal.nvs.memcpy_from_with_checksum = memcpy_from_eeprom_with_checksum;
 
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;

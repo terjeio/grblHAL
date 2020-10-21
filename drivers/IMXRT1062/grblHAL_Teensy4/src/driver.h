@@ -50,6 +50,9 @@
 #ifndef PLASMA_ENABLE
 #define PLASMA_ENABLE       0
 #endif
+#ifndef PPI_ENABLE
+#define PPI_ENABLE          0
+#endif
 #ifndef SPINDLE_HUANYANG
 #define SPINDLE_HUANYANG    0
 #endif
@@ -144,6 +147,14 @@
 #include "generic_map.h"
 #endif
 
+#if SPINDLEPWMPIN == 12
+#define PPI_TIMER       (IMXRT_TMR2)
+#define PPI_TIMERIRQ    IRQ_QTIMER2
+#else
+#define PPI_TIMER       (IMXRT_TMR1)
+#define PPI_TIMERIRQ    IRQ_QTIMER1
+#endif
+
 // Adjust STEP_PULSE_LATENCY to get accurate step pulse length when required, e.g if using high step rates.
 // The default value is calibrated for 10 microseconds length.
 // NOTE: step output mode, number of axes and compiler optimization settings may all affect this value.
@@ -184,32 +195,6 @@
 
 #if ODOMETER_ENABLE
 #include "odometer/odometer.h"
-#endif
-
-#if TRINAMIC_ENABLE || KEYPAD_ENABLE || ETHERNET_ENABLE || QEI_ENABLE || PLASMA_ENABLE || ODOMETER_ENABLE
-
-#define DRIVER_SETTINGS
-
-typedef struct {
-#if ETHERNET_ENABLE
-    network_settings_t network;
-#endif
-#if TRINAMIC_ENABLE
-    trinamic_settings_t trinamic;
-#endif
-#if KEYPAD_ENABLE
-    jog_settings_t jog;
-#endif
-#if QEI_ENABLE
-    encoder_settings_t encoder[QEI_ENABLE];
-#endif
-#if PLASMA_ENABLE
-    plasma_settings_t plasma;
-#endif
-} driver_settings_t;
-
-extern driver_settings_t driver_settings;
-
 #endif
 
 #if KEYPAD_ENABLE && !defined(KEYPAD_STROBE_PIN)

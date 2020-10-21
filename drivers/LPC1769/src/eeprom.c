@@ -33,7 +33,7 @@
 #include <string.h>
 
 #include "chip.h"
-#include "grbl/grbl.h"
+#include "grbl/hal.h"
 #include "grbl/nuts_bolts.h"
 
 typedef struct {
@@ -45,19 +45,6 @@ typedef struct {
 
 static i2c_trans_t i2c;
 static I2C_XFER_T xfer;
-
-void eepromInit (void)
-{
-    Chip_IOCON_PinMux(LPC_IOCON, 0, 19, IOCON_MODE_INACT, IOCON_FUNC3);
-    Chip_IOCON_PinMux(LPC_IOCON, 0, 20, IOCON_MODE_INACT, IOCON_FUNC3);
-    Chip_IOCON_EnableOD(LPC_IOCON, 0, 19);
-    Chip_IOCON_EnableOD(LPC_IOCON, 0, 20);
-
-    Chip_I2C_Init(I2C1);
-    Chip_I2C_SetClockRate(I2C1, 400000);
-
-    Chip_I2C_SetMasterEventHandler(I2C1, Chip_I2C_EventHandlerPolling);
-}
 
 static void I2C_EEPROM (i2c_trans_t *i2c, bool read)
 {
@@ -87,7 +74,7 @@ static void I2C_EEPROM (i2c_trans_t *i2c, bool read)
     i2c->data += i2c->count;
 }
 
-uint8_t eepromGetByte (uint32_t addr)
+static uint8_t getByte (uint32_t addr)
 {
     static uint8_t value;
 
@@ -100,7 +87,7 @@ uint8_t eepromGetByte (uint32_t addr)
     return value;
 }
 
-void eepromPutByte (uint32_t addr, uint8_t new_value)
+static void putByte (uint32_t addr, uint8_t new_value)
 {
     i2c.addr = EEPROM_I2C_ADDRESS;
     i2c.word_addr = addr;
@@ -110,7 +97,7 @@ void eepromPutByte (uint32_t addr, uint8_t new_value)
     I2C_EEPROM(&i2c, false);
 }
 
-void eepromWriteBlockWithChecksum (uint32_t destination, uint8_t *source, uint32_t size)
+static nvs_transfer_result_t writeBlock (uint32_t destination, uint8_t *source, uint32_t size, bool with_checksum)
 {
     uint32_t bytes = size;
 
@@ -129,11 +116,13 @@ void eepromWriteBlockWithChecksum (uint32_t destination, uint8_t *source, uint32
         i2c.word_addr = destination;
     }
 
-    if(size > 0)
-        eepromPutByte(destination, calc_checksum(source, size));
+    if(size > 0 && with_checksum)
+        putByte(destination, calc_checksum(source, size));
+
+    return NVS_TransferResult_OK;
 }
 
-bool eepromReadBlockWithChecksum (uint8_t *destination, uint32_t source, uint32_t size)
+static nvs_transfer_result_t readBlock (uint8_t *destination, uint32_t source, uint32_t size, bool with_checksum)
 {
     i2c.addr = EEPROM_I2C_ADDRESS;
     i2c.word_addr = source;
@@ -142,7 +131,31 @@ bool eepromReadBlockWithChecksum (uint8_t *destination, uint32_t source, uint32_
 
     I2C_EEPROM(&i2c, true);
 
-    return calc_checksum(destination, size) == eepromGetByte(source + size);
+    return with_checksum ? (calc_checksum(destination, size) == getByte(source + size) ? NVS_TransferResult_OK : NVS_TransferResult_Failed) : NVS_TransferResult_OK;
+}
+
+
+void eepromInit (void)
+{
+#if EEPROM_IS_FRAM
+    hal.nvs.type = NVS_FRAM;
+#else
+    hal.nvs.type = NVS_EEPROM;
+#endif
+    hal.nvs.get_byte = getByte;
+    hal.nvs.put_byte = putByte;
+    hal.nvs.memcpy_to_nvs = writeBlock;
+    hal.nvs.memcpy_from_nvs = readBlock;
+
+    Chip_IOCON_PinMux(LPC_IOCON, 0, 19, IOCON_MODE_INACT, IOCON_FUNC3);
+    Chip_IOCON_PinMux(LPC_IOCON, 0, 20, IOCON_MODE_INACT, IOCON_FUNC3);
+    Chip_IOCON_EnableOD(LPC_IOCON, 0, 19);
+    Chip_IOCON_EnableOD(LPC_IOCON, 0, 20);
+
+    Chip_I2C_Init(I2C1);
+    Chip_I2C_SetClockRate(I2C1, 400000);
+
+    Chip_I2C_SetMasterEventHandler(I2C1, Chip_I2C_EventHandlerPolling);
 }
 
 #endif

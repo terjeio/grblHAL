@@ -24,10 +24,15 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <errno.h>
 
 #include "platform.h"
-#include "grbl/grbl.h"
+#include "grbl/hal.h"
+#include "grbl/report.h"
+#include "grbl/protocol.h"
+#include "grbl/protocol.h"
+#include "grbl/nvs_buffer.h"
 
 typedef struct arg_vars {
     // Output file handles
@@ -162,21 +167,30 @@ int main(int argc, char *argv[])
         }
     }
 
-    memset(&hal, 0, sizeof(HAL));
+    // Clear all and set some core function pointers
+    memset(&grbl, 0, sizeof(grbl_t));
+    grbl.on_execute_realtime = protocol_execute_noop;
+    grbl.protocol_enqueue_gcode = protocol_enqueue_gcode;
 
-    hal.version = HAL_VERSION;
+    // Clear all and set some HAL function pointers
+    memset(&hal, 0, sizeof(grbl_hal_t));
+    hal.version = HAL_VERSION; // Update when signatures and/or contract is changed - driver_init() should fail
+    hal.driver_reset = dummy_handler;
+    hal.irq_enable = dummy_handler;
+    hal.irq_disable = dummy_handler;
+    hal.nvs.size = GRBL_NVS_SIZE;
 
     if(!driver_init())
        return -1;
 
     // TODO: read settings from EEPROM.dat if exists?
 
-    eeprom_emu_init();
+    nvs_buffer_init();
     settings_init();
 
-    report_init();
-    hal.report.status_message = validator_report_status_message;
-    hal.report.feedback_message = report_feedback_message;
+    report_init_fns();
+    grbl.report.status_message = validator_report_status_message;
+    grbl.report.feedback_message = report_feedback_message;
 
     hal.stream.read = serial_read;
     hal.stream.write = serial_write;

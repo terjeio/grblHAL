@@ -1,11 +1,11 @@
 /*
-  I2CKeypad.h - An embedded CNC Controller with rs274/ngc (g-code) support
+  i2c.h - An embedded CNC Controller with rs274/ngc (g-code) support
 
-  Driver code for Cypress PSoC 5 (CY8CKIT-059)
+  I2C driver for Cypress PSoC 5 (CY8CKIT-059)
 
   Part of GrblHAL
 
-  Copyright (c) 2017-2018 Terje Io
+  Copyright (c) 2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -21,29 +21,10 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef _KEYPAD_H_
-#define _KEYPAD_H_
+#include "driver.h"
+#include "keypad/keypad.h"
+#include "grbl/plugins.h"
 
-#include <stdbool.h>
-#include <stdint.h>
-
-#include "hal.h"
-
-#define KEYBUF_SIZE 16
-#define KEYPAD_I2CADDR 0x49
-
-typedef enum {
-    JogMode_Fast = 0,
-    JogMode_Slow,
-    JogMode_Step
-} jogmode_t;
-
-void I2C_keypad_setup (void);
-void process_keypress (uint_fast16_t state);
+void I2C_Init (void);
+void I2C_GetKeycode (uint32_t i2cAddr, keycode_callback_ptr callback);
 void I2C_ISR_ExitCallback(void);
-
-status_code_t driver_setting (setting_type_t setting, float value, char *svalue);
-void driver_settings_restore (void);
-void driver_settings_report (setting_type_t setting);
-
-#endif

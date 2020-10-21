@@ -51,9 +51,9 @@
     #define MASLOW_B_KD     18.0f
     #define MASLOW_B_IMAX   5000
 
-    #define MASLOW_Z_KP     10.0d
-    #define MASLOW_Z_KI     21.0d
-    #define MASLOW_Z_KD     17.0d
+    #define MASLOW_Z_KP     10.0f
+    #define MASLOW_Z_KI     21.0f
+    #define MASLOW_Z_KD     17.0f
     #define MASLOW_Z_IMAX   5000
 #else
     #define MASLOW_A_KP     22.0f
@@ -146,7 +146,7 @@ typedef struct {
 } maslow_debug_t;
 
 typedef struct {
-    maslow_settings_t *settings;
+    maslow_settings_t settings;
     void (*pid_settings_changed)(uint_fast8_t idx);
     void (*move)(uint_fast8_t idx, int_fast16_t distance);
     void (*reset_pid)(uint_fast8_t idx);
@@ -159,10 +159,7 @@ typedef struct {
 extern maslow_hal_t maslow_hal;
 
 // Initialize HAL pointers for Maslow Router kinematics
-void maslow_init (void);
-status_code_t maslow_setting (setting_type_t param, float value, char *svalue);
-void maslow_settings_report (setting_type_t setting);
-void maslow_settings_restore (void);
+bool maslow_init (void);
 static status_code_t maslow_tuning (uint_fast16_t state, char *line, char *lcline);
 
 #endif

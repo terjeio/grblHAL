@@ -23,7 +23,24 @@
 #ifndef _NVS_H_
 #define _NVS_H_
 
+#ifndef NVS_SIZE
+#define NVS_SIZE 2048
+#endif
+
 #define GRBL_NVS_SIZE 1024
+#define NVS_CRC_BYTES 1
+
+// Define persistent storage memory address location values for Grbl settings and parameters
+// NOTE: 1KB persistent storage is the minimum required. The upper half is reserved for parameters and
+// the startup script. The lower half contains the global settings and space for future
+// developments.
+#define NVS_ADDR_GLOBAL         1U
+#define NVS_ADDR_PARAMETERS     512U
+#define NVS_ADDR_BUILD_INFO     942U
+#define NVS_ADDR_STARTUP_BLOCK  (NVS_ADDR_BUILD_INFO - 1 - N_STARTUP_LINE * (sizeof(stored_line_t) + NVS_CRC_BYTES))
+#ifdef N_TOOLS
+#define NVS_ADDR_TOOL_TABLE     (NVS_ADDR_PARAMETERS - 1 - N_TOOLS * (sizeof(tool_data_t) + NVS_CRC_BYTES))
+#endif
 
 typedef enum {
     NVS_None = 0,
@@ -34,9 +51,16 @@ typedef enum {
 } nvs_type;
 
 typedef struct {
+    uint8_t *mem_address;
     uint16_t address;
     uint16_t size;
 } nvs_driver_area_t;
+
+typedef enum {
+    NVS_TransferResult_Failed = 0,
+    NVS_TransferResult_Busy,
+    NVS_TransferResult_OK,
+} nvs_transfer_result_t;
 
 typedef struct {
     nvs_type type;
@@ -44,8 +68,8 @@ typedef struct {
     nvs_driver_area_t driver_area;
     uint8_t (*get_byte)(uint32_t addr);
     void (*put_byte)(uint32_t addr, uint8_t new_value);
-    void (*memcpy_to_with_checksum)(uint32_t destination, uint8_t *source, uint32_t size);
-    bool (*memcpy_from_with_checksum)(uint8_t *destination, uint32_t source, uint32_t size);
+    nvs_transfer_result_t (*memcpy_to_nvs)(uint32_t destination, uint8_t *source, uint32_t size, bool with_checksum);
+    nvs_transfer_result_t (*memcpy_from_nvs)(uint8_t *destination, uint32_t source, uint32_t size, bool with_checksum);
     bool (*memcpy_from_flash)(uint8_t *dest);
     bool (*memcpy_to_flash)(uint8_t *source);
 } nvs_io_t;

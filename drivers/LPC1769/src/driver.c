@@ -247,7 +247,7 @@ static void stepperWakeUp (void)
     STEPPER_TIMER->TCR = 0b10;          // reset
     STEPPER_TIMER->MR[0] = 0xFFFF;      // Set a long initial delay,
     STEPPER_TIMER->TCR = 0b01;          // start stepper ISR timer in up mode
-//    hal.stepper_interrupt_callback();   // and start the show
+//    hal.stepper.interrupt_callback();   // and start the show
 }
 
 // Disables stepper driver interrupts
@@ -446,7 +446,7 @@ static control_signals_t systemGetState (void)
 // and the probing cycle modes for toward-workpiece/away-from-workpiece.
 static void probeConfigure(bool is_probe_away, bool probing)
 {
-  probe_invert_mask = settings.flags.invert_probe_pin ? 0 : PROBE_BIT;
+  probe_invert_mask = settings.probe.invert_probe_pin ? 0 : PROBE_BIT;
 
   if (is_probe_away)
       probe_invert_mask ^= PROBE_BIT;
@@ -706,9 +706,9 @@ void settings_changed (settings_t *settings)
 
         if(hal.driver_cap.variable_spindle) {
             pwm_init(&SPINDLE_PWM_CHANNEL, SPINDLE_PWM_USE_PRIMARY_PIN, SPINDLE_PWM_USE_SECONDARY_PIN, spindle_pwm.period, 0);
-            hal.spindle_set_state = spindleSetStateVariable;
+            hal.spindle.set_state = spindleSetStateVariable;
         } else
-            hal.spindle_set_state = spindleSetState;
+            hal.spindle.set_state = spindleSetState;
 
         int32_t t = (uint32_t)(12.0f * (settings->steppers.pulse_microseconds - STEP_PULSE_LATENCY)) - 1;
         pulse_length = t < 2 ? 2 : t;
@@ -718,9 +718,9 @@ void settings_changed (settings_t *settings)
             pulse_delay = t < 2 ? 2 : t;
             if(pulse_delay == pulse_length)
                 pulse_delay++;
-            hal.stepper_pulse_start = &stepperPulseStartDelayed;
+            hal.stepper.pulse_start = &stepperPulseStartDelayed;
         } else
-            hal.stepper_pulse_start = &stepperPulseStart;
+            hal.stepper.pulse_start = &stepperPulseStart;
 
         PULSE_TIMER->TCR = 0b10;
         PULSE_TIMER->MR[0] = pulse_length;
@@ -1013,12 +1013,12 @@ static bool driver_setup (settings_t *settings)
 
  // Set defaults
 
-    IOInitDone = settings->version == 17;
+    IOInitDone = settings->version == 18;
 
     settings_changed(settings);
 
-    hal.spindle_set_state((spindle_state_t){0}, 0.0f);
-    hal.coolant_set_state((coolant_state_t){0});
+    hal.spindle.set_state((spindle_state_t){0}, 0.0f);
+    hal.coolant.set_state((coolant_state_t){0});
     stepperSetDirOutputs((axes_signals_t){0});
 
     return IOInitDone;
@@ -1046,12 +1046,8 @@ bool driver_init (void) {
     SysTick->CTRL |= SysTick_CTRL_CLKSOURCE_Msk|SysTick_CTRL_TICKINT_Msk;
     NVIC_SetPriority(SysTick_IRQn, (1 << __NVIC_PRIO_BITS) - 1);
 
-#if EEPROM_ENABLE
-    eepromInit();
-#endif
-
     hal.info = "LCP1769";
-    hal.driver_version = "200923";
+    hal.driver_version = "201014";
     hal.driver_setup = driver_setup;
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
@@ -1061,31 +1057,31 @@ bool driver_init (void) {
     hal.delay_ms = &driver_delay;
     hal.settings_changed = settings_changed;
 
-    hal.stepper_wake_up = stepperWakeUp;
-    hal.stepper_go_idle = stepperGoIdle;
-    hal.stepper_enable = stepperEnable;
-    hal.stepper_cycles_per_tick = stepperCyclesPerTick;
-    hal.stepper_pulse_start = stepperPulseStart;
+    hal.stepper.wake_up = stepperWakeUp;
+    hal.stepper.go_idle = stepperGoIdle;
+    hal.stepper.enable = stepperEnable;
+    hal.stepper.cycles_per_tick = stepperCyclesPerTick;
+    hal.stepper.pulse_start = stepperPulseStart;
 
-    hal.limits_enable = limitsEnable;
-    hal.limits_get_state = limitsGetState;
+    hal.limits.enable = limitsEnable;
+    hal.limits.get_state = limitsGetState;
 
-    hal.coolant_set_state = coolantSetState;
-    hal.coolant_get_state = coolantGetState;
+    hal.coolant.set_state = coolantSetState;
+    hal.coolant.get_state = coolantGetState;
 
-    hal.probe_get_state = probeGetState;
-    hal.probe_configure_invert_mask = probeConfigure;
+    hal.probe.get_state = probeGetState;
+    hal.probe.configure = probeConfigure;
 
-    hal.spindle_set_state = spindleSetState;
-    hal.spindle_get_state = spindleGetState;
+    hal.spindle.set_state = spindleSetState;
+    hal.spindle.get_state = spindleGetState;
 #ifdef SPINDLE_PWM_DIRECT
-    hal.spindle_get_pwm = spindleGetPWM;
-    hal.spindle_update_pwm = spindle_set_speed;
+    hal.spindle.get_pwm = spindleGetPWM;
+    hal.spindle.update_pwm = spindle_set_speed;
 #else
-    hal.spindle_update_rpm = spindleUpdateRPM;
+    hal.spindle.update_rpm = spindleUpdateRPM;
 #endif
 
-    hal.system_control_get_state = systemGetState;
+    hal.control.get_state = systemGetState;
 
 #if USB_SERIAL_CDC
     usbInit();
@@ -1108,15 +1104,7 @@ bool driver_init (void) {
 #endif
 
 #if EEPROM_ENABLE
-  #if EEPROM_IS_FRAM
-    hal.nvs.type = NVS_FRAM;
-  #else
-    hal.nvs.type = NVS_EEPROM;
-  #endif
-    hal.nvs.get_byte = eepromGetByte;
-    hal.nvs.put_byte = eepromPutByte;
-    hal.nvs.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
-    hal.nvs.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
+    eepromInit();
 #elif FLASH_ENABLE
     hal.nvs.type = NVS_Flash;
     hal.nvs.memcpy_from_flash = memcpy_from_flash;
@@ -1157,7 +1145,7 @@ bool driver_init (void) {
 
     // No need to move version check before init.
     // Compiler will fail any signature mismatch for existing entries.
-    return hal.version == 6;
+    return hal.version == 7;
 }
 
 /* interrupt handlers */
@@ -1166,7 +1154,7 @@ bool driver_init (void) {
 void STEPPER_IRQHandler (void)
 {
     STEPPER_TIMER->IR = STEPPER_TIMER->IR;
-    hal.stepper_interrupt_callback();
+    hal.stepper.interrupt_callback();
 }
 
 /* The Stepper Port Reset Interrupt: This interrupt handles the falling edge of the step
@@ -1246,11 +1234,11 @@ void DEBOUNCE_IRQHandler (void)
           switch(signal->group) {
 
             case INPUT_GROUP_LIMIT:
-                hal.limit_interrupt_callback(limitsGetState());
+                hal.limits.interrupt_callback(limitsGetState());
                 break;
 
             case INPUT_GROUP_CONTROL:
-                hal.control_interrupt_callback(systemGetState());
+                hal.control.interrupt_callback(systemGetState());
                 break;
         }
     }
@@ -1304,10 +1292,10 @@ void GPIO_IRQHandler (void)
     }
 
     if(grp & INPUT_GROUP_LIMIT)
-        hal.limit_interrupt_callback(limitsGetState());
+        hal.limits.interrupt_callback(limitsGetState());
 
     if(grp & INPUT_GROUP_CONTROL)
-        hal.control_interrupt_callback(systemGetState());
+        hal.control.interrupt_callback(systemGetState());
 
 #if KEYPAD_ENABLE
     if(grp & INPUT_GROUP_KEYPAD)

@@ -27,7 +27,7 @@
 #include "grbl_eeprom_extensions.h"
 #include "platform.h"
 
-#include "grbl/grbl.h"
+#include "grbl/hal.h"
 
 /* don't delay at all in validator */
 static void driver_delay_ms (uint32_t ms, void (*callback)(void))
@@ -76,7 +76,7 @@ static control_signals_t systemGetState (void)
     return signals;
 }
 
-static void probeConfigureInvertMask (bool is_probe_away)
+static void probeConfigureInvertMask (bool is_probe_away, bool probing)
 {
 }
 
@@ -173,7 +173,7 @@ uint16_t serial_get_rx_buffer_available()
 bool driver_init ()
 {
     hal.info = "Validator";
-    hal.driver_version = "200528";
+    hal.driver_version = "200924";
     hal.driver_setup = driver_setup;
     hal.rx_buffer_size = RX_BUFFER_SIZE;
     hal.f_step_timer = F_CPU;
@@ -207,7 +207,7 @@ bool driver_init ()
 
     hal.system_control_get_state = systemGetState;
 
-    hal.eeprom.type = EEPROM_None;
+    hal.nvs.type = NVS_None;
 
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;

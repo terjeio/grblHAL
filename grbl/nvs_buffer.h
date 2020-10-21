@@ -3,7 +3,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2017 Terje Io
+  Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
   Grbl is free software: you can redistribute it and/or modify
@@ -38,7 +38,10 @@ typedef struct {
 extern settings_dirty_t settings_dirty;
 
 bool nvs_buffer_init (void);
+bool nvs_buffer_alloc (void);
+uint32_t nvs_alloc (size_t size);
 void nvs_buffer_sync_physical (void);
 nvs_io_t *nvs_buffer_get_physical (void);
+void nvs_memmap (void);
 
 #endif

@@ -54,6 +54,9 @@
 #ifndef KEYPAD_ENABLE
 #define KEYPAD_ENABLE       0
 #endif
+#ifndef PPI_ENABLE
+#define PPI_ENABLE       	0
+#endif
 #ifndef EEPROM_ENABLE
 #define EEPROM_ENABLE       0
 #endif
@@ -97,6 +100,7 @@
 #define STEPPER_TIMER TIM2
 #define PULSE_TIMER TIM3
 #define DEBOUNCE_TIMER TIM4
+#define PPI_TIMER TIM5
 
 #ifdef BOARD_CNC_BOOSTERPACK
   #if N_AXIS > 3
@@ -139,31 +143,11 @@
   #endif
 #endif
 
-#if TRINAMIC_ENABLE || KEYPAD_ENABLE
-#define DRIVER_SETTINGS
-#endif
-
-#ifdef DRIVER_SETTINGS
-
 #if TRINAMIC_ENABLE
 #include "tmc2130/trinamic.h"
 #endif
 
-typedef struct {
-#if TRINAMIC_ENABLE
-    trinamic_settings_t trinamic;
-#endif
-#if KEYPAD_ENABLE
-    jog_settings_t jog;
-#endif
-} driver_settings_t;
-
-extern driver_settings_t driver_settings;
-
-#endif
-
 // End configuration
-
 
 #if KEYPAD_ENABLE && !defined(KEYPAD_PORT)
 #error Keypad plugin not supported!

@@ -1,12 +1,12 @@
 //
 // enet.h - lw-IP/FreeRTOS TCP/IP stream implementation
 //
-// v1.0 / 2018-11-08 / Io Engineering / Terje
+// v1.2 / 2020-09-25 / Io Engineering / Terje
 //
 
 /*
 
-Copyright (c) 2018-2019, Terje Io
+Copyright (c) 2018-2020, Terje Io
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -41,10 +41,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "driver.h"
 
-bool enet_init (network_settings_t *network);
-char *enet_ip_address (void);
-status_code_t ethernet_setting (setting_type_t param, float value, char *svalue);
-void ethernet_settings_report (setting_type_t setting);
-void ethernet_settings_restore (void);
+bool enet_init (void);
+bool enet_start (void);
 
 #endif

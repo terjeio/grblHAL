@@ -28,7 +28,8 @@ set(HUANYANG_SOURCE spindle/huanyang.c spindle/modbus)
 set(MAIN_SRCS main.c driver.c nvs.c esp32-hal-uart.c
  i2c.c
  ioexpand.c
- eeprom.c
+ eeprom/eeprom_24LC16B.c
+ eeprom/eeprom_24AAxxx.c
  i2s_out.c
  grbl/grbllib.c
  grbl/coolant_control.c

@@ -26,5 +26,6 @@
 
 void tc_init (void);
 status_code_t tc_probe_workpiece (void);
+void tc_clear_tlo_reference (axes_signals_t homing_cycle);
 
 #endif

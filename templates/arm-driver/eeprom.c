@@ -16,7 +16,7 @@
 
 // Read single byte from EEPROM.
 // addr is 0-based offset from start.
-uint8_t eepromGetByte (uint32_t addr)
+static uint8_t getByte (uint32_t addr)
 {
     uint32_t data;
 
@@ -28,31 +28,42 @@ uint8_t eepromGetByte (uint32_t addr)
 
 // Write single byte to EEPROM.
 // addr is 0-based offset from start.
-void eepromPutByte (uint32_t addr, uint8_t new_value)
+static void putByte (uint32_t addr, uint8_t new_value)
 {
 //    EEPROM_WRITE(new_value);
 }
 
-// Read block of data from EEPROM, return true if checksum matches.
+// Read block of data from EEPROM, return true if checksum matches or no checksum used.
 // Checksum is stored in the byte following the last byte read from the block.
-bool eepromReadBlockWithChecksum (uint8_t *destination, uint32_t source, uint32_t size)
+static nvs_transfer_result_t readBlock (uint8_t *destination, uint32_t source, uint32_t size, bool with_checksum)
 {
     uint8_t *data = destination;
 
     for(; size > 0; size--)
-      *data++ = eepromGetByte(source++);
+      *data++ = getByte(source++);
 
-    return calc_checksum(destination, size) == eepromGetByte(source);
+    return with_checksum ? (calc_checksum(destination, size) == getByte(source + size) ? NVS_TransferResult_OK : NVS_TransferResult_Failed) : NVS_TransferResult_OK;
 }
 
-// Write block of data to EEPROM followed by a checksum byte.
-void eepromWriteBlockWithChecksum (uint32_t destination, uint8_t *source, uint32_t size) {
+// Write block of data to EEPROM followed by an optional checksum byte.
+static nvs_transfer_result_t writeBlock (uint32_t destination, uint8_t *source, uint32_t size, bool with_checksum)
+{
 
     uint8_t *data = source;
     uint32_t remaining = size;
 
     for(; remaining > 0; remaining--)
-        eepromPutByte(destination++, *data++);
+        putByte(destination++, *data++);
 
-    eepromPutByte(destination, calc_checksum(source, size));
+	if(with_checksum)
+		putByte(destination + size, calc_checksum(source, size));
+}
+
+void eeprom_init (void)
+{
+    hal.nvs.type = NVS_EEPROM;
+    hal.nvs.get_byte = getByte;
+    hal.nvs.put_byte = putByte;
+    hal.nvs.memcpy_to_nvs = writeBlock;
+    hal.nvs.memcpy_from_nvs = readBlock;
 }

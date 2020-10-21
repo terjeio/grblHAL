@@ -5,7 +5,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2019 Terje Io
+  Copyright (c) 2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -48,6 +48,6 @@ void I2C_GetKeycode (uint32_t i2cAddr, keycode_callback_ptr callback);
 
 #endif
 
-uint8_t *I2C_Receive (uint32_t i2cAddr, uint8_t *buf, uint8_t bytes, bool block);
-void I2C_Send (uint32_t i2cAddr, uint8_t *buf, uint8_t bytes, bool block);
-uint8_t *I2C_ReadRegister (uint32_t i2cAddr, uint8_t *buf, uint8_t abytes, uint8_t bytes, bool block);
+uint8_t *I2C_Receive (uint32_t i2cAddr, uint8_t *buf, uint16_t bytes, bool block);
+void I2C_Send (uint32_t i2cAddr, uint8_t *buf, uint16_t bytes, bool block);
+uint8_t *I2C_ReadRegister (uint32_t i2cAddr, uint8_t *buf, uint8_t abytes, uint16_t bytes, bool block);

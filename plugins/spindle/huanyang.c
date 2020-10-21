@@ -212,10 +212,10 @@ static void rx_exception (uint8_t code)
 
 void huanyang_init (modbus_stream_t *stream)
 {
-    hal.spindle_set_state = spindleSetState;
-    hal.spindle_get_state = spindleGetState;
-    hal.spindle_reset_data = NULL;
-    hal.spindle_update_rpm = spindleUpdateRPM;
+    hal.spindle.set_state = spindleSetState;
+    hal.spindle.get_state = spindleGetState;
+    hal.spindle.reset_data = NULL;
+    hal.spindle.update_rpm = spindleUpdateRPM;
 
     hal.driver_cap.variable_spindle = On;
     hal.driver_cap.spindle_at_speed = On;
