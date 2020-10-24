@@ -54,6 +54,9 @@
 #ifndef KEYPAD_ENABLE
 #define KEYPAD_ENABLE       0
 #endif
+#ifndef ODOMETER_ENABLE
+#define ODOMETER_ENABLE     0
+#endif
 #ifndef EEPROM_ENABLE
 #define EEPROM_ENABLE       0
 #endif

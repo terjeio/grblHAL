@@ -49,6 +49,10 @@
 #include "keypad/keypad.h"
 #endif
 
+#if ODOMETER_ENABLE
+#include "odometer/odometer.h"
+#endif
+
 #if PPI_ENABLE
 #include "laser/ppi.h"
 #endif
@@ -571,6 +575,11 @@ static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t 
     return prev;
 }
 
+static uint32_t getElapsedTicks (void)
+{
+    return uwTick;
+}
+
 // Configures peripherals when settings are initialized or changed
 void settings_changed (settings_t *settings)
 {
@@ -1063,7 +1072,7 @@ bool driver_init (void)
 #else
     hal.info = "STM32F401CC";
 #endif
-    hal.driver_version = "201014";
+    hal.driver_version = "201024";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1102,6 +1111,7 @@ bool driver_init (void)
 
     hal.control.get_state = systemGetState;
 
+    hal.get_elapsed_ticks = getElapsedTicks;
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
@@ -1165,6 +1175,10 @@ bool driver_init (void)
 #endif
 
     my_plugin_init();
+
+#if ODOMETER_ENABLE
+    odometer_init(); // NOTE: this *must* be last plugin to be initialized as it claims storage at the end of NVS.
+#endif
 
     // No need to move version check before init.
     // Compiler will fail any signature mismatch for existing entries.

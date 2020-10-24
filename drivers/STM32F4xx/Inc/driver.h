@@ -54,6 +54,9 @@
 #ifndef KEYPAD_ENABLE
 #define KEYPAD_ENABLE       0
 #endif
+#ifndef ODOMETER_ENABLE
+#define ODOMETER_ENABLE     0
+#endif
 #ifndef PPI_ENABLE
 #define PPI_ENABLE       	0
 #endif

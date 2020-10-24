@@ -23,7 +23,7 @@
 // If none is enabled pin mappings from generic_map.h will be used.
 //#define BOARD_CNC3040
 //#define BOARD_PROTONEER_3XX   // For use with a Nucleo-F411RE and F446RE boards
-//#define BOARD_GENERIC_UNO     // For use with a Nucleo-F411RE and F446RE boards
+#define BOARD_GENERIC_UNO     // For use with a Nucleo-F411RE and F446RE boards
 //#define BOARD_CNC_BOOSTERPACK
 
 // Configuration
@@ -34,6 +34,7 @@
 #endif
 //#define SDCARD_ENABLE      1 // Run gcode programs from SD card, requires sdcard plugin.
 //#define KEYPAD_ENABLE      1 // I2C keypad for jogging etc., requires keypad plugin.
+//#define ODOMETER_ENABLE    1 // Odometer plugin.
 //#define PPI_ENABLE         1 // Laser PPI plugin. To be completed, requires laser plugin.
 //#define TRINAMIC_ENABLE    1 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
 //#define TRINAMIC_I2C       1 // Trinamic I2C - SPI bridge interface.

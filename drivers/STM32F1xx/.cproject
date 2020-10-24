@@ -90,6 +90,7 @@
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="eeprom"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="grbl"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="keypad"/>
+						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="odometer"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="sdcard"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="tmc2130"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="trinamic"/>

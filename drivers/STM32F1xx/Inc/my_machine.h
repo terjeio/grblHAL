@@ -30,6 +30,7 @@
 #define USB_SERIAL_CDC       1 // Serial communication via native USB. Comment out for UART communication.
 //#define SDCARD_ENABLE      1 // Run gcode programs from SD card, requires sdcard plugin.
 //#define KEYPAD_ENABLE      1 // I2C keypad for jogging etc., requires keypad plugin.
+//#define ODOMETER_ENABLE    1 // Odometer plugin.
 //#define TRINAMIC_ENABLE    1 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
 //#define TRINAMIC_I2C       1 // Trinamic I2C - SPI bridge interface.
 //#define TRINAMIC_DEV       1 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code.
