@@ -47,8 +47,9 @@ static queue_entry_t queue[MODBUS_QUEUE_LENGTH];
 static volatile bool spin_lock = false;
 static volatile queue_entry_t *tail, *head, *packet = NULL;
 static volatile modbus_state_t state = ModBus_Idle;
-static driver_reset_ptr driver_reset = NULL;
-static on_execute_realtime_ptr on_execute_realtime = NULL;
+static driver_reset_ptr driver_reset;
+static on_execute_realtime_ptr on_execute_realtime;
+static on_report_options_ptr on_report_options;
 
 // Compute the MODBUS RTU CRC
 static uint16_t modbus_CRC16x (char *buf, uint_fast16_t len)
@@ -159,7 +160,7 @@ modbus_state_t modbus_get_state (void)
     return state;
 }
 
-void modbus_poll (uint16_t grbl_state)
+void modbus_poll (uint_fast16_t grbl_state)
 {
     static uint32_t last_ms;
 
@@ -252,6 +253,12 @@ static void modbus_reset (void)
     driver_reset();
 }
 
+static void onReportOptions (void)
+{
+    on_report_options();
+    hal.stream.write("[PLUGIN:MODBUS v0.01]" ASCII_EOL);
+}
+
 void modbus_init (modbus_stream_t *mstream)
 {
     uint_fast8_t idx;
@@ -259,10 +266,15 @@ void modbus_init (modbus_stream_t *mstream)
     stream = mstream;
 
     if(driver_reset == NULL) {
+
         driver_reset = hal.driver_reset;
         hal.driver_reset = modbus_reset;
+
         on_execute_realtime = grbl.on_execute_realtime;
         grbl.on_execute_realtime = modbus_poll;
+
+        on_report_options = grbl.on_report_options;
+        grbl.on_report_options = onReportOptions;
     }
 
     head = tail = &queue[0];

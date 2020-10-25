@@ -37,6 +37,7 @@
 #include "../grbl/report.h"
 #include "../grbl/override.h"
 #include "../grbl/protocol.h"
+#include "../grbl/nvs_buffer.h"
 #else
 #include "i2c.h"
 #include "grbl/report.h"

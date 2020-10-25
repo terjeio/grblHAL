@@ -33,6 +33,8 @@
 #include <string.h>
 #include <math.h>
 
+#include "trinamic.h"
+
 #include "grbl/report.h"
 #ifdef ARDUINO
   #if TRINAMIC_I2C

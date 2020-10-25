@@ -100,7 +100,7 @@ static nvs_transfer_result_t readBlock (uint8_t *destination, uint32_t source, u
         i2c_nvs_transfer(&i2c, true);
     }
 
-    return with_checksum ? (calc_checksum(destination, size) == getByte(source + size) ? NVS_TransferResult_OK : NVS_TransferResult_Failed) : NVS_TransferResult_OK;
+    return with_checksum ? (calc_checksum(destination, size) == getByte(source) ? NVS_TransferResult_OK : NVS_TransferResult_Failed) : NVS_TransferResult_OK;
 }
 
 void i2c_eeprom_init (void)

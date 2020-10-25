@@ -217,7 +217,7 @@ static status_code_t commandExecute (uint_fast16_t state, char *line, char *lcli
 static void onReportOptions (void)
 {
     on_report_options();
-    hal.stream.write("[PLUGIN:ODOMETERS v0.01]"  ASCII_EOL);
+    hal.stream.write("[PLUGIN:ODOMETERS v0.02]"  ASCII_EOL);
 }
 
 static void odometer_warning1 (uint_fast16_t state)
@@ -236,12 +236,12 @@ void odometer_init()
 
     if(!(nvs.type == NVS_EEPROM || nvs.type == NVS_FRAM))
         protocol_enqueue_rt_command(odometer_warning1);
-    else if(NVS_SIZE - GRBL_NVS_SIZE - hal.nvs.driver_area.size < (sizeof(odometer_data_t) * 2 + 2))
+    else if(NVS_SIZE - GRBL_NVS_SIZE - hal.nvs.driver_area.size < ((sizeof(odometer_data_t) + NVS_CRC_BYTES) * 2))
         protocol_enqueue_rt_command(odometer_warning2);
     else {
 
-        odometers_address = NVS_SIZE - (sizeof(odometer_data_t) + 1);
-        odometers_address_prv = odometers_address - (sizeof(odometer_data_t) + 1);
+        odometers_address = NVS_SIZE - (sizeof(odometer_data_t) + NVS_CRC_BYTES);
+        odometers_address_prv = odometers_address - (sizeof(odometer_data_t) + NVS_CRC_BYTES);
 
         if(nvs.memcpy_from_nvs((uint8_t *)&odometers, odometers_address, sizeof(odometer_data_t), true) != NVS_TransferResult_OK)
             odometer_data_reset(false);
