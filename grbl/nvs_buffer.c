@@ -27,6 +27,7 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <assert.h>
 
 #include "hal.h"
 #include "nvs_buffer.h"
@@ -189,6 +190,8 @@ static void nvs_warning (uint_fast16_t state)
 // Try to allocate RAM from heap for buffer/emulation.
 bool nvs_buffer_alloc (void)
 {
+    assert(NVS_SIZE > GRBL_NVS_SIZE);
+
     nvsbuffer = malloc(NVS_SIZE);
 
     return nvsbuffer != NULL;
@@ -203,17 +206,11 @@ bool nvs_buffer_init (void)
 
         memcpy(&physical_nvs, &hal.nvs, sizeof(nvs_io_t)); // save pointers to physical storage handler functions
 
+        // Copy physical storage content to RAM when available
         if(physical_nvs.type == NVS_Flash)
             physical_nvs.memcpy_from_flash(nvsbuffer);
-        else if(physical_nvs.type != NVS_None) {
-
-            // Initialize physical storage on settings version mismatch
-           	if(physical_nvs.get_byte(0) != SETTINGS_VERSION)
-                settings_init();
-
-            // Copy physical storage content to RAM
+        else if(physical_nvs.type != NVS_None)
             physical_nvs.memcpy_from_nvs(nvsbuffer, 0, GRBL_NVS_SIZE + hal.nvs.driver_area.size, false);
-        }
 
         // Switch hal to use RAM version of non-volatile storage data
         hal.nvs.type = NVS_Emulated;
@@ -224,13 +221,15 @@ bool nvs_buffer_init (void)
         hal.nvs.memcpy_from_flash = NULL;
         hal.nvs.memcpy_to_flash = NULL;
 
-        // If no physical storage available or if flash load fails import default settings to RAM
+        // If no physical storage available or if NVS import fails copy default settings to RAM
+        // and write out to physical storage when available.
         if(physical_nvs.type == NVS_None || ram_get_byte(0) != SETTINGS_VERSION) {
-            settings_restore((settings_restore_t){0xFF});
-            if(physical_nvs.type == NVS_Flash) {
+            settings_restore(settings_all);
+            if(physical_nvs.type == NVS_Flash)
                 physical_nvs.memcpy_to_flash(nvsbuffer);
-                grbl.report.status_message(Status_SettingReadFail);
-            }
+            else
+                physical_nvs.memcpy_to_nvs(0, nvsbuffer, GRBL_NVS_SIZE + hal.nvs.driver_area.size, false);
+            grbl.report.status_message(Status_SettingReadFail);
         }
     } else
         protocol_enqueue_rt_command(nvs_warning);

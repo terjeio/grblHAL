@@ -363,12 +363,12 @@ status_code_t gc_execute_block(char *block, char *message)
      perform initial error-checks for command word modal group violations, for any repeated
      words, and for negative values set for the value words F, N, P, T, and S. */
 
-    word_bit_t word_bit = {0}; // Bit-value for assigning tracking variables
     uint_fast8_t char_counter = gc_parser_flags.jog_motion ? 3 /* Start parsing after `$J=` */ : 0;
     char letter;
     float value;
     uint32_t int_value = 0;
     uint_fast16_t mantissa = 0;
+    word_bit_t word_bit = { .parameter = (parameter_word_t)0 }; // Bit-value for assigning tracking variables
 
     while ((letter = block[char_counter++]) != '\0') { // Loop until no more g-code words in block.
 

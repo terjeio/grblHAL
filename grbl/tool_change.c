@@ -277,7 +277,7 @@ static status_code_t tool_change (parser_state_t *parser_state)
     if(next_tool == NULL)
         return Status_GCodeToolError;
 
-    if(current_tool.tool == next_tool->tool || settings.tool_change.mode == ToolChange_Ignore)
+    if(current_tool.tool == next_tool->tool)
         return Status_OK;
 
 #if COMPATIBILITY_LEVEL > 1
@@ -389,16 +389,16 @@ void tc_init (void)
 
     gc_set_tool_offset(ToolLengthOffset_Cancel, 0, 0.0f);
 
-    if(settings.tool_change.mode == ToolChange_Disabled) {
+    if(settings.tool_change.mode == ToolChange_Disabled || settings.tool_change.mode == ToolChange_Ignore) {
         hal.tool.select = NULL;
         hal.tool.change = NULL;
     } else {
+        hal.tool.select = tool_select;
+        hal.tool.change = tool_change;
         if(driver_reset == NULL) {
             driver_reset = hal.driver_reset;
             hal.driver_reset = reset;
         }
-        hal.tool.select = tool_select;
-        hal.tool.change = tool_change;
     }
 }
 
