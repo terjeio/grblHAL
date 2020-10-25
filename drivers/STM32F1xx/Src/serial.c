@@ -29,6 +29,8 @@
 
 #include "main.h"
 
+#if !USB_SERIAL_CDC
+
 static stream_rx_buffer_t rxbuf = {0};
 static stream_tx_buffer_t txbuf = {0}, rxbackup;
 
@@ -212,3 +214,5 @@ void USART1_IRQHandler (void)
             USART1->CR1 &= ~USART_CR1_TXEIE;    // disable UART TX interrupt
    }
 }
+
+#endif

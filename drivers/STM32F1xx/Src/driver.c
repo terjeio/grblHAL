@@ -910,8 +910,7 @@ static bool driver_setup (settings_t *settings)
 
     IOInitDone = settings->version == 18;
 
-    settings_changed(settings);
-
+    hal.settings_changed(settings);
     hal.spindle.set_state((spindle_state_t){0}, 0.0f);
     hal.coolant.set_state((coolant_state_t){0});
     stepperSetDirOutputs((axes_signals_t){0});
