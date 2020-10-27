@@ -1,6 +1,6 @@
 ## STM32F4xxGrblDriver
 
-A GrblHAL driver for the STM32F401CC and STM32F411RE ARM processors.
+A grblHAL driver for the STM32F401CC, STM32F411RE and STM32F446RE ARM processors.
 
 Loosely based on code from robomechs [6-AXIS-USBCNC-GRBL](https://github.com/robomechs/6-AXIS-USBCNC-GRBL) port, updated for [STM32CubeIDE](https://www.st.com/en/development-tools/stm32cubeide.htm) and the latest STM HAL drivers where appropriate.
 
@@ -29,4 +29,10 @@ If compiling for STM32F446, change/add some symbols in project properties _C\/C+
 __NOTE:__ Internal flash page for parameters is not at the end of the flash memory due to size restrictions. This means each firmware upgrade will erase any saved parameters. 
 
 ---
-2020-10-06
+
+CNC breakout boards:
+
+[CNC breakout for Nucleo-64](https://github.com/terjeio/CNC_Breakout_Nucleo64) by Terje Io.
+
+---
+2020-10-27

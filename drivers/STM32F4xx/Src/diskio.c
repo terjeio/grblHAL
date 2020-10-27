@@ -11,7 +11,6 @@
  * For FatFs R0.13c
  */
 
-
 #include "driver.h"
 
 #if SDCARD_ENABLE
@@ -22,6 +21,7 @@
 #include "main.h"
 #include "ff.h"
 #include "diskio.h"
+#include "spi.h"
 
 /* Definitions for MMC/SDC command */
 #define CMD0    (0x40+0)    /* GO_IDLE_STATE */
@@ -43,21 +43,6 @@
 #define BOOL bool
 #define TRUE true
 #define FALSE false
-
-static SPI_HandleTypeDef hspi1 = {
-    .Instance = SPI1,
-    .Init.Mode = SPI_MODE_MASTER,
-    .Init.Direction = SPI_DIRECTION_2LINES,
-    .Init.DataSize = SPI_DATASIZE_8BIT,
-    .Init.CLKPolarity = SPI_POLARITY_LOW,
-    .Init.CLKPhase = SPI_PHASE_1EDGE,
-    .Init.NSS = SPI_NSS_SOFT,
-    .Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_256,
-    .Init.FirstBit = SPI_FIRSTBIT_MSB,
-    .Init.TIMode = SPI_TIMODE_DISABLE,
-    .Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE,
-    .Init.CRCPolynomial = 10
-};
 
 /* asserts the CS pin to the card */
 static inline
@@ -95,31 +80,13 @@ BYTE PowerFlag = 0;     /* indicates if "power" is on */
 /* Transmit a byte to MMC via SPI  (Platform dependent)                  */
 /*-----------------------------------------------------------------------*/
 
-static
-void xmit_spi(BYTE dat)
-{
-    hspi1.Instance->DR = dat;
-
-    while(!__HAL_SPI_GET_FLAG(&hspi1, SPI_FLAG_TXE));
-
-    __HAL_SPI_CLEAR_OVRFLAG(&hspi1);
-}
-
+#define xmit_spi(d) spi_put_byte(d)
 
 /*-----------------------------------------------------------------------*/
 /* Receive a byte from MMC via SPI  (Platform dependent)                 */
 /*-----------------------------------------------------------------------*/
 
-static
-BYTE rcvr_spi (void)
-{
-    hspi1.Instance->DR = 0xFF; // Writing dummy data into Data register
-
-    while(!__HAL_SPI_GET_FLAG(&hspi1, SPI_FLAG_RXNE));
-
-    return (BYTE)hspi1.Instance->DR;
-}
-
+#define rcvr_spi() (BYTE)spi_get_byte()
 
 static
 void rcvr_spi_m (BYTE *dst)
@@ -173,41 +140,24 @@ void send_initial_clock_train(void)
 //static
 void power_on (void)
 {
-    static bool init = false;
-
     /*
      * This doesn't really turn the power on, but initializes the
      * SSI port and pins needed to talk to the card.
      */
 
-    if(!init) {
-        // Disable JTAG. NOTE: a power cycle is required after programming
-        __HAL_AFIO_REMAP_SWJ_DISABLE();
+    spi_init();
 
-        hal.delay_ms(10, NULL);
-
-        HAL_SPI_Init(&hspi1);
-    }
-
-    __HAL_SPI_ENABLE(&hspi1);
-
-    init = true;
     PowerFlag = 1;
 }
 
 // set the SSI speed to the max setting
-static
-void set_max_speed(void)
-{
-    hspi1.Instance->CR1 &= ~SPI_BAUDRATEPRESCALER_256;
-    hspi1.Instance->CR1 |= SPI_BAUDRATEPRESCALER_32; // should be able to go to 12Mhz...
-}
+
+#define set_max_speed() spi_set_max_speed()
 
 static
 void power_off (void)
 {
     PowerFlag = 0;
-    __HAL_SPI_DISABLE(&hspi1);
 }
 
 static

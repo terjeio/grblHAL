@@ -23,7 +23,7 @@
 #define STEP_PORT       GPIOA
 #define X_STEP_PIN      0
 #define Y_STEP_PIN      1
-#define Z_STEP_PIN      10
+#define Z_STEP_PIN      3
 #define X_STEP_BIT      (1<<X_STEP_PIN)
 #define Y_STEP_BIT      (1<<Y_STEP_PIN)
 #define Z_STEP_BIT      (1<<Z_STEP_PIN)
@@ -125,13 +125,4 @@
 #define SD_CS_PORT  GPIOA
 #define SD_CS_PIN   3
 #define SD_CS_BIT   (1<<SD_CS_PIN)
-// The following defines are not used but defined for reference
-// Port init and remap is done by HAL_SPI_MspInit() in stm32f1xx_hal_msp.c
-#define SD_IO_PORT  GPIOB
-#define SD_SCK_PIN  3
-#define SD_SCK_BIT  (1<<SD_SCK_PIN)
-#define SD_MISO_PIN 4
-#define SD_MISO_BIT (1<<SD_MISO_PIN)
-#define SD_MOSI_PIN 5
-#define SD_MOSI_BIT (1<<SD_MOSI_PIN)
 #endif

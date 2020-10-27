@@ -1,9 +1,9 @@
 /*
-  i2c.h - I2C support for EEPROM, keypad and Trinamic plugins
+  spi.c - SPI support for SD card & Trinamic plugins
 
   Part of GrblHAL driver for STM32F4xx
 
-  Copyright (c) 2018-2020 Terje Io
+  Copyright (c) 2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -19,29 +19,13 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef __I2C_DRIVER_H__
-#define __I2C_DRIVER_H__
+#ifndef _GRBL_SPI_H_
+#define _GRBL_SPI_H_
 
-#include "driver.h"
-#include "grbl/plugins.h"
-
-#if TRINAMIC_ENABLE && TRINAMIC_I2C
-
-#include "trinamic\trinamic2130.h"
-#include "trinamic\TMC2130_I2C_map.h"
-
-#define I2C_ADR_I2CBRIDGE 0x47
-
-void I2C_DriverInit (TMC_io_driver_t *drv);
-
-#endif
-
-#if KEYPAD_ENABLE
-
-#include "keypad/keypad.h"
-
-void I2C_GetKeycode (uint32_t i2cAddr, keycode_callback_ptr callback);
-
-#endif
+void spi_init (void);
+void spi_set_max_speed (void);
+void spi_disable (void);
+uint8_t spi_get_byte (void);
+void spi_put_byte (uint8_t byte);
 
 #endif

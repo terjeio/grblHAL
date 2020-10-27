@@ -180,6 +180,9 @@ static uint32_t dir_outmap[sizeof(c_dir_outmap) / sizeof(uint32_t)];
 #ifndef Z_LIMIT_PORT
   #define Z_LIMIT_PORT LIMIT_PORT
 #endif
+#ifndef A_LIMIT_PORT
+  #define A_LIMIT_PORT LIMIT_PORT
+#endif
 
 #if KEYPAD_ENABLE == 0
 #define KEYPAD_STROBE_BIT 0
@@ -208,7 +211,16 @@ static void stepperEnable (axes_signals_t enable)
 #if TRINAMIC_ENABLE && TRINAMIC_I2C
     axes_signals_t tmc_enable = trinamic_stepper_enable(enable);
 #else
+  #ifdef STEPPERS_DISABLE_PORT
     BITBAND_PERI(STEPPERS_DISABLE_PORT->ODR, STEPPERS_DISABLE_PIN) = enable.x;
+  #else
+    BITBAND_PERI(X_STEPPERS_DISABLE_PORT->ODR, X_STEPPERS_DISABLE_PIN) = enable.x;
+    BITBAND_PERI(Y_STEPPERS_DISABLE_PORT->ODR, Y_STEPPERS_DISABLE_PIN) = enable.y;
+    BITBAND_PERI(Z_STEPPERS_DISABLE_PORT->ODR, Z_STEPPERS_DISABLE_PIN) = enable.z;
+   #if N_AXIS > 3
+    BITBAND_PERI(A_STEPPERS_DISABLE_PORT->ODR, A_STEPPERS_DISABLE_PIN) = enable.a;
+   #endif
+  #endif
 #endif
 }
 
@@ -342,11 +354,17 @@ inline static axes_signals_t limitsGetState()
     signals.x = BITBAND_PERI(X_LIMIT_PORT->IDR, X_LIMIT_PIN);
     signals.y = BITBAND_PERI(Y_LIMIT_PORT->IDR, Y_LIMIT_PIN);
     signals.z = BITBAND_PERI(Z_LIMIT_PORT->IDR, Z_LIMIT_PIN);
+  #ifdef A_LIMIT_PIN
+    signals.a = BITBAND_PERI(A_LIMIT_PORT->IDR, A_LIMIT_PIN);
+  #endif
 #elif LIMIT_INMODE == GPIO_MAP
     uint32_t bits = LIMIT_PORT->IDR;
     signals.x = (bits & X_LIMIT_BIT) != 0;
     signals.y = (bits & Y_LIMIT_BIT) != 0;
     signals.z = (bits & Z_LIMIT_BIT) != 0;
+  #ifdef A_LIMIT_PIN
+    signals.a = (bits & A_LIMIT_BIT) != 0;
+  #endif
 #else
     signals.value = (uint8_t)((LIMIT_PORT->IDR & LIMIT_MASK) >> LIMIT_INMODE);
 #endif
@@ -740,7 +758,6 @@ void settings_changed (settings_t *settings)
         HAL_GPIO_Init(CONTROL_PORT, &GPIO_Init);
 #endif
 
-
         /***********************
          *  Limit pins config  *
          ***********************/
@@ -790,10 +807,6 @@ void settings_changed (settings_t *settings)
             GPIO_Init.Mode = GPIO_MODE_INPUT;
             GPIO_Init.Alternate = 0;
 
-            GPIO_Init.Pin = Z_LIMIT_BIT;
-            GPIO_Init.Pull = settings->limits.disable_pullup.z ? GPIO_NOPULL : GPIO_PULLUP;
-            HAL_GPIO_Init(Z_LIMIT_PORT, &GPIO_Init);
-
             GPIO_Init.Pin = X_LIMIT_BIT;
             GPIO_Init.Pull = settings->limits.disable_pullup.x ? GPIO_NOPULL : GPIO_PULLUP;
             HAL_GPIO_Init(X_LIMIT_PORT, &GPIO_Init);
@@ -801,6 +814,10 @@ void settings_changed (settings_t *settings)
             GPIO_Init.Pin = Y_LIMIT_BIT;
             GPIO_Init.Pull = settings->limits.disable_pullup.y ? GPIO_NOPULL : GPIO_PULLUP;
             HAL_GPIO_Init(Y_LIMIT_PORT, &GPIO_Init);
+
+            GPIO_Init.Pin = Z_LIMIT_BIT;
+            GPIO_Init.Pull = settings->limits.disable_pullup.z ? GPIO_NOPULL : GPIO_PULLUP;
+            HAL_GPIO_Init(Z_LIMIT_PORT, &GPIO_Init);
 
 #ifdef A_LIMIT_BIT
             GPIO_Init.Pin = A_LIMIT_BIT;
@@ -894,8 +911,21 @@ static bool driver_setup (settings_t *settings)
 
  // Stepper init
 
+#ifdef STEPPERS_DISABLE_PORT
     GPIO_Init.Pin = STEPPERS_DISABLE_MASK;
     HAL_GPIO_Init(STEPPERS_DISABLE_PORT, &GPIO_Init);
+#else
+    GPIO_Init.Pin = X_STEPPERS_DISABLE_BIT;
+    HAL_GPIO_Init(X_STEPPERS_DISABLE_PORT, &GPIO_Init);
+    GPIO_Init.Pin = Y_STEPPERS_DISABLE_BIT;
+    HAL_GPIO_Init(Y_STEPPERS_DISABLE_PORT, &GPIO_Init);
+    GPIO_Init.Pin = Z_STEPPERS_DISABLE_BIT;
+    HAL_GPIO_Init(Z_STEPPERS_DISABLE_PORT, &GPIO_Init);
+ #if N_AXIS > 3
+  GPIO_Init.Pin = A_STEPPERS_DISABLE_BIT;
+  HAL_GPIO_Init(A_STEPPERS_DISABLE_PORT, &GPIO_Init);
+ #endif
+#endif
 
 #ifdef STEP_MASK
     GPIO_Init.Pin = STEP_MASK;
@@ -1071,7 +1101,7 @@ bool driver_init (void)
 #else
     hal.info = "STM32F401CC";
 #endif
-    hal.driver_version = "201024";
+    hal.driver_version = "201027";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1163,6 +1193,10 @@ bool driver_init (void)
     hal.driver_cap.limits_pull_up = On;
 #ifdef PROBE_PIN
     hal.driver_cap.probe_pull_up = On;
+#endif
+
+#ifdef HAS_BOARD_INIT
+    board_init();
 #endif
 
 #if TRINAMIC_ENABLE

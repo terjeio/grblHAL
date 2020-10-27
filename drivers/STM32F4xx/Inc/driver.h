@@ -119,6 +119,8 @@
   #include "protoneer_3.xx_map.h"
 #elif defined(BOARD_GENERIC_UNO)
   #include "uno_map.h"
+#elif defined(BOARD_MORPHO_CNC)
+  #include "st_morpho_map.h"
 #else // default board
   #include "generic_map.h"
 #endif
@@ -139,15 +141,22 @@
 #endif
 
 #if EEPROM_ENABLE|| KEYPAD_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
-  #ifdef NUCLEO_F411
-    #define I2C_PORT 1
+  #if defined(NUCLEO_F411) || defined(NUCLEO_F446)
+    #define I2C_PORT 1 // GPIOB, SCL_PIN = 8, SDA_PIN = 9
   #else
-    #define I2C_PORT 2
+    #define I2C_PORT 2 // GPIOB, SCL_PIN = 10, SDA_PIN = 11
   #endif
 #endif
 
 #if TRINAMIC_ENABLE
 #include "tmc2130/trinamic.h"
+#endif
+
+#if SDCARD_ENABLE
+#define SD_CS_PORT  GPIOC
+#define SD_CS_PIN   8
+#define SD_CS_BIT   (1<<SD_CS_PIN)
+#define SPI_PORT 1 // GPIOA, SCK_PIN = 5, MISO_PIN = 6, MOSI_PIN = 7
 #endif
 
 // End configuration
