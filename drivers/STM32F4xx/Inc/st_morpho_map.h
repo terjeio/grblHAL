@@ -69,7 +69,7 @@ void board_init (void);
 #define Y_STEPPERS_DISABLE_BIT    (1<<Y_STEPPERS_DISABLE_PIN)
 #define Z_STEPPERS_DISABLE_BIT    (1<<Z_STEPPERS_DISABLE_PIN)
 #if N_AXIS > 3
-#define A_STEPPERS_DISABLE_PORT   GPIOB
+#define A_STEPPERS_DISABLE_PORT   GPIOA
 #define A_STEPPERS_DISABLE_PIN    6
 #define A_STEPPERS_DISABLE_BIT    (1<<A_STEPPERS_DISABLE_PIN)
 #endif
@@ -106,10 +106,10 @@ void board_init (void);
 
 // Define flood and mist coolant enable output pins.
 #define COOLANT_FLOOD_PORT          GPIOB
-#define COOLANT_FLOOD_PIN           4
+#define COOLANT_FLOOD_PIN           10
 #define COOLANT_FLOOD_BIT           (1<<COOLANT_FLOOD_PIN)
 #define COOLANT_MIST_PORT           GPIOB
-#define COOLANT_MIST_PIN            13
+#define COOLANT_MIST_PIN            4
 #define COOLANT_MIST_BIT            (1<<COOLANT_MIST_PIN)
 
 // Define user-control controls (cycle start, reset, feed hold) input pins.
@@ -132,17 +132,17 @@ void board_init (void);
 
 // Auxiliary I/O
 #define AUXINPUT0_PORT  GPIOB
-#define AUXINPUT0_PIN   15
+#define AUXINPUT0_PIN   13
 #define AUXINPUT0_BIT   (1<<AUXINPUT0_PIN)
 #define AUXINPUT1_PORT  GPIOB
-#define AUXINPUT1_PIN   2
+#define AUXINPUT1_PIN   14
 #define AUXINPUT1_BIT   (1<<AUXINPUT1_PIN)
 
 #define AUXOUTPUT0_PORT GPIOB
-#define AUXOUTPUT0_PIN  14
+#define AUXOUTPUT0_PIN  15
 #define AUXOUTPUT0_BIT  (1<<AUXOUTPUT0_PIN)
 #define AUXOUTPUT1_PORT GPIOB
-#define AUXOUTPUT1_PIN  10
+#define AUXOUTPUT1_PIN  2
 #define AUXOUTPUT1_BIT  (1<<AUXOUTPUT1_PIN)
 
 #if KEYPAD_ENABLE

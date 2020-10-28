@@ -19,8 +19,11 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "main.h"
 #include "driver.h"
+
+#if defined(BOARD_MORPHO_CNC)
+
+#include "main.h"
 #include "grbl/protocol.h"
 
 static void digital_out (uint8_t port, bool on)
@@ -93,3 +96,5 @@ void board_init (void)
     GPIO_Init.Pin = AUXOUTPUT1_BIT;
     HAL_GPIO_Init(AUXOUTPUT1_PORT, &GPIO_Init);
 }
+
+#endif
