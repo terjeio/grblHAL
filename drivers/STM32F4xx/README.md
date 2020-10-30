@@ -12,7 +12,7 @@ A method for flashing the Nucleo F411RE is to drop the `.bin` file on the NODE_F
 
 If compiling for STM32F411, change/add some symbols in project properties _C\/C++ General > Paths and Symbols > Symbols_.
 
-* change the symbol `STM32F401xC` to `STM32F411xE`.
+* remove the symbol `STM32F401xC` and add `STM32F411xE`.
 
 * if for the [Nucleo F411RE development board](https://www.st.com/en/evaluation-tools/nucleo-f411re.html) then add the symbol `NUCLEO_F411`.
 
@@ -20,9 +20,9 @@ If compiling for STM32F411, change/add some symbols in project properties _C\/C+
 
 If compiling for STM32F446, change/add some symbols in project properties _C\/C++ General > Paths and Symbols > Symbols_.
 
-* change the symbol `STM32F401xC` to `STM32F446xx`.
+* remove the symbol `STM32F401xC` and add `STM32F446xx`.
 
-* if for the [Nucleo F4446RE development board](https://www.st.com/en/evaluation-tools/nucleo-f446re.html) then add the symbol `NUCLEO_F446`.
+* if for the [Nucleo F446RE development board](https://www.st.com/en/evaluation-tools/nucleo-f446re.html) then add the symbol `NUCLEO_F446`.
 
 * if the oscillator frequency is different from the default 25 MHz then add the symbol `HSE_VALUE` and set the value to the frequency in Hz. E.g. `8000000` for 8 Mhz.
 
@@ -35,4 +35,4 @@ CNC breakout boards:
 [CNC breakout for Nucleo-64](https://github.com/terjeio/CNC_Breakout_Nucleo64) by Terje Io.
 
 ---
-2020-10-27
+2020-10-30
