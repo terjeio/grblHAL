@@ -35,17 +35,7 @@
 #include "kinematics.h"
 #endif
 
-// To prevent the homing cycle from racking the dual axis, when one limit triggers before the
-// other due to switch failure or noise, the homing cycle will automatically abort if the second
-// motor's limit switch does not trigger within the three distance parameters defined below.
-// Axis length percent will automatically compute a fail distance as a percentage of the max
-// travel of the other non-dual axis, i.e. if dual axis select is X_AXIS at 5.0%, then the fail
-// distance will be computed as 5.0% of y-axis max travel. Fail distance max and min are the
-// limits of how far or little a valid fail distance is.
-#define DUAL_AXIS_HOMING_FAIL_AXIS_LENGTH_PERCENT  5.0f  // Float (percent)
-#define DUAL_AXIS_HOMING_FAIL_DISTANCE_MAX  25.0f  // Float (mm)
-#define DUAL_AXIS_HOMING_FAIL_DISTANCE_MIN  2.5f // Float (mm)
-
+#include "defaults.h"
 
 // Homing axis search distance multiplier. Computed by this value times the cycle travel.
 #ifndef HOMING_AXIS_SEARCH_SCALAR

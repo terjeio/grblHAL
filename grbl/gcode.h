@@ -425,7 +425,7 @@ typedef struct {
     tool_offset_mode_t tool_offset_mode; // {G43,G43.1,G49}
     coord_system_t coord_system;         // {G54,G55,G56,G57,G58,G59,G59.1,G59.2,G59.3}
     // uint8_t control;                  // {G61} NOTE: Don't track. Only default supported.
-    program_flow_t program_flow;         // {M0,M1,M2,M30}
+    program_flow_t program_flow;         // {M0,M1,M2,M30,M60}
     coolant_state_t coolant;             // {M7,M8,M9}
     spindle_state_t spindle;             // {M3,M4,M5}
     gc_override_flags_t override_ctrl;   // {M48,M49,M50,M51,M53,M56}

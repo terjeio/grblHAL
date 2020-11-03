@@ -1,5 +1,14 @@
 ## grblHAL changelog
 
+Build 20201103:
+
+* Added data structures for spindle encoder/spindle sync to the core. Used by drivers supporting spindle sync.
+* Updated spindle sync code for MSP432 and added spindle sync capability to iMXRT1060 and STM32F4xx drivers.  
+__NOTE:__ Spindle sync support is still in alpha stage! The current code has only been tested with a simulator.
+* Fixed bug that could lead to settings storage area fail to reinitialize properly when corrupted.
+* Moved some symbols in preparation for adding $-settings for them.
+* Improved rewind capability (on `M2`) of SD card plugin. Added `$` command for dumping SD card file contents to output stream.
+
 Build 20201020:
 
 __NOTE:__ Settings data format has been changed and settings will be reset to default on update. Backup and restore.

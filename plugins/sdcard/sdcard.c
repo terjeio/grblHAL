@@ -27,12 +27,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(ESP_PLATFORM) || defined(STM32F103xB) ||  defined(__LPC17XX__) ||  defined(__IMXRT1062__)
+#if defined(ESP_PLATFORM) || defined(STM32_PLATFORM) ||  defined(__LPC17XX__) ||  defined(__IMXRT1062__)
 #define NEW_FATFS
 #endif
 
 #ifdef ARDUINO
   #include "../grbl/report.h"
+  #include "../grbl/protocol.h"
   #ifdef __IMXRT1062__
     #include "uSDFS.h"
     #define SDCARD_DEV "1:/"
@@ -40,6 +41,7 @@
   #endif
 #else
   #include "grbl/report.h"
+  #include "grbl/protocol.h"
 #endif
 
 #ifdef __IMXRT1062__
@@ -52,7 +54,7 @@ const char *dev = "";
 #define SDCARD_DEV ""
 #endif
 
-#if defined(STM32F103xB) || defined(__LPC17XX__) ||  defined(__IMXRT1062__)
+#if defined(STM32_PLATFORM) || defined(__LPC17XX__) ||  defined(__IMXRT1062__)
 #define UINT32FMT "%lu"
 #endif
 
@@ -114,11 +116,12 @@ static driver_reset_ptr driver_reset;
 static on_unknown_sys_command_ptr on_unknown_sys_command;
 static on_realtime_report_ptr on_realtime_report;
 static on_state_change_ptr state_change_requested;
+static on_program_completed_ptr on_program_completed;
 
 static void sdcard_end_job (void);
 static void sdcard_report (stream_write_ptr stream_write, report_tracking_flags_t report);
 static void trap_state_change_request(uint_fast16_t state);
-
+static void sdcard_on_program_completed (program_flow_t program_flow);
 //static report_t active_reports;
 
 #ifdef __MSP432E401Y__
@@ -338,6 +341,9 @@ static void sdcard_end_job (void)
     if(grbl.on_realtime_report == sdcard_report)
         grbl.on_realtime_report = on_realtime_report;
 
+    if(grbl.on_program_completed == sdcard_on_program_completed)
+        grbl.on_program_completed = on_program_completed;
+
     if(grbl.on_state_change == trap_state_change_request)
         grbl.on_state_change = state_change_requested;
 
@@ -417,42 +423,48 @@ static status_code_t trap_status_report (status_code_t status_code)
     return status_code;
 }
 
-static message_code_t trap_feedback_message (message_code_t message_code)
-{
-    report_feedback_message(message_code);
-
-    if(message_code == Message_ProgramEnd) {
-        if(frewind) {
-            f_lseek(file.handle, 0);
-            file.pos = file.line = 0;
-            file.eol = false;
-            report_feedback_message(Message_CycleStartToRerun);
-            hal.stream.read = await_cycle_start;
-            if(grbl.on_state_change != trap_state_change_request) {
-                state_change_requested = grbl.on_state_change;
-                grbl.on_state_change = trap_state_change_request;
-            }
-        } else
-            sdcard_end_job();
-    }
-
-    return message_code;
-}
-
 static void sdcard_report (stream_write_ptr stream_write, report_tracking_flags_t report)
 {
-    char *pct_done = ftoa((float)file.pos / (float)file.size * 100.0f, 1);
+    if(hal.stream.read != await_cycle_start) {
+        char *pct_done = ftoa((float)file.pos / (float)file.size * 100.0f, 1);
 
-    if(sys.state != STATE_IDLE && !strncmp(pct_done, "100.0", 5))
-        strcpy(pct_done, "99.9");
+        if(sys.state != STATE_IDLE && !strncmp(pct_done, "100.0", 5))
+            strcpy(pct_done, "99.9");
 
-    stream_write("|SD:");
-    stream_write(pct_done);
-    stream_write(",");
-    stream_write(file.name);
+        stream_write("|SD:");
+        stream_write(pct_done);
+        stream_write(",");
+        stream_write(file.name);
+    }
 
     if(on_realtime_report)
         on_realtime_report(stream_write, report);
+}
+
+static void sdcard_restart_msg (uint_fast16_t state)
+{
+    report_feedback_message(Message_CycleStartToRerun);
+}
+
+static void sdcard_on_program_completed (program_flow_t program_flow)
+{
+    frewind = frewind || program_flow == ProgramFlow_CompletedM2; // || program_flow == ProgramFlow_CompletedM30;
+
+    if(frewind) {
+        f_lseek(file.handle, 0);
+        file.pos = file.line = 0;
+        file.eol = false;
+        hal.stream.read = await_cycle_start;
+        if(grbl.on_state_change != trap_state_change_request) {
+            state_change_requested = grbl.on_state_change;
+            grbl.on_state_change = trap_state_change_request;
+        }
+        protocol_enqueue_rt_command(sdcard_restart_msg);
+    } else
+        sdcard_end_job();
+
+    if(on_program_completed)
+        on_program_completed(program_flow);
 }
 
 #if M6_ENABLE
@@ -531,8 +543,11 @@ static status_code_t sdcard_parse (uint_fast16_t state, char *line, char *lcline
 #endif
                     on_realtime_report = grbl.on_realtime_report;
                     grbl.on_realtime_report = sdcard_report;                     // Add percent complete to real time report
-                    grbl.report.status_message = trap_status_report;             // Redirect status message and feedback message
-                    grbl.report.feedback_message = trap_feedback_message;        // reports here
+
+                    on_program_completed = grbl.on_program_completed;
+                    grbl.on_program_completed = sdcard_on_program_completed;
+
+                    grbl.report.status_message = trap_status_report;             // Redirect status message reports here
                     retval = Status_OK;
                 } else
                     retval = Status_SDReadError;

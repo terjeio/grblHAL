@@ -56,7 +56,10 @@ uint16_t usbRxFree (void)
 //
 void usbRxFlush (void)
 {
-    rxbuf.head = rxbuf.tail = 0;
+    rxbuf.tail = rxbuf.head;
+// Flush output buffer too.
+    txbuf.s = use_tx2data ? txdata2 : txbuf.data;
+    txbuf.length = 0;
 }
 
 //

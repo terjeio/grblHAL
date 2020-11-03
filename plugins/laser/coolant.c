@@ -127,7 +127,7 @@ static void driverReset (void)
     }
 }
 
-static void onProgramCompleted (void)
+static void onProgramCompleted (program_flow_t program_flow)
 {
     // Keep coolant and exhaust (flood) on? Setting? Delayed task?
     if(coolant_on) {
@@ -137,7 +137,7 @@ static void onProgramCompleted (void)
     }
 
     if(on_program_completed)
-        on_program_completed();
+        on_program_completed(program_flow);
 }
 
 static void onRealtimeReport (stream_write_ptr stream_write, report_tracking_flags_t report)

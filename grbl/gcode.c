@@ -2607,7 +2607,7 @@ status_code_t gc_execute_block(char *block, char *message)
                 sys.report.coolant = On; // ...
 
                 if(grbl.on_program_completed)
-                    grbl.on_program_completed();
+                    grbl.on_program_completed(gc_state.modal.program_flow);
             }
 
             // Clear any pending output commands

@@ -7,9 +7,9 @@ It has been written to complement grblHAL and has features such as proper keyboa
 
 ---
 
-Latest build date is 20201020, see the [changelog](changelog.md) for details.
+Latest build date is 20201103, see the [changelog](changelog.md) for details.
 
-__NOTE:__ Settings data format has been changed and settings will be reset to default on update. Backup and restore.
+Note that this build is mainly a code preview for lathe spindle sync coming to iMXRT1062 and STM32F4xx so there is no need for current users to update.
 
 ---
 

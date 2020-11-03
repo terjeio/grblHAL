@@ -1,7 +1,7 @@
 /*
   config.h - compile time configuration and default setting values
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 
@@ -277,9 +277,6 @@
 // non-volatile storage when not in idle state.
 // The buffer will be written to non-volatile storage when in idle state.
 //#define BUFFER_NVSDATA_DISABLE
-
-// Max number of entries in log for PID data reporting, to be used for tuning
-//#define PID_LOG 1000 // Default disabled. Uncomment to enable.
 
 //#define ENABLE_BACKLASH_COMPENSATION
 
@@ -562,6 +559,17 @@
 // for professional CNC machines, regardless of where the limit switches are located. Set this
 // define to 1 to force Grbl to always set the machine origin at the homed location despite switch orientation.
 //#define HOMING_FORCE_SET_ORIGIN // Default disabled. Uncomment to enable.
+
+// To prevent the homing cycle from racking the dual axis, when one limit triggers before the
+// other due to switch failure or noise, the homing cycle will automatically abort if the second
+// motor's limit switch does not trigger within the three distance parameters defined below.
+// Axis length percent will automatically compute a fail distance as a percentage of the max
+// travel of the other non-dual axis, i.e. if dual axis select is X_AXIS at 5.0%, then the fail
+// distance will be computed as 5.0% of y-axis max travel. Fail distance max and min are the
+// limits of how far or little a valid fail distance is.
+//#define DUAL_AXIS_HOMING_FAIL_AXIS_LENGTH_PERCENT  5.0f  // Float (percent)
+//#define DUAL_AXIS_HOMING_FAIL_DISTANCE_MAX  25.0f  // Float (mm)
+//#define DUAL_AXIS_HOMING_FAIL_DISTANCE_MIN  2.5f // Float (mm)
 
 // Enables and configures parking motion methods upon a safety door state. Primarily for OEMs
 // that desire this feature for their integrated machines. At the moment, Grbl assumes that

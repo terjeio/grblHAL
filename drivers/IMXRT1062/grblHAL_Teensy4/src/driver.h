@@ -1,7 +1,7 @@
 /*
   driver.h - driver code for IMXRT1062 processor (on Teensy 4.0 board)
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 
@@ -135,6 +135,19 @@
 #endif
 #endif
 
+// Timer assignments (for reference, Arduino libs does not follow the CMSIS style...)
+
+//#define STEPPER_TIMER     PIT0 (32 bit)
+//#define PULSE_TIMER       TMR4
+//#define SPINDLE_PWM_TIMER TMR1 (pin 12) or TMR2 (pin 3)
+//#define DEBOUNCE_TIMER    TMR3
+//#define PLASMA_TIMER      TMR2
+//#define PPI_TIMER         inverse of SPINDLE_PWM_TIMER
+
+// Timers used for spindle encoder if spindle sync is enabled:
+//#define RPM_TIMER         GPT1
+//#define RPM_COUNTER       GPT2
+
 // End configuration
 
 #ifdef BOARD_CNC_BOOSTERPACK
@@ -247,6 +260,7 @@ typedef enum {
     Input_QEI_B,
     Input_QEI_Select,
     Input_QEI_Index,
+    Input_SpindleIndex,
     Input_Aux0,
     Input_Aux1,
     Input_Aux2,

@@ -20,6 +20,7 @@
 */
 
 #define HAS_BOARD_INIT
+#define SPINDLE_SYNC_ENABLE
 
 void board_init (void);
 
@@ -129,6 +130,16 @@ void board_init (void);
 #define PROBE_PORT                  GPIOC
 #define PROBE_PIN                   7
 #define PROBE_BIT                   (1<<PROBE_PIN)
+
+// Spindle encoder pins.
+
+#define SPINDLE_INDEX_PORT  GPIOB
+#define SPINDLE_INDEX_PIN   14
+#define SPINDLE_INDEX_BIT   (1<<SPINDLE_INDEX_PIN)
+
+#define SPINDLE_PULSE_PORT  GPIOD
+#define SPINDLE_PULSE_PIN   2
+#define SPINDLE_PULSE_BIT   (1<<SPINDLE_PULSE_PIN)
 
 // Auxiliary I/O
 #define AUXINPUT0_PORT  GPIOB

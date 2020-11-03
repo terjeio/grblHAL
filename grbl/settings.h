@@ -381,6 +381,12 @@ typedef union {
 } homing_settings_flags_t;
 
 typedef struct {
+    float fail_length_percent; // DUAL_AXIS_HOMING_FAIL_AXIS_LENGTH_PERCENT
+    float fail_distance_max;   // DUAL_AXIS_HOMING_FAIL_DISTANCE_MAX
+    float fail_distance_min;   // DUAL_AXIS_HOMING_FAIL_DISTANCE_MIN
+} homing_dual_axis_t;
+
+typedef struct {
     float feed_rate;
     float seek_rate;
     float pulloff;
@@ -389,6 +395,7 @@ typedef struct {
     uint16_t debounce_delay;
     homing_settings_flags_t flags;
     axes_signals_t cycle[N_AXIS];
+//    homing_dual_axis_t dual_axis;
 } homing_settings_t;
 
 typedef struct {

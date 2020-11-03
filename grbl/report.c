@@ -346,7 +346,7 @@ message_code_t report_feedback_message (message_code_t message_code)
             break;
 
         case Message_CycleStartToRerun:
-            hal.stream.write_all("Cycle start to rerun job");
+            hal.stream.write_all("Press cycle start to rerun job");
             break;
 
         case Message_ReferenceTLOEstablished:
