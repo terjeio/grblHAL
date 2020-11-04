@@ -3,12 +3,12 @@
 //
 // For Texas Instruments MSP430 Value Line Launchpad
 //
-// v1.0 / 2019-03-21 / Io Engineering / Terje
+// v1.1 / 2020-11-04 / Io Engineering / Terje
 //
 
 /*
 
-Copyright (c) 2019, Terje Io
+Copyright (c) 2019-2020, Terje Io
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -53,7 +53,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define MSG_BADC  4U
 
 char const *const message[] = {
-    "\r\nSpindle Simulator 1.0\0",
+    "\r\nSpindle Simulator 1.1\0",
     "Error: missing parameters",
     "OK",
     "FAILED",
@@ -67,10 +67,12 @@ typedef struct {
 } command_t;
 
 char cmdbuf[16];
-uint16_t ppr = 120, rpm = 400;
+uint16_t ppr = 120, rpm = 400, max_rpm = 1000;
+uint32_t pulse_period = 0;
+bool update_rpm = true;
 int16_t step = 0;
 
-bool manual = false, lock = false;
+bool manual = false, lock = false, invert = false;
 
 void trigOut (void)
 {
@@ -112,9 +114,23 @@ uint16_t read_adc (void)
     return adc;
 }
 
+void setRPM (int value, int16_t offset)
+{
+    uint32_t new_period = ((2000000UL * 60UL) / (value + (lock ? 0 : offset)) / ppr);
+
+    rpm = value;
+    pulse_period = pulse_period > (1UL << 16) ? (1UL << 16) - 1 : pulse_period;
+
+    if((update_rpm = new_period != pulse_period))
+        pulse_period = new_period;
+}
+
 bool setPPR (int value)
 {
     ppr = value;
+    pulse_period = step = 0;
+
+    setRPM(rpm, 0);
 
     return true;
 }
@@ -122,19 +138,6 @@ bool setPPR (int value)
 bool cmdSetPPR (char *params)
 {
     return setPPR(parseInt(params));
-}
-
-void setRPM (int value, int16_t offset)
-{
-    uint32_t new_rpm = ((2000000UL * 60UL) / (value + (lock ? 0 : offset)) / ppr);
-
-    rpm = value;
-    new_rpm = new_rpm > (1UL << 16) ? (1UL << 16) - 1 : new_rpm;
-
-    SPINDLE_PULSE_CCR0 = (uint16_t)new_rpm;
-
-    INDEX_CCR0 = 25;
-    INDEX_CCR1 = 5;
 }
 
 bool cmdSetRPM (char *params)
@@ -168,6 +171,13 @@ bool cmdAuto (char *params)
     return true;
 }
 
+bool cmdInvert (char *params)
+{
+    invert = parseInt(params);
+
+    return true;
+}
+
 bool cmdLock (char *params)
 {
     lock = parseInt(params);
@@ -192,7 +202,8 @@ void exeCommand (char *cmdline)
         "SPINDLE:", cmdSpindle, true,
         "AUTO:",    cmdAuto, true,
         "LOCK:",    cmdLock, true,
-        "STEP:",    cmdStep, true
+        "STEP:",    cmdStep, true,
+        "INVERT:",  cmdInvert, true
     };
 
     static const uint16_t numcmds = sizeof(commands) / sizeof(command_t);
@@ -221,12 +232,20 @@ uint16_t read_rpm (void)
 {
     uint16_t i = 64, adc = 0;
 
+    static p = 0;
+
+    p = 0;
+
     while(i--) {
+        p++;
         adc += read_adc();
         __delay_cycles(100);
     }
 
-    return (adc >> 6) * 36 / 33; // MSP4302553 has 3.6V supply, ADC source 3.3V
+    adc = (adc >> 6) * 36 / 33; // MSP430G2553 has 3.6V supply, ADC source 3.3V
+    adc = invert ? 1023 - adc : adc;
+
+    return (uint16_t)(((uint32_t)adc * max_rpm) / 1024UL);
 }
 
 void main (void)
@@ -239,21 +258,23 @@ void main (void)
     DCOCTL = CALDCO_16MHZ;              // Set DCO for 16MHz using
     BCSCTL1 = CALBC1_16MHZ;             // calibration registers
 
-    INDEX_CCR0 = 40000;                 // Set inital step time and
-    INDEX_CCR1 = 10;                    // pulse width
+    INDEX_CCR0 = 40000;                 // Set inital index pulse time and
+    INDEX_CCR1 = 20000;                 // pulse width
     INDEX_CCTL1 = OUTMOD_3;             // Set output mode to PWM,
     INDEX_CTL = TASSEL1|ID0|ID1|TACLR;  // bind to SMCLK and clear TA
     INDEX_PORT_SEL |= INDEX_BIT;        // Enable TA0.1 on INDEX pin
-    INDEX_PORT_DIR |= INDEX_BIT;        // Set X step and
-    SPINDLE_PULSE_CCTL0 = CCIE;
+    INDEX_PORT_DIR |= INDEX_BIT;        // Set index pulse pin as output and
+    SPINDLE_PULSE_CCTL0 = CCIE;         // enable timer interrupt
 
-    SPINDLE_PULSE_CCR0 = 40000;                     // Set initial step time and
-    SPINDLE_PULSE_CCR1 = 10;                        // pulse width
-    SPINDLE_PULSE_CCTL1 = OUTMOD_7;                 // Set output mode to PWM,
+    SPINDLE_PULSE_CCR0 = 40000;                     // Set initial pulse time and
+    SPINDLE_PULSE_CCR1 = 20000;                     // pulse width
+    SPINDLE_PULSE_CCTL1 = OUTMOD_3;                 // Set output mode to PWM,
     SPINDLE_PULSE_CTL = TASSEL1|ID0|ID1|TACLR;      // bind to SMCLK and clear TA
-    SPINDLE_PULSE_PORT_SEL |= SPINDLE_PULSE_BIT;    // Enable TA1.0 on Y/ZSTEP pins
-    SPINDLE_PULSE_PORT_DIR |= SPINDLE_PULSE_BIT;    // Set step pins as outputs
-    INDEX_CCTL0 = CCIE;                             // Enable X step timer interrupt
+    SPINDLE_PULSE_PORT_SEL |= SPINDLE_PULSE_BIT;    // Enable TA1.0 on pulse pin
+    SPINDLE_PULSE_PORT_DIR |= SPINDLE_PULSE_BIT;    // Set pulse pin as output and
+    INDEX_CCTL0 = CCIE;                             // enable timer interrupt
+
+    setRPM(rpm, 0);
 
     SPINDLE_ON_PORT_OUT |= SPINDLE_ON_BIT;
     SPINDLE_ON_PORT_REN |= SPINDLE_ON_BIT;
@@ -316,8 +337,17 @@ __interrupt void TIMER_SP_ISR(void)
     if(index == 0) {
         index = ppr - 1;
         INDEX_CTL |= MC0;   // Start index timer in up mode
-    } else
+    } else {
         index--;
+        if(update_rpm) {
+            update_rpm = false;
+            SPINDLE_PULSE_CCR0 = (uint16_t)pulse_period;
+            SPINDLE_PULSE_CCR1 = (uint16_t)pulse_period >> 1;
+
+            INDEX_CCR0 = SPINDLE_PULSE_CCR0;
+            INDEX_CCR1 = SPINDLE_PULSE_CCR1;
+        }
+    }
 }
 
 #pragma vector=INDEX_IRQH
