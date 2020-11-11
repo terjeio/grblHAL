@@ -1,7 +1,7 @@
 /*
   grbllib.c - An embedded CNC Controller with rs274/ngc (g-code) support
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2011-2015 Sungeun K. Jeon
@@ -204,6 +204,10 @@ int grbl_enter (void)
 #ifdef WALL_PLOTTER
     wall_plotter_init();
 #endif
+
+    // "Wire" homing switches to limit switches if not provided by the driver.
+    if(hal.homing.get_state == NULL)
+        hal.homing.get_state = hal.limits.get_state;
 
     // Grbl initialization loop upon power-up or a system abort. For the latter, all processes
     // will return to this loop to be cleanly re-initialized.
