@@ -281,6 +281,7 @@ typedef enum {
 
 typedef struct output_command {
     bool is_digital;
+    bool is_executed;
     uint8_t port;
     int32_t value;
     struct output_command *next;
@@ -299,6 +300,10 @@ typedef enum {
 // NOTE: Not used by core, may be used by driver code
 typedef enum {
     UserMCode_Ignore = 0,
+    LaserPPI_Enable = 112,
+    LaserPPI_Rate = 113,
+    LaserPPI_PulseLength = 114,
+    Laser_Coolant = 115,
     Trinamic_DebugReport = 122,
     Trinamic_StepperCurrent = 906,
     Trinamic_ModeToggle = 569,
@@ -377,9 +382,28 @@ typedef union {
     };
 } coord_data_t;
 
+typedef enum {
+    CoordinateSystem_G54 = 0,
+    CoordinateSystem_G55,
+    CoordinateSystem_G56,
+    CoordinateSystem_G57,
+    CoordinateSystem_G58,
+    CoordinateSystem_G59,
+#if COMPATIBILITY_LEVEL <= 1
+    CoordinateSystem_G59_1,
+    CoordinateSystem_G59_2,
+    CoordinateSystem_G59_3,
+#endif
+    N_WorkCoordinateSystems,
+    CoordinateSystem_G28 = N_WorkCoordinateSystems,
+    CoordinateSystem_G30,
+    CoordinateSystem_G92,
+    N_CoordinateSystems
+} coord_system_id_t;
+
 typedef struct {
     float xyz[N_AXIS];
-    uint8_t idx;
+    coord_system_id_t id;
 } coord_system_t;
 
 typedef struct {
@@ -401,7 +425,7 @@ typedef struct {
     tool_offset_mode_t tool_offset_mode; // {G43,G43.1,G49}
     coord_system_t coord_system;         // {G54,G55,G56,G57,G58,G59,G59.1,G59.2,G59.3}
     // uint8_t control;                  // {G61} NOTE: Don't track. Only default supported.
-    program_flow_t program_flow;         // {M0,M1,M2,M30}
+    program_flow_t program_flow;         // {M0,M1,M2,M30,M60}
     coolant_state_t coolant;             // {M7,M8,M9}
     spindle_state_t spindle;             // {M3,M4,M5}
     gc_override_flags_t override_ctrl;   // {M48,M49,M50,M51,M53,M56}
@@ -501,7 +525,8 @@ typedef struct {
     status_code_t last_error;           // last return value from parser
     // The following variables are not cleared upon warm restart when COMPATIBILITY_LEVEL <= 1
     float g92_coord_offset[N_AXIS];     // Retains the G92 coordinate offset (work coordinates) relative to
-                                        // machine zero in mm. Persistent and loaded from EEPROM on boot when COMPATIBILITY_LEVEL <= 1
+                                        // machine zero in mm. Persistent and loaded from non-volatile storage
+                                        // on boot when COMPATIBILITY_LEVEL <= 1
     float tool_length_offset[N_AXIS];   // Tracks tool length offset when enabled
     tool_data_t *tool;                  // Tracks tool number and tool offset
 } parser_state_t;
@@ -538,7 +563,13 @@ status_code_t gc_execute_block(char *block, char *message);
 // limit pull-off routines.
 #define gc_sync_position() system_convert_array_steps_to_mpos (gc_state.position, sys_position)
 
-void gc_set_laser_ppimode (bool on);
+// Sets g-code parser and planner position in mm.
+#define sync_position() plan_sync_position(); system_convert_array_steps_to_mpos (gc_state.position, sys_position)
+
+// Set dynamic laser power mode to PPI (Pulses Per Inch)
+// Driver support for pulsing the laser on signal is required for this to work.
+// Returns true if driver uses hardware implementation.
+bool gc_laser_ppi_enable (uint_fast16_t ppi, uint_fast16_t pulse_length);
 
 // Gets axes scaling state.
 axes_signals_t gc_get_g51_state (void);

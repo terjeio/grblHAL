@@ -3,7 +3,7 @@
 
   Part of GrblHAL driver for MSP432P401R
 
-  Copyright (c) 2018-2019 Terje Io
+  Copyright (c) 2018-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -53,6 +53,7 @@ static i2c_tr_trans_t i2c;
 
 #define i2cIsBusy ((i2c.state != I2CState_Idle) || (I2C_PORT->CTLW0 & EUSCI_B_CTLW0_TXSTP))
 
+// Power on self test, attempt to release bus if stuck.
 bool I2CPOS (void)
 {
     // BIT4 = SDA, BIT5 = SCL
@@ -94,7 +95,7 @@ void i2c_init (void)
     memset(&i2c, 0, sizeof(i2c_tr_trans_t));
 
     if(!I2CPOS()) {
-        serialWriteS("[POS:I2C fail]\r\n");
+        serialWriteS("[POS:I2C fail]" ASCII_EOL);
         while(true);
     }
 
@@ -110,7 +111,7 @@ void i2c_init (void)
     NVIC_SetPriority(I2C_INT, 1);  // set priority
 }
 
-#if ATC_ENABLE
+#if ATC_ENABLE || KEYPAD_ENABLE
 
 static uint8_t *I2C_Receive (uint32_t i2cAddr, uint32_t bytes, bool block)
 {
@@ -198,7 +199,7 @@ static void WaitForACK (void)
 //    while (EUSCI_B1->CTLW0 & EUSCI_B_CTLW0_TXSTP);               // Ensure stop condition got sent
 }
 */
-void i2c_eeprom_transfer (i2c_eeprom_trans_t *i2c, bool read)
+nvs_transfer_result_t i2c_nvs_transfer (nvs_transfer_t *i2c, bool read)
 {
     bool single = i2c->count == 1;
 
@@ -240,6 +241,8 @@ void i2c_eeprom_transfer (i2c_eeprom_trans_t *i2c, bool read)
         hal.delay_ms(5, 0);                                             // Wait a bit for the write cycle to complete
     }
     while (EUSCI_B1->CTLW0 & EUSCI_B_CTLW0_TXSTP);                      // Ensure stop condition got sent
+
+    return NVS_TransferResult_OK;
 }
 
 #endif

@@ -100,7 +100,7 @@ void eepromPutByte (uint32_t addr, uint8_t new_value)
     StartI2C(false);
 }
 
-void eepromWriteBlockWithChecksum (uint32_t destination, uint8_t *source, uint32_t size)
+nvs_transfer_result_t eepromWriteBlockWithChecksum (uint32_t destination, uint8_t *source, uint32_t size, bool with_checksum)
 {
     uint32_t bytes = size;
 
@@ -120,11 +120,13 @@ void eepromWriteBlockWithChecksum (uint32_t destination, uint8_t *source, uint32
         i2c.word_addr = destination & 0xFF;
     }
 
-    if(size > 0)
+    if(size > 0 && with_checksum)
         eepromPutByte(destination, calc_checksum(source, size));
+
+    return NVS_TransferResult_OK;
 }
 
-bool eepromReadBlockWithChecksum (uint8_t *destination, uint32_t source, uint32_t size)
+nvs_transfer_result_t eepromReadBlockWithChecksum (uint8_t *destination, uint32_t source, uint32_t size, bool with_checksum)
 {
     i2c.addr = EEPROM_I2C_ADDRESS | (source >> 8);
     i2c.word_addr = source & 0xFF;
@@ -133,7 +135,8 @@ bool eepromReadBlockWithChecksum (uint8_t *destination, uint32_t source, uint32_
 
     StartI2C(true);
 
-    return calc_checksum(destination, size) == eepromGetByte(source + size);
+    return with_checksum ? (calc_checksum(destination, size) == eepromGetByte(source + size) ? NVS_TransferResult_OK : NVS_TransferResult_Failed) : NVS_TransferResult_OK;
+
 }
 
 #endif

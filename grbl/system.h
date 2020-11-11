@@ -44,6 +44,7 @@
 #define EXEC_PID_REPORT     bit(10)
 #define EXEC_GCODE_REPORT   bit(11)
 #define EXEC_TLO_REPORT     bit(12)
+#define EXEC_RT_COMMAND     bit(13)
 
 // Define system state bit map. The state variable primarily tracks the individual functions
 // of Grbl to manage each without overlapping. It is also used as a messaging flag for
@@ -98,7 +99,8 @@ typedef enum {
     Alarm_HomingRequried = 11,
     Alarm_LimitsEngaged = 12,
     Alarm_ProbeProtect = 13,
-    Alarm_Spindle = 14
+    Alarm_Spindle = 14,
+    Alarm_HomingFailAutoSquaringApproach = 15
 } alarm_code_t;
 
 typedef enum {
@@ -142,8 +144,7 @@ typedef union {
                  probe_disconnected :1,
                  motor_fault        :1,
                  motor_warning      :1,
-                 arc_ok             :1,
-                 unassigned         :3,
+                 unassigned         :4,
                  probe_triggered    :1, // used for probe protection
                  deasserted         :1; // this flag is set if signals are deasserted. Note: do NOT pass on to Grbl control_interrupt_handler if set.
     };
@@ -227,8 +228,8 @@ typedef struct {
     bool suspend;                       // System suspend state flag.
     volatile bool steppers_deenergize;  // Set to true to deenergize stepperes
     bool mpg_mode;                      // To be moved to system_flags_t
-    bool tlo_reference_set;             // True when tool length reference offset is established
-    int32_t tlo_reference;              // Tool length reference offset
+    axes_signals_t tlo_reference_set;   // Axes with tool length reference offset set
+    int32_t tlo_reference[N_AXIS];      // Tool length reference offset
     alarm_code_t alarm_pending;         // Delayed alarm, currently used for probe protection
     system_flags_t flags;               // Assorted state flags
     step_control_t step_control;        // Governs the step segment generator depending on system state.
@@ -239,8 +240,8 @@ typedef struct {
     report_tracking_flags_t report;     // Tracks when to add data to status reports.
     parking_state_t parking_state;      // Tracks parking state
     hold_state_t holding_state;         // Tracks holding state
+    float home_position[N_AXIS];        // Home position for homed axes
     float spindle_rpm;
-    char *message;                      // Message to be displayed
 #ifdef PID_LOG
     pid_data_t pid_log;
 #endif
@@ -259,7 +260,7 @@ extern volatile uint_fast16_t sys_rt_exec_alarm;   // Global realtimeate val exe
 // Executes an internal system command, defined as a string starting with a '$'
 status_code_t system_execute_line(char *line);
 
-// Execute the startup script lines stored in EEPROM upon initialization
+// Execute the startup script lines stored in non-volatile storage upon initialization
 void system_execute_startup(char *line);
 
 void system_flag_wco_change();

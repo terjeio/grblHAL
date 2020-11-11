@@ -4,7 +4,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2019 Terje Io
+  Copyright (c) 2019-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -26,9 +26,9 @@
  */
 
 #ifdef ARDUINO
-#include "src/grbl/grbl.h"
+#include "../grbl/hal.h"
 #else
-#include "grbl/grbl.h"
+#include "grbl/hal.h"
 #endif
 
 // check - check if M-code is handled here.
@@ -88,7 +88,7 @@ static void execute (uint_fast16_t state, parser_block_t *gc_block) {
 // Call this function on driver setup.
 void mcodes_init (void)
 {
-    hal.user_mcode_check = check;
-    hal.user_mcode_validate = validate;
-    hal.user_mcode_execute = execute;
+    hal.user_mcode.check = check;
+    hal.user_mcode.validate = validate;
+    hal.user_mcode.execute = execute;
 }

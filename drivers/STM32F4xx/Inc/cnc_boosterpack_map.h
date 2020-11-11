@@ -30,7 +30,7 @@
 #endif
 
 #define CNC_BOOSTERPACK 1
-#define EEPROM_ENABLE   1 // Only change if BoosterPack does not have EEPROM mounted
+#define EEPROM_ENABLE   0 // Disabled for now for BlackPill - pin differences... // Only change if BoosterPack does not have EEPROM mounted
 
 // Define step pulse output pins.
 #define STEP_PORT       GPIOA
@@ -139,15 +139,6 @@
 #define SD_CS_PORT  GPIOA
 #define SD_CS_PIN   3
 #define SD_CS_BIT   (1<<SD_CS_PIN)
-// The following defines are not used but defined for reference
-// Port init and remap is done by HAL_SPI_MspInit() in stm32f1xx_hal_msp.c
-#define SD_IO_PORT  GPIOB
-#define SD_SCK_PIN  3
-#define SD_SCK_BIT  (1<<SD_SCK_PIN)
-#define SD_MISO_PIN 4
-#define SD_MISO_BIT (1<<SD_MISO_PIN)
-#define SD_MOSI_PIN 5
-#define SD_MOSI_BIT (1<<SD_MOSI_PIN)
 #endif
 
 /* EOF */

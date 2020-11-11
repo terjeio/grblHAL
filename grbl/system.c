@@ -26,7 +26,6 @@
 #include "hal.h"
 #include "motion_control.h"
 #include "protocol.h"
-#include "report.h"
 #include "tool_change.h"
 #include "state_machine.h"
 #ifdef KINEMATICS_API
@@ -54,17 +53,22 @@ ISR_CODE void control_interrupt_handler (control_signals_t signals)
                     // NOTE: at least for lasers there should be an external interlock blocking laser power.
                     if(sys.state != STATE_IDLE && sys.state != STATE_JOG)
                         system_set_exec_state_flag(EXEC_SAFETY_DOOR);
-                    hal.spindle_set_state((spindle_state_t){0}, 0.0f); // TODO: stop spindle in laser mode only?
+                    hal.spindle.set_state((spindle_state_t){0}, 0.0f); // TODO: stop spindle in laser mode only?
                 } else
                     system_set_exec_state_flag(EXEC_SAFETY_DOOR);
             }
 #endif
-            if (signals.probe_triggered && sys_probing_state == Probing_Off && (sys.state & (STATE_CYCLE|STATE_JOG))) {
-                system_set_exec_state_flag(EXEC_FEED_HOLD);
-                sys.alarm_pending = Alarm_ProbeProtect;
-            } else if (signals.probe_disconnected && sys_probing_state == Probing_Active && sys.state == STATE_CYCLE) {
-                system_set_exec_state_flag(EXEC_FEED_HOLD);
-                sys.alarm_pending = Alarm_ProbeProtect;
+            if (signals.probe_triggered) {
+                if(sys_probing_state == Probing_Off && (sys.state & (STATE_CYCLE|STATE_JOG))) {
+                    system_set_exec_state_flag(EXEC_STOP);
+                    sys.alarm_pending = Alarm_ProbeProtect;
+                } else
+                    hal.probe.configure(false, false);
+            } else if (signals.probe_disconnected) {
+                if(sys_probing_state == Probing_Active && sys.state == STATE_CYCLE) {
+                    system_set_exec_state_flag(EXEC_FEED_HOLD);
+                    sys.alarm_pending = Alarm_ProbeProtect;
+                }
             } else if (signals.feed_hold)
                 system_set_exec_state_flag(EXEC_FEED_HOLD);
             else if (signals.cycle_start)
@@ -77,7 +81,7 @@ ISR_CODE void control_interrupt_handler (control_signals_t signals)
 // Executes user startup script, if stored.
 void system_execute_startup (char *line)
 {
-    if(hal.eeprom.type != EEPROM_None) {
+    if(hal.nvs.type != NVS_None) {
 
         uint_fast8_t n;
 
@@ -162,7 +166,7 @@ status_code_t system_execute_line (char *line)
                 retval = Status_InvalidStatement;
             else {
                 sys.flags.block_delete_enabled = !sys.flags.block_delete_enabled;
-                hal.report.feedback_message(sys.flags.block_delete_enabled ? Message_Enabled : Message_Disabled);
+                grbl.report.feedback_message(sys.flags.block_delete_enabled ? Message_Enabled : Message_Disabled);
             }
             break;
 
@@ -174,10 +178,10 @@ status_code_t system_execute_line (char *line)
                 // is idle and ready, regardless of alarm locks. This is mainly to keep things
                 // simple and consistent.
                 mc_reset();
-                hal.report.feedback_message(Message_Disabled);
+                grbl.report.feedback_message(Message_Disabled);
             } else if (sys.state == STATE_IDLE) { // Requires idle mode.
                 set_state(STATE_CHECK_MODE);
-                hal.report.feedback_message(Message_Enabled);
+                grbl.report.feedback_message(Message_Enabled);
             } else
                 retval = Status_IdleError;
             break;
@@ -187,7 +191,7 @@ status_code_t system_execute_line (char *line)
                 retval = Status_InvalidStatement;
             else if (sys.state & (STATE_ALARM|STATE_ESTOP)) {
 
-                control_signals_t control_signals = hal.system_control_get_state();
+                control_signals_t control_signals = hal.control.get_state();
 
                 // Block if e-stop is active.
                 if (control_signals.e_stop)
@@ -198,12 +202,12 @@ status_code_t system_execute_line (char *line)
                 // Block if safety reset is active.
                 else if(control_signals.reset)
                     retval = Status_Reset;
-                else if (settings.limits.flags.hard_enabled && settings.limits.flags.check_at_init && hal.limits_get_state().value)
+                else if (settings.limits.flags.hard_enabled && settings.limits.flags.check_at_init && hal.limits.get_state().value)
                     retval = Status_LimitsEngaged;
                 else if (settings.homing.flags.enabled && settings.homing.flags.init_lock && sys.homed.mask != sys.homing.mask)
                     retval = Status_HomingRequired;
                 else {
-                    hal.report.feedback_message(Message_AlarmUnlock);
+                    grbl.report.feedback_message(Message_AlarmUnlock);
                     set_state(STATE_IDLE);
                 }
                 // Don't run startup script. Prevents stored moves in startup from causing accidents.
@@ -215,12 +219,12 @@ status_code_t system_execute_line (char *line)
                 retval = Status_IdleError;
             else {
 
-                control_signals_t control_signals = hal.system_control_get_state();
+                control_signals_t control_signals = hal.control.get_state();
 
                 // Block if e-stop is active.
                 if (control_signals.e_stop)
                     retval = Status_EStop;
-                else if (!settings.homing.flags.enabled)
+                else if (!(settings.homing.flags.enabled && (sys.homing.mask || settings.homing.flags.single_axis_commands || settings.homing.flags.manual)))
                     retval = Status_SettingDisabled;
                 // Block if safety door is ajar.
                 else if (control_signals.safety_door_ajar && !settings.flags.safety_door_ignore_when_idle)
@@ -270,14 +274,15 @@ status_code_t system_execute_line (char *line)
                     retval = Status_InvalidStatement;
             }
 
-            if (retval == Status_OK && !sys.abort) {  // Execute startup scripts after successful homing.
+            if (retval == Status_OK && !sys.abort) {
                 set_state(STATE_IDLE); // Set to IDLE when complete.
                 st_go_idle(); // Set steppers to the settings idle state before returning.
-                if (line[2] == '\0')
-                    system_execute_startup(line); // TODO: only after all configured axes homed?
+                // Execute startup scripts after successful homing.
+                if (sys.homing.mask && (sys.homing.mask & sys.homed.mask) == sys.homing.mask)
+                    system_execute_startup(line);
             }
 
-            if(retval != Status_InvalidStatement)
+            if(retval == Status_Unhandled)
                 retval = Status_OK;
             break;
 
@@ -292,13 +297,25 @@ status_code_t system_execute_line (char *line)
 
         case 'T':
             if(line[2] == 'L' && line[3] == 'R') {
-                if((sys.tlo_reference_set = sys.flags.probe_succeeded)) {
-                    plane_t plane;
-                    sys.tlo_reference = sys_probe_position[gc_get_plane_data(&plane, gc_state.modal.plane_select)->axis_linear];
-                }
+#ifdef TOOL_LENGTH_OFFSET_AXIS
+                if(sys.flags.probe_succeeded) {
+                    sys.tlo_reference_set.mask = bit(TOOL_LENGTH_OFFSET_AXIS);
+                    sys.tlo_reference[TOOL_LENGTH_OFFSET_AXIS] = sys_probe_position[TOOL_LENGTH_OFFSET_AXIS]; // - gc_state.tool_length_offset[Z_AXIS]));
+                } else
+                    sys.tlo_reference_set.mask = 0;
+#else
+                plane_t plane;
+                gc_get_plane_data(&plane, gc_state.modal.plane_select);
+                if(sys.flags.probe_succeeded) {
+                    sys.tlo_reference_set.mask |= bit(plane.axis_linear);
+                    sys.tlo_reference[plane.axis_linear] = sys_probe_position[plane.axis_linear];
+//                    - lroundf(gc_state.tool_length_offset[plane.axis_linear] * settings.axis[plane.axis_linear].steps_per_mm);
+                } else
+                    sys.tlo_reference_set.mask = 0;
+#endif
                 sys.report.tlo_reference = On;
                 retval = Status_OK;
-            } else if(sys.flags.probe_succeeded && line[2] == 'P' && line[3] == 'W')
+            } else if(sys.tlo_reference_set.mask && line[2] == 'P' && line[3] == 'W')
                 retval = tc_probe_workpiece();
             else
                 retval = Status_InvalidStatement;
@@ -321,7 +338,7 @@ status_code_t system_execute_line (char *line)
                 report_build_info(line);
             }
           #ifndef DISABLE_BUILD_INFO_WRITE_COMMAND
-            else if (line[2] == '=' && strlen(&line[3]) < (MAX_STORED_LINE_LENGTH - 1))
+            else if (line[2] == '=' && strlen(&line[3]) < (sizeof(stored_line_t) - 1))
                 settings_write_build_info(&lcline[3]);
           #endif
             else
@@ -337,19 +354,19 @@ status_code_t system_execute_line (char *line)
                     retval = Status_IdleError;
                 else switch (line[5]) {
 
-                  #ifndef DISABLE_RESTORE_EEPROM_DEFAULT_SETTINGS
+                  #ifndef DISABLE_RESTORE_NVS_DEFAULT_SETTINGS
                     case '$':
                         restore.defaults = On;
                         break;
                   #endif
 
-                  #ifndef DISABLE_RESTORE_EEPROM_CLEAR_PARAMETERS
+                  #ifndef DISABLE_RESTORE_NVS_CLEAR_PARAMETERS
                     case '#':
                         restore.parameters = On;
                         break;
                   #endif
 
-                  #ifndef DISABLE_RESTORE_EEPROM_WIPE_ALL
+                  #ifndef DISABLE_RESTORE_NVS_WIPE_ALL
                     case '*':
                         restore.mask = settings_all.mask;
                         break;
@@ -367,7 +384,7 @@ status_code_t system_execute_line (char *line)
                 }
                 if(retval == Status_OK && restore.mask) {
                     settings_restore(restore);
-                    hal.report.feedback_message(Message_RestoreDefaults);
+                    grbl.report.feedback_message(Message_RestoreDefaults);
                     mc_reset(); // Force reset to ensure settings are initialized correctly.
                 }
             }
@@ -380,7 +397,7 @@ status_code_t system_execute_line (char *line)
                 uint_fast8_t counter;
                 for (counter = 0; counter < N_STARTUP_LINE; counter++) {
                     if (!(settings_read_startup_line(counter, line)))
-                        hal.report.status_message(Status_SettingReadFail);
+                        grbl.report.status_message(Status_SettingReadFail);
                     else
                         report_startup_line(counter, line);
                 }
@@ -397,7 +414,7 @@ status_code_t system_execute_line (char *line)
                     retval = Status_InvalidStatement;
                 else {
                     line = &line[counter];
-                    if(strlen(line) >= (MAX_STORED_LINE_LENGTH - 1))
+                    if(strlen(line) >= (sizeof(stored_line_t) - 1))
                         retval = Status_Overflow;
                     else if ((retval = gc_execute_block(line, NULL)) == Status_OK) // Execute gcode block to ensure block is valid.
                         settings_write_startup_line((uint8_t)parameter, line);
@@ -408,10 +425,7 @@ status_code_t system_execute_line (char *line)
 
 #ifdef DEBUGOUT
         case 'Q':
-            hal.stream.write(uitoa((uint32_t)sizeof(settings_t)));
-            hal.stream.write(" ");
-            hal.stream.write(uitoa((uint32_t)sizeof(coord_data_t) + 1));
-            hal.stream.write("\r\n");
+            nvs_memmap();
             break;
 #endif
 
@@ -419,8 +433,8 @@ status_code_t system_execute_line (char *line)
             retval = Status_Unhandled;
 
             // Let user code have a peek at system commands before check for global setting
-            if(hal.driver_sys_command_execute)
-                retval = hal.driver_sys_command_execute(sys.state, line, lcline);
+            if(grbl.on_unknown_sys_command)
+                retval = grbl.on_unknown_sys_command(sys.state, line, lcline);
 
             if (retval == Status_Unhandled) {
                 // Check for global setting, store if so

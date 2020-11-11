@@ -93,21 +93,23 @@ void I2C2_ER_IRQHandler(void)
 
 #if EEPROM_ENABLE
 
-void i2c_eeprom_transfer (i2c_eeprom_trans_t *i2c, bool read)
+nvs_transfer_result_t i2c_nvs_transfer (nvs_transfer_t *i2c, bool read)
 {
     while (HAL_I2C_GetState(&i2c_port) != HAL_I2C_STATE_READY);
 
 //    while (HAL_I2C_IsDeviceReady(&i2c_port, (uint16_t)(0xA0), 3, 100) != HAL_OK);
 
     if(read)
-        HAL_I2C_Mem_Read(&i2c_port, i2c->address << 1, i2c->word_addr, I2C_MEMADD_SIZE_8BIT, i2c->data, i2c->count, 100);
+        HAL_I2C_Mem_Read(&i2c_port, i2c->address << 1, i2c->word_addr, i2c->word_addr_bytes == 1 ? I2C_MEMADD_SIZE_8BIT : I2C_MEMADD_SIZE_16BIT, i2c->data, i2c->count, 100);
     else {
-        HAL_I2C_Mem_Write(&i2c_port, i2c->address << 1, i2c->word_addr, I2C_MEMADD_SIZE_8BIT, i2c->data, i2c->count, 100);
+        HAL_I2C_Mem_Write(&i2c_port, i2c->address << 1, i2c->word_addr, i2c->word_addr_bytes == 1 ? I2C_MEMADD_SIZE_8BIT : I2C_MEMADD_SIZE_16BIT, i2c->data, i2c->count, 100);
 #if !EEPROM_IS_FRAM
-        hal.delay_ms(5, NULL);
+        hal.delay_ms(7, NULL);
 #endif
     }
     i2c->data += i2c->count;
+
+    return NVS_TransferResult_OK;
 }
 
 #endif

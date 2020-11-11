@@ -34,7 +34,9 @@ typedef union {
     struct {
         uint8_t triggered   :1,
                 connected   :1,
-                unassigned  :6;
+                inverted    :1, // For driver use
+                is_probing  :1, // For driver use
+                unassigned  :4;
     };
 } probe_state_t;
 

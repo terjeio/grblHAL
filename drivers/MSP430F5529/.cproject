@@ -31,6 +31,7 @@
 							<tool id="com.ti.ccstudio.buildDefinitions.MSP430_18.1.exe.compilerDebug.954775150" name="MSP430 Compiler" superClass="com.ti.ccstudio.buildDefinitions.MSP430_18.1.exe.compilerDebug">
 								<option id="com.ti.ccstudio.buildDefinitions.MSP430_18.1.compilerID.DEFINE.895255343" name="Pre-define NAME (--define, -D)" superClass="com.ti.ccstudio.buildDefinitions.MSP430_18.1.compilerID.DEFINE" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__MSP430F5529__"/>
+									<listOptionValue builtIn="false" value="NVS_SIZE=1024"/>
 									<listOptionValue builtIn="false" value="TX_BUFFER_SIZE=128"/>
 									<listOptionValue builtIn="false" value="RX_BUFFER_SIZE=256"/>
 									<listOptionValue builtIn="false" value="BLOCK_BUFFER_SIZE=16"/>

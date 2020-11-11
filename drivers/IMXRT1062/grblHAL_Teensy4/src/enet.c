@@ -34,17 +34,25 @@
 #include "lwip/dhcp.h"
 
 #include "grbl/report.h"
+#include "grbl/nvs_buffer.h"
+
 #include "networking/TCPStream.h"
 #include "networking/WsStream.h"
 
 static volatile bool linkUp = false;
 static char IPAddress[IP4ADDR_STRLEN_MAX];
-static network_settings_t network;
 static network_services_t services = {0};
+static driver_setting_ptrs_t driver_settings;
+static network_settings_t ethernet, network;
+static on_report_options_ptr on_report_options;
 
-char *enet_ip_address (void)
+static void reportIP (void)
 {
-    return IPAddress;
+    on_report_options();
+
+    hal.stream.write("[IP:");
+    hal.stream.write(IPAddress);
+    hal.stream.write("]" ASCII_EOL);
 }
 
 static void link_status_callback (struct netif *netif)
@@ -99,35 +107,38 @@ void grbl_enet_poll (void)
 #endif
     }
 
-    if (ms - last_ms1 > 100)
+    if (ms - last_ms1 > 25)
     {
         last_ms1 = ms;
         enet_poll();
     }
 }
 
-bool grbl_enet_init (network_settings_t *settings)
+bool grbl_enet_start (void)
 {
-    *IPAddress = '\0';
+    if(driver_settings.nvs_address != 0) {
 
-    memcpy(&network, settings, sizeof(network_settings_t));
+        *IPAddress = '\0';
 
-    if(network.ip_mode == IpMode_Static)
-        enet_init((ip_addr_t *)&network.ip, (ip_addr_t *)&network.mask, (ip_addr_t *)&network.gateway);
-    else
-        enet_init(NULL, NULL, NULL);
+        memcpy(&network, &ethernet, sizeof(network_settings_t));
 
-    netif_set_status_callback(netif_default, netif_status_callback);
-    netif_set_link_callback(netif_default, link_status_callback);
+        if(network.ip_mode == IpMode_Static)
+            enet_init((ip_addr_t *)&network.ip, (ip_addr_t *)&network.mask, (ip_addr_t *)&network.gateway);
+        else
+            enet_init(NULL, NULL, NULL);
 
-    netif_set_up(netif_default);
-#if LWIP_NETIF_HOSTNAME
-    netif_set_hostname(netif_default, network.hostname);
-#endif
-    if(network.ip_mode == IpMode_DHCP)
-        dhcp_start(netif_default);
+        netif_set_status_callback(netif_default, netif_status_callback);
+        netif_set_link_callback(netif_default, link_status_callback);
 
-    return true;
+        netif_set_up(netif_default);
+    #if LWIP_NETIF_HOSTNAME
+        netif_set_hostname(netif_default, network.hostname);
+    #endif
+        if(network.ip_mode == IpMode_DHCP)
+            dhcp_start(netif_default);
+    }
+
+    return driver_settings.nvs_address != 0;
 }
 
 static inline void set_addr (char *ip, ip4_addr_t *addr)
@@ -135,15 +146,14 @@ static inline void set_addr (char *ip, ip4_addr_t *addr)
     memcpy(ip, addr, sizeof(ip4_addr_t));
 }
 
-status_code_t ethernet_setting (setting_type_t param, float value, char *svalue)
+status_code_t ethernet_setting (setting_type_t setting, float value, char *svalue)
 {
-    status_code_t status = Status_Unhandled;
+    status_code_t status = svalue ? Status_OK : Status_Unhandled;
 
-    if(svalue) switch(param) {
+    if(svalue) switch(setting) {
 
         case Setting_NetworkServices:
             if(isintf(value) && value >= 0.0f && value < 256.0f) {
-                status = Status_OK;
                 network_services_t is_available = {0};
 #if TELNET_ENABLE
                 is_available.telnet = On;
@@ -154,7 +164,7 @@ status_code_t ethernet_setting (setting_type_t param, float value, char *svalue)
 #if WEBSOCKET_ENABLE
                 is_available.websocket = On;
 #endif
-                driver_settings.network.services.mask = (uint8_t)value & is_available.mask;
+                ethernet.services.mask = (uint8_t)value & is_available.mask;
                 // TODO: fault if attempt to select services not available?
             } else
                 status = Status_InvalidStatement; //out of range...
@@ -162,49 +172,43 @@ status_code_t ethernet_setting (setting_type_t param, float value, char *svalue)
 
 #if LWIP_NETIF_HOSTNAME
         case Setting_Hostname:
-            if(strlen(svalue) < sizeof(hostname_t)) {
-                strcpy(driver_settings.network.hostname, svalue);
-                status = Status_OK;
-            } else
+            if(strlen(svalue) < sizeof(hostname_t))
+                strcpy(ethernet.hostname, svalue);
+            else
                 status = Status_InvalidStatement; // too long...
             break;
 #endif
 
 #if TELNET_ENABLE
         case Setting_TelnetPort:
-          if(isintf(value) && value != NAN && value > 0.0f && value < 65536.0f) {
-              status = Status_OK;
-              driver_settings.network.telnet_port = (uint16_t)value;
-          } else
+          if(isintf(value) && value != NAN && value > 0.0f && value < 65536.0f)
+              ethernet.telnet_port = (uint16_t)value;
+          else
               status = Status_InvalidStatement; //out of range...
           break;
 #endif
 
 #if WEBSOCKET_ENABLE
         case Setting_WebSocketPort:
-          if(isintf(value) && value != NAN && value > 0.0f && value < 65536.0f) {
-              status = Status_OK;
-              driver_settings.network.websocket_port = (uint16_t)value;
-          } else
+          if(isintf(value) && value != NAN && value > 0.0f && value < 65536.0f)
+              ethernet.websocket_port = (uint16_t)value;
+          else
               status = Status_InvalidStatement; //out of range...
           break;
 #endif
 
 #if HTTP_ENABLE
         case Setting_HttpPort:
-          if((claimed = (value != NAN && value > 0.0f && value < 65536.0f) {
-              status = Status_OK;
-              driver_settings.network.http_port = (uint16_t)value;
-          } else
+          if((claimed = (value != NAN && value > 0.0f && value < 65536.0f)
+              ethernet.http_port = (uint16_t)value;
+          else
               status = Status_InvalidStatement; //out of range...
           break;
 #endif
 
         case Setting_IpMode:
-          if(isintf(value) && value >= 0.0f && value <= 2.0f) {
-              status = Status_OK;
-              driver_settings.network.ip_mode = (ip_mode_t)(uint8_t)value;
-          }
+          if(isintf(value) && value >= 0.0f && value <= 2.0f)
+              ethernet.ip_mode = (ip_mode_t)(uint8_t)value;
           else
               status = Status_InvalidStatement; // out of range...
           break;
@@ -212,10 +216,9 @@ status_code_t ethernet_setting (setting_type_t param, float value, char *svalue)
         case Setting_IpAddress:
           {
               ip4_addr_t addr;
-              if(ip4addr_aton(svalue, &addr) == 1) {
-                  status = Status_OK;
-                  set_addr(driver_settings.network.ip, &addr);
-              } else
+              if(ip4addr_aton(svalue, &addr) == 1)
+                  set_addr(ethernet.ip, &addr);
+              else
                   status = Status_InvalidStatement;
           }
           break;
@@ -223,10 +226,9 @@ status_code_t ethernet_setting (setting_type_t param, float value, char *svalue)
         case Setting_Gateway:
           {
               ip4_addr_t addr;
-              if(ip4addr_aton(svalue, &addr) == 1) {
-                  status = Status_OK;
-                  set_addr(driver_settings.network.gateway, &addr);
-              } else
+              if(ip4addr_aton(svalue, &addr) == 1)
+                  set_addr(ethernet.gateway, &addr);
+              else
                   status = Status_InvalidStatement;
           }
           break;
@@ -234,115 +236,155 @@ status_code_t ethernet_setting (setting_type_t param, float value, char *svalue)
         case Setting_NetMask:
           {
               ip4_addr_t addr;
-              if(ip4addr_aton(svalue, &addr) == 1) {
-                  status = Status_OK;
-                  set_addr(driver_settings.network.mask, &addr);
-              } else
+              if(ip4addr_aton(svalue, &addr) == 1)
+                  set_addr(ethernet.mask, &addr);
+              else
                   status = Status_InvalidStatement;
           }
           break;
 
         default:
+            status = Status_Unhandled;
             break;
     }
 
-    return status;
+    if(status == Status_OK)
+        hal.nvs.memcpy_to_nvs(driver_settings.nvs_address, (uint8_t *)&ethernet, sizeof(network_settings_t), true);
+
+    return status == Status_Unhandled && driver_settings.set ? driver_settings.set(setting, value, svalue) : status;
 }
 
 void ethernet_settings_report (setting_type_t setting)
 {
+    bool reported = true;
+
     switch(setting) {
 
         case Setting_NetworkServices:
-            report_uint_setting(setting, driver_settings.network.services.mask);
+            report_uint_setting(setting, ethernet.services.mask);
             break;
 
 #if LWIP_NETIF_HOSTNAME
         case Setting_Hostname:
-            report_string_setting(setting, driver_settings.network.hostname);
+            report_string_setting(setting, ethernet.hostname);
             break;
 #endif
 
         case Setting_IpMode:
-            report_uint_setting(setting, driver_settings.network.ip_mode);
+            report_uint_setting(setting, ethernet.ip_mode);
             break;
 
         case Setting_IpAddress:
-            if(driver_settings.network.ip_mode != IpMode_DHCP) {
+            if(ethernet.ip_mode != IpMode_DHCP) {
                 char ip[IP4ADDR_STRLEN_MAX];
-                report_string_setting(setting, ip4addr_ntoa_r((ip4_addr_t *)&driver_settings.network.ip, ip, IP4ADDR_STRLEN_MAX));
+                report_string_setting(setting, ip4addr_ntoa_r((ip4_addr_t *)&ethernet.ip, ip, IP4ADDR_STRLEN_MAX));
             }
             break;
 
         case Setting_Gateway:
-            if(driver_settings.network.ip_mode != IpMode_DHCP) {
+            if(ethernet.ip_mode != IpMode_DHCP) {
                 char ip[IP4ADDR_STRLEN_MAX];
-                report_string_setting(setting, ip4addr_ntoa_r((ip4_addr_t *)&driver_settings.network.gateway, ip, IP4ADDR_STRLEN_MAX));
+                report_string_setting(setting, ip4addr_ntoa_r((ip4_addr_t *)&ethernet.gateway, ip, IP4ADDR_STRLEN_MAX));
             }
             break;
 
         case Setting_NetMask:
-            if(driver_settings.network.ip_mode != IpMode_DHCP) {
+            if(ethernet.ip_mode != IpMode_DHCP) {
                 char ip[IP4ADDR_STRLEN_MAX];
-                report_string_setting(setting, ip4addr_ntoa_r((ip4_addr_t *)&driver_settings.network.mask, ip, IP4ADDR_STRLEN_MAX));
+                report_string_setting(setting, ip4addr_ntoa_r((ip4_addr_t *)&ethernet.mask, ip, IP4ADDR_STRLEN_MAX));
             }
             break;
 
 #if TELNET_ENABLE
         case Setting_TelnetPort:
-            report_uint_setting(setting, driver_settings.network.telnet_port);
+            report_uint_setting(setting, ethernet.telnet_port);
             break;
 #endif
 
 #if WEBSOCKET_ENABLE
         case Setting_WebSocketPort:
-            report_uint_setting(setting, driver_settings.network.websocket_port);
+            report_uint_setting(setting, ethernet.websocket_port);
             break;
 #endif
 
         default:
+            reported = false;
             break;
     }
+
+    if(!reported && driver_settings.report)
+        driver_settings.report(setting);
 }
 
 void ethernet_settings_restore (void)
 {
-    strcpy(driver_settings.network.hostname, NETWORK_HOSTNAME);
+    strcpy(ethernet.hostname, NETWORK_HOSTNAME);
 
     ip4_addr_t addr;
 
-    driver_settings.network.ip_mode = (ip_mode_t)NETWORK_IPMODE;
+    ethernet.ip_mode = (ip_mode_t)NETWORK_IPMODE;
 
     if(ip4addr_aton(NETWORK_IP, &addr) == 1)
-        set_addr(driver_settings.network.ip, &addr);
+        set_addr(ethernet.ip, &addr);
 
     if(ip4addr_aton(NETWORK_GATEWAY, &addr) == 1)
-        set_addr(driver_settings.network.gateway, &addr);
+        set_addr(ethernet.gateway, &addr);
 
 #if NETWORK_IPMODE == 0
     if(ip4addr_aton(NETWORK_MASK, &addr) == 1)
-        set_addr(driver_settings.network.mask, &addr);
+        set_addr(ethernet.mask, &addr);
 #else
     if(ip4addr_aton("255.255.255.0", &addr) == 1)
-        set_addr(driver_settings.network.mask, &addr);
+        set_addr(ethernet.mask, &addr);
 #endif
 
-    driver_settings.network.services.mask = 0;
-    driver_settings.network.telnet_port = NETWORK_TELNET_PORT;
-    driver_settings.network.http_port = NETWORK_HTTP_PORT;
-    driver_settings.network.websocket_port = NETWORK_WEBSOCKET_PORT;
+    ethernet.services.mask = 0;
+    ethernet.telnet_port = NETWORK_TELNET_PORT;
+    ethernet.http_port = NETWORK_HTTP_PORT;
+    ethernet.websocket_port = NETWORK_WEBSOCKET_PORT;
 
 #if TELNET_ENABLE
-    driver_settings.network.services.telnet = On;
+    ethernet.services.telnet = On;
 #endif
 
 #if HTTP_ENABLE
-    driver_settings.network.services.http = On;
+    ethernet.services.http = On;
 #endif
 
 #if WEBSOCKET_ENABLE
-    driver_settings.network.services.websocket = On;
+    ethernet.services.websocket = On;
 #endif
+
+    hal.nvs.memcpy_to_nvs(driver_settings.nvs_address, (uint8_t *)&ethernet, sizeof(network_settings_t), true);
+
+    if(driver_settings.restore)
+        driver_settings.restore();
+}
+
+static void ethernet_settings_load (void)
+{
+    if(hal.nvs.memcpy_from_nvs((uint8_t *)&ethernet, driver_settings.nvs_address, sizeof(network_settings_t), true) != NVS_TransferResult_OK)
+        ethernet_settings_restore();
+
+    if(driver_settings.load)
+        driver_settings.load();
+}
+
+bool grbl_enet_init (network_settings_t *settings)
+{
+    if((hal.driver_settings.nvs_address = nvs_alloc(sizeof(network_settings_t)))) {
+        memcpy(&driver_settings, &hal.driver_settings, sizeof(driver_setting_ptrs_t));
+        hal.driver_cap.ethernet = On;
+        hal.driver_settings.set = ethernet_setting;
+        hal.driver_settings.report = ethernet_settings_report;
+        hal.driver_settings.restore = ethernet_settings_restore;
+        hal.driver_settings.load = ethernet_settings_load;
+
+        on_report_options = grbl.on_report_options;
+        grbl.on_report_options = reportIP;
+    }
+
+    return driver_settings.nvs_address != 0;
 }
 
 #endif

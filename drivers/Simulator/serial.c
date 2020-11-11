@@ -22,10 +22,12 @@
 
 */
 
+#include <string.h>
+
 #include "mcu.h"
 #include "simulator.h"
 
-#include "grbl/grbl.h"
+#include "grbl/hal.h"
 
 static stream_tx_buffer_t txbuffer = {0};
 static stream_rx_buffer_t rxbuffer = {0}, rxbackup;

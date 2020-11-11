@@ -45,38 +45,38 @@
 #define I2S_OUT_WS      GPIO_NUM_17
 #define I2S_OUT_DATA    GPIO_NUM_21
 
-#define X_STEP_PIN      0
+#define X_STEP_PIN      2
 #define X_DIRECTION_PIN 1
-#define X_DISABLE_PIN   2
+#define X_DISABLE_PIN   0
 #define X_LIMIT_PIN     GPIO_NUM_36
 
-#define Y_STEP_PIN      4
-#define Y_DIRECTION_PIN 5
+#define Y_STEP_PIN      5
+#define Y_DIRECTION_PIN 4
 #define Y_DISABLE_PIN   7
 #define Y_LIMIT_PIN     GPIO_NUM_39
 
-#define Z_STEP_PIN      8
+#define Z_STEP_PIN      10
 #define Z_DIRECTION_PIN 9
-#define Z_DISABLE_PIN   10
+#define Z_DISABLE_PIN   8
 #define Z_LIMIT_PIN     GPIO_NUM_34
 
 #ifdef A_AXIS
-#define A_STEP_PIN      12
-#define A_DIRECTION_PIN 13
+#define A_STEP_PIN      13
+#define A_DIRECTION_PIN 12
 #define A_DISABLE_PIN   15
 #define A_LIMIT_PIN     GPIO_NUM_35
 #endif
 
 #ifdef B_AXIS
-#define B_STEP_PIN      16
+#define B_STEP_PIN      18
 #define B_DIRECTION_PIN 17
-#define B_DISABLE_PIN   18
+#define B_DISABLE_PIN   16
 #define B_LIMIT_PIN     GPIO_NUM_32
 #endif
 
 #ifdef C_AXIS
-#define C_STEP_PIN      20
-#define C_DIRECTION_PIN 21
+#define C_STEP_PIN      21
+#define C_DIRECTION_PIN 20
 #define C_DISABLE_PIN   23
 #define C_LIMIT_PIN     GPIO_NUM_33
 

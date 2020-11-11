@@ -225,6 +225,8 @@
 #define PROBE_GPIO          portGpio(PROBE_PN)
 #define PROBE_PIN           6
 #define PROBE_BIT           (1<<PROBE_PIN)
+#define PROBE_INT           portINT(PROBE_PN)
+#define PROBE_IRQHandler    portHANDLER(PROBE_PN)
 
 // Define spindle enable, spindle direction and PWM output pins.
 

@@ -281,7 +281,7 @@ bool plan_check_full_buffer ()
 // NOTE: All system motion commands, such as homing/parking, are not subject to overrides.
 float plan_compute_profile_nominal_speed (plan_block_t *block)
 {
-    float nominal_speed = block->condition.spindle.synchronized ? block->programmed_rate * hal.spindle_get_data(SpindleData_RPM).rpm : block->programmed_rate;
+    float nominal_speed = block->condition.spindle.synchronized ? block->programmed_rate * hal.spindle.get_data(SpindleData_RPM).rpm : block->programmed_rate;
 
     if (block->condition.rapid_motion)
         nominal_speed *= (0.01f * sys.override.rapid_rate);
@@ -377,8 +377,9 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
     block->condition = pl_data->condition;
     block->overrides = pl_data->overrides;
     block->line_number = pl_data->line_number;
-    block->message = pl_data->message;
     block->output_commands = pl_data->output_commands;
+    block->message = pl_data->message;
+    pl_data->message = NULL;
 
     // Copy position data based on type of motion being planned.
     memcpy(position_steps, block->condition.system_motion ? sys_position : pl.position, sizeof(position_steps));

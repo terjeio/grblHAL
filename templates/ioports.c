@@ -25,7 +25,7 @@
 #include <stdbool.h>
 
 #ifdef ARDUINO
-#include "src/grbl/grbl.h"
+#include "../grbl/grbl.h"
 #else
 #include "grbl/grbl.h"
 #endif
@@ -78,8 +78,10 @@ void ioports_init (void)
     hal.port.digital_out = digital_out;     // Leave unset (NULL) if no digital ports handled.
     hal.port.analog_out = analog_out;       // Leave unset (NULL) if no analog ports handled.
     hal.port.wait_on_input = wait_on_input; // Leave unset (NULL) if no wait on input is required.
-    hal.port.num_digital = 1;               // Set to number of digital outputs handled.
-    hal.port.num_analog = 1;                // Set to number of analog outputs handled.
+    hal.port.num_digital_out = 1;           // Set to number of digital outputs handled.
+    hal.port.num_analog_out = 1;            // Set to number of analog outputs handled.
+    hal.port.num_digital_in = 1;            // Set to number of digital inputs handled.
+    hal.port.num_analog_in = 1;             // Set to number of analog inputs handled.
 
     // If any action on soft reset is required uncomment the following lines:
 //    if(driver_reset == NULL) {

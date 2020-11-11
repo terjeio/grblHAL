@@ -4,7 +4,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2018-2019 Terje Io
+  Copyright (c) 2018-2020 Terje Io
 
   This code reads/writes the whole RAM-based emulated EPROM contents from/to flash
 
@@ -38,13 +38,13 @@ static const uint32_t flash_target = 0x1000UL * 16 + 0x8000UL * (flash_sector - 
 
 bool memcpy_from_flash (uint8_t *dest)
 {
-    memcpy(dest, (const void *)flash_target, hal.eeprom.size);
+    memcpy(dest, (const void *)flash_target, hal.nvs.size);
     return true;
 }
 
 bool memcpy_to_flash (uint8_t *source)
 {
-    if (!memcmp(source, (const void *)flash_target, hal.eeprom.size))
+    if (!memcmp(source, (const void *)flash_target, hal.nvs.size))
         return true;
 
     uint8_t ret;
@@ -54,7 +54,7 @@ bool memcpy_to_flash (uint8_t *source)
     ret = Chip_IAP_PreSectorForReadWrite(flash_sector, flash_sector);
     ret = Chip_IAP_EraseSector(flash_sector, flash_sector);
     ret = Chip_IAP_PreSectorForReadWrite(flash_sector, flash_sector);
-    ret = Chip_IAP_CopyRamToFlash(flash_target, (uint32_t *)source, (uint32_t)hal.eeprom.size);
+    ret = Chip_IAP_CopyRamToFlash(flash_target, (uint32_t *)source, (uint32_t)hal.nvs.size);
 
     __enable_irq();
 

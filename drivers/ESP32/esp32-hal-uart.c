@@ -109,7 +109,7 @@ IRAM_ATTR static void _uart1_isr (void *arg)
             memcpy(&rxbackup, &rxbuffer, sizeof(stream_rx_buffer_t));
             rxbuffer.backup = true;
             rxbuffer.tail = rxbuffer.head;
-            hal.stream.read = uartRead; // restore normal input
+            hal.stream.read = serialRead; // restore normal input
 
         } else if(!hal.stream.enqueue_realtime_command(c)) {
 
@@ -235,42 +235,42 @@ IRAM_ATTR static void flush (uart_t *uart)
     UART_MUTEX_UNLOCK(uart);
 }
 
-void uartInit (void)
+void serialInit (void)
 {
     uart1 = &_uart_bus_array[0]; // use UART 0
 
     uartConfig(uart1, BAUD_RATE);
 
-    uartFlush();
+    serialFlush();
     uartEnableInterrupt(uart1, _uart1_isr, true);
 }
 
-uint32_t uartAvailable (void)
+uint32_t serialAvailable (void)
 {
     uint16_t head = rxbuffer.head, tail = rxbuffer.tail;
 
     return BUFCOUNT(head, tail, RX_BUFFER_SIZE);
 }
 
-uint16_t uartRXFree (void)
+uint16_t serialRXFree (void)
 {
     uint16_t head = rxbuffer.head, tail = rxbuffer.tail;
 
     return (RX_BUFFER_SIZE - 1) - BUFCOUNT(head, tail, RX_BUFFER_SIZE);
 }
 
-uint32_t uartAvailableForWrite (void)
+uint32_t serialAvailableForWrite (void)
 {
     return uart1 ? 0x7f - uart1->dev->status.txfifo_cnt : 0;
 }
 
 // "dummy" version of serialGetC
-static int16_t uartGetNull (void)
+static int16_t serialGetNull (void)
 {
     return -1;
 }
 
-int16_t uartRead (void)
+int16_t serialRead (void)
 {
     UART_MUTEX_LOCK(uart1);
     int16_t data;
@@ -287,7 +287,7 @@ int16_t uartRead (void)
     return data;
 }
 
-bool uartPutC (const char c)
+bool serialPutC (const char c)
 {
     UART_MUTEX_LOCK(uart1);
 
@@ -302,22 +302,22 @@ bool uartPutC (const char c)
     return true;
 }
 
-void uartWriteS (const char *data)
+void serialWriteS (const char *data)
 {
     char c, *ptr = (char *)data;
 
     while((c = *ptr++) != '\0')
-        uartPutC(c);
+        serialPutC(c);
 }
 
-IRAM_ATTR void uartFlush (void)
+IRAM_ATTR void serialFlush (void)
 {
     flush(uart1);
 
     rxbuffer.tail = rxbuffer.head;
 }
 
-IRAM_ATTR void uartCancel (void)
+IRAM_ATTR void serialCancel (void)
 {
 //    UART_MUTEX_LOCK(uart1);
     rxbuffer.data[rxbuffer.head] = ASCII_CAN;
@@ -326,11 +326,11 @@ IRAM_ATTR void uartCancel (void)
 //    UART_MUTEX_UNLOCK(uart1);
 }
 
-IRAM_ATTR bool uartSuspendInput (bool suspend)
+IRAM_ATTR bool serialSuspendInput (bool suspend)
 {
     UART_MUTEX_LOCK(uart1);
     if(suspend)
-        hal.stream.read = uartGetNull;
+        hal.stream.read = serialGetNull;
     else if(rxbuffer.backup)
         memcpy(&rxbuffer, &rxbackup, sizeof(stream_rx_buffer_t));
     UART_MUTEX_UNLOCK(uart1);
@@ -367,7 +367,7 @@ static void IRAM_ATTR _uart2_isr (void *arg)
             memcpy(&rxbackup2, &rxbuffer2, sizeof(stream_rx_buffer_t));
             rxbuffer2.backup = true;
             rxbuffer2.tail = rxbuffer.head;
-            hal.stream.read = uart2Read; // restore normal input
+            hal.stream.read = serial2Read; // restore normal input
 
         } else if(!hal.stream.enqueue_realtime_command(c)) {
 
@@ -392,7 +392,7 @@ static void IRAM_ATTR _uart2_isr (void *arg)
 
 #if MODBUS_ENABLE && defined(MODBUS_DIRECTION_PIN)
 
-IRAM_ATTR void uart2Direction(bool tx)
+IRAM_ATTR void serial2Direction(bool tx)
 {
     gpio_set_level(MODBUS_DIRECTION_PIN, tx);
 }
@@ -422,13 +422,13 @@ IRAM_ATTR void serialSelect(bool mpg_mode)
 
 #endif
 
-void uart2Init (uint32_t baud_rate)
+void serial2Init (uint32_t baud_rate)
 {
     uart2 = &_uart_bus_array[1]; // use UART 1
 
     uartConfig(uart2, baud_rate);
 
-    uart2Flush();
+    serial2Flush();
 #if MODBUS_ENABLE
     uartEnableInterrupt(uart2, _uart2_isr, true);
   #ifdef MODBUS_DIRECTION_PIN
@@ -440,33 +440,33 @@ void uart2Init (uint32_t baud_rate)
         .intr_type = GPIO_INTR_DISABLE
     };
     gpio_config(&gpioConfig);
-    uart2Direction(false);
+    serial2Direction(false);
   #endif
 #else
     uartEnableInterrupt(uart2, _uart2_isr, false);
 #endif
 }
 
-uint16_t uart2Available (void)
+uint16_t serial2Available (void)
 {
     uint16_t head = rxbuffer2.head, tail = rxbuffer2.tail;
 
     return BUFCOUNT(head, tail, RX_BUFFER_SIZE);
 }
 
-uint16_t uart2txCount (void)
+uint16_t serial2txCount (void)
 {
     return (uint16_t)uart2->dev->status.txfifo_cnt;
 }
 
-uint16_t uart2RXFree (void)
+uint16_t serial2RXFree (void)
 {
     uint16_t head = rxbuffer2.head, tail = rxbuffer2.tail;
 
     return (RX_BUFFER_SIZE - 1) - BUFCOUNT(head, tail, RX_BUFFER_SIZE);
 }
 
-bool uart2PutC (const char c)
+bool serial2PutC (const char c)
 {
     UART_MUTEX_LOCK(uart2);
 
@@ -480,16 +480,16 @@ bool uart2PutC (const char c)
 
 // Writes a number of characters from a buffer to the serial output stream, blocks if buffer full
 //
-void uart2Write (const char *s, uint16_t length)
+void serial2Write (const char *s, uint16_t length)
 {
     char *ptr = (char *)s;
 
     while(length--)
-        uart2PutC(*ptr++);
+        serial2PutC(*ptr++);
 }
 
 
-int16_t uart2Read (void)
+int16_t serial2Read (void)
 {
     UART_MUTEX_LOCK(uart2);
     int16_t data;
@@ -507,14 +507,14 @@ int16_t uart2Read (void)
     return data;
 }
 
-IRAM_ATTR void uart2Flush (void)
+IRAM_ATTR void serial2Flush (void)
 {
     flush(uart2);
 
     rxbuffer2.tail = rxbuffer2.head;
 }
 
-IRAM_ATTR void uart2Cancel (void)
+IRAM_ATTR void serial2Cancel (void)
 {
 //    UART_MUTEX_LOCK(uart2);
     rxbuffer2.data[rxbuffer2.head] = ASCII_CAN;
@@ -523,11 +523,11 @@ IRAM_ATTR void uart2Cancel (void)
 //    UART_MUTEX_UNLOCK(uart2);
 }
 
-bool uart2SuspendInput (bool suspend)
+bool serial2SuspendInput (bool suspend)
 {
     UART_MUTEX_LOCK(uart2);
     if(suspend)
-        hal.stream.read = uartGetNull;
+        hal.stream.read = serialGetNull;
     else if(rxbuffer2.backup)
         memcpy(&rxbuffer2, &rxbackup2, sizeof(stream_rx_buffer_t));
     UART_MUTEX_UNLOCK(uart2);

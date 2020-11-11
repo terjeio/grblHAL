@@ -25,6 +25,12 @@ Contains the freeRTOS task for the DNS server that processes the requests.
 @see https://github.com/tonyp7/esp32-wifi-manager
 */
 
+#include "driver.h"
+
+#if WIFI_ENABLE
+
+#include "wifi.h"
+
 #include <lwip/sockets.h>
 #include <string.h>
 #include <freertos/FreeRTOS.h>
@@ -46,8 +52,6 @@ Contains the freeRTOS task for the DNS server that processes the requests.
 #include <byteswap.h>
 
 #include "dns_server.h"
-
-#include "driver.h"
 
 static const char TAG[] = "dns_server";
 static TaskHandle_t task_dns_server = NULL;
@@ -79,7 +83,7 @@ void dns_server(void *pvParameters) {
     ip4_addr_t ip_resolved;
 //    inet_pton(AF_INET, DEFAULT_AP_IP, &ip_resolved);
 
-    memcpy(&ip_resolved, driver_settings.wifi.ap.network.ip, sizeof(ip4_addr_t));
+    memcpy(&ip_resolved, get_wifi_settings()->ap.network.ip, sizeof(ip4_addr_t));
 
     /* Create UDP socket */
     socket_fd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -174,3 +178,6 @@ void dns_server(void *pvParameters) {
 
     vTaskDelete ( NULL );
 }
+
+#endif
+

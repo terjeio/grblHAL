@@ -1,7 +1,7 @@
 /*
   driver.h - driver code for IMXRT1062 processor (on Teensy 4.0 board)
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 
@@ -47,11 +47,20 @@
 #ifndef USB_SERIAL_WAIT
 #define USB_SERIAL_WAIT     0
 #endif
+#ifndef PLASMA_ENABLE
+#define PLASMA_ENABLE       0
+#endif
+#ifndef PPI_ENABLE
+#define PPI_ENABLE          0
+#endif
 #ifndef SPINDLE_HUANYANG
 #define SPINDLE_HUANYANG    0
 #endif
 #ifndef QEI_ENABLE
 #define QEI_ENABLE          0
+#endif
+#ifndef ODOMETER_ENABLE
+#define ODOMETER_ENABLE     0
 #endif
 
 #ifndef ETHERNET_ENABLE
@@ -126,6 +135,19 @@
 #endif
 #endif
 
+// Timer assignments (for reference, Arduino libs does not follow the CMSIS style...)
+
+//#define STEPPER_TIMER     PIT0 (32 bit)
+//#define PULSE_TIMER       TMR4
+//#define SPINDLE_PWM_TIMER TMR1 (pin 12) or TMR2 (pin 3)
+//#define DEBOUNCE_TIMER    TMR3
+//#define PLASMA_TIMER      TMR2
+//#define PPI_TIMER         inverse of SPINDLE_PWM_TIMER
+
+// Timers used for spindle encoder if spindle sync is enabled:
+//#define RPM_TIMER         GPT1
+//#define RPM_COUNTER       GPT2
+
 // End configuration
 
 #ifdef BOARD_CNC_BOOSTERPACK
@@ -136,6 +158,14 @@
   #include "T41U5XBB_map.h"
 #else // default board
 #include "generic_map.h"
+#endif
+
+#if SPINDLEPWMPIN == 12
+#define PPI_TIMER       (IMXRT_TMR2)
+#define PPI_TIMERIRQ    IRQ_QTIMER2
+#else
+#define PPI_TIMER       (IMXRT_TMR1)
+#define PPI_TIMERIRQ    IRQ_QTIMER1
 #endif
 
 // Adjust STEP_PULSE_LATENCY to get accurate step pulse length when required, e.g if using high step rates.
@@ -168,27 +198,16 @@
 #include "spindle/huanyang.h"
 #endif
 
-#if TRINAMIC_ENABLE || KEYPAD_ENABLE || ETHERNET_ENABLE || QEI_ENABLE
-
-#define DRIVER_SETTINGS
-
-typedef struct {
-#if ETHERNET_ENABLE
-    network_settings_t network;
+#ifndef VFD_SPINDLE
+#define VFD_SPINDLE 0
 #endif
-#if TRINAMIC_ENABLE
-    trinamic_settings_t trinamic;
-#endif
-#if KEYPAD_ENABLE
-    jog_settings_t jog;
-#endif
-#if QEI_ENABLE
-    encoder_settings_t encoder[QEI_ENABLE];
-#endif
-} driver_settings_t;
 
-extern driver_settings_t driver_settings;
+#if PLASMA_ENABLE
+#include "plasma/thc.h"
+#endif
 
+#if ODOMETER_ENABLE
+#include "odometer/odometer.h"
 #endif
 
 #if KEYPAD_ENABLE && !defined(KEYPAD_STROBE_PIN)
@@ -216,6 +235,77 @@ extern driver_settings_t driver_settings;
   #error "QEI_ENABLE requires encoder input pins A and B to be defined!"
 #endif
 
+typedef enum {
+    Input_Probe = 0,
+    Input_Reset,
+    Input_FeedHold,
+    Input_CycleStart,
+    Input_SafetyDoor,
+    Input_EStop,
+    Input_ModeSelect,
+    Input_LimitX,
+    Input_LimitX_Max,
+    Input_LimitY,
+    Input_LimitY_Max,
+    Input_LimitZ,
+    Input_LimitZ_Max,
+    Input_LimitA,
+    Input_LimitA_Max,
+    Input_LimitB,
+    Input_LimitB_Max,
+    Input_LimitC,
+    Input_LimitC_Max,
+    Input_KeypadStrobe,
+    Input_QEI_A,
+    Input_QEI_B,
+    Input_QEI_Select,
+    Input_QEI_Index,
+    Input_SpindleIndex,
+    Input_Aux0,
+    Input_Aux1,
+    Input_Aux2,
+    Input_Aux3
+} input_t;
+
+typedef enum {
+    IRQ_Mode_None    = 0b00,
+    IRQ_Mode_Change  = 0b01,
+    IRQ_Mode_Rising  = 0b10,
+    IRQ_Mode_Falling = 0b11
+} irq_mode_t;
+
+typedef struct {
+    volatile uint32_t DR;
+    volatile uint32_t GDIR;
+    volatile uint32_t PSR;
+    volatile uint32_t ICR1;
+    volatile uint32_t ICR2;
+    volatile uint32_t IMR;
+    volatile uint32_t ISR;
+    volatile uint32_t EDGE_SEL;
+    uint32_t unused[25];
+    volatile uint32_t DR_SET;
+    volatile uint32_t DR_CLEAR;
+    volatile uint32_t DR_TOGGLE;
+} gpio_reg_t;
+
+typedef struct {
+    gpio_reg_t *reg;
+    uint32_t bit;
+} gpio_t;
+
+typedef struct {
+    input_t id;
+    uint8_t group;
+    uint8_t pin;
+    gpio_t *port;
+    gpio_t gpio; // doubled up for now for speed...
+    irq_mode_t irq_mode;
+    uint8_t offset;
+    volatile bool active;
+    volatile bool debounce;
+} input_signal_t;
+
 // The following struct is pulled from the Teensy Library core, Copyright (c) 2019 PJRC.COM, LLC.
 
 typedef struct {
@@ -228,6 +318,7 @@ typedef struct {
 //
 
 void selectStream (stream_type_t stream);
+void pinModeOutput (gpio_t *gpio, uint8_t pin);
 
 uint32_t xTaskGetTickCount();
 

@@ -12,7 +12,7 @@
 #ifndef CYAPICALLBACKS_H
 #define CYAPICALLBACKS_H
     
-    #include "i2c_keypad.h"
+    #include "i2c.h"
     
     /*Define your macro callbacks here */
     /*For more information, refer to the Macro Callbacks topic in the PSoC Creator Help.*/

@@ -68,7 +68,7 @@ static void state_restore_conditions (planner_cond_t *condition, float rpm)
         spindle_restore(condition->spindle, rpm);
 
         // Block if safety door re-opened during prior restore actions.
-        if (gc_state.modal.coolant.value != hal.coolant_get_state().value) {
+        if (gc_state.modal.coolant.value != hal.coolant.get_state().value) {
             // NOTE: Laser mode will honor this delay. An exhaust system is often controlled by this pin.
             coolant_set_state(condition->coolant);
             delay_sec(SAFETY_DOOR_COOLANT_DELAY, DelayMode_SysSuspend);
@@ -92,14 +92,14 @@ bool initiate_hold (uint_fast16_t new_state)
 
     if (block == NULL) {
         restore_condition.spindle = gc_state.modal.spindle;
-        restore_condition.coolant.mask = gc_state.modal.coolant.mask | hal.coolant_get_state().mask;
+        restore_condition.coolant.mask = gc_state.modal.coolant.mask | hal.coolant.get_state().mask;
         restore_spindle_rpm = gc_state.spindle.rpm;
     } else {
         restore_condition = block->condition;
         restore_spindle_rpm = block->spindle.rpm;
     }
 
-    if(settings.flags.laser_mode && settings.flags.disable_laser_during_hold)
+    if(settings.mode == Mode_Laser && settings.flags.disable_laser_during_hold)
         enqueue_accessory_override(CMD_OVERRIDE_SPINDLE_STOP);
 
     if(sys.state & (STATE_CYCLE|STATE_JOG)) {
@@ -157,12 +157,12 @@ void set_state (uint_fast16_t new_state)
                         st_prep_buffer();                   // Initialize step segment buffer before beginning cycle.
                         if(block->condition.spindle.synchronized) {
 
-                            if(hal.spindle_reset_data)
-                                hal.spindle_reset_data();
+                            if(hal.spindle.reset_data)
+                                hal.spindle.reset_data();
 
-                            uint32_t index = hal.spindle_get_data(SpindleData_Counters).index_count + 2;
+                            uint32_t index = hal.spindle.get_data(SpindleData_Counters).index_count + 2;
 
-                            while(index != hal.spindle_get_data(SpindleData_Counters).index_count); // check for abort in this loop?
+                            while(index != hal.spindle.get_data(SpindleData_Counters).index_count); // check for abort in this loop?
 
                         }
                         st_wake_up();
@@ -199,7 +199,7 @@ void set_state (uint_fast16_t new_state)
             case STATE_SAFETY_DOOR:
                 if((sys.state & (STATE_ALARM|STATE_ESTOP|STATE_SLEEP|STATE_CHECK_MODE)))
                     return;
-                hal.report.feedback_message(Message_SafetyDoorAjar);
+                grbl.report.feedback_message(Message_SafetyDoorAjar);
                 // no break
             case STATE_SLEEP:
                 sys.parking_state = Parking_Retracting;
@@ -222,8 +222,8 @@ void set_state (uint_fast16_t new_state)
                 break;
         }
 
-        if(hal.state_change_requested)
-            hal.state_change_requested(new_state);
+        if(grbl.on_state_change)
+            grbl.on_state_change(new_state);
     }
 }
 
@@ -244,15 +244,15 @@ void state_suspend_manager (void)
 
         // Handles restoring of spindle state
         if (sys.override.spindle_stop.restore) {
-            hal.report.feedback_message(Message_SpindleRestore);
-            if (settings.flags.laser_mode) // When in laser mode, ignore spindle spin-up delay. Set to turn on laser when cycle starts.
+            grbl.report.feedback_message(Message_SpindleRestore);
+            if (settings.mode == Mode_Laser) // When in laser mode, ignore spindle spin-up delay. Set to turn on laser when cycle starts.
                 sys.step_control.update_spindle_rpm = On;
             else
                 spindle_set_state(restore_condition.spindle, restore_spindle_rpm);
             sys.override.spindle_stop.value = 0; // Clear stop override state
         }
 
-    } else if (sys.step_control.update_spindle_rpm && hal.spindle_get_state().on) {
+    } else if (sys.step_control.update_spindle_rpm && hal.spindle.get_state().on) {
         // Handles spindle state during hold. NOTE: Spindle speed overrides may be altered during hold state.
         spindle_set_state(restore_condition.spindle, restore_spindle_rpm);
         sys.step_control.update_spindle_rpm = Off;
@@ -278,6 +278,9 @@ static void state_idle (uint_fast16_t rt_exec)
 
 static void state_cycle (uint_fast16_t rt_exec)
 {
+    if (rt_exec == EXEC_CYCLE_START)
+        return; // no need to perform other tests...
+
     if ((rt_exec & EXEC_TOOL_CHANGE))
         hal.stream.suspend_read(true); // Block reading from input stream until tool change state is acknowledged
 
@@ -318,8 +321,7 @@ static void state_await_motion_cancel (uint_fast16_t rt_exec)
             sys.step_control.flags = 0;
             plan_reset();
             st_reset();
-            gc_sync_position();
-            plan_sync_position();
+            sync_position();
 #ifdef ENABLE_BACKLASH_COMPENSATION
             mc_sync_backlash_position();
 #endif
@@ -348,8 +350,8 @@ static void state_await_hold (uint_fast16_t rt_exec)
         switch (sys.state) {
 
             case STATE_TOOL_CHANGE:
-                hal.spindle_set_state((spindle_state_t){0}, 0.0f); // De-energize
-                hal.coolant_set_state((coolant_state_t){0}); // De-energize
+                hal.spindle.set_state((spindle_state_t){0}, 0.0f); // De-energize
+                hal.coolant.set_state((coolant_state_t){0}); // De-energize
                 break;
 
             // Resume door state when parking motion has retracted and door has been closed.
@@ -374,7 +376,7 @@ static void state_await_hold (uint_fast16_t rt_exec)
                     // Execute slow pull-out parking retract motion. Parking requires parking axis homed, the
                     // current location not exceeding the parking target location, and laser mode disabled.
                     // NOTE: State is will remain DOOR, until the de-energizing and retract is complete.
-                    if (bit_istrue(sys.homed.mask, bit(settings.parking.axis)) && (park.target[settings.parking.axis] < settings.parking.target) && !settings.flags.laser_mode && !sys.override.control.parking_disable) {
+                    if (bit_istrue(sys.homed.mask, bit(settings.parking.axis)) && (park.target[settings.parking.axis] < settings.parking.target) && settings.mode != Mode_Laser && !sys.override.control.parking_disable) {
                         handler_changed = true;
                         stateHandler = state_await_waypoint_retract;
                         // Retract spindle by pullout distance. Ensure retraction motion moves away from
@@ -392,13 +394,13 @@ static void state_await_hold (uint_fast16_t rt_exec)
                     } else {
                         // Parking motion not possible. Just disable the spindle and coolant.
                         // NOTE: Laser mode does not start a parking motion to ensure the laser stops immediately.
-                        hal.spindle_set_state((spindle_state_t){0}, 0.0f); // De-energize
-                        hal.coolant_set_state((coolant_state_t){0});     // De-energize
+                        hal.spindle.set_state((spindle_state_t){0}, 0.0f); // De-energize
+                        hal.coolant.set_state((coolant_state_t){0});     // De-energize
                         sys.parking_state = Parking_DoorAjar;
                     }
                 } else {
-                    hal.spindle_set_state((spindle_state_t){0}, 0.0f); // De-energize
-                    hal.coolant_set_state((coolant_state_t){0}); // De-energize
+                    hal.spindle.set_state((spindle_state_t){0}, 0.0f); // De-energize
+                    hal.coolant.set_state((coolant_state_t){0}); // De-energize
                     sys.parking_state = Parking_DoorAjar;
                 }
                 break;
@@ -424,7 +426,7 @@ static void state_await_resume (uint_fast16_t rt_exec)
         sys.parking_state = Parking_DoorAjar;
     }
 
-    if ((rt_exec & EXEC_CYCLE_START) && !(sys.state == STATE_SAFETY_DOOR && hal.system_control_get_state().safety_door_ajar)) {
+    if ((rt_exec & EXEC_CYCLE_START) && !(sys.state == STATE_SAFETY_DOOR && hal.control.get_state().safety_door_ajar)) {
 
         bool handler_changed = false;
 
@@ -469,7 +471,7 @@ static void state_await_resume (uint_fast16_t rt_exec)
 
             default:
                 if (!settings.flags.restore_after_feed_hold) {
-                    if(!hal.spindle_get_state().on) {
+                    if(!hal.spindle.get_state().on) {
                         gc_state.spindle.rpm = 0.0f;
                         gc_state.modal.spindle.on = gc_state.modal.spindle.ccw = Off;
                     }
@@ -501,12 +503,12 @@ static void state_await_restore (uint_fast16_t rt_exec)
 
         restart = true;
 
-        if (restore_condition.spindle.on != hal.spindle_get_state().on) {
-            hal.report.feedback_message(Message_SpindleRestore);
+        if (restore_condition.spindle.on != hal.spindle.get_state().on) {
+            grbl.report.feedback_message(Message_SpindleRestore);
             spindle_restore(restore_condition.spindle, restore_spindle_rpm);
         }
 
-        if (restore_condition.coolant.value != hal.coolant_get_state().value) {
+        if (restore_condition.coolant.value != hal.coolant.get_state().value) {
             // NOTE: Laser mode will honor this delay. An exhaust system is often controlled by this pin.
             coolant_set_state(restore_condition.coolant);
             delay_sec(SAFETY_DOOR_COOLANT_DELAY, DelayMode_SysSuspend);
@@ -514,7 +516,7 @@ static void state_await_restore (uint_fast16_t rt_exec)
 
         sys.override.spindle_stop.value = 0; // Clear spindle stop override states
 
-        hal.report.feedback_message(Message_None);
+        grbl.report.feedback_message(Message_None);
 
         if(restart) {
             set_state(STATE_IDLE);
@@ -531,7 +533,7 @@ static void state_await_restore (uint_fast16_t rt_exec)
 
 static void restart_retract (void)
 {
-    hal.report.feedback_message(Message_SafetyDoorAjar);
+    grbl.report.feedback_message(Message_SafetyDoorAjar);
 
     stateHandler = state_await_hold;
 
@@ -570,10 +572,10 @@ static void state_await_waypoint_retract (uint_fast16_t rt_exec)
         // NOTE: Clear accessory state after retract and after an aborted restore motion.
         park.plan_data.condition.spindle.value = 0;
         park.plan_data.spindle.rpm = 0.0f;
-        hal.spindle_set_state(park.plan_data.condition.spindle, 0.0f); // De-energize
+        hal.spindle.set_state(park.plan_data.condition.spindle, 0.0f); // De-energize
 
         park.plan_data.condition.coolant.value = 0;
-        hal.coolant_set_state(park.plan_data.condition.coolant); // De-energize
+        hal.coolant.set_state(park.plan_data.condition.coolant); // De-energize
 
         stateHandler = state_await_resume;
 

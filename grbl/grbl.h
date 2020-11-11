@@ -1,7 +1,7 @@
 /*
   grbl.h - main Grbl include file for compile time configuration
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2015-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -23,14 +23,18 @@
 #ifndef _GRBL_H_
 #define _GRBL_H_
 
-// Grbl versioning system
-#define GRBL_VERSION "1.1f"
-#define GRBL_VERSION_BUILD "20200830"
-
 #include <stdint.h>
 #include <stdbool.h>
 
 #include "config.h"
+
+// Grbl versioning system
+#if COMPATIBILITY_LEVEL == 0
+#define GRBL_VERSION "1.1f"
+#else
+#define GRBL_VERSION "1.1f"
+#endif
+#define GRBL_VERSION_BUILD "20201103"
 
 // The following symbols are set here if not already set by the compiler or in config.h
 // Do NOT change here!
@@ -76,8 +80,8 @@
 #define SLEEP_DURATION 5.0f // Number of minutes before sleep mode is entered.
 #endif
 
-#ifndef EMULATE_EEPROM_DISABLE
-#define EMULATE_EEPROM
+#ifndef BUFFER_NVSDATA_DISABLE
+#define BUFFER_NVSDATA
 #endif
 
 // The following symbols are default values that are unlikely to be changed
@@ -131,11 +135,12 @@
 #define CMD_OVERRIDE_COOLANT_MIST_TOGGLE 0xA1
 #define CMD_PID_REPORT 0xA2
 #define CMD_TOOL_ACK 0xA3
+#define CMD_PROBE_CONNECTED_TOGGLE 0xA4
 
 // System motion line numbers must be zero.
 #define JOG_LINE_NUMBER 0
 
-// Number of blocks Grbl executes upon startup. These blocks are stored in EEPROM, where the size
+// Number of blocks Grbl executes upon startup. These blocks are stored in non-volatile storage, where the size
 // and addresses are defined in settings.h. With the current settings, up to 2 startup blocks may
 // be stored and executed in order. These startup blocks would typically be used to set the g-code
 // parser state depending on user preferences.
@@ -253,7 +258,7 @@
 #define TOOL_LENGTH_OFFSET_AXIS Z_AXIS // Default z-axis. Valid values are X_AXIS, Y_AXIS, or Z_AXIS.
 #endif
 
-// Max length of gcode lines (blocks) stored in EEPROM, do not set > 70 unless less than 6 axes are enabled
+// Max length of gcode lines (blocks) stored in non-volatile storage, do not set > 70 unless less than 6 axes are enabled
 #define MAX_STORED_LINE_LENGTH 70
 
 #endif

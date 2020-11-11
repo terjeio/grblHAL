@@ -27,8 +27,8 @@
 #include "nvs.h"
 #include "grbl/hal.h"
 
-#ifndef EMULATE_EEPROM
-#error EMULATE_EPROM must be enabled to use flash for settings storage
+#ifndef BUFFER_NVSDATA
+#error BUFFER_NVSDATA must be enabled to use flash for settings storage
 #endif
 
 static const DRAM_ATTR char ESP_SPACE_CHAR = ' ';
@@ -50,7 +50,7 @@ bool nvsRead (uint8_t *dest)
 {
     bool ok;
 
-    if(!(ok = grblNVS && esp_partition_read(grblNVS, 0, (void *)dest, hal.eeprom.size) == ESP_OK))
+    if(!(ok = grblNVS && esp_partition_read(grblNVS, 0, (void *)dest, hal.nvs.size) == ESP_OK))
         grblNVS = NULL;
 
     return ok;
@@ -65,7 +65,7 @@ bool nvsWrite (uint8_t *source)
 
     bool ok = grblNVS &&
                esp_partition_erase_range(grblNVS, 0, SPI_FLASH_SEC_SIZE) == ESP_OK &&
-                esp_partition_write(grblNVS, 0, (void *)source, hal.eeprom.size) == ESP_OK;
+                esp_partition_write(grblNVS, 0, (void *)source, hal.nvs.size) == ESP_OK;
 
     // Restore real time command handler
     hal.stream.enqueue_realtime_command = realtime_command_handler;

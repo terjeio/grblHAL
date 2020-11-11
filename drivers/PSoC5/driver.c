@@ -23,10 +23,12 @@
 
 #include "project.h"
 #include "serial.h"
-#include "i2c_keypad.h"
-#include "hal.h"
+#include "driver.h"
 
-//#define HAS_KEYPAD //uncomment to enable I2C keypad for jogging etc.
+#if KEYPAD_ENABLE
+#include "keypad/keypad.h"
+#include "i2c.h"
+#endif
 
 // prescale step counter to 20Mhz (80 / (STEPPER_DRIVER_PRESCALER + 1))
 #define STEPPER_DRIVER_PRESCALER 3
@@ -40,7 +42,7 @@ static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to
 
 // Interrupt handler prototypes
 static void stepper_driver_isr (void);
-static void stepper_pulse_isr (void);
+//static void stepper_pulse_isr (void);
 static void limit_isr (void);
 static void control_isr (void);
 static void systick_isr (void);
@@ -222,7 +224,7 @@ static control_signals_t systemGetState (void)
 // Called by probe_init() and the mc_probe() routines. Sets up the probe pin invert mask to
 // appropriately set the pin logic according to setting for normal-high/normal-low operation
 // and the probing cycle modes for toward-workpiece/away-from-workpiece.
-static void probeConfigure(bool is_probe_away, bool probing)
+static void probeConfigure (bool is_probe_away, bool probing)
 {
     probing = probing;
     
@@ -257,27 +259,27 @@ void eepromPutByte (uint32_t addr, uint8_t new_value)
     EEPROM_WriteByte(new_value, addr); 
 }
 
-static void eepromWriteBlockWithChecksum (uint32_t destination, uint8_t *source, uint32_t size)
+nvs_transfer_result_t eepromWriteBlock (uint32_t destination, uint8_t *source, uint32_t size, bool with_checksum)
 {
-  unsigned char checksum = 0;
-  for(; size > 0; size--) { 
-    checksum = (checksum << 1) || (checksum >> 7);
-    checksum += *source;
-    EEPROM_WriteByte(*(source++), destination++); 
-  }
-  EEPROM_WriteByte(checksum, destination);
+    uint8_t checksum = calc_checksum(source, size);
+
+    for(; size > 0; size--)
+        EEPROM_WriteByte(*(source++), destination++); 
+    
+    if(size > 0 && with_checksum)
+        EEPROM_WriteByte(checksum, destination);
+
+    return NVS_TransferResult_OK;
 }
 
-bool eepromReadBlockWithChecksum (uint8_t *destination, uint32_t source, uint32_t size)
+nvs_transfer_result_t eepromReadBlock (uint8_t *destination, uint32_t source, uint32_t size, bool with_checksum)
 {
-  unsigned char data, checksum = 0;
-  for(; size > 0; size--) { 
-    data = EEPROM_ReadByte(source++);
-    checksum = (checksum << 1) || (checksum >> 7);
-    checksum += data;    
-    *(destination++) = data; 
-  }
-  return checksum == EEPROM_ReadByte(source);
+    uint32_t remaining = size;
+
+    for(; remaining > 0; remaining--)
+        *(destination++) = EEPROM_ReadByte(source++); 
+
+    return with_checksum ? (calc_checksum(destination, size) == EEPROM_ReadByte(source) ? NVS_TransferResult_OK : NVS_TransferResult_Failed) : NVS_TransferResult_OK;
 }
 
 // Helper functions for setting/clearing/inverting individual bits atomically (uninterruptable)
@@ -316,7 +318,7 @@ void settings_changed (settings_t *settings)
         if(hal.driver_cap.step_pulse_delay && settings->steppers.pulse_delay_microseconds > 0.0f) {
       //    TimerIntRegister(TIMER2_BASE, TIMER_A, stepper_pulse_isr_delayed);
       //    TimerIntEnable(TIMER2_BASE, TIMER_TIMA_TIMEOUT|TIMER_TIMA_MATCH);
-            hal.stepper_pulse_start = &stepperPulseStartDelayed;
+            hal.stepper.pulse_start = &stepperPulseStartDelayed;
         }
 
         StepPulseClock_SetDivider((uint32_t)(24.0f * settings->steppers.pulse_microseconds));
@@ -350,9 +352,9 @@ void settings_changed (settings_t *settings)
         ControlSignalsInvert_Write(settings->control_invert.mask);
 
         // Probe input
-        ProbeInvert_Write(settings->flags.disable_probe_pullup ? 0 : 1);
-        Probe_SetDriveMode(settings->flags.disable_probe_pullup ? Probe_DM_RES_DWN : Probe_DM_RES_UP);
-        Probe_Write(settings->flags.disable_probe_pullup ? 0 : 1);
+        ProbeInvert_Write(settings->probe.disable_probe_pullup ? 0 : 1);
+        Probe_SetDriveMode(settings->probe.disable_probe_pullup ? Probe_DM_RES_DWN : Probe_DM_RES_UP);
+        Probe_Write(settings->probe.disable_probe_pullup ? 0 : 1);
 
         spindle_precompute_pwm_values(&spindle_pwm, hal.f_step_timer);
 
@@ -379,7 +381,7 @@ static bool driver_setup (settings_t *settings)
         SpindlePWM_Start();
         SpindlePWM_WritePeriod(spindle_pwm.period);
     } else
-        hal.spindle_set_state = spindleSetStateFixed;
+        hal.spindle.set_state = spindleSetStateFixed;
 
 //    CyIntSetSysVector(SYSTICK_INTERRUPT_VECTOR_NUMBER, systick_isr);
 //    SysTick_Config(BCLK__BUS_CLK__HZ / INTERRUPT_FREQ);
@@ -389,12 +391,12 @@ static bool driver_setup (settings_t *settings)
     DelayTimer_Interrupt_Enable();
     DelayTimer_Start();
 
-    IOInitDone = settings->version == 17;
+    IOInitDone = settings->version == 18;
 
     settings_changed(settings);
 
-    hal.spindle_set_state((spindle_state_t){0}, 0.0f);
-    hal.coolant_set_state((coolant_state_t){0});
+    hal.spindle.set_state((spindle_state_t){0}, 0.0f);
+    hal.coolant.set_state((coolant_state_t){0});
     DirOutput_Write(0);
 
 #ifdef HAS_KEYPAD
@@ -418,38 +420,38 @@ bool driver_init (void)
     EEPROM_Start();
 
     hal.info = "PSoC 5";
-    hal.driver_version = "200818";
+    hal.driver_version = "2001014";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = 24000000UL;
     hal.rx_buffer_size = RX_BUFFER_SIZE;
     hal.delay_ms = driver_delay_ms;
     hal.settings_changed = settings_changed;
 
-    hal.stepper_wake_up = stepperWakeUp;
-    hal.stepper_go_idle = stepperGoIdle;
-    hal.stepper_enable = stepperEnable;
-    hal.stepper_cycles_per_tick = stepperCyclesPerTick;
-    hal.stepper_pulse_start = stepperPulseStart;
+    hal.stepper.wake_up = stepperWakeUp;
+    hal.stepper.go_idle = stepperGoIdle;
+    hal.stepper.enable = stepperEnable;
+    hal.stepper.cycles_per_tick = stepperCyclesPerTick;
+    hal.stepper.pulse_start = stepperPulseStart;
 
-    hal.limits_enable = limitsEnable;
-    hal.limits_get_state = limitsGetState;
+    hal.limits.enable = limitsEnable;
+    hal.limits.get_state = limitsGetState;
 
-    hal.coolant_set_state = coolantSetState;
-    hal.coolant_get_state = coolantGetState;
+    hal.coolant.set_state = coolantSetState;
+    hal.coolant.get_state = coolantGetState;
 
-    hal.probe_get_state = probeGetState;
-    hal.probe_configure_invert_mask = probeConfigure;
+    hal.probe.get_state = probeGetState;
+    hal.probe.configure = probeConfigure;
 
-    hal.spindle_set_state = spindleSetStateVariable;
-    hal.spindle_get_state = spindleGetState;
+    hal.spindle.set_state = spindleSetStateVariable;
+    hal.spindle.get_state = spindleGetState;
 #ifdef SPINDLE_PWM_DIRECT
-    hal.spindle_get_pwm = spindleGetPWM;
-    hal.spindle_update_pwm = spindle_set_speed;
+    hal.spindle.get_pwm = spindleGetPWM;
+    hal.spindle.update_pwm = spindle_set_speed;
 #else
-    hal.spindle_update_rpm = spindleUpdateRPM;
+    hal.spindle.update_rpm = spindleUpdateRPM;
 #endif
 
-    hal.system_control_get_state = systemGetState;
+    hal.control.get_state = systemGetState;
 
     hal.stream.read = serialGetC;
     hal.stream.write = serialWriteS;
@@ -459,22 +461,15 @@ bool driver_init (void)
     hal.stream.cancel_read_buffer = serialRxCancel;
     hal.stream.suspend_read = serialSuspendInput;
 
-    hal.eeprom.type = EEPROM_Physical;
-    hal.eeprom.get_byte = (uint8_t (*)(uint32_t))&EEPROM_ReadByte;
-    hal.eeprom.put_byte = eepromPutByte;
-    hal.eeprom.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
-    hal.eeprom.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
+    hal.nvs.type = NVS_EEPROM;
+    hal.nvs.get_byte = (uint8_t (*)(uint32_t))&EEPROM_ReadByte;
+    hal.nvs.put_byte = eepromPutByte;
+    hal.nvs.memcpy_to_nvs = eepromWriteBlock;
+    hal.nvs.memcpy_from_nvs = eepromReadBlock;
 
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
-
-#ifdef HAS_KEYPAD
-    hal.execute_realtime = process_keypress;
-    hal.driver_setting = driver_setting;
-    hal.driver_settings_restore = driver_settings_restore;
-    hal.driver_settings_report = driver_settings_report;
-#endif
 
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
 
@@ -489,9 +484,16 @@ bool driver_init (void)
     hal.driver_cap.limits_pull_up = On;
     hal.driver_cap.probe_pull_up = On;
 
+#if KEYPAD_ENABLE
+    I2C_Init();
+    keypad_init();
+#endif
+  
+    my_plugin_init();
+
     // No need to move version check before init.
     // Compiler will fail any signature mismatch for existing entries.
-    return hal.version == 6;
+    return hal.version == 7;
 }
 
 /* interrupt handlers */
@@ -501,23 +503,23 @@ static void stepper_driver_isr (void)
 {
     StepperTimer_ReadStatusRegister(); // Clear interrupt
 
-    hal.stepper_interrupt_callback();
+    hal.stepper.interrupt_callback();
 }
 
 // This interrupt is enabled when Grbl sets the motor port bits to execute
 // a step. This ISR resets the motor port after a short period (settings.pulse_microseconds)
 // completing one step cycle.
-
+/*
 static void stepper_pulse_isr (void)
 {
     //Stepper_Timer_ReadStatusRegister();
 
     StepOutput_Write(next_step_outbits.value);
 }
-
+*/
 static void limit_isr (void)
 {
-    hal.limit_interrupt_callback((axes_signals_t)HomingSignals_Read());
+    hal.limits.interrupt_callback((axes_signals_t)HomingSignals_Read());
 }
 
 static void control_isr (void)
@@ -526,7 +528,7 @@ static void control_isr (void)
     
     signals.value = ControlSignals_Read();
     
-    hal.control_interrupt_callback(signals);
+    hal.control.interrupt_callback(signals);
 }
 
 // Interrupt handler for 1 ms interval timer

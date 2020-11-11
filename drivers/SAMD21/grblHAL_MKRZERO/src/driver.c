@@ -83,10 +83,6 @@ static void spindle_set_speed (uint_fast16_t pwm_value);
 static ioexpand_t iopins = {0};
 #endif
 
-#ifdef DRIVER_SETTINGS
-driver_settings_t driver_settings;
-#endif
-
 static void SysTick_IRQHandler (void);
 static void STEPPER_IRQHandler (void);
 static void STEPPULSE_IRQHandler (void);
@@ -168,7 +164,7 @@ static void stepperWakeUp (void)
     STEP_TIMER->COUNT16.CTRLA.reg |= TC_CTRLA_ENABLE;
     while(STEP_TIMER->COUNT16.STATUS.bit.SYNCBUSY);
 
-    hal.stepper_interrupt_callback();   // start the show
+    hal.stepper.interrupt_callback();   // start the show
 }
 
 // Disables stepper driver interrupts
@@ -198,10 +194,8 @@ static void stepperCyclesPerTick (uint32_t cycles_per_tick)
 // Sets stepper direction and pulse pins and starts a step pulse
 static void stepperPulseStart (stepper_t *stepper)
 {
-    if(stepper->dir_change) {
-        stepper->dir_change = false;
+    if(stepper->dir_change)
         set_dir_outputs(stepper->dir_outbits);
-    }
 
     if(stepper->step_outbits.value) {
         set_step_outputs(stepper->step_outbits);
@@ -215,7 +209,6 @@ static void stepperPulseStartDelayed (stepper_t *stepper)
 {
     if(stepper->dir_change) {
 
-        stepper->dir_change = false;
         set_dir_outputs(stepper->dir_outbits);
 
         if(stepper->step_outbits.value) {
@@ -306,7 +299,7 @@ static control_signals_t systemGetState (void)
 // and the probing cycle modes for toward-workpiece/away-from-workpiece.
 static void probeConfigure (bool is_probe_away, bool probing)
 {
-  probe_invert = settings.flags.invert_probe_pin;
+  probe_invert = settings.probe.invert_probe_pin;
 
   if (is_probe_away)
       probe_invert = !probe_invert;
@@ -535,13 +528,6 @@ static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t 
     return prev;
 }
 
-static void showMessage (const char *msg)
-{
-    hal.stream.write("[MSG:");
-    hal.stream.write(msg);
-    hal.stream.write("]\r\n");
-}
-
 void pinModeOutput (gpio_t *gpio, uint8_t pin)
 {
     pinMode(pin, OUTPUT);
@@ -584,9 +570,9 @@ void settings_changed (settings_t *settings)
             while(SPINDLE_PWM_TIMER->SYNCBUSY.bit.CC2);
             SPINDLE_PWM_TIMER->CTRLA.bit.ENABLE = 1;        
             while(SPINDLE_PWM_TIMER->SYNCBUSY.bit.ENABLE);
-            hal.spindle_set_state = spindleSetStateVariable;
+            hal.spindle.set_state = spindleSetStateVariable;
         } else
-            hal.spindle_set_state = spindleSetState;
+            hal.spindle.set_state = spindleSetState;
 
         int16_t t = (int16_t)(24.0f * (settings->steppers.pulse_microseconds - STEP_PULSE_LATENCY)) - 1;
         pulse_length = t < 2 ? 2 : t;
@@ -594,9 +580,9 @@ void settings_changed (settings_t *settings)
         if(settings->steppers.pulse_delay_microseconds > 0.0f) {
             t = (int16_t)(24.0f * (settings->steppers.pulse_delay_microseconds - 1.7f)) - 1;
             pulse_delay = t < 2 ? 2 : t;
-            hal.stepper_pulse_start = stepperPulseStartDelayed;
+            hal.stepper.pulse_start = stepperPulseStartDelayed;
         } else
-            hal.stepper_pulse_start = stepperPulseStart;
+            hal.stepper.pulse_start = stepperPulseStart;
 
         next_step_outbits.value = 0;
         IRQRegister(STEP_TIMER_IRQn, STEPPULSE_IRQHandler);
@@ -654,7 +640,7 @@ void settings_changed (settings_t *settings)
         attachInterrupt(Z_LIMIT_PIN, LIMIT_IRQHandler, limit_ies.z ? FALLING : RISING);
 
 #if KEYPAD_ENABLE
-        pinMode(KEYPAD_PIN, hal.driver_cap.probe_pull_up ? INPUT_PULLUP : INPUT_PULLDOWN);
+        pinMode(KEYPAD_PIN, INPUT_PULLUP);
         attachInterrupt(KEYPAD_PIN, KEYPAD_IRQHandler, CHANGE);
 #endif
 
@@ -717,21 +703,6 @@ static bool driver_setup (settings_t *settings)
     while(GCLK->STATUS.bit.SYNCBUSY);
     GCLK->CLKCTRL.reg = (uint16_t)(GCLK_CLKCTRL_CLKEN | GCLK_CLKCTRL_GEN_GCLK6 | GCLK_CLKCTRL_ID_TCC2_TC3);
     while(GCLK->STATUS.bit.SYNCBUSY);
-
-
-    /********************************************************
-     * Read driver specific setting from persistent storage *
-     ********************************************************/
-
-#ifdef DRIVER_SETTINGS
-    if(hal.eeprom.type != EEPROM_None) {
-        if(!hal.eeprom.memcpy_from_with_checksum((uint8_t *)&driver_settings, hal.eeprom.driver_area.address, sizeof(driver_settings)))
-            hal.driver_settings_restore();
-        #if TRINAMIC_ENABLE && CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
-          driver_settings.trinamic.driver_enable.mask = AXES_BITMASK;
-        #endif
-    }
-#endif
 
  // Stepper init
 
@@ -850,7 +821,11 @@ static bool driver_setup (settings_t *settings)
 #endif
 
 #if TRINAMIC_ENABLE
-    trinamic_init();
+  #if CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
+    trinamic_start(false);
+  #else
+    trinamic_start(true);
+  #endif
 #endif
 
 #ifdef DEBUGOUT
@@ -859,17 +834,13 @@ static bool driver_setup (settings_t *settings)
 
  // Set defaults
 
-    IOInitDone = settings->version == 17;
+    IOInitDone = settings->version == 18;
 
     settings_changed(settings);
 
-    hal.stepper_go_idle(true);
-    hal.spindle_set_state((spindle_state_t){0}, 0.0f);
-    hal.coolant_set_state((coolant_state_t){0});
-
-#if KEYPAD_ENABLE
-    keypad_init();
-#endif
+    hal.stepper.go_idle(true);
+    hal.spindle.set_state((spindle_state_t){0}, 0.0f);
+    hal.coolant.set_state((coolant_state_t){0});
 
 #if SDCARD_ENABLE
     pinMode(SD_CD_PIN, INPUT_PULLUP);
@@ -887,51 +858,6 @@ static bool driver_setup (settings_t *settings)
     return IOInitDone;
 }
 
-#ifdef DRIVER_SETTINGS
-
-static status_code_t driver_setting (uint_fast16_t param, float value, char *svalue)
-{
-    status_code_t status = Status_Unhandled;
-
-#if KEYPAD_ENABLE
-    status = keypad_setting(param, value, svalue);
-#endif
-
-#if TRINAMIC_ENABLE
-    if(status == Status_Unhandled)
-        status = trinamic_setting(param, value, svalue);
-#endif
-
-    if(status == Status_OK)
-        hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
-
-    return status;
-}
-
-static void driver_settings_report (setting_type_t setting)
-{
-#if KEYPAD_ENABLE
-    keypad_settings_report(setting);
-#endif
-
-#if TRINAMIC_ENABLE
-    trinamic_settings_report(setting);
-#endif
-}
-
-static void driver_settings_restore (void)
-{
-#if KEYPAD_ENABLE
-    keypad_settings_restore();
-#endif
-#if TRINAMIC_ENABLE
-    trinamic_settings_restore();
-#endif
-    hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
-}
-
-#endif
-
 // EEPROM emulation - stores settings in flash
 // Note: settings will not survive a reflash unless protected
 
@@ -946,7 +872,7 @@ static nvs_storage_t grblNVS;
 bool nvsRead (uint8_t *dest)
 {
     if(grblNVS.addr != NULL)
-        memcpy(dest, grblNVS.addr, GRBL_EEPROM_SIZE);
+        memcpy(dest, grblNVS.addr, hal.nvs.size);
 
     return grblNVS.addr != NULL;
 }
@@ -954,7 +880,7 @@ bool nvsRead (uint8_t *dest)
 bool nvsWrite (uint8_t *source)
 {
     uint8_t *row = (uint8_t *)grblNVS.addr;
-    uint32_t size = GRBL_EEPROM_SIZE;
+    uint32_t size = hal.nvs.size;
 
     // Erase flash pages
     do {
@@ -967,7 +893,7 @@ bool nvsWrite (uint8_t *source)
     
     uint32_t *dest = (uint32_t *)grblNVS.addr, *src = (uint32_t *)source, words;
 
-    size = GRBL_EEPROM_SIZE;
+    size = GRBL_NVS_SIZE;
     NVMCTRL->CTRLB.bit.MANW = 1;
 
     // Clear page buffer
@@ -996,21 +922,18 @@ bool nvsInit (void)
 {
     grblNVS.page_size = 8 << NVMCTRL->PARAM.bit.PSZ;
     grblNVS.row_size = grblNVS.page_size * 4;
-    grblNVS.addr = (void *)(NVMCTRL->PARAM.bit.NVMP * grblNVS.page_size - GRBL_EEPROM_SIZE);
+    grblNVS.addr = (void *)(NVMCTRL->PARAM.bit.NVMP * grblNVS.page_size - GRBL_NVS_SIZE);
 
     return true;
 }
 
 // End EEPROM emulation
 
-#if KEYPAD_ENABLE || USB_SERIAL_CDC
+#if USB_SERIAL_CDC
 static void execute_realtime (uint_fast16_t state)
 {
 #if USB_SERIAL_CDC
     usb_execute_realtime(state);
-#endif
-#if KEYPAD_ENABLE
-    keypad_process_keypress(state);
 #endif
 }
 #endif
@@ -1043,7 +966,7 @@ bool driver_init (void) {
     IRQRegister(SysTick_IRQn, SysTick_IRQHandler);
 
     hal.info = "SAMD21";
-    hal.driver_version = "200818";
+    hal.driver_version = "201014";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1053,34 +976,32 @@ bool driver_init (void) {
     hal.delay_ms = driver_delay_ms;
     hal.settings_changed = settings_changed;
 
-    hal.stepper_wake_up = stepperWakeUp;
-    hal.stepper_go_idle = stepperGoIdle;
-    hal.stepper_enable = stepperEnable;
-    hal.stepper_cycles_per_tick = stepperCyclesPerTick;
-    hal.stepper_pulse_start = stepperPulseStart;
+    hal.stepper.wake_up = stepperWakeUp;
+    hal.stepper.go_idle = stepperGoIdle;
+    hal.stepper.enable = stepperEnable;
+    hal.stepper.cycles_per_tick = stepperCyclesPerTick;
+    hal.stepper.pulse_start = stepperPulseStart;
 
-    hal.limits_enable = limitsEnable;
-    hal.limits_get_state = limitsGetState;
+    hal.limits.enable = limitsEnable;
+    hal.limits.get_state = limitsGetState;
 
-    hal.coolant_set_state = coolantSetState;
-    hal.coolant_get_state = coolantGetState;
+    hal.coolant.set_state = coolantSetState;
+    hal.coolant.get_state = coolantGetState;
 //#ifdef PROBE_PIN
-    hal.probe_get_state = probeGetState;
+    hal.probe.configure = probeConfigure;
+    hal.probe.get_state = probeGetState;
 //#endif
-    hal.probe_configure_invert_mask = probeConfigure;
 
-    hal.spindle_set_state = spindleSetState;
-    hal.spindle_get_state = spindleGetState;
+    hal.spindle.set_state = spindleSetState;
+    hal.spindle.get_state = spindleGetState;
 #ifdef SPINDLE_PWM_DIRECT
-    hal.spindle_get_pwm = spindleGetPWM;
-    hal.spindle_update_pwm = spindle_set_speed;
+    hal.spindle.get_pwm = spindleGetPWM;
+    hal.spindle.update_pwm = spindle_set_speed;
 #else
-    hal.spindle_update_rpm = spindleUpdateRPM;
+    hal.spindle.update_rpm = spindleUpdateRPM;
 #endif
     
-    hal.system_control_get_state = systemGetState;
-
-    hal.show_message = showMessage;
+    hal.control.get_state = systemGetState;
 
 #if USB_SERIAL_CDC
     usb_serialInit();
@@ -1102,53 +1023,28 @@ bool driver_init (void) {
     hal.stream.suspend_read = serialSuspendInput;
 #endif
 
-#if EEPROM_ENABLE
-    eepromInit();
-    hal.eeprom.type = EEPROM_Physical;
-    hal.eeprom.get_byte = eepromGetByte;
-    hal.eeprom.put_byte = eepromPutByte;
-    hal.eeprom.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
-    hal.eeprom.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
-#else
-    if(nvsInit()) {
-        hal.eeprom.type = EEPROM_Emulated;
-        hal.eeprom.size = GRBL_EEPROM_SIZE;
-        hal.eeprom.memcpy_from_flash = nvsRead;
-        hal.eeprom.memcpy_to_flash = nvsWrite;
-    } else
-        hal.eeprom.type = EEPROM_None;
-#endif
-
 #if I2C_ENABLE
     i2c_init();
 #endif
 
-#ifdef DRIVER_SETTINGS
-    if(hal.eeprom.type != EEPROM_None) {
-        hal.eeprom.driver_area.address = GRBL_EEPROM_SIZE;
-        hal.eeprom.driver_area.size = sizeof(driver_settings); // Add assert?
-        hal.eeprom.size = GRBL_EEPROM_SIZE + sizeof(driver_settings) + 1;
-
-        hal.driver_setting = driver_setting;
-        hal.driver_settings_report = driver_settings_report;
-        hal.driver_settings_restore = driver_settings_restore;
-    }
-#endif
-
-#if TRINAMIC_ENABLE
-    hal.user_mcode_check = trinamic_MCodeCheck;
-    hal.user_mcode_validate = trinamic_MCodeValidate;
-    hal.user_mcode_execute = trinamic_MCodeExecute;
-    hal.driver_rt_report = trinamic_RTReport;
-    hal.driver_axis_settings_report = trinamic_axis_settings_report;
+#if EEPROM_ENABLE
+    i2c_eeprom_init();
+#else
+    if(nvsInit()) {
+        hal.nvs.type = NVS_Flash;
+        hal.nvs.memcpy_from_flash = nvsRead;
+        hal.nvs.memcpy_to_flash = nvsWrite;
+    } else
+        hal.nvs.type = NVS_None;
 #endif
 
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
+    hal.get_elapsed_ticks = millis;
 
-#if KEYPAD_ENABLE || USB_SERIAL_CDC
-    hal.execute_realtime = execute_realtime;
+#if USB_SERIAL_CDC
+    grbl.on_execute_realtime = execute_realtime;
 #endif
 
 #ifdef DEBUGOUT
@@ -1170,13 +1066,20 @@ bool driver_init (void) {
     hal.driver_cap.control_pull_up = On;
     hal.driver_cap.limits_pull_up = On;
     hal.driver_cap.probe_pull_up = On;
-#if SDCARD_ENABLE
-    hal.driver_cap.sd_card = On;
+
+#if TRINAMIC_ENABLE
+    trinamic_init();
 #endif
+
+#if KEYPAD_ENABLE
+    keypad_init();
+#endif
+
+    my_plugin_init();
 
     // No need to move version check before init.
     // Compiler will fail any signature mismatch for existing entries.
-    return hal.version == 6;
+    return hal.version == 7;
 }
 
 /* interrupt handlers */
@@ -1185,7 +1088,7 @@ bool driver_init (void) {
 static void STEPPER_IRQHandler (void)
 {
     STEPPER_TIMER->COUNT32.INTFLAG.bit.MC0 = 1;
-    hal.stepper_interrupt_callback();
+    hal.stepper.interrupt_callback();
 }
 
 // Step pulse handler
@@ -1233,13 +1136,13 @@ static void DEBOUNCE_IRQHandler (void)
     axes_signals_t state = limitsGetState();
 
     if(state.mask) //TODO: add check for limit switches having same state as when limit_isr were invoked?
-        hal.limit_interrupt_callback(state);
+        hal.limits.interrupt_callback(state);
 #endif
 }
 
 static void CONTROL_IRQHandler (void)
 {
-    hal.control_interrupt_callback(systemGetState());
+    hal.control.interrupt_callback(systemGetState());
 }
 
 static void LIMIT_IRQHandler (void)
@@ -1248,7 +1151,7 @@ static void LIMIT_IRQHandler (void)
         DEBOUNCE_TIMER->CTRLBSET.bit.CMD = TCC_CTRLBCLR_CMD_RETRIGGER_Val;
         while(DEBOUNCE_TIMER->SYNCBUSY.bit.CTRLB);
     } else
-        hal.limit_interrupt_callback(limitsGetState());
+        hal.limits.interrupt_callback(limitsGetState());
 }
 
 static void SD_IRQHandler (void)
@@ -1261,7 +1164,7 @@ static void SD_IRQHandler (void)
 #if KEYPAD_ENABLE
 void KEYPAD_IRQHandler (void)
 {
-    keypad_keyclick_handler(pinIn(KEYPAD_PIN) != 0);
+    keypad_keyclick_handler(pinIn(KEYPAD_PIN) == 0);
 }
 #endif
 

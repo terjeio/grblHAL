@@ -1,10 +1,9 @@
 /*
-  eeprom_emulate.h - EEPROM emulation methods
+  spi.c - SPI support for SD card & Trinamic plugins
 
-  Part of GrblHAL
+  Part of GrblHAL driver for STM32F4xx
 
-  Copyright (c) 2017 Terje Io
-  Copyright (c) 2009-2011 Simen Svale Skogsrud
+  Copyright (c) 2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -20,24 +19,13 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef _EEPROM_EMULATE_H_
-#define _EEPROM_EMULATE_H_
+#ifndef _GRBL_SPI_H_
+#define _GRBL_SPI_H_
 
-typedef struct {
-    bool is_dirty;
-    bool global_settings;
-    bool build_info;
-    bool driver_settings;
-    uint8_t startup_lines;
-    uint16_t coord_data;
-#ifdef N_TOOLS
-    uint16_t tool_data;
-#endif
-} settings_dirty_t;
-
-extern settings_dirty_t settings_dirty;
-
-bool eeprom_emu_init();
-void eeprom_emu_sync_physical ();
+void spi_init (void);
+void spi_set_max_speed (void);
+void spi_disable (void);
+uint8_t spi_get_byte (void);
+void spi_put_byte (uint8_t byte);
 
 #endif

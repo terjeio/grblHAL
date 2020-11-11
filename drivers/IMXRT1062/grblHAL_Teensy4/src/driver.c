@@ -1,7 +1,7 @@
 /*
   driver.c - driver code for IMXRT1062 processor (on Teensy 4.0/4.1 board)
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 
@@ -19,6 +19,7 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -44,6 +45,19 @@
 #include "keypad/keypad.h"
 #endif
 
+#if PLASMA_ENABLE
+#include "plasma/thc.h"
+#endif
+
+#if PPI_ENABLE
+#include "laser/ppi.h"
+static void ppi_timeout_isr (void);
+#endif
+
+#if ODOMETER_ENABLE
+#include "odometer/odometer.h"
+#endif
+
 #if ETHERNET_ENABLE
   #include "enet.h"
   #if TELNET_ENABLE
@@ -52,8 +66,6 @@
   #if WEBSOCKET_ENABLE
     #include "networking/WsStream.h"
   #endif
-        static bool enet_ok = false;
-
 #endif
 
 #if USB_SERIAL_CDC == 1
@@ -78,79 +90,14 @@
   #endif
 #endif
 
-typedef struct {
-    volatile uint32_t DR;
-    volatile uint32_t GDIR;
-    volatile uint32_t PSR;
-    volatile uint32_t ICR1;
-    volatile uint32_t ICR2;
-    volatile uint32_t IMR;
-    volatile uint32_t ISR;
-    volatile uint32_t EDGE_SEL;
-    uint32_t unused[25];
-    volatile uint32_t DR_SET;
-    volatile uint32_t DR_CLEAR;
-    volatile uint32_t DR_TOGGLE;    
-} gpio_reg_t; 
-
-typedef struct {
-    gpio_reg_t *reg;
-    uint32_t bit;
-} gpio_t;
-
-typedef enum {
-    Input_Probe = 0,
-    Input_Reset,
-    Input_FeedHold,
-    Input_CycleStart,
-    Input_SafetyDoor,
-    Input_EStop,
-    Input_ModeSelect,
-    Input_LimitX,
-    Input_LimitX_Max,
-    Input_LimitY,
-    Input_LimitY_Max,
-    Input_LimitZ,
-    Input_LimitZ_Max,
-    Input_LimitA,
-    Input_LimitA_Max,
-    Input_LimitB,
-    Input_LimitB_Max,
-    Input_LimitC,
-    Input_LimitC_Max,
-    Input_KeypadStrobe,
-    Input_QEI_A,
-    Input_QEI_B,
-    Input_QEI_Select,
-    Input_QEI_Index,
-} input_t;
-
-#define INPUT_GROUP_CONTROL    (1 << 0)
-#define INPUT_GROUP_PROBE      (1 << 1)
-#define INPUT_GROUP_LIMIT      (1 << 2)
-#define INPUT_GROUP_KEYPAD     (1 << 3)
-#define INPUT_GROUP_MPG        (1 << 4)
-#define INPUT_GROUP_QEI        (1 << 5)
-#define INPUT_GROUP_QEI_SELECT (1 << 6)
-
-typedef enum {
-    IRQ_Mode_None    = 0b00,
-    IRQ_Mode_Change  = 0b01,
-    IRQ_Mode_Rising  = 0b10,    
-    IRQ_Mode_Falling = 0b11
-} irq_mode_t;
-
-typedef struct {
-    input_t id;
-    uint8_t group;
-    uint8_t pin;
-    gpio_t *port;
-    gpio_t gpio; // doubled up for now for speed...
-    irq_mode_t irq_mode;
-    uint8_t offset;
-    volatile bool active;
-    volatile bool debounce;
-} input_signal_t;
+#define INPUT_GROUP_CONTROL       (1 << 0)
+#define INPUT_GROUP_PROBE         (1 << 1)
+#define INPUT_GROUP_LIMIT         (1 << 2)
+#define INPUT_GROUP_KEYPAD        (1 << 3)
+#define INPUT_GROUP_MPG           (1 << 4)
+#define INPUT_GROUP_QEI           (1 << 5)
+#define INPUT_GROUP_QEI_SELECT    (1 << 6)
+#define INPUT_GROUP_SPINDLE_INDEX (1 << 7)
 
 typedef struct {
     volatile uint_fast8_t head;
@@ -191,7 +138,11 @@ static debounce_queue_t debounce_queue = {0};
 static gpio_t Reset, FeedHold, CycleStart, Probe, LimitX, LimitY, LimitZ;
 
 // Standard outputs
-static gpio_t spindleEnable, spindleDir, Mist, Flood, stepX, stepY, stepZ, dirX, dirY, dirZ;
+static gpio_t Mist, Flood, stepX, stepY, stepZ, dirX, dirY, dirZ;
+
+#if !VFD_SPINDLE
+static gpio_t spindleEnable, spindleDir;
+#endif
 
 // Optional I/O
 #ifdef SAFETY_DOOR_PIN
@@ -228,6 +179,7 @@ static gpio_t KeypadStrobe;
 static gpio_t ModeSelect;
 #endif
 #if QEI_ENABLE
+static qei_enable = false;
 static gpio_t QEI_A, QEI_B;
  #ifdef QEI_SELECT_PIN
   #define QEI_SELECT_ENABLED 1
@@ -277,6 +229,9 @@ static gpio_t QEI_A, QEI_B;
 #ifdef Z2_LIMIT_PIN
   static gpio_t LimitZ2;
 #endif
+#ifdef SPINDLE_INDEX_PIN
+  static gpio_t SpindleIndex;
+#endif
 
 static input_signal_t inputpin[] = {
 #if ESTOP_ENABLE
@@ -300,7 +255,7 @@ static input_signal_t inputpin[] = {
 #endif
     { .id = Input_LimitZ,       .port = &LimitZ,       .pin = Z_LIMIT_PIN,       .group = INPUT_GROUP_LIMIT }
 #ifdef Z2_LIMIT_PIN
-  , { .id = Input_LimitZ_Max,   .port = &LimitZ2,      .pin = Z2_LIMIT_PIN,      .group = INPUT_GROUP_LIMIT },
+  , { .id = Input_LimitZ_Max,   .port = &LimitZ2,      .pin = Z2_LIMIT_PIN,      .group = INPUT_GROUP_LIMIT }
 #endif
 #ifdef A_LIMIT_PIN
   , { .id = Input_LimitA,       .port = &LimitA,       .pin = A_LIMIT_PIN,       .group = INPUT_GROUP_LIMIT }
@@ -311,8 +266,11 @@ static input_signal_t inputpin[] = {
 #if MPG_MODE_ENABLE
   ,  { .id = Input_ModeSelect,  .port = &ModeSelect,   .pin = MODE_PIN,          .group = INPUT_GROUP_MPG }
 #endif
-#if KEYPAD_ENABLE && defined(KEYPAD_PIN)
+#if KEYPAD_ENABLE && defined(KEYPAD_STROBE_PIN)
   , { .id = Input_KeypadStrobe, .port = &KeypadStrobe, .pin = KEYPAD_STROBE_PIN, .group = INPUT_GROUP_KEYPAD }
+#endif
+#ifdef SPINDLE_INDEX_PIN
+  , { .id = Input_SpindleIndex, .port = &SpindleIndex, .pin = SPINDLE_INDEX_PIN, .group = INPUT_GROUP_SPINDLE_INDEX }
 #endif
 #if QEI_ENABLE
   , { .id = Input_QEI_A,        .port = &QEI_A,        .pin = QEI_A_PIN,         .group = INPUT_GROUP_QEI }
@@ -328,7 +286,12 @@ static input_signal_t inputpin[] = {
 
 #define DIGITAL_OUT(gpio, on) { if(on) gpio.reg->DR_SET = gpio.bit; else gpio.reg->DR_CLEAR = gpio.bit; } 
 
+#if USB_SERIAL_CDC || QEI_ENABLE
+#define ADD_MSEVENT 1
 static volatile bool ms_event = false;
+#else
+#define ADD_MSEVENT 0
+#endif
 static bool IOInitDone = false, probe_invert = false;
 static uint16_t pulse_length, pulse_delay;
 static axes_signals_t next_step_outbits;
@@ -337,19 +300,33 @@ static delay_t grbl_delay = { .ms = 0, .callback = NULL };
 static axes_signals_t motors_1 = {AXES_BITMASK}, motors_2 = {AXES_BITMASK};
 #endif
 
-#ifndef VFD_SPINDLE
+#if !VFD_SPINDLE
 static bool pwmEnabled = false;
 static spindle_pwm_t spindle_pwm;
 
 static void spindle_set_speed (uint_fast16_t pwm_value);
 #endif
 
-#ifdef DRIVER_SETTINGS
-driver_settings_t driver_settings;
-#endif
-
 #if MODBUS_ENABLE
 static modbus_stream_t modbus_stream = {0};
+#endif
+
+#ifdef SPINDLE_SYNC_ENABLE
+
+#include "grbl/spindle_sync.h"
+
+static spindle_data_t spindle_data;
+static spindle_encoder_t spindle_encoder = {
+    .counter.tics_per_irq = 4
+};
+static spindle_sync_t spindle_tracker;
+static volatile bool spindleLock = false;
+
+static void stepperPulseStartSynchronized (stepper_t *stepper);
+static void spindleDataReset (void);
+static spindle_data_t spindleGetData (spindle_data_request_t request);
+static void spindle_pulse_isr (void);
+
 #endif
 
 #if ETHERNET_ENABLE
@@ -687,10 +664,17 @@ static void stepperCyclesPerTick (uint32_t cycles_per_tick)
 // stepper_t struct is defined in grbl/stepper.h
 static void stepperPulseStart (stepper_t *stepper)
 {
-    if(stepper->dir_change) {
-        stepper->dir_change = false;
-        set_dir_outputs(stepper->dir_outbits);
+#ifdef SPINDLE_SYNC_ENABLE
+    if(stepper->new_block && stepper->exec_segment->spindle_sync) {
+        spindle_tracker.stepper_pulse_start_normal = hal.stepper.pulse_start;
+        hal.stepper.pulse_start = stepperPulseStartSynchronized;
+        hal.stepper.pulse_start(stepper);
+        return;
     }
+#endif
+
+    if(stepper->dir_change)
+        set_dir_outputs(stepper->dir_outbits);
 
     if(stepper->step_outbits.value) {
         set_step_outputs(stepper->step_outbits);
@@ -705,9 +689,17 @@ static void stepperPulseStart (stepper_t *stepper)
 // stepper_t struct is defined in grbl/stepper.h
 static void stepperPulseStartDelayed (stepper_t *stepper)
 {
+#ifdef SPINDLE_SYNC_ENABLE
+    if(stepper->new_block && stepper->exec_segment->spindle_sync) {
+        spindle_tracker.stepper_pulse_start_normal = hal.stepper.pulse_start;
+        hal.stepper.pulse_start = stepperPulseStartSynchronized;
+        hal.stepper.pulse_start(stepper);
+        return;
+    }
+#endif
+
     if(stepper->dir_change) {
 
-        stepper->dir_change = false;
         set_dir_outputs(stepper->dir_outbits);
 
         if(stepper->step_outbits.value) {
@@ -728,6 +720,116 @@ static void stepperPulseStartDelayed (stepper_t *stepper)
         TMR4_CTRL0 |= TMR_CTRL_CM(0b001);
     }
 }
+
+#ifdef SPINDLE_SYNC_ENABLE
+
+// Spindle sync version: sets stepper direction and pulse pins and starts a step pulse.
+// Switches back to "normal" version if spindle synchronized motion is finished.
+// TODO: add delayed pulse handling...
+static void stepperPulseStartSynchronized (stepper_t *stepper)
+{
+    static bool sync = false;
+    static float block_start;
+
+    if(stepper->new_block) {
+        if(!stepper->exec_segment->spindle_sync) {
+            hal.stepper.pulse_start = spindle_tracker.stepper_pulse_start_normal;
+            hal.stepper.pulse_start(stepper);
+            return;
+        }
+        sync = true;
+        set_dir_outputs(stepper->dir_outbits);
+        spindle_tracker.programmed_rate = stepper->exec_block->programmed_rate;
+        spindle_tracker.steps_per_mm = stepper->exec_block->steps_per_mm;
+        spindle_tracker.segment_id = 0;
+        spindle_tracker.prev_pos = 0.0f;
+        block_start = spindleGetData(SpindleData_AngularPosition).angular_position * spindle_tracker.programmed_rate;
+        pidf_reset(&spindle_tracker.pid);
+#ifdef PID_LOG
+        sys.pid_log.idx = 0;
+        sys.pid_log.setpoint = 100.0f;
+#endif
+    }
+
+    if(stepper->step_outbits.value) {
+        set_step_outputs(stepper->step_outbits);
+        TMR4_CTRL0 |= TMR_CTRL_CM(0b001);
+    }
+
+    if(spindle_tracker.segment_id != stepper->exec_segment->id) {
+
+        spindle_tracker.segment_id = stepper->exec_segment->id;
+
+        if(!stepper->new_block) {  // adjust this segments total time for any positional error since last segment
+
+            float actual_pos;
+
+            if(stepper->exec_segment->cruising) {
+
+                float dt = (float)hal.f_step_timer / (float)(stepper->exec_segment->cycles_per_tick * stepper->exec_segment->n_step);
+                actual_pos = spindleGetData(SpindleData_AngularPosition).angular_position * spindle_tracker.programmed_rate;
+
+                if(sync) {
+                    spindle_tracker.pid.sample_rate_prev = dt;
+//                    block_start += (actual_pos - spindle_tracker.block_start) - spindle_tracker.prev_pos;
+//                    block_start += spindle_tracker.prev_pos;
+                    sync = false;
+                }
+
+                actual_pos -= block_start;
+                int32_t step_delta = (int32_t)(pidf(&spindle_tracker.pid, spindle_tracker.prev_pos, actual_pos, dt) * spindle_tracker.steps_per_mm);
+
+
+                int32_t ticks = (((int32_t)stepper->step_count + step_delta) * (int32_t)stepper->exec_segment->cycles_per_tick) / (int32_t)stepper->step_count;
+
+                stepper->exec_segment->cycles_per_tick = (uint32_t)max(ticks, spindle_tracker.min_cycles_per_tick);
+
+                stepperCyclesPerTick(stepper->exec_segment->cycles_per_tick);
+           } else
+               actual_pos = spindle_tracker.prev_pos;
+
+#ifdef PID_LOG
+            if(sys.pid_log.idx < PID_LOG) {
+
+                sys.pid_log.target[sys.pid_log.idx] = spindle_tracker.prev_pos;
+                sys.pid_log.actual[sys.pid_log.idx] = actual_pos; // - spindle_tracker.prev_pos;
+
+            //    spindle_tracker.log[sys.pid_log.idx] = STEPPER_TIMER->BGLOAD << stepper->amass_level;
+            //    spindle_tracker.pos[sys.pid_log.idx] = stepper->exec_segment->cycles_per_tick  stepper->amass_level;
+            //    spindle_tracker.pos[sys.pid_log.idx] = stepper->exec_segment->cycles_per_tick * stepper->step_count;
+            //    STEPPER_TIMER->BGLOAD = STEPPER_TIMER->LOAD;
+
+             //   spindle_tracker.pos[sys.pid_log.idx] = spindle_tracker.prev_pos;
+
+                sys.pid_log.idx++;
+            }
+#endif
+        }
+
+        spindle_tracker.prev_pos = stepper->exec_segment->target_position;
+    }
+}
+
+#endif
+
+#if PLASMA_ENABLE
+
+#if PLASMA_ENABLE
+static void output_pulse_isr(void);
+#endif
+
+static axes_signals_t pulse_output = {0};
+
+void stepperOutputStep (axes_signals_t step_outbits, axes_signals_t dir_outbits)
+{
+    pulse_output = step_outbits;
+    dir_outbits.value ^= settings.steppers.dir_invert.mask;
+
+    DIGITAL_OUT(dirZ, dir_outbits.z);
+    TMR2_CTRL0 |= TMR_CTRL_CM(0b001);
+}
+
+#endif
 
 #ifdef DUAL_LIMIT_SWITCHES
 
@@ -799,6 +901,23 @@ inline static axes_signals_t limitsGetState()
 #endif
 
 #ifdef SQUARING_ENABLED
+
+static axes_signals_t getAutoSquaredAxes (void)
+{
+    axes_signals_t ganged = {0};
+
+    #if X_AUTO_SQUARE
+    ganged.x = On;
+#endif
+#if Y_AUTO_SQUARE
+    ganged.y = On;
+#endif
+#if Z_AUTO_SQUARE
+    ganged.z = On;
+#endif
+
+    return ganged;
+}
 
 // Enable/disable motors for auto squaring of ganged axes
 static void StepperDisableMotors (axes_signals_t axes, squaring_mode_t mode)
@@ -875,7 +994,7 @@ static void limitsEnable (bool on, bool homing)
     } while(i);
 
 #ifdef SQUARING_ENABLED
-    hal.limits_get_state = homing ? limitsGetHomeState : limitsGetState;
+    hal.limits.get_state = homing ? limitsGetHomeState : limitsGetState;
 #endif
 }
 
@@ -897,7 +1016,7 @@ inline static control_signals_t systemGetState (void)
 #endif
     signals.feed_hold = (FeedHold.reg->DR & FeedHold.bit) != 0;
     signals.cycle_start = (CycleStart.reg->DR & CycleStart.bit) != 0;
-#ifdef SAFETY_DOOR_PIN
+#if defined(ENABLE_SAFETY_DOOR_INPUT_PIN) && defined(SAFETY_DOOR_PIN)
     signals.safety_door_ajar = (SafetyDoor.reg->DR & SafetyDoor.bit) != 0;
 #endif
 
@@ -912,7 +1031,7 @@ inline static control_signals_t systemGetState (void)
 // and the probing cycle modes for toward-workpiece/away-from-workpiece.
 static void probeConfigure (bool is_probe_away, bool probing)
 {
-    probe_invert = !settings.flags.invert_probe_pin;
+    probe_invert = !settings.probe.invert_probe_pin;
 
     if (is_probe_away)
         probe_invert = !probe_invert;
@@ -930,7 +1049,7 @@ probe_state_t probeGetState (void)
     return state;
 }
 
-#ifndef VFD_SPINDLE
+#if !VFD_SPINDLE
 
 // Static spindle (off, on cw & on ccw)
 
@@ -942,6 +1061,9 @@ inline static void spindle_off ()
 inline static void spindle_on ()
 {
     DIGITAL_OUT(spindleEnable, !settings.spindle.invert.on);
+#ifdef SPINDLE_SYNC_ENABLE
+    spindleDataReset();
+#endif
 }
 
 inline static void spindle_dir (bool ccw)
@@ -1038,6 +1160,15 @@ static void spindleSetStateVariable (spindle_state_t state, float rpm)
             spindle_dir(state.ccw);
         spindle_set_speed(spindle_compute_pwm_value(&spindle_pwm, rpm, false));
     }
+
+#ifdef SPINDLE_SYNC_ENABLE
+    if(settings.spindle.at_speed_tolerance > 0.0f) {
+        float tolerance = rpm * settings.spindle.at_speed_tolerance / 100.0f;
+        spindle_data.rpm_low_limit = rpm - tolerance;
+        spindle_data.rpm_high_limit = rpm + tolerance;
+    }
+    spindle_data.rpm_programmed = spindle_data.rpm = rpm;
+#endif
 }
 
 // Returns spindle state in a spindle_state_t variable.
@@ -1057,8 +1188,104 @@ static spindle_state_t spindleGetState (void)
 
     state.value ^= settings.spindle.invert.mask;
 
+#ifdef SPINDLE_SYNC_ENABLE
+    float rpm = spindleGetData(SpindleData_RPM).rpm;
+    state.at_speed = settings.spindle.at_speed_tolerance <= 0.0f || (rpm >= spindle_data.rpm_low_limit && rpm <= spindle_data.rpm_high_limit);
+#endif
+
     return state;
 }
+
+#if PPI_ENABLE
+
+static void spindlePulseOn (uint_fast16_t pulse_length)
+{
+    static uint_fast16_t plen = 0;
+
+    if(plen != pulse_length) {
+        plen = pulse_length;
+        PPI_TIMER.CH[0].COMP1 = (uint16_t)((pulse_length * F_BUS_MHZ) / 128);
+    }
+
+    spindle_on();
+    PPI_TIMER.CH[0].CTRL |= TMR_CTRL_CM(0b001);
+}
+
+#endif
+
+#ifdef SPINDLE_SYNC_ENABLE
+
+static spindle_data_t spindleGetData (spindle_data_request_t request)
+{
+    bool stopped;
+    uint32_t pulse_length = spindle_encoder.timer.pulse_length / spindle_encoder.counter.tics_per_irq;
+    spindle_encoder.pulse_distance = 1.0f / 120.0f;
+    uint32_t rpm_timer_delta = GPT1_CNT - spindle_encoder.timer.last_pulse;
+
+    // If no (4) spindle pulses during last 250 ms assume RPM is 0
+    if((stopped = ((pulse_length == 0) || (rpm_timer_delta > spindle_encoder.maximum_tt)))) {
+        spindle_data.rpm = 0.0f;
+        rpm_timer_delta = (GPT2_CNT - spindle_encoder.counter.last_count) * pulse_length;
+    }
+
+    switch(request) {
+
+        case SpindleData_Counters:
+            spindle_data.pulse_count = GPT2_CNT;
+            break;
+
+        case SpindleData_RPM:
+            if(!stopped)
+                spindle_data.rpm = spindle_encoder.rpm_factor / (float)pulse_length;
+            break;
+
+        case SpindleData_AngularPosition:;
+            while(spindleLock);
+            int32_t d = spindle_encoder.counter.last_count - spindle_encoder.counter.last_index;
+            spindle_data.angular_position = (float)spindle_data.index_count +
+                    ((float)(d) +
+                             (pulse_length == 0 ? 0.0f : (float)rpm_timer_delta / (float)pulse_length)) *
+                                spindle_encoder.pulse_distance;
+            break;
+    }
+
+    return spindle_data;
+}
+
+static void spindleDataReset (void)
+{
+    while(spindleLock);
+
+    uint32_t timeout = millis() + 1000; // 1 second
+
+    uint32_t index_count = spindle_data.index_count + 2;
+    if(spindleGetData(SpindleData_RPM).rpm > 0.0f) { // wait for index pulse if running
+
+        while(index_count != spindle_data.index_count && millis() <= timeout);
+
+//        if(uwTick > timeout)
+//            alarm?
+    }
+
+    GPT2_CR &= ~GPT_CR_EN;  // Reset timer
+    GPT1_CR &= ~GPT_CR_EN;  // Reset timer
+    GPT1_PR = 24;
+    GPT1_CR |= GPT_CR_EN;
+
+    spindle_encoder.timer.last_index = GPT1_CNT;
+    spindle_encoder.timer.pulse_length = 0;
+    spindle_encoder.counter.last_count = 0;
+    spindle_encoder.counter.last_index = 0;
+
+    spindle_data.pulse_count = 0;
+    spindle_data.index_count = 0;
+
+    // Spindle pulse counter
+    GPT2_OCR1 = spindle_encoder.counter.tics_per_irq;
+    GPT2_CR |= GPT_CR_EN;
+}
+
+#endif
 
 // end spindle code
 
@@ -1088,19 +1315,9 @@ static coolant_state_t coolantGetState (void)
     return state;
 }
 
-static void showMessage (const char *msg)
-{
-    hal.stream.write("[MSG:");
-    hal.stream.write(msg);
-    hal.stream.write("]" ASCII_EOL);
-}
-
 #if ETHERNET_ENABLE
 static void reportIP (void)
 {
-    hal.stream.write("[IP:");
-    hal.stream.write(enet_ip_address());
-    hal.stream.write("]" ASCII_EOL);
     if(services.telnet || services.websocket) {
         hal.stream.write("[NETCON:");
         hal.stream.write(services.telnet ? "Telnet" : "Websocket");
@@ -1145,29 +1362,46 @@ static void settings_changed (settings_t *settings)
         stepperEnable(settings->steppers.deenergize);
 
 #ifdef SQUARING_ENABLED
-        hal.stepper_disable_motors((axes_signals_t){0}, SquaringMode_Both);
+        hal.stepper.disable_motors((axes_signals_t){0}, SquaringMode_Both);
 #endif
 
-#if ETHERNET_ENABLE
-
-        if(!enet_ok)
-            enet_ok = grbl_enet_init(&driver_settings.network);
-
-#endif
-
-#ifndef VFD_SPINDLE
+#if !PLASMA_ENABLE && !defined(SPINDLE_RPM_CONTROLLED)
 
         if(hal.driver_cap.variable_spindle && spindle_precompute_pwm_values(&spindle_pwm, F_BUS_ACTUAL / 2)) {
-#if SPINDLEPWMPIN == 12
+  #if SPINDLEPWMPIN == 12
             TMR1_COMP11 = spindle_pwm.period;
             TMR1_CMPLD11 = spindle_pwm.period;
-#else // 13
+  #else // 13
             TMR2_COMP10 = spindle_pwm.period;
             TMR2_CMPLD10 = spindle_pwm.period;
-#endif
-            hal.spindle_set_state = spindleSetStateVariable;
+  #endif
+            hal.spindle.set_state = spindleSetStateVariable;
         } else
-            hal.spindle_set_state = spindleSetState;
+            hal.spindle.set_state = spindleSetState;
+#elif !VFD_SPINDLE
+        hal.spindle.set_state = spindleSetState;
+#endif
+
+#ifdef SPINDLE_SYNC_ENABLE
+
+        if((hal.spindle.get_data = settings->spindle.ppr > 0 ? spindleGetData : NULL) && spindle_encoder.ppr != settings->spindle.ppr) {
+
+            hal.spindle.reset_data = spindleDataReset;
+            hal.spindle.set_state((spindle_state_t){0}, 0.0f);
+
+            pidf_init(&spindle_tracker.pid, &settings->position.pid);
+
+            float timer_resolution = 1.0f / 1000000.0f; // 1 us resolution
+
+            spindle_tracker.min_cycles_per_tick = (int32_t)ceilf(settings->steppers.pulse_microseconds * 2.0f + settings->steppers.pulse_delay_microseconds);
+            spindle_encoder.ppr = settings->spindle.ppr;
+            spindle_encoder.counter.tics_per_irq = 20;
+            spindle_encoder.pulse_distance = 1.0f / spindle_encoder.ppr;
+            spindle_encoder.maximum_tt = (uint32_t)(0.25f / timer_resolution) * spindle_encoder.counter.tics_per_irq; // 250 mS
+            spindle_encoder.rpm_factor = 60.0f / ((timer_resolution * (float)spindle_encoder.ppr));
+            spindleDataReset();
+            //        spindle_data.rpm = 60.0f / ((float)(spindle_encoder.tpp * spindle_encoder.ppr) * spindle_encoder.timer_resolution); // TODO: get rid of division
+        }
 
 #endif
 
@@ -1180,15 +1414,22 @@ static void settings_changed (settings_t *settings)
             float delay = settings->steppers.pulse_delay_microseconds - STEP_PULSE_LATENCY;
             if(delay <= STEP_PULSE_LATENCY)
                 delay = STEP_PULSE_LATENCY + 0.2f;
-            pulse_delay = (uint16_t)((float)F_BUS_MHZ * delay);;
-            hal.stepper_pulse_start = stepperPulseStartDelayed;
+            pulse_delay = (uint16_t)((float)F_BUS_MHZ * delay);
+            hal.stepper.pulse_start = stepperPulseStartDelayed;
         } else
-            hal.stepper_pulse_start = stepperPulseStart;
+            hal.stepper.pulse_start = stepperPulseStart;
 
         TMR4_COMP10 = pulse_length;
         TMR4_CSCTRL0 &= ~TMR_CSCTRL_TCF2EN;
         TMR4_CTRL0 &= ~TMR_CTRL_OUTMODE(0b000);
         attachInterruptVector(IRQ_QTIMER4, stepper_pulse_isr);
+
+#if PLASMA_ENABLE
+        TMR2_CSCTRL0 &= ~(TMR_CSCTRL_TCF1|TMR_CSCTRL_TCF2);
+        TMR2_COMP10 = pulse_length;
+        TMR2_CSCTRL0 &= ~TMR_CSCTRL_TCF2EN;
+        TMR2_CTRL0 &= ~TMR_CTRL_OUTMODE(0b000);
+#endif
 
         /****************************************
          *  Control, limit & probe pins config  *
@@ -1287,28 +1528,39 @@ static void settings_changed (settings_t *settings)
 #endif
 #if KEYPAD_ENABLE
                 case Input_KeypadStrobe:
+                    pullup = true;
                     signal->irq_mode = IRQ_Mode_Change;
+                    break;
+#endif
+#ifdef SPINDLE_INDEX_PIN
+                case Input_SpindleIndex:
+                    pullup = false;
+                    signal->irq_mode = IRQ_Mode_Rising;
                     break;
 #endif
 #if QEI_ENABLE
                 case Input_QEI_A:
-                    signal->irq_mode = IRQ_Mode_Change;
+                    if(qei_enable)
+                        signal->irq_mode = IRQ_Mode_Change;
                     break;
 
                 case Input_QEI_B:
-                    signal->irq_mode = IRQ_Mode_Change;
+                    if(qei_enable)
+                        signal->irq_mode = IRQ_Mode_Change;
                     break;
 
   #if QEI_INDEX_ENABLED
                 case Input_QEI_Index:
-                    signal->irq_mode = IRQ_Mode_None;
+                    if(qei_enable)
+                        signal->irq_mode = IRQ_Mode_None;
                     break;
   #endif
 
   #if QEI_SELECT_ENABLED
                 case Input_QEI_Select:
                     signal->debounce = hal.driver_cap.software_debounce;
-                    signal->irq_mode = IRQ_Mode_Falling;
+                    if(qei_enable)
+                        signal->irq_mode = IRQ_Mode_Falling;
                     break;
   #endif
 #endif
@@ -1373,7 +1625,7 @@ void pinModeOutput (gpio_t *gpio, uint8_t pin)
 
 #if QEI_ENABLE
 
-void qei_update (void)
+static void qei_update (void)
 {
     const uint8_t encoder_valid_state[] = {0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0};
 
@@ -1392,21 +1644,21 @@ void qei_update (void)
         if (qei.state == 0x42 || qei.state == 0xD4 || qei.state == 0x2B || qei.state == 0xBD) {
             qei.count--;
             if(qei.vel_timeout == 0) {
-                qei.encoder.event.position_changed = hal.encoder_event_handler != NULL;
-                hal.encoder_event_handler(&qei.encoder, qei.count);
+                qei.encoder.event.position_changed = hal.encoder.on_event != NULL;
+                hal.encoder.on_event(&qei.encoder, qei.count);
             }
         } else if(qei.state == 0x81 || qei.state == 0x17 || qei.state == 0xE8 || qei.state == 0x7E) {
             qei.count++;
             if(qei.vel_timeout == 0) {
-                qei.encoder.event.position_changed = hal.encoder_event_handler != NULL;
-                hal.encoder_event_handler(&qei.encoder, qei.count);
+                qei.encoder.event.position_changed = hal.encoder.on_event != NULL;
+                hal.encoder.on_event(&qei.encoder, qei.count);
             }
         }
     }
 
 }
 
-void qei_reset (uint_fast8_t id)
+static void qei_reset (uint_fast8_t id)
 {
     qei.vel_timeout = 0;
     qei.count = qei.vel_count = 0;
@@ -1414,19 +1666,20 @@ void qei_reset (uint_fast8_t id)
     qei.vel_timeout = qei.encoder.axis != 0xFF ? QEI_VELOCITY_TIMEOUT : 0;
 }
 
+// dummy handler, called on events if plugin init fails
+static void encoder_event (encoder_t *encoder, int32_t position)
+{
+    UNUSED(position);
+    encoder->event.events = 0;
+}
+
 #endif
 
 // Initializes MCU peripherals for Grbl use
 static bool driver_setup (settings_t *settings)
 {
-#ifdef DRIVER_SETTINGS
-    if(hal.eeprom.driver_area.address != 0) {
-        if(!hal.eeprom.memcpy_from_with_checksum((uint8_t *)&driver_settings, hal.eeprom.driver_area.address, sizeof(driver_settings)))
-            hal.driver_settings_restore();
-      #if TRINAMIC_ENABLE && defined(BOARD_CNC_BOOSTERPACK) // Trinamic BoosterPack does not support mixed drivers
-        driver_settings.trinamic.driver_enable.mask = AXES_BITMASK;
-      #endif
-    }
+#if TRINAMIC_ENABLE && defined(BOARD_CNC_BOOSTERPACK) // Trinamic BoosterPack does not support mixed drivers
+    driver_settings.trinamic.driver_enable.mask = AXES_BITMASK;
 #endif
 
     /******************
@@ -1450,6 +1703,19 @@ static bool driver_setup (settings_t *settings)
     NVIC_ENABLE_IRQ(IRQ_QTIMER4);
 
     TMR4_ENBL = 1;
+
+#if PLASMA_ENABLE
+    TMR2_ENBL = 0;
+    TMR2_LOAD0 = 0;
+    TMR2_CTRL0 = TMR_CTRL_PCS(0b1000) | TMR_CTRL_ONCE | TMR_CTRL_LENGTH;
+    TMR2_CSCTRL0 = TMR_CSCTRL_TCF1EN;
+
+    attachInterruptVector(IRQ_QTIMER2, output_pulse_isr);
+    NVIC_SET_PRIORITY(IRQ_QTIMER2, 0);
+    NVIC_ENABLE_IRQ(IRQ_QTIMER2);
+
+    TMR2_ENBL = 1;
+#endif
 
     pinModeOutput(&stepX, X_STEP_PIN);
     pinModeOutput(&dirX, X_DIRECTION_PIN);
@@ -1525,7 +1791,7 @@ static bool driver_setup (settings_t *settings)
         TMR3_ENBL = 0;
         TMR3_LOAD0 = 0;
         TMR3_CTRL0 = TMR_CTRL_PCS(0b1111) | TMR_CTRL_ONCE | TMR_CTRL_LENGTH;
-        TMR3_COMP10 = (40000 * 128) / F_BUS_MHZ; // 150 MHz -> 40ms
+        TMR3_COMP10 = (uint16_t)((40000UL * F_BUS_MHZ) / 128); // 150 MHz -> 40ms
         TMR3_CSCTRL0 = TMR_CSCTRL_TCF1EN;
 
         attachInterruptVector(IRQ_QTIMER3, debounce_isr);
@@ -1548,7 +1814,7 @@ static bool driver_setup (settings_t *settings)
     pinModeOutput(&Flood, COOLANT_FLOOD_PIN);
     pinModeOutput(&Mist, COOLANT_MIST_PIN);
 
-#ifndef VFD_SPINDLE
+#if !VFD_SPINDLE
 
    /******************
     *  Spindle init  *
@@ -1556,6 +1822,8 @@ static bool driver_setup (settings_t *settings)
 
     pinModeOutput(&spindleEnable, SPINDLE_ENABLE_PIN);
     pinModeOutput(&spindleDir, SPINDLE_DIRECTION_PIN);
+
+#if !PLASMA_ENABLE
 
 #if SPINDLEPWMPIN == 12
     TMR1_ENBL = 0;
@@ -1573,105 +1841,94 @@ static bool driver_setup (settings_t *settings)
 
     *(portConfigRegister(SPINDLEPWMPIN)) = 1;
 
-#endif
+#ifdef SPINDLE_SYNC_ENABLE
+
+    CCM_CCGR1 |= CCM_CCGR1_GPT1_BUS(CCM_CCGR_ON);
+    CCM_CMEOR |= CCM_CMEOR_MOD_EN_OV_GPT;
+
+    // Free running timer
+    GPT1_CR = 0;
+    GPT1_CR |= GPT_CR_SWR;
+    while(GPT1_CR & GPT_CR_SWR);
+    GPT1_CR = GPT_CR_CLKSRC(1);
+    GPT1_CR |= GPT_CR_FRR|GPT_CR_ENMOD|GPT_CR_EN;
+    GPT1_PR = 150;
+
+  #if SPINDLE_PULSE_PIN == 14
+
+    CCM_CCGR0 |= CCM_CCGR0_GPT2_BUS(CCM_CCGR_ON);
+
+    IOMUXC_SW_MUX_CTL_PAD_GPIO_AD_B1_02 = 8;
+    IOMUXC_SW_PAD_CTL_PAD_GPIO_AD_B1_02 = IOMUXC_PAD_DSE(7) | IOMUXC_PAD_PKE | IOMUXC_PAD_PUE | IOMUXC_PAD_PUS(3) | IOMUXC_PAD_HYS;
+//    IOMUXC_SW_PAD_CTL_PAD_GPIO_AD_B1_02 = 0x001d0b0;
+    IOMUXC_GPT2_IPP_IND_CLKIN_SELECT_INPUT = 1;
+
+    // Spindle pulse counter
+    GPT2_CR = 0;
+    GPT2_CR |= GPT_CR_SWR;
+    while(GPT2_CR & GPT_CR_SWR);
+    GPT2_CR = GPT_CR_CLKSRC(3);
+    GPT2_CR |= GPT_CR_ENMOD;
+    GPT2_CR |= GPT_CR_FRR|GPT_CR_EN;
+    GPT2_OCR1 = spindle_encoder.counter.tics_per_irq;
+    GPT2_IR = GPT_IR_OF1IE;
+
+    attachInterruptVector(IRQ_GPT2, spindle_pulse_isr);
+    NVIC_SET_PRIORITY(IRQ_GPT2, 1);
+    NVIC_ENABLE_IRQ(IRQ_GPT2);
+
+  #endif
+
+#endif // SPINDLE_SYNC_ENABLE
+
+#if PPI_ENABLE
+
+    PPI_TIMER.ENBL = 0;
+    PPI_TIMER.CH[0].LOAD = 0;
+    PPI_TIMER.CH[0].COMP1 = (uint16_t)((1500UL * F_BUS_MHZ) / 128);
+    PPI_TIMER.CH[0].CTRL = TMR_CTRL_PCS(0b1111) | TMR_CTRL_ONCE | TMR_CTRL_LENGTH;
+    PPI_TIMER.CH[0].CSCTRL = TMR_CSCTRL_TCF1EN;
+
+    attachInterruptVector(PPI_TIMERIRQ, ppi_timeout_isr);
+    NVIC_SET_PRIORITY(PPI_TIMERIRQ, 3);
+    NVIC_ENABLE_IRQ(PPI_TIMERIRQ);
+
+    PPI_TIMER.ENBL = 1;
+
+    ppi_init();
+
+  #endif // PPI_ENABLE
+
+#endif // !PLASMA_ENABLE
+
+#endif // !VFD_SPINDLE
 
   // Set defaults
 
-    IOInitDone = settings->version == 17;
+    IOInitDone = settings->version == 18;
 
-    settings_changed(settings);
-
-    hal.stepper_go_idle(true);
+    hal.settings_changed(settings);
+    hal.stepper.go_idle(true);
 
 #if IOPORTS_ENABLE
     ioports_init();
-#endif
-
-#if QEI_ENABLE
-    encoder_init(&qei.encoder);
 #endif
 
 #if SDCARD_ENABLE
     sdcard_init();
 #endif
 
+#if ETHERNET_ENABLE
+    grbl_enet_start();
+#endif
+
+#if QEI_ENABLE
+    if(qei_enable)
+        encoder_start(&qei.encoder);
+#endif
+
     return IOInitDone;
 }
-
-#ifdef DRIVER_SETTINGS
-
-static status_code_t driver_setting (setting_type_t param, float value, char *svalue)
-{
-    status_code_t status = Status_Unhandled;
-
-#if ETHERNET_ENABLE
-    status = ethernet_setting(param, value, svalue);
-#endif
-
-#if KEYPAD_ENABLE
-    if(status == Status_Unhandled)
-        status = keypad_setting(param, value, svalue);
-#endif
-
-#if TRINAMIC_ENABLE
-    if(status == Status_Unhandled)
-        status = trinamic_setting(param, value, svalue);
-#endif
-
-#if QEI_ENABLE
-    if(status == Status_Unhandled) {
-        if((status = encoder_setting(param, value, svalue)) != Status_Unhandled)
-            encoder_init(&qei.encoder); // Reinit encoders on setting changes
-    }
-#endif
-
-    if(status == Status_OK)
-        hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
-
-    return status;
-}
-
-static void driver_settings_report (setting_type_t setting)
-{
-#if ETHERNET_ENABLE
-    ethernet_settings_report(setting);
-#endif
-
-#if KEYPAD_ENABLE
-    keypad_settings_report(setting);
-#endif
-
-#if TRINAMIC_ENABLE
-    trinamic_settings_report(setting);
-#endif
-
-#if QEI_ENABLE
-    encoder_settings_report(setting);
-#endif
-}
-
-static void driver_settings_restore (void)
-{
-#if ETHERNET_ENABLE
-    ethernet_settings_restore();
-#endif
-
-#if KEYPAD_ENABLE
-    keypad_settings_restore();
-#endif
-
-#if TRINAMIC_ENABLE
-    trinamic_settings_restore();
-#endif
-
-#if QEI_ENABLE
-    encoder_settings_restore();
-#endif
-
-    hal.eeprom.memcpy_to_with_checksum(hal.eeprom.driver_area.address, (uint8_t *)&driver_settings, sizeof(driver_settings));
-}
-
-#endif
 
 #if EEPROM_ENABLE == 0
 
@@ -1681,14 +1938,14 @@ bool nvsRead (uint8_t *dest)
 {
 // assert size ? E2END
 
-    eeprom_read_block(dest, 0, hal.eeprom.size);
+    eeprom_read_block(dest, 0, hal.nvs.size);
 
     return true; //?;
 }
 
 bool nvsWrite (uint8_t *source)
 {
-    eeprom_write_block(source, 0, hal.eeprom.size);
+    eeprom_write_block(source, 0, hal.nvs.size);
 
     return true; //?;
 }
@@ -1697,22 +1954,36 @@ bool nvsWrite (uint8_t *source)
 
 #endif
 
-#if QEI_SELECT_ENABLED || KEYPAD_ENABLE || ETHERNET_ENABLE || USB_SERIAL_CDC > 0
+#if ETHERNET_ENABLE || ADD_MSEVENT
 
 static void execute_realtime (uint_fast16_t state)
 {
+#if ADD_MSEVENT
     if(ms_event) {
+
         ms_event = false;
-  #if USB_SERIAL_CDC > 0
-    usb_execute_realtime(state);
+
+  #if USB_SERIAL_CDC
+        usb_execute_realtime(state);
   #endif
-  #if KEYPAD_ENABLE
-    keypad_process_keypress(state);
-  #endif
-  #if QEI_SELECT_ENABLED
-    encoder_execute_realtime(state);
+
+  #if QEI_ENABLE
+        if(qei.vel_timeout && !(--qei.vel_timeout)) {
+            qei.encoder.velocity = abs(qei.count - qei.vel_count) * 1000 / (millis() - qei.vel_timestamp);
+            qei.vel_timestamp = millis();
+            qei.vel_timeout = QEI_VELOCITY_TIMEOUT;
+            if((qei.encoder.event.position_changed = !qei.dbl_click_timeout || qei.encoder.velocity == 0))
+                hal.encoder.on_event(&qei.encoder, qei.count);
+            qei.vel_count = qei.count;
+        }
+
+        if(qei.dbl_click_timeout && !(--qei.dbl_click_timeout)) {
+            qei.encoder.event.click = On;
+            hal.encoder.on_event(&qei.encoder, qei.count);
+        }
   #endif
     }
+#endif // ADD_MSEVENT
 
 #if ETHERNET_ENABLE
     grbl_enet_poll();
@@ -1775,11 +2046,15 @@ bool driver_init (void)
 #if SPINDLE_HUANYANG
     strcat(options, "HUANYANG ");
 #endif
+#if PLASMA_ENABLE
+    strcat(options, "PLASMA ");
+#endif
+
     if(*options != '\0')
         options[strlen(options) - 1] = '\0';
 
     hal.info = "IMXRT1062";
-    hal.driver_version = "200823";
+    hal.driver_version = "201014";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1790,38 +2065,46 @@ bool driver_init (void)
     hal.delay_ms = driver_delay_ms;
     hal.settings_changed = settings_changed;
 
-    hal.stepper_wake_up = stepperWakeUp;
-    hal.stepper_go_idle = stepperGoIdle;
-    hal.stepper_enable = stepperEnable;
-    hal.stepper_cycles_per_tick = stepperCyclesPerTick;
-    hal.stepper_pulse_start = stepperPulseStart;
+    hal.stepper.wake_up = stepperWakeUp;
+    hal.stepper.go_idle = stepperGoIdle;
+    hal.stepper.enable = stepperEnable;
+    hal.stepper.cycles_per_tick = stepperCyclesPerTick;
+    hal.stepper.pulse_start = stepperPulseStart;
 #ifdef SQUARING_ENABLED
-    hal.stepper_disable_motors = StepperDisableMotors;
+    hal.stepper.get_auto_squared = getAutoSquaredAxes;
+    hal.stepper.disable_motors = StepperDisableMotors;
 #endif
 
-    hal.limits_enable = limitsEnable;
-    hal.limits_get_state = limitsGetState;
+    hal.limits.enable = limitsEnable;
+    hal.limits.get_state = limitsGetState;
 
-    hal.coolant_set_state = coolantSetState;
-    hal.coolant_get_state = coolantGetState;
+    hal.coolant.set_state = coolantSetState;
+    hal.coolant.get_state = coolantGetState;
 
-    hal.probe_get_state = probeGetState;
-    hal.probe_configure_invert_mask = probeConfigure;
+    hal.probe.configure = probeConfigure;
+    hal.probe.get_state = probeGetState;
 
-#ifndef VFD_SPINDLE
-    hal.spindle_set_state = spindleSetState;
-    hal.spindle_get_state = spindleGetState;
+#if !VFD_SPINDLE
+    hal.spindle.set_state = spindleSetState;
+    hal.spindle.get_state = spindleGetState;
   #ifdef SPINDLE_PWM_DIRECT
-    hal.spindle_get_pwm = spindleGetPWM;
-    hal.spindle_update_pwm = spindle_set_speed;
+    hal.spindle.get_pwm = spindleGetPWM;
+    hal.spindle.update_pwm = spindle_set_speed;
   #else
-    hal.spindle_update_rpm = spindleUpdateRPM;
+    hal.spindle.update_rpm = spindleUpdateRPM;
+  #endif
+  #if PPI_ENABLE
+    hal.spindle.pulse_on = spindlePulseOn;
   #endif
 #endif
-    hal.system_control_get_state = systemGetState;
+#ifdef SPINDLE_SYNC_ENABLE
+    hal.driver_cap.spindle_sync = On;
+    hal.driver_cap.spindle_at_speed = On;
+#endif
+    hal.control.get_state = systemGetState;
 
 #if ETHERNET_ENABLE
-    hal.report_options = reportIP;
+    grbl.on_report_options = reportIP;
 #endif
 
 #if USB_SERIAL_CDC
@@ -1833,26 +2116,13 @@ bool driver_init (void)
     selectStream(StreamType_Serial);
 
 #if EEPROM_ENABLE
-    eepromInit(); 
-    hal.eeprom.type = EEPROM_Physical;
-    hal.eeprom.get_byte = eepromGetByte;
-    hal.eeprom.put_byte = eepromPutByte;
-    hal.eeprom.memcpy_to_with_checksum = eepromWriteBlockWithChecksum;
-    hal.eeprom.memcpy_from_with_checksum = eepromReadBlockWithChecksum;
+    i2c_init();
+    i2c_eeprom_init();
 #else // use Arduino emulated EEPROM in flash
     eeprom_initialize();
-    hal.eeprom.type = EEPROM_Emulated;
-    hal.eeprom.memcpy_from_flash = nvsRead;
-    hal.eeprom.memcpy_to_flash = nvsWrite;
-#endif
-
-#ifdef DRIVER_SETTINGS
-    hal.eeprom.driver_area.address = GRBL_EEPROM_SIZE;
-    hal.eeprom.size = GRBL_EEPROM_SIZE + sizeof(driver_settings_t) + 1;
-    hal.eeprom.driver_area.size = sizeof(driver_settings_t);
-    hal.driver_setting = driver_setting;
-    hal.driver_settings_report = driver_settings_report;
-    hal.driver_settings_restore = driver_settings_restore;
+    hal.nvs.type = NVS_Flash;
+    hal.nvs.memcpy_from_flash = nvsRead;
+    hal.nvs.memcpy_to_flash = nvsWrite;
 #endif
 
     hal.reboot = reboot;
@@ -1861,18 +2131,13 @@ bool driver_init (void)
     hal.set_value_atomic = valueSetAtomic;
     hal.get_elapsed_ticks = millis;
 
-    hal.show_message = showMessage;
-
-#if QEI_SELECT_ENABLED || KEYPAD_ENABLE || ETHERNET_ENABLE || USB_SERIAL_CDC > 0
-    hal.execute_realtime = execute_realtime;
+#if ETHERNET_ENABLE || ADD_MSEVENT
+    grbl.on_execute_realtime = execute_realtime;
 #endif
 
 #if QEI_ENABLE
-    hal.encoder_reset = qei_reset;
-    hal.encoder_event_handler = encoder_event;
-  #if COMPATIBILITY_LEVEL <= 1
-    hal.driver_rt_report = encoder_rt_report;
-  #endif
+    hal.encoder.reset = qei_reset;
+    hal.encoder.on_event = encoder_event;
 #endif
 
 #if MODBUS_ENABLE
@@ -1889,23 +2154,10 @@ bool driver_init (void)
     modbus_init(&modbus_stream);
 #endif
 
-#if SPINDLE_HUANYANG
-    huanyang_init(&modbus_stream);
-#endif
-
-#ifdef DEBUGOUT
-    hal.debug_out = debugOut;
-#endif
-
-#ifdef UART_DEBUG
-    serialInit(115200);
-    uart_debug_write(ASCII_EOL "UART Debug:" ASCII_EOL);
-#endif
-
   // Driver capabilities, used for announcing and negotiating (with Grbl) driver functionality.
   // See driver_cap_t union i grbl/hal.h for available flags.
 
-#ifndef VFD_SPINDLE
+#if !VFD_SPINDLE && !PLASMA_ENABLE
   #ifdef SPINDLE_DIRECTION_PIN
     hal.driver_cap.spindle_dir = On;
   #endif
@@ -1920,23 +2172,6 @@ bool driver_init (void)
 #ifdef SAFETY_DOOR_PIN
     hal.driver_cap.safety_door = On;
 #endif
-#if ETHERNET_ENABLE
-    hal.driver_cap.ethernet = On;
-#endif
-#if SDCARD_ENABLE
-    hal.driver_cap.sd_card = On;
-#endif
-
-#if X_AUTO_SQUARE
-    hal.driver_cap.axis_ganged_x = On;
-#endif
-#if Y_AUTO_SQUARE
-    hal.driver_cap.axis_ganged_y = On;
-#endif
-#if Z_AUTO_SQUARE
-    hal.driver_cap.axis_ganged_z = On;
-#endif
-
     hal.driver_cap.software_debounce = On;
     hal.driver_cap.step_pulse_delay = On;
     hal.driver_cap.amass_level = 3;
@@ -1944,9 +2179,49 @@ bool driver_init (void)
     hal.driver_cap.limits_pull_up = On;
     hal.driver_cap.probe_pull_up = On;
 
+#ifdef DEBUGOUT
+    hal.debug_out = debugOut;
+#endif
+
+#ifdef UART_DEBUG
+    serialInit(115200);
+    uart_debug_write(ASCII_EOL "UART Debug:" ASCII_EOL);
+#endif
+
+#ifdef HAS_BOARD_INIT
+    board_init();
+#endif
+
+#if ETHERNET_ENABLE
+    grbl_enet_init();
+#endif
+
+#if KEYPAD_ENABLE
+    keypad_init();
+#endif
+
+#if QEI_ENABLE
+    qei_enable = encoder_init(QEI_ENABLE);
+#endif
+
+#if SPINDLE_HUANYANG
+    huanyang_init(&modbus_stream);
+#endif
+
+#if PLASMA_ENABLE
+    hal.stepper.output_step = stepperOutputStep;
+    plasma_init();
+#endif
+
+    my_plugin_init();
+
+#if ODOMETER_ENABLE
+    odometer_init(); // NOTE: this *must* be last plugin to be initialized as it claims storage at the end of NVS.
+#endif
+
     // No need to move version check before init.
     // Compiler will fail any signature mismatch for existing entries.
-    return hal.version == 6;
+    return hal.version == 7;
 }
 
 /* interrupt handlers */
@@ -1956,7 +2231,7 @@ static void stepper_driver_isr (void)
 {
     if(PIT_TFLG0 & PIT_TFLG_TIF) {
         PIT_TFLG0 |= PIT_TFLG_TIF;
-        hal.stepper_interrupt_callback();
+        hal.stepper.interrupt_callback();
     }
 }
 
@@ -1988,6 +2263,53 @@ static void stepper_pulse_isr_delayed (void)
     TMR4_COMP10 = pulse_length;
     TMR4_CTRL0 |= TMR_CTRL_CM(0b001);
 }
+
+#if defined(SPINDLE_SYNC_ENABLE) && SPINDLE_PULSE_PIN == 14
+
+static void spindle_pulse_isr (void)
+{
+    uint32_t tval = GPT1_CNT;
+
+    GPT2_SR |= GPT_SR_OF1; // clear interrupt flag
+    GPT2_OCR1 += spindle_encoder.counter.tics_per_irq;
+
+    spindleLock = true;
+
+    spindle_data.pulse_count = GPT2_CNT;
+
+    spindle_encoder.counter.last_count = spindle_data.pulse_count;
+    spindle_encoder.timer.pulse_length = tval - spindle_encoder.timer.last_pulse;
+    spindle_encoder.timer.last_pulse = tval;
+
+    spindleLock = false;
+}
+
+#endif
+
+#if PLASMA_ENABLE
+static void output_pulse_isr(void)
+{
+    axes_signals_t output = {pulse_output.mask ^ settings.steppers.dir_invert.mask};
+
+    TMR2_CSCTRL0 &= ~TMR_CSCTRL_TCF1;
+
+    DIGITAL_OUT(stepZ, output.z);
+
+    if(pulse_output.value) {
+        pulse_output.value = 0;
+        TMR2_CTRL0 |= TMR_CTRL_CM(0b001);
+    }
+}
+#endif
+
+#if PPI_ENABLE
+// Switches off the spindle (laser) after laser.pulse_length time has elapsed
+static void ppi_timeout_isr (void)
+{
+    PPI_TIMER.CH[0].CSCTRL &= ~TMR_CSCTRL_TCF1;
+    spindle_off();
+}
+#endif
 
 inline static bool enqueue_debounce (input_signal_t *signal)
 {
@@ -2032,25 +2354,24 @@ static void debounce_isr (void)
     }
 
     if(grp & INPUT_GROUP_LIMIT)
-        hal.limit_interrupt_callback(limitsGetState());
+        hal.limits.interrupt_callback(limitsGetState());
 
     if(grp & INPUT_GROUP_CONTROL)
-        hal.control_interrupt_callback(systemGetState());
+        hal.control.interrupt_callback(systemGetState());
 
 #if QEI_SELECT_ENABLED
 
     if(grp & INPUT_GROUP_QEI_SELECT) {
         if(!qei.dbl_click_timeout)
-            qei.dbl_click_timeout = driver_settings.encoder[0].dbl_click_window;
-        else if(qei.dbl_click_timeout < driver_settings.encoder[0].dbl_click_window - 40) {
+            qei.dbl_click_timeout = qei.encoder.settings->dbl_click_window;
+        else if(qei.dbl_click_timeout < qei.encoder.settings->dbl_click_window - 40) {
             qei.dbl_click_timeout = 0;
             qei.encoder.event.dbl_click = On;
-            hal.encoder_event_handler(&qei.encoder, qei.count);
+            hal.encoder.on_event(&qei.encoder, qei.count);
         }
     }
 
 #endif
-
 }
 
   //GPIO intr process
@@ -2095,7 +2416,17 @@ static void gpio_isr (void)
                         */
                     } else
 #endif
-                    grp |= inputpin[i].group;
+
+#if defined(SPINDLE_SYNC_ENABLE) && defined(SPINDLE_INDEX_PIN)
+                    if(inputpin[i].group & INPUT_GROUP_SPINDLE_INDEX) {
+                        spindleLock = true;
+                        spindle_data.index_count++;
+                        spindle_encoder.counter.last_index = GPT2_CNT;
+                        spindle_encoder.timer.last_index = GPT1_CNT;
+                        spindleLock = false;
+                    } else
+#endif
+                        grp |= inputpin[i].group;
                 }
             }
         }
@@ -2106,20 +2437,20 @@ static void gpio_isr (void)
     }
 
     if(grp & INPUT_GROUP_LIMIT)
-        hal.limit_interrupt_callback(limitsGetState());
+        hal.limits.interrupt_callback(limitsGetState());
 
     if(grp & INPUT_GROUP_CONTROL)
-        hal.control_interrupt_callback(systemGetState());
+        hal.control.interrupt_callback(systemGetState());
 
 #if QEI_SELECT_ENABLED
 
     if(grp & INPUT_GROUP_QEI_SELECT) {
         if(!qei.dbl_click_timeout)
-            qei.dbl_click_timeout = driver_settings.encoder[0].dbl_click_window;
-        else if(qei.dbl_click_timeout < driver_settings.encoder[0].dbl_click_window - 40) {
+            qei.dbl_click_timeout = qei.encoder.settings->dbl_click_window;
+        else if(qei.dbl_click_timeout < qei.encoder.settings->dbl_click_window - 40) {
             qei.dbl_click_timeout = 0;
             qei.encoder.event.dbl_click = On;
-            hal.encoder_event_handler(&qei.encoder, qei.count);
+            hal.encoder.on_event(&qei.encoder, qei.count);
         }
     }
 
@@ -2139,39 +2470,17 @@ static void gpio_isr (void)
 
 #if KEYPAD_ENABLE
     if(grp & INPUT_GROUP_KEYPAD)
-        keypad_keyclick_handler(KeypadStrobe.reg->DR & KeypadStrobe.bit);
+        keypad_keyclick_handler(!(KeypadStrobe.reg->DR & KeypadStrobe.bit));
 #endif
 }
 
 // Interrupt handler for 1 ms interval timer
 static void systick_isr (void)
 {
-    ms_event = true;
-
-#if USB_SERIAL_CDC == 2 || ETHERNET_ENABLE
     systick_isr_org();
-#endif
 
-#if MODBUS_ENABLE
-    modbus_poll();
-#endif
-
-#if QEI_ENABLE
-
-    if(qei.vel_timeout && !(--qei.vel_timeout)) {
-        qei.encoder.velocity = abs(qei.count - qei.vel_count) * 1000 / (millis() - qei.vel_timestamp);
-        qei.vel_timestamp = millis();
-        qei.vel_timeout = QEI_VELOCITY_TIMEOUT;
-        if((qei.encoder.event.position_changed = !qei.dbl_click_timeout || qei.encoder.velocity == 0))
-            hal.encoder_event_handler(&qei.encoder, qei.count);
-        qei.vel_count = qei.count;
-    }
-
-    if(qei.dbl_click_timeout && !(--qei.dbl_click_timeout)) {
-        qei.encoder.event.click = On;
-        hal.encoder_event_handler(&qei.encoder, qei.count);
-    }
-
+#if ADD_MSEVENT
+    ms_event = true;
 #endif
 
     if(grbl_delay.ms && !(--grbl_delay.ms)) {

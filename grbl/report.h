@@ -25,14 +25,25 @@
 
 #include "system.h"
 
+// Message types for uncoded messages
+typedef enum {
+    Message_Plain = 0,
+    Message_Info,
+    Message_Warning
+} message_type_t;
+
 // Initialize reporting subsystem
 void report_init (void);
+void report_init_fns (void);
 
 // Prints system status messages.
 status_code_t report_status_message (status_code_t status_code);
 
 // Prints system alarm messages.
 alarm_code_t report_alarm_message (alarm_code_t alarm_code);
+
+// Prints feedback message, typically from gcode.
+void report_message (const char *msg, message_type_t type);
 
 // Prints miscellaneous feedback messages.
 message_code_t report_feedback_message (message_code_t message_code);

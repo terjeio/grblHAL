@@ -33,7 +33,7 @@
 void coolant_set_state (coolant_state_t mode)
 {
     if (!ABORTED) { // Block during abort.
-        hal.coolant_set_state(mode);
+        hal.coolant.set_state(mode);
         sys.report.coolant = On; // Set to report change immediately
     }
 }

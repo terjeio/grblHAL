@@ -27,7 +27,7 @@
 #include "grbl_eeprom_extensions.h"
 #include "platform.h"
 
-#include "grbl/grbl.h"
+#include "grbl/hal.h"
 
 static bool probe_invert;
 static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
@@ -196,7 +196,7 @@ static void limitsEnable (bool on, bool homing)
     gpio[LIMITS_PORT1].irq_mask.mask = on ? AXES_BITMASK : 0;
     gpio[LIMITS_PORT1].irq_state.mask = 0;
 
-    hal.limits_get_state = homing ? limitsGetHomeState : limitsGetState;
+    hal.limits.get_state = homing ? limitsGetHomeState : limitsGetState;
   #endif
 }
 
@@ -212,9 +212,9 @@ static control_signals_t systemGetState (void)
     return signals;
 }
 
-static void probeConfigureInvertMask (bool is_probe_away)
+static void probeConfigureInvertMask (bool is_probe_away, bool probing)
 {
-  probe_invert = settings.flags.invert_probe_pin;
+  probe_invert = settings.probe.invert_probe_pin;
 
   if (is_probe_away)
       probe_invert ^= is_probe_away;
@@ -352,16 +352,14 @@ bool driver_setup (settings_t *settings)
     gpio[CONTROL_PORT].irq_mask.mask = CONTROL_MASK;
     mcu_register_irq_handler(Control_IRQHandler, CONTROL_IRQ);
 
-    gpio[PROBE_PORT].dir.mask = PROBE_MASK;
     mcu_gpio_in(&gpio[PROBE_PORT], PROBE_CONNECTED_BIT, PROBE_CONNECTED_BIT); // default to connected
 
-    settings_changed(settings);
+    hal.settings_changed(settings);
+    hal.stepper.go_idle(true);
+    hal.spindle.set_state((spindle_state_t){0}, 0.0f);
+    hal.coolant.set_state((coolant_state_t){0});
 
-    hal.stepper_go_idle(true);
-    hal.spindle_set_state((spindle_state_t){0}, 0.0f);
-    hal.coolant_set_state((coolant_state_t){0});
-
-    return settings->version == 16;
+    return settings->version == 18;
 }
 
 // used to inject a sleep in grbl main loop, 
@@ -383,43 +381,43 @@ bool driver_init ()
     serialInit();
 
     hal.info = "Simulator";
-    hal.driver_version = "200528";
+    hal.driver_version = "201024";
     hal.driver_setup = driver_setup;
     hal.rx_buffer_size = RX_BUFFER_SIZE;
     hal.f_step_timer = F_CPU;
     hal.delay_ms = driver_delay_ms;
     hal.settings_changed = settings_changed;
 
-    hal.execute_realtime = sim_process_realtime;
+    grbl.on_execute_realtime = sim_process_realtime;
 
-    hal.stepper_wake_up = stepperWakeUp;
-    hal.stepper_go_idle = stepperGoIdle;
-    hal.stepper_enable = stepperEnable;
-    hal.stepper_cycles_per_tick = stepperCyclesPerTick;
-    hal.stepper_pulse_start = stepperPulseStart;
+    hal.stepper.wake_up = stepperWakeUp;
+    hal.stepper.go_idle = stepperGoIdle;
+    hal.stepper.enable = stepperEnable;
+    hal.stepper.cycles_per_tick = stepperCyclesPerTick;
+    hal.stepper.pulse_start = stepperPulseStart;
 #ifdef SQUARING_ENABLED
-    hal.stepper_disable_motors = StepperDisableMotors;
+    hal.stepper.disable_motors = StepperDisableMotors;
 #endif
 
-    hal.limits_enable = limitsEnable;
-    hal.limits_get_state = limitsGetState;
+    hal.limits.enable = limitsEnable;
+    hal.limits.get_state = limitsGetState;
 
-    hal.coolant_set_state = coolantSetState;
-    hal.coolant_get_state = coolantGetState;
+    hal.coolant.set_state = coolantSetState;
+    hal.coolant.get_state = coolantGetState;
 
-    hal.probe_get_state = probeGetState;
-    hal.probe_configure_invert_mask = probeConfigureInvertMask;
+    hal.probe.get_state = probeGetState;
+    hal.probe.configure = probeConfigureInvertMask;
 
-    hal.spindle_set_state = spindleSetState;
-    hal.spindle_get_state = spindleGetState;
+    hal.spindle.set_state = spindleSetState;
+    hal.spindle.get_state = spindleGetState;
 #ifdef SPINDLE_PWM_DIRECT
-    hal.spindle_get_pwm = spindleGetPWM;
-    hal.spindle_update_pwm = spindle_set_speed;
+    hal.spindle.get_pwm = spindleGetPWM;
+    hal.spindle.update_pwm = spindle_set_speed;
 #else
-    hal.spindle_update_rpm = spindleUpdateRPM;
+    hal.spindle.update_rpm = spindleUpdateRPM;
 #endif
 
-    hal.system_control_get_state = systemGetState;
+    hal.control.get_state = systemGetState;
 /*
     hal.show_message = showMessage;
 */
@@ -431,11 +429,11 @@ bool driver_init ()
     hal.stream.write_all = serialWriteS;
     hal.stream.suspend_read = serialSuspendInput;
 
-    hal.eeprom.type = EEPROM_Physical;
-    hal.eeprom.get_byte = eeprom_get_char;
-    hal.eeprom.put_byte = eeprom_put_char;
-    hal.eeprom.memcpy_to_with_checksum = memcpy_to_eeprom_with_checksum;
-    hal.eeprom.memcpy_from_with_checksum = memcpy_from_eeprom_with_checksum;
+    hal.nvs.type = NVS_EEPROM;
+    hal.nvs.get_byte = eeprom_get_char;
+    hal.nvs.put_byte = eeprom_put_char;
+    hal.nvs.memcpy_to_nvs = memcpy_to_eeprom;
+    hal.nvs.memcpy_from_nvs = memcpy_from_eeprom;
 
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
@@ -461,28 +459,28 @@ bool driver_init ()
     hal.driver_cap.limits_pull_up = On;
     hal.driver_cap.probe_pull_up = On;
 #ifdef SQUARING_ENABLED
-    hal.driver_cap.axis_ganged_x = On;
+ //   hal.driver_cap.axis_ganged_x = On;
 #endif
     // no need to move version check before init - compiler will fail any signature mismatch for existing entries
-    return hal.version == 6;
+    return hal.version == 7;
 }
 
 // Main stepper driver
 void Stepper_IRQHandler (void)
 {
-    hal.stepper_interrupt_callback();
+    hal.stepper.interrupt_callback();
 }
 
 void Control_IRQHandler (void)
 {
     gpio[CONTROL_PORT].irq_state.value = ~CONTROL_MASK;
-    hal.control_interrupt_callback(hal.system_control_get_state());
+    hal.control.interrupt_callback(hal.control.get_state());
 }
 
 void Limits0_IRQHandler (void)
 {
     gpio[LIMITS_PORT0].irq_state.value = (uint8_t)~AXES_BITMASK;
-    hal.limit_interrupt_callback(hal.limits_get_state());
+    hal.limits.interrupt_callback(hal.limits.get_state());
 }
 
 #ifdef SQUARING_ENABLED
@@ -490,7 +488,7 @@ void Limits0_IRQHandler (void)
 void Limits1_IRQHandler (void)
 {
     gpio[LIMITS_PORT1].irq_state.value = (uint8_t)~AXES_BITMASK;
-    hal.limit_interrupt_callback(hal.limits_get_state());
+    hal.limits.interrupt_callback(hal.limits.get_state());
 }
 
 #endif

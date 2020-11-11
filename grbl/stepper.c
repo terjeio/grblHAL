@@ -83,6 +83,9 @@ typedef struct {
 static amass_t amass;
 #endif
 
+// Message to be output by foreground process
+static char *message = NULL; // TODO: do we need a queue for this?
+
 // Stepper timer ticks per minute
 static float cycles_per_min;
 
@@ -165,11 +168,23 @@ static st_prep_t prep;
   are shown and defined in the above illustration.
 */
 
+//
+
+// Output message in sync with motion, called by foreground process.
+static void output_message (uint_fast16_t state)
+{
+    if(message) {
+        report_message(message, Message_Plain);
+        free(message);
+        message = NULL;
+    }
+}
+
 // Callback from delay to deenergize steppers after movement, might been cancelled
 void st_deenergize ()
 {
     if(sys.steppers_deenergize) {
-        hal.stepper_enable(settings.steppers.deenergize);
+        hal.stepper.enable(settings.steppers.deenergize);
         sys.steppers_deenergize = false;
     }
 }
@@ -184,7 +199,7 @@ void st_wake_up ()
     st.exec_block = NULL;
     sys.steppers_deenergize = false;
 
-    hal.stepper_wake_up();
+    hal.stepper.wake_up();
 }
 
 
@@ -193,16 +208,16 @@ ISR_CODE void st_go_idle ()
 {
     // Disable Stepper Driver Interrupt. Allow Stepper Port Reset Interrupt to finish, if active.
 
-    hal.stepper_go_idle(false);
+    hal.stepper.go_idle(false);
 
     // Set stepper driver idle state, disabled or enabled, depending on settings and circumstances.
-    if (((settings.steppers.idle_lock_time != 0xff) || sys_rt_exec_alarm || sys.state == STATE_SLEEP) && sys.state != STATE_HOMING) {
+    if (((settings.steppers.idle_lock_time != 255) || sys_rt_exec_alarm || sys.state == STATE_SLEEP) && sys.state != STATE_HOMING) {
         // Force stepper dwell to lock axes for a defined amount of time to ensure the axes come to a complete
         // stop and not drift from residual inertial forces at the end of the last movement.
         sys.steppers_deenergize = true;
         hal.delay_ms(settings.steppers.idle_lock_time, st_deenergize);
     } else
-        hal.stepper_enable(settings.steppers.deenergize);
+        hal.stepper.enable(settings.steppers.deenergize);
 }
 
 
@@ -260,7 +275,9 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
     // Start a step pulse when there is a block to execute.
     if(st.exec_block) {
 
-        hal.stepper_pulse_start(&st);
+        hal.stepper.pulse_start(&st);
+
+        st.new_block = st.dir_change = false;
 
         if (st.step_count == 0) // Segment is complete. Discard current segment.
             st.exec_segment = NULL;
@@ -275,7 +292,7 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
             st.exec_segment = (segment_t *)segment_buffer_tail;
 
             // Initialize step segment timing per step and load number of steps to execute.
-            hal.stepper_cycles_per_tick(st.exec_segment->cycles_per_tick);
+            hal.stepper.cycles_per_tick(st.exec_segment->cycles_per_tick);
             st.step_count = st.exec_segment->n_step; // NOTE: Can sometimes be zero when moving slow.
 
             // If the new segment starts a new planner block, initialize stepper variables and counters.
@@ -296,18 +313,21 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
                 // Execute output commands to be syncronized with motion
                 while(st.exec_block->output_commands) {
                     output_command_t *cmd = st.exec_block->output_commands;
+                    cmd->is_executed = true;
                     if(cmd->is_digital)
                         hal.port.digital_out(cmd->port, cmd->value != 0.0f);
                     else
                         hal.port.analog_out(cmd->port, cmd->value);
-                    cmd = cmd->next;
-                    free(st.exec_block->output_commands);
-                    st.exec_block->output_commands = cmd;
+                    st.exec_block->output_commands = cmd->next;
                 }
 
-                // "Enqueue" any message to be displayed (by foreground process)
+                // Enqueue any message to be printed (by foreground process)
                 if(st.exec_block->message) {
-                    protocol_message(st.exec_block->message);
+                    if(message == NULL) {
+                        message = st.exec_block->message;
+                        protocol_enqueue_rt_command(output_message);
+                    } else
+                        free(st.exec_block->message); //
                     st.exec_block->message = NULL;
                 }
 
@@ -348,17 +368,17 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
 
             if(st.exec_segment->update_rpm) {
               #ifdef SPINDLE_PWM_DIRECT
-                hal.spindle_update_pwm(st.exec_segment->spindle_pwm);
+                hal.spindle.update_pwm(st.exec_segment->spindle_pwm);
               #else
-                hal.spindle_update_rpm(st.exec_segment->spindle_rpm);
+                hal.spindle.update_rpm(st.exec_segment->spindle_rpm);
               #endif
             }
         } else {
             // Segment buffer empty. Shutdown.
             st_go_idle();
             // Ensure pwm is set properly upon completion of rate-controlled motion.
-            if (st.exec_block->dynamic_rpm && settings.flags.laser_mode)
-                hal.spindle_set_state((spindle_state_t){0}, 0.0f);
+            if (st.exec_block->dynamic_rpm && settings.mode == Mode_Laser)
+                hal.spindle.set_state((spindle_state_t){0}, 0.0f);
 
             system_set_exec_state_flag(EXEC_CYCLE_COMPLETE); // Flag main program for cycle complete
 
@@ -369,7 +389,7 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
     // Check probing state.
     // Monitors probe pin state and records the system position when detected.
     // NOTE: This function must be extremely efficient as to not bog down the stepper ISR.
-    if (sys_probing_state == Probing_Active && hal.probe_get_state().triggered) {
+    if (sys_probing_state == Probing_Active && hal.probe.get_state().triggered) {
         sys_probing_state = Probing_Off;
         memcpy(sys_probe_position, sys_position, sizeof(sys_position));
         bit_true(sys_rt_exec_state, EXEC_MOTION_CANCEL);
@@ -460,12 +480,17 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
 // Reset and clear stepper subsystem variables
 void st_reset ()
 {
-    if(hal.probe_configure_invert_mask)
-        hal.probe_configure_invert_mask(false, false);
+    if(hal.probe.configure)
+        hal.probe.configure(false, false);
+
+    if(message) {
+        free(message);
+        message = NULL;
+    }
 
     // Initialize stepper driver idle state, clear step and direction port pins.
     st_go_idle();
-   // hal.stepper_go_idle(true);
+   // hal.stepper.go_idle(true);
 
     // NOTE: buffer indices starts from 1 for simpler driver coding!
 
@@ -627,10 +652,11 @@ void st_prep_buffer()
                 st_prep_block->programmed_rate = pl_block->programmed_rate;
                 st_prep_block->millimeters = pl_block->millimeters;
                 st_prep_block->steps_per_mm = (float)pl_block->step_event_count / pl_block->millimeters;
-                st_prep_block->message = pl_block->message;
                 st_prep_block->output_commands = pl_block->output_commands;
                 st_prep_block->overrides = pl_block->overrides;
                 st_prep_block->backlash_motion = pl_block->condition.backlash_motion;
+                st_prep_block->message = pl_block->message;
+                pl_block->message= NULL;
 
                 // Initialize segment buffer data for generating the segments.
                 prep.steps_per_mm = st_prep_block->steps_per_mm;
@@ -749,7 +775,7 @@ void st_prep_buffer()
             }
 
             if(sys.state != STATE_HOMING)
-                sys.step_control.update_spindle_rpm |= settings.flags.laser_mode; // Force update whenever updating block in laser mode.
+                sys.step_control.update_spindle_rpm |= (settings.mode == Mode_Laser); // Force update whenever updating block in laser mode.
         }
 
         // Initialize new segment
@@ -888,7 +914,7 @@ void st_prep_buffer()
             if(rpm != prep.current_spindle_rpm) {
               #ifdef SPINDLE_PWM_DIRECT
                 prep.current_spindle_rpm = rpm;
-                prep_segment->spindle_pwm = hal.spindle_get_pwm(rpm);
+                prep_segment->spindle_pwm = hal.spindle.get_pwm(rpm);
               #else
                 prep.current_spindle_rpm = prep_segment->spindle_rpm = rpm;
               #endif
@@ -956,6 +982,7 @@ void st_prep_buffer()
       #endif
 
         prep_segment->cycles_per_tick = cycles;
+        prep_segment->current_rate = prep.current_speed;
 
         // Segment complete! Increment segment pointers, so stepper ISR can immediately execute it.
         segment_buffer_head = segment_next_head;

@@ -33,7 +33,7 @@
 #include "limits.h"
 #include "report.h"
 #include "state_machine.h"
-#include "eeprom_emulate.h"
+#include "nvs_buffer.h"
 #ifdef KINEMATICS_API
 #include "kinematics.h"
 #endif
@@ -56,12 +56,8 @@ volatile probing_state_t sys_probing_state; // Probing state value. Used to coor
 volatile uint_fast16_t sys_rt_exec_state;   // Global realtime executor bitflag variable for state management. See EXEC bitmasks.
 volatile uint_fast16_t sys_rt_exec_alarm;   // Global realtime executor bitflag variable for setting various alarms.
 
-HAL hal;
-
-static const report_t report_fns = {
-    .status_message = report_status_message,
-    .feedback_message = report_feedback_message
-};
+grbl_t grbl;
+grbl_hal_t hal;
 
 // called from stream drivers while tx is blocking, return false to terminate
 
@@ -102,27 +98,39 @@ static void debug_out (bool on)
 int grbl_enter (void)
 {
 #ifdef N_TOOLS
-    assert(EEPROM_ADDR_GLOBAL + sizeof(settings_t) + 1 < EEPROM_ADDR_TOOL_TABLE);
+    assert(NVS_ADDR_GLOBAL + sizeof(settings_t) + NVS_CRC_BYTES < NVS_ADDR_TOOL_TABLE);
 #else
-    assert(EEPROM_ADDR_GLOBAL + sizeof(settings_t) + 1 < EEPROM_ADDR_PARAMETERS);
+    assert(NVS_ADDR_GLOBAL + sizeof(settings_t) + NVS_CRC_BYTES < NVS_ADDR_PARAMETERS);
 #endif
-    assert(EEPROM_ADDR_PARAMETERS + SETTING_INDEX_NCOORD * (sizeof(coord_data_t) + 1) < EEPROM_ADDR_STARTUP_BLOCK);
-    assert(EEPROM_ADDR_STARTUP_BLOCK + N_STARTUP_LINE * (MAX_STORED_LINE_LENGTH + 1) < EEPROM_ADDR_BUILD_INFO);
+    assert(NVS_ADDR_PARAMETERS + N_CoordinateSystems * (sizeof(coord_data_t) + NVS_CRC_BYTES) < NVS_ADDR_STARTUP_BLOCK);
+    assert(NVS_ADDR_STARTUP_BLOCK + N_STARTUP_LINE * (sizeof(stored_line_t) + NVS_CRC_BYTES) < NVS_ADDR_BUILD_INFO);
 
     bool looping = true, driver_ok;
 
-    memset(&hal, 0, sizeof(HAL));  // Clear...
+    // Clear all and set some core function pointers
+    memset(&grbl, 0, sizeof(grbl_t));
+    grbl.on_execute_realtime = protocol_execute_noop;
+    grbl.protocol_enqueue_gcode = protocol_enqueue_gcode;
+    grbl.on_report_options = dummy_handler;
 
+    // Clear all and set some HAL function pointers
+    memset(&hal, 0, sizeof(grbl_hal_t));
     hal.version = HAL_VERSION; // Update when signatures and/or contract is changed - driver_init() should fail
-    hal.limit_interrupt_callback = limit_interrupt_handler;
-    hal.control_interrupt_callback = control_interrupt_handler;
-    hal.stepper_interrupt_callback = stepper_driver_interrupt_handler;
-    hal.stream.enqueue_realtime_command = protocol_enqueue_realtime_command;
-    hal.stream_blocking_callback = stream_tx_blocking;
-    hal.protocol_enqueue_gcode = protocol_enqueue_gcode;
     hal.driver_reset = dummy_handler;
+    hal.irq_enable = dummy_handler;
+    hal.irq_disable = dummy_handler;
+    hal.nvs.size = GRBL_NVS_SIZE;
+    hal.stream.enqueue_realtime_command = protocol_enqueue_realtime_command;
+    hal.limits.interrupt_callback = limit_interrupt_handler;
+    hal.control.interrupt_callback = control_interrupt_handler;
+    hal.stepper.interrupt_callback = stepper_driver_interrupt_handler;
+    hal.stream_blocking_callback = stream_tx_blocking;
 
-    memcpy(&hal.report, &report_fns, sizeof(report_t));
+#ifdef BUFFER_NVSDATA
+    nvs_buffer_alloc(); // Allocate memory block for NVS buffer
+#endif
+
+    report_init_fns();
 
 #ifdef KINEMATICS_API
     memset(&kinematics, 0, sizeof(kinematics_t));
@@ -139,22 +147,16 @@ int grbl_enter (void)
     hal.stream.suspend_read = NULL;
 #endif
 
-#if COMPATIBILITY_LEVEL > 1
-    hal.driver_setting = NULL;
-    hal.driver_settings_report = NULL;
-    hal.driver_settings_restore = NULL;
-#endif
-
 #ifndef ENABLE_SAFETY_DOOR_INPUT_PIN
     hal.driver_cap.safety_door = false;
 #else
     driver_ok &= hal.driver_cap.safety_door;
 #endif
 
-  #ifdef EMULATE_EEPROM
-    eeprom_emu_init();
+  #ifdef BUFFER_NVSDATA
+    nvs_buffer_init();
   #endif
-    settings_init(); // Load Grbl settings from EEPROM
+    settings_init(); // Load Grbl settings from non-volatile storage
 
     memset(sys_position, 0, sizeof(sys_position)); // Clear machine position.
 
@@ -176,7 +178,6 @@ int grbl_enter (void)
 #endif
 */
     sys.mpg_mode = false;
-    sys.message = NULL;
 
     driver_ok = driver_ok && hal.driver_setup(&settings);
 
@@ -185,7 +186,7 @@ int grbl_enter (void)
 #endif
 
 #ifdef SPINDLE_PWM_DIRECT
-    driver_ok = driver_ok && hal.spindle_get_pwm != NULL && hal.spindle_update_pwm != NULL;
+    driver_ok = driver_ok && hal.spindle.get_pwm != NULL && hal.spindle.update_pwm != NULL;
 #endif
 
     if(!driver_ok) {
@@ -209,14 +210,11 @@ int grbl_enter (void)
     while(looping) {
 
         // Reset report entry points
-        memcpy(&hal.report, &report_fns, sizeof(report_t));
+        report_init_fns();
 
         // Reset system variables, keeping current state and MPG mode.
         bool prior_mpg_mode = sys.mpg_mode;
         uint_fast16_t prior_state = sys.state;
-
-        if(sys.message)
-            free(sys.message);
 
         memset(&sys, 0, sizeof(system_t)); // Clear system struct variable.
         set_state(prior_state);
@@ -237,7 +235,7 @@ int grbl_enter (void)
         // Reset Grbl primary systems.
         hal.stream.reset_read_buffer(); // Clear input stream buffer
         gc_init(cold_start); // Set g-code parser to default state
-        hal.limits_enable(settings.limits.flags.hard_enabled, false);
+        hal.limits.enable(settings.limits.flags.hard_enabled, false);
         plan_reset(); // Clear block buffer and planner variables
         st_reset(); // Clear stepper subsystem variables.
         limits_set_homing_axes(); // Set axes to be homed from settings.
@@ -245,11 +243,10 @@ int grbl_enter (void)
         mc_backlash_init(); // Init backlash configuration.
 #endif
         // Sync cleared gcode and planner positions to current system position.
-        plan_sync_position();
-        gc_sync_position();
+        sync_position();
 
-        if(hal.stepper_disable_motors)
-            hal.stepper_disable_motors((axes_signals_t){0}, SquaringMode_Both);
+        if(hal.stepper.disable_motors)
+            hal.stepper.disable_motors((axes_signals_t){0}, SquaringMode_Both);
 
         if(!hal.driver_cap.atc)
             tc_init();

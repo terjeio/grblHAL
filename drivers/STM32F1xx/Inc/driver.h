@@ -54,6 +54,9 @@
 #ifndef KEYPAD_ENABLE
 #define KEYPAD_ENABLE       0
 #endif
+#ifndef ODOMETER_ENABLE
+#define ODOMETER_ENABLE     0
+#endif
 #ifndef EEPROM_ENABLE
 #define EEPROM_ENABLE       0
 #endif
@@ -97,6 +100,10 @@
 #define PULSE_TIMER TIM3
 #define DEBOUNCE_TIMER TIM4
 
+#if TRINAMIC_ENABLE
+#include "tmc2130/trinamic.h"
+#endif
+
 #ifdef BOARD_CNC_BOOSTERPACK
   #if N_AXIS > 3
     #error Max number of axes is 3!
@@ -128,27 +135,6 @@
 
 #if EEPROM_ENABLE|| KEYPAD_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
 #define I2C_PORT
-#endif
-
-#if TRINAMIC_ENABLE || KEYPAD_ENABLE
-#define DRIVER_SETTINGS
-#endif
-
-#ifdef DRIVER_SETTINGS
-
-#include "tmc2130/trinamic.h"
-
-typedef struct {
-#if TRINAMIC_ENABLE
-    trinamic_settings_t trinamic;
-#endif
-#if KEYPAD_ENABLE
-    jog_settings_t jog;
-#endif
-} driver_settings_t;
-
-extern driver_settings_t driver_settings;
-
 #endif
 
 #if KEYPAD_ENABLE && !defined(KEYPAD_PORT)

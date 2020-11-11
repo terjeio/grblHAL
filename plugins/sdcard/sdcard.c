@@ -19,20 +19,21 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
 #include "sdcard.h"
 
 #if SDCARD_ENABLE
 
-#if defined(ESP_PLATFORM) || defined(STM32F103xB) ||  defined(__LPC17XX__) ||  defined(__IMXRT1062__)
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#if defined(ESP_PLATFORM) || defined(STM32_PLATFORM) ||  defined(__LPC17XX__) ||  defined(__IMXRT1062__)
 #define NEW_FATFS
 #endif
 
 #ifdef ARDUINO
   #include "../grbl/report.h"
+  #include "../grbl/protocol.h"
   #ifdef __IMXRT1062__
     #include "uSDFS.h"
     #define SDCARD_DEV "1:/"
@@ -40,6 +41,7 @@
   #endif
 #else
   #include "grbl/report.h"
+  #include "grbl/protocol.h"
 #endif
 
 #ifdef __IMXRT1062__
@@ -52,7 +54,7 @@ const char *dev = "";
 #define SDCARD_DEV ""
 #endif
 
-#if defined(STM32F103xB) || defined(__LPC17XX__) ||  defined(__IMXRT1062__)
+#if defined(STM32_PLATFORM) || defined(__LPC17XX__) ||  defined(__IMXRT1062__)
 #define UINT32FMT "%lu"
 #endif
 
@@ -66,7 +68,6 @@ const char *dev = "";
 
 #define MAX_PATHLEN 128
 #define LCAPS(c) ((c >= 'A' && c <= 'Z') ? c | 0x20 : c)
-
 
 #if FF_USE_LFN
 //#define _USE_LFN FF_USE_LFN
@@ -111,7 +112,16 @@ static file_t file = {
 
 static bool frewind = false;
 static io_stream_t active_stream;
-static driver_reset_ptr driver_reset = NULL;
+static driver_reset_ptr driver_reset;
+static on_unknown_sys_command_ptr on_unknown_sys_command;
+static on_realtime_report_ptr on_realtime_report;
+static on_state_change_ptr state_change_requested;
+static on_program_completed_ptr on_program_completed;
+
+static void sdcard_end_job (void);
+static void sdcard_report (stream_write_ptr stream_write, report_tracking_flags_t report);
+static void trap_state_change_request(uint_fast16_t state);
+static void sdcard_on_program_completed (program_flow_t program_flow);
 //static report_t active_reports;
 
 #ifdef __MSP432E401Y__
@@ -327,12 +337,23 @@ static status_code_t sdcard_ls (char *buf)
 static void sdcard_end_job (void)
 {
     file_close();
+
+    if(grbl.on_realtime_report == sdcard_report)
+        grbl.on_realtime_report = on_realtime_report;
+
+    if(grbl.on_program_completed == sdcard_on_program_completed)
+        grbl.on_program_completed = on_program_completed;
+
+    if(grbl.on_state_change == trap_state_change_request)
+        grbl.on_state_change = state_change_requested;
+
     memcpy(&hal.stream, &active_stream, sizeof(io_stream_t));   // Restore stream pointers
     hal.stream.reset_read_buffer();                             // and flush input buffer
-    hal.driver_rt_report = NULL;
-    hal.state_change_requested = NULL;
-    hal.report.status_message = report_status_message;
-    hal.report.feedback_message = report_feedback_message;
+    on_realtime_report = NULL;
+    state_change_requested = NULL;
+
+    report_init_fns();
+
     frewind = false;
 }
 
@@ -376,10 +397,18 @@ static ISR_CODE bool drop_input_stream (char c)
 static void trap_state_change_request(uint_fast16_t state)
 {
     if(state == STATE_CYCLE) {
+
         if(hal.stream.read == await_cycle_start)
             hal.stream.read = sdcard_read;
-        hal.state_change_requested = NULL;
+
+        if(grbl.on_state_change== trap_state_change_request) {
+            grbl.on_state_change = state_change_requested;
+            state_change_requested = NULL;
+        }
     }
+
+    if(state_change_requested)
+        state_change_requested(state);
 }
 
 static status_code_t trap_status_report (status_code_t status_code)
@@ -394,36 +423,48 @@ static status_code_t trap_status_report (status_code_t status_code)
     return status_code;
 }
 
-static message_code_t trap_feedback_message (message_code_t message_code)
-{
-    report_feedback_message(message_code);
-
-    if(message_code == Message_ProgramEnd) {
-        if(frewind) {
-            f_lseek(file.handle, 0);
-            file.pos = file.line = 0;
-            file.eol = false;
-            report_feedback_message(Message_CycleStartToRerun);
-            hal.stream.read = await_cycle_start;
-            hal.state_change_requested = trap_state_change_request;
-        } else
-            sdcard_end_job();
-    }
-
-    return message_code;
-}
-
 static void sdcard_report (stream_write_ptr stream_write, report_tracking_flags_t report)
 {
-    char *pct_done = ftoa((float)file.pos / (float)file.size * 100.0f, 1);
+    if(hal.stream.read != await_cycle_start) {
+        char *pct_done = ftoa((float)file.pos / (float)file.size * 100.0f, 1);
 
-    if(sys.state != STATE_IDLE && !strncmp(pct_done, "100.0", 5))
-        strcpy(pct_done, "99.9");
+        if(sys.state != STATE_IDLE && !strncmp(pct_done, "100.0", 5))
+            strcpy(pct_done, "99.9");
 
-    stream_write("|SD:");
-    stream_write(pct_done);
-    stream_write(",");
-    stream_write(file.name);
+        stream_write("|SD:");
+        stream_write(pct_done);
+        stream_write(",");
+        stream_write(file.name);
+    }
+
+    if(on_realtime_report)
+        on_realtime_report(stream_write, report);
+}
+
+static void sdcard_restart_msg (uint_fast16_t state)
+{
+    report_feedback_message(Message_CycleStartToRerun);
+}
+
+static void sdcard_on_program_completed (program_flow_t program_flow)
+{
+    frewind = frewind || program_flow == ProgramFlow_CompletedM2; // || program_flow == ProgramFlow_CompletedM30;
+
+    if(frewind) {
+        f_lseek(file.handle, 0);
+        file.pos = file.line = 0;
+        file.eol = false;
+        hal.stream.read = await_cycle_start;
+        if(grbl.on_state_change != trap_state_change_request) {
+            state_change_requested = grbl.on_state_change;
+            grbl.on_state_change = trap_state_change_request;
+        }
+        protocol_enqueue_rt_command(sdcard_restart_msg);
+    } else
+        sdcard_end_job();
+
+    if(on_program_completed)
+        on_program_completed(program_flow);
 }
 
 #if M6_ENABLE
@@ -434,11 +475,11 @@ static bool sdcard_suspend (bool suspend)
         hal.stream.reset_read_buffer();
         hal.stream.read = active_stream.read;               // Restore normal stream input for tool change (jog etc)
         hal.stream.enqueue_realtime_command = active_stream.enqueue_realtime_command;
-        hal.report.status_message = report_status_message;  // as well as normal status messages reporting
+        grbl.report.status_message = report_status_message;  // as well as normal status messages reporting
     } else {
         hal.stream.read = sdcard_read;                      // Resume reading from SD card
         hal.stream.enqueue_realtime_command = drop_input_stream;
-        hal.report.status_message = trap_status_report;     // and redirect status messages back to us
+        grbl.report.status_message = trap_status_report;     // and redirect status messages back to us
     }
 
     return true;
@@ -466,13 +507,31 @@ static status_code_t sdcard_parse (uint_fast16_t state, char *line, char *lcline
             retval = Status_OK;
             break;
 
+        case '<':
+            if (!(state == STATE_IDLE || state == STATE_CHECK_MODE))
+                retval = Status_SystemGClock;
+            else {
+                if(file_open(&lcline[3])) {
+                    int16_t c;
+                    char buf[2] = {0};
+                    while((c = file_read()) != -1) {
+                        buf[0] = (char)c;
+                        hal.stream.write(buf);
+                    }
+                    file_close();
+                    retval = Status_OK;
+                } else
+                    retval = Status_SDReadError;
+            }
+            break;
+
         case '=':
             if (!(state == STATE_IDLE || state == STATE_CHECK_MODE))
                 retval = Status_SystemGClock;
             else {
                 if(file_open(&lcline[3])) {
                     gc_state.last_error = Status_OK;                            // Start with no errors
-                    hal.report.status_message(Status_OK);                       // and confirm command to originator
+                    grbl.report.status_message(Status_OK);                      // and confirm command to originator
                     memcpy(&active_stream, &hal.stream, sizeof(io_stream_t));   // Save current stream pointers
                     hal.stream.type = StreamType_SDCard;                        // then redirect to read from SD card instead
                     hal.stream.read = sdcard_read;                              // ...
@@ -482,9 +541,13 @@ static status_code_t sdcard_parse (uint_fast16_t state, char *line, char *lcline
 #else
                     hal.stream.suspend_read = NULL;                             // ...
 #endif
-                    hal.driver_rt_report = sdcard_report;                       // Add percent complete to real time report
-                    hal.report.status_message = trap_status_report;             // Redirect status message and feedback message
-                    hal.report.feedback_message = trap_feedback_message;        // reports here
+                    on_realtime_report = grbl.on_realtime_report;
+                    grbl.on_realtime_report = sdcard_report;                     // Add percent complete to real time report
+
+                    on_program_completed = grbl.on_program_completed;
+                    grbl.on_program_completed = sdcard_on_program_completed;
+
+                    grbl.report.status_message = trap_status_report;             // Redirect status message reports here
                     retval = Status_OK;
                 } else
                     retval = Status_SDReadError;
@@ -496,7 +559,7 @@ static status_code_t sdcard_parse (uint_fast16_t state, char *line, char *lcline
             break;
     }
 
-    return retval;
+    return retval == Status_Unhandled && on_unknown_sys_command ? on_unknown_sys_command(state, line, lcline) : retval;
 }
 
 static void sdcard_reset (void)
@@ -515,9 +578,13 @@ static void sdcard_reset (void)
 
 void sdcard_init (void)
 {
+    hal.driver_cap.sd_card = On;
+
     driver_reset = hal.driver_reset;
     hal.driver_reset = sdcard_reset;
-    hal.driver_sys_command_execute = sdcard_parse;
+
+    on_unknown_sys_command = grbl.on_unknown_sys_command;
+    grbl.on_unknown_sys_command = sdcard_parse;
 }
 
 FATFS *sdcard_getfs(void)

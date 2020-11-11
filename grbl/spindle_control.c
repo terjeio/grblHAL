@@ -25,7 +25,6 @@
 
 #include "hal.h"
 #include "protocol.h"
-#include "report.h"
 #include "state_machine.h"
 
 // Set spindle speed override
@@ -56,14 +55,14 @@ bool spindle_set_state (spindle_state_t state, float rpm)
 
         if (!state.on) { // Halt or set spindle direction and rpm.
             sys.spindle_rpm = rpm = 0.0f;
-            hal.spindle_set_state((spindle_state_t){0}, 0.0f);
+            hal.spindle.set_state((spindle_state_t){0}, 0.0f);
         } else {
             // NOTE: Assumes all calls to this function is when Grbl is not moving or must remain off.
             // TODO: alarm/interlock if going from CW to CCW directly in non-laser mode?
-            if (settings.flags.laser_mode && state.ccw)
+            if (settings.mode == Mode_Laser && state.ccw)
                 rpm = 0.0f; // TODO: May need to be rpm_min*(100/MAX_SPINDLE_RPM_OVERRIDE);
 
-            hal.spindle_set_state(state, spindle_set_rpm(rpm, sys.override.spindle_rpm));
+            hal.spindle.set_state(state, spindle_set_rpm(rpm, sys.override.spindle_rpm));
         }
         sys.report.spindle = On; // Set to report change immediately
 
@@ -84,7 +83,7 @@ bool spindle_sync (spindle_state_t state, float rpm)
         // Empty planner buffer to ensure spindle is set when programmed.
         if((ok = protocol_buffer_synchronize()) && spindle_set_state(state, rpm) && !at_speed) {
             float delay = 0.0f;
-            while(!(at_speed = hal.spindle_get_state().at_speed)) {
+            while(!(at_speed = hal.spindle.get_state().at_speed)) {
                 delay_sec(0.1f, DelayMode_Dwell);
                 delay += 0.1f;
                 if(ABORTED)
@@ -106,7 +105,7 @@ bool spindle_restore (spindle_state_t state, float rpm)
 {
     bool ok = true;
 
-    if(settings.flags.laser_mode) // When in laser mode, ignore spindle spin-up delay. Set to turn on laser when cycle starts.
+    if(settings.mode == Mode_Laser) // When in laser mode, ignore spindle spin-up delay. Set to turn on laser when cycle starts.
         sys.step_control.update_spindle_rpm = On;
     else { // TODO: add check for current spindle state matches restore state?
         spindle_set_state(state, rpm);
@@ -115,7 +114,7 @@ bool spindle_restore (spindle_state_t state, float rpm)
                 delay_sec(SAFETY_DOOR_SPINDLE_DELAY, DelayMode_SysSuspend);
             else if((ok == (settings.spindle.at_speed_tolerance <= 0.0f))) {
                 float delay = 0.0f;
-                while(!(ok = hal.spindle_get_state().at_speed)) {
+                while(!(ok = hal.spindle.get_state().at_speed)) {
                     delay_sec(0.1f, DelayMode_SysSuspend);
                     delay += 0.1f;
                     if(ABORTED)

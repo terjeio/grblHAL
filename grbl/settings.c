@@ -1,5 +1,5 @@
 /*
-  settings.c - eeprom configuration handling
+  settings.c - non-volatile storage configuration handling
 
   Part of GrblHAL
 
@@ -29,9 +29,8 @@
 
 #include "hal.h"
 #include "defaults.h"
-#include "report.h"
 #include "limits.h"
-#include "eeprom_emulate.h"
+#include "nvs_buffer.h"
 #include "tool_change.h"
 
 #ifdef ENABLE_SPINDLE_LINEARIZATION
@@ -74,15 +73,22 @@ const settings_t defaults = {
 
     .flags.legacy_rt_commands = DEFAULT_LEGACY_RTCOMMANDS,
     .flags.report_inches = DEFAULT_REPORT_INCHES,
-    .flags.laser_mode = DEFAULT_LASER_MODE,
-    .flags.lathe_mode = DEFAULT_LATHE_MODE,
-    .flags.invert_probe_pin = DEFAULT_INVERT_PROBE_PIN,
     .flags.sleep_enable = DEFAULT_SLEEP_ENABLE,
+#if DEFAULT_LASER_MODE
+    .mode = Mode_Laser,
     .flags.disable_laser_during_hold = DEFAULT_DISABLE_LASER_DURING_HOLD,
+#else
+    .flags.disable_laser_during_hold = 0,
+  #if DEFAULT_LATHE_MODE
+    .mode = Mode_Lathe,
+  #endif
+#endif
     .flags.restore_after_feed_hold = DEFAULT_RESTORE_AFTER_FEED_HOLD,
     .flags.force_initialization_alarm = DEFAULT_FORCE_INITIALIZATION_ALARM,
-    .flags.disable_probe_pullup = DISABLE_PROBE_PIN_PULL_UP,
-    .flags.allow_probing_feed_override = ALLOW_FEED_OVERRIDE_DURING_PROBE_CYCLES,
+
+    .probe.disable_probe_pullup = DISABLE_PROBE_PIN_PULL_UP,
+    .probe.allow_feed_override = ALLOW_FEED_OVERRIDE_DURING_PROBE_CYCLES,
+    .probe.invert_probe_pin = DEFAULT_INVERT_PROBE_PIN,
 
     .steppers.pulse_microseconds = DEFAULT_STEP_PULSE_MICROSECONDS,
     .steppers.pulse_delay_microseconds = DEFAULT_STEP_PULSE_DELAY,
@@ -216,14 +222,14 @@ const settings_t defaults = {
 // Write build info to persistent storage
 void settings_write_build_info (char *line)
 {
-    if(hal.eeprom.type != EEPROM_None)
-        hal.eeprom.memcpy_to_with_checksum(EEPROM_ADDR_BUILD_INFO, (uint8_t *)line, MAX_STORED_LINE_LENGTH);
+    if(hal.nvs.type != NVS_None)
+        hal.nvs.memcpy_to_nvs(NVS_ADDR_BUILD_INFO, (uint8_t *)line, sizeof(stored_line_t), true);
 }
 
 // Read build info from persistent storage.
 bool settings_read_build_info(char *line)
 {
-    if (!(hal.eeprom.type != EEPROM_None && hal.eeprom.memcpy_from_with_checksum((uint8_t *)line, EEPROM_ADDR_BUILD_INFO, MAX_STORED_LINE_LENGTH))) {
+    if (!(hal.nvs.type != NVS_None && hal.nvs.memcpy_from_nvs((uint8_t *)line, NVS_ADDR_BUILD_INFO, sizeof(stored_line_t), true) == NVS_TransferResult_OK)) {
         // Reset line with default value
         line[0] = 0; // Empty line
         settings_write_build_info(line);
@@ -237,12 +243,12 @@ void settings_write_startup_line (uint8_t idx, char *line)
 {
     assert(idx < N_STARTUP_LINE);
 
-#ifdef FORCE_BUFFER_SYNC_DURING_EEPROM_WRITE
+#ifdef FORCE_BUFFER_SYNC_DURING_NVS_WRITE
     protocol_buffer_synchronize(); // A startup line may contain a motion and be executing.
 #endif
 
-    if(hal.eeprom.type != EEPROM_None)
-        hal.eeprom.memcpy_to_with_checksum(EEPROM_ADDR_STARTUP_BLOCK + idx * (MAX_STORED_LINE_LENGTH + 1), (uint8_t *)line, MAX_STORED_LINE_LENGTH);
+    if(hal.nvs.type != NVS_None)
+        hal.nvs.memcpy_to_nvs(NVS_ADDR_STARTUP_BLOCK + idx * (sizeof(stored_line_t) + NVS_CRC_BYTES), (uint8_t *)line, sizeof(stored_line_t), true);
 }
 
 // Read startup line to persistent storage.
@@ -250,7 +256,7 @@ bool settings_read_startup_line (uint8_t idx, char *line)
 {
     assert(idx < N_STARTUP_LINE);
 
-    if (!(hal.eeprom.type != EEPROM_None && hal.eeprom.memcpy_from_with_checksum((uint8_t *)line, EEPROM_ADDR_STARTUP_BLOCK + idx * (MAX_STORED_LINE_LENGTH + 1), MAX_STORED_LINE_LENGTH))) {
+    if (!(hal.nvs.type != NVS_None && hal.nvs.memcpy_from_nvs((uint8_t *)line, NVS_ADDR_STARTUP_BLOCK + idx * (sizeof(stored_line_t) + NVS_CRC_BYTES), sizeof(stored_line_t), true) == NVS_TransferResult_OK)) {
         // Reset line with default value
         *line = '\0'; // Empty line
         settings_write_startup_line(idx, line);
@@ -260,27 +266,27 @@ bool settings_read_startup_line (uint8_t idx, char *line)
 }
 
 // Write selected coordinate data to persistent storage.
-void settings_write_coord_data (uint8_t idx, float (*coord_data)[N_AXIS])
+void settings_write_coord_data (coord_system_id_t id, float (*coord_data)[N_AXIS])
 {
-    assert(idx <= SETTING_INDEX_NCOORD);
+    assert(id <= N_CoordinateSystems);
 
-#ifdef FORCE_BUFFER_SYNC_DURING_EEPROM_WRITE
+#ifdef FORCE_BUFFER_SYNC_DURING_NVS_WRITE
     protocol_buffer_synchronize();
 #endif
 
-    if(hal.eeprom.type != EEPROM_None)
-        hal.eeprom.memcpy_to_with_checksum(EEPROM_ADDR_PARAMETERS + idx * (sizeof(coord_data_t) + 1), (uint8_t *)coord_data, sizeof(coord_data_t));
+    if(hal.nvs.type != NVS_None)
+        hal.nvs.memcpy_to_nvs(NVS_ADDR_PARAMETERS + id * (sizeof(coord_data_t) + NVS_CRC_BYTES), (uint8_t *)coord_data, sizeof(coord_data_t), true);
 }
 
 // Read selected coordinate data from persistent storage.
-bool settings_read_coord_data (uint8_t idx, float (*coord_data)[N_AXIS])
+bool settings_read_coord_data (coord_system_id_t id, float (*coord_data)[N_AXIS])
 {
-    assert(idx <= SETTING_INDEX_NCOORD);
+    assert(id <= N_CoordinateSystems);
 
-    if (!(hal.eeprom.type != EEPROM_None && hal.eeprom.memcpy_from_with_checksum((uint8_t *)coord_data, EEPROM_ADDR_PARAMETERS + idx * (sizeof(coord_data_t) + 1), sizeof(coord_data_t)))) {
+    if (!(hal.nvs.type != NVS_None && hal.nvs.memcpy_from_nvs((uint8_t *)coord_data, NVS_ADDR_PARAMETERS + id * (sizeof(coord_data_t) + NVS_CRC_BYTES), sizeof(coord_data_t), true) == NVS_TransferResult_OK)) {
         // Reset with default zero vector
         memset(coord_data, 0, sizeof(coord_data_t));
-        settings_write_coord_data(idx, coord_data);
+        settings_write_coord_data(id, coord_data);
         return false;
     }
     return true;
@@ -292,8 +298,8 @@ bool settings_write_tool_data (tool_data_t *tool_data)
 #ifdef N_TOOLS
     assert(tool_data->tool > 0 && tool_data->tool <= N_TOOLS); // NOTE: idx 0 is a non-persistent entry for tools not in tool table
 
-    if(hal.eeprom.type != EEPROM_None)
-        hal.eeprom.memcpy_to_with_checksum(EEPROM_ADDR_TOOL_TABLE + (tool_data->tool - 1) * (sizeof(tool_data_t) + 1), (uint8_t *)tool_data, sizeof(tool_data_t));
+    if(hal.nvs.type != NVS_None)
+        hal.nvs.memcpy_to_nvs(NVS_ADDR_TOOL_TABLE + (tool_data->tool - 1) * (sizeof(tool_data_t) + NVS_CRC_BYTES), (uint8_t *)tool_data, sizeof(tool_data_t), true);
 
     return true;
 #else
@@ -307,7 +313,7 @@ bool settings_read_tool_data (uint32_t tool, tool_data_t *tool_data)
 #ifdef N_TOOLS
     assert(tool > 0 && tool <= N_TOOLS); // NOTE: idx 0 is a non-persistent entry for tools not in tool table
 
-    if (!(hal.eeprom.type != EEPROM_None && hal.eeprom.memcpy_from_with_checksum((uint8_t *)tool_data, EEPROM_ADDR_TOOL_TABLE + (tool - 1) * (sizeof(tool_data_t) + 1), sizeof(tool_data_t)) && tool_data->tool == tool)) {
+    if (!(hal.nvs.type != NVS_None && hal.nvs.memcpy_from_nvs((uint8_t *)tool_data, NVS_ADDR_TOOL_TABLE + (tool - 1) * (sizeof(tool_data_t) + NVS_CRC_BYTES), sizeof(tool_data_t), true) == NVS_TransferResult_OK && tool_data->tool == tool)) {
         memset(tool_data, 0, sizeof(tool_data_t));
         tool_data->tool = tool;
     }
@@ -319,18 +325,21 @@ bool settings_read_tool_data (uint32_t tool, tool_data_t *tool_data)
 }
 
 // Read Grbl global settings from persistent storage.
+// Checks version-byte of non-volatile storage and global settings copy.
 bool read_global_settings ()
 {
-    // Check version-byte of eeprom
-    return hal.eeprom.type != EEPROM_None && SETTINGS_VERSION == hal.eeprom.get_byte(0) && hal.eeprom.memcpy_from_with_checksum((uint8_t *)&settings, EEPROM_ADDR_GLOBAL, sizeof(settings_t));
+    bool ok = hal.nvs.type != NVS_None && SETTINGS_VERSION == hal.nvs.get_byte(0) && hal.nvs.memcpy_from_nvs((uint8_t *)&settings, NVS_ADDR_GLOBAL, sizeof(settings_t), true) == NVS_TransferResult_OK;
+
+    return ok && settings.version == SETTINGS_VERSION;
 }
+
 
 // Write Grbl global settings and version number to persistent storage
 void write_global_settings ()
 {
-    if(hal.eeprom.type != EEPROM_None) {
-        hal.eeprom.put_byte(0, SETTINGS_VERSION);
-        hal.eeprom.memcpy_to_with_checksum(EEPROM_ADDR_GLOBAL, (uint8_t *)&settings, sizeof(settings_t));
+    if(hal.nvs.type != NVS_None) {
+        hal.nvs.put_byte(0, SETTINGS_VERSION);
+        hal.nvs.memcpy_to_nvs(NVS_ADDR_GLOBAL, (uint8_t *)&settings, sizeof(settings_t), true);
     }
 }
 
@@ -339,9 +348,9 @@ void write_global_settings ()
 void settings_restore (settings_restore_t restore)
 {
     uint_fast8_t idx;
-    char empty_line[MAX_STORED_LINE_LENGTH];
+    stored_line_t empty_line;
 
-    memset(empty_line, 0xFF, MAX_STORED_LINE_LENGTH);
+    memset(empty_line, 0xFF, sizeof(stored_line_t));
     *empty_line = '\0';
 
     if (restore.defaults) {
@@ -361,10 +370,10 @@ void settings_restore (settings_restore_t restore)
         float coord_data[N_AXIS];
 
         memset(coord_data, 0, sizeof(coord_data));
-        for (idx = 0; idx <= SETTING_INDEX_NCOORD; idx++)
-            settings_write_coord_data(idx, &coord_data);
+        for (idx = 0; idx <= N_WorkCoordinateSystems; idx++)
+            settings_write_coord_data((coord_system_id_t)idx, &coord_data);
 
-        settings_write_coord_data(SETTING_INDEX_G92, &coord_data); // Clear G92 offsets
+        settings_write_coord_data(CoordinateSystem_G92, &coord_data); // Clear G92 offsets
 
 #ifdef N_TOOLS
         tool_data_t tool_data;
@@ -386,10 +395,25 @@ void settings_restore (settings_restore_t restore)
         settings_write_build_info(BUILD_INFO);
     }
 
-    if(restore.driver_parameters && hal.driver_settings_restore)
-        hal.driver_settings_restore();
+    if(restore.driver_parameters && hal.driver_settings.restore) {
+        hal.driver_settings.restore();
+        hal.nvs.memcpy_to_nvs(hal.nvs.driver_area.address, hal.nvs.driver_area.mem_address, hal.nvs.driver_area.size, false);
+    }
 
-    eeprom_emu_sync_physical();
+    nvs_buffer_sync_physical();
+}
+
+static status_code_t store_driver_setting (setting_type_t setting, float value, char *svalue)
+{
+    status_code_t status = hal.driver_settings.set ? hal.driver_settings.set(setting, value, svalue) : Status_Unhandled;
+
+    if(status == Status_OK) {
+ //       hal.nvs.memcpy_to_nvs(hal.nvs.driver_area.address, hal.nvs.driver_area.mem_address, hal.nvs.driver_area.size, true);
+        if(hal.driver_settings.changed)
+            hal.driver_settings.changed(&settings);
+    }
+
+    return status == Status_Unhandled ? Status_InvalidStatement : status;
 }
 
 // A helper method to set settings from command line
@@ -398,9 +422,13 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
     uint_fast8_t set_idx = 0;
     float value;
 
+    // Trim leading spaces
+    while(*svalue == ' ')
+        svalue++;
+
     if (!read_float(svalue, &set_idx, &value)) {
         status_code_t status;
-        if(hal.driver_setting && (status = hal.driver_setting(setting, NAN, svalue)) != Status_Unhandled)
+        if((status = store_driver_setting(setting, NAN, svalue)) != Status_InvalidStatement)
             return status;
         else
             return Status_BadNumberFormat;
@@ -461,8 +489,8 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 break;
         }
 
-        if(!(found || (hal.driver_setting && hal.driver_setting(setting, value, svalue) == Status_OK)))
-            return Status_InvalidStatement;
+        if(!found)
+            return store_driver_setting(setting, value, svalue);
 
     } else {
         // Store non-axis Grbl settings
@@ -502,10 +530,10 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 break;
 
             case Setting_InvertProbePin: // Reset to ensure change. Immediate re-init may cause problems.
-                if(!hal.probe_configure_invert_mask)
+                if(!hal.probe.configure)
                     return Status_SettingDisabled;
-                settings.flags.invert_probe_pin = int_value != 0;
-                hal.probe_configure_invert_mask(false, false);
+                settings.probe.invert_probe_pin = int_value != 0;
+                hal.probe.configure(false, false);
                 break;
 
             case Setting_StatusReportMask:
@@ -568,9 +596,9 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 break;
 
             case Setting_ProbePullUpDisable:
-                if(!hal.probe_configure_invert_mask)
+                if(!hal.probe.configure)
                     return Status_SettingDisabled;
-                settings.flags.disable_probe_pullup = int_value != 0;
+                settings.probe.disable_probe_pullup = int_value != 0;
                 break;
 
             case Setting_SoftLimitsEnable:
@@ -584,7 +612,7 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
 #if COMPATIBILITY_LEVEL <= 1
                 settings.limits.flags.check_at_init = bit_istrue(int_value, bit(1));
 #endif
-                hal.limits_enable(settings.limits.flags.hard_enabled, false); // Change immediately. NOTE: Nice to have but could be problematic later.
+                hal.limits.enable(settings.limits.flags.hard_enabled, false); // Change immediately. NOTE: Nice to have but could be problematic later.
                 break;
 
             case Setting_JogSoftLimited:
@@ -615,7 +643,7 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 break;
 
             case Setting_ProbingFeedOverride:
-                settings.flags.allow_probing_feed_override = int_value != 0;
+                settings.probe.allow_feed_override = int_value != 0;
                 break;
 
             case Setting_HomingEnable:
@@ -689,31 +717,33 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 break;
 
             case Setting_Mode:
-                switch(int_value) {
-                    case 1:
+                switch((machine_mode_t)int_value) {
+
+                    case Mode_Standard:
+                       settings.flags.disable_laser_during_hold = 0;
+                       gc_state.modal.diameter_mode = false;
+                       break;
+
+                    case Mode_Laser:
                         if(!hal.driver_cap.variable_spindle)
                             return Status_SettingDisabledLaser;
-                        settings.flags.laser_mode = On;
-                        settings.flags.lathe_mode = Off;
+                        if(settings.mode != Mode_Laser)
+                            settings.flags.disable_laser_during_hold = DEFAULT_DISABLE_LASER_DURING_HOLD;
+                        gc_state.modal.diameter_mode = false;
                         break;
 
-                     case 2:
-                        settings.flags.laser_mode = Off;
-                        settings.flags.lathe_mode = On;
+                     case Mode_Lathe:
+                        settings.flags.disable_laser_during_hold = 0;
                         break;
 
-                     default:
-                        settings.flags.laser_mode = Off;
-                        settings.flags.lathe_mode = Off;
-                        break;
+                     default: // Mode_Standard
+                        return Status_InvalidStatement;
                 }
-                if(!settings.flags.lathe_mode)
-                    gc_state.modal.diameter_mode = false;
+                settings.mode = (machine_mode_t)int_value;
                 break;
 
             case Setting_ParkingEnable:
-                if (bit_istrue(int_value, bit(0)))
-                    settings.parking.flags.value = bit_istrue(int_value, bit(0)) ? (int_value & 0x07) : 0;
+                settings.parking.flags.value = bit_istrue(int_value, bit(0)) ? (int_value & 0x07) : 0;
                 break;
 
             case Setting_ParkingAxis:
@@ -821,7 +851,11 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 break;
 
             case Setting_ToolChangeMode:
-                if(!hal.driver_cap.atc && hal.stream.suspend_read && int_value <= ToolChange_SemiAutomatic) {
+                if(!hal.driver_cap.atc && hal.stream.suspend_read && int_value <= ToolChange_Ignore) {
+#if COMPATIBILITY_LEVEL > 1
+                    if((toolchange_mode_t)int_value == ToolChange_Manual_G59_3 || (toolchange_mode_t)int_value == ToolChange_SemiAutomatic)
+                        return Status_InvalidStatement;
+#endif
                     settings.tool_change.mode = (toolchange_mode_t)int_value;
                     tc_init();
                 } else
@@ -843,9 +877,24 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 settings.tool_change.seek_rate = value;
                 break;
 
-            default:;
-                status_code_t status = hal.driver_setting ? hal.driver_setting(setting, value, svalue) : Status_Unhandled;
-                return status == Status_Unhandled ? Status_InvalidStatement : status;
+            case Settings_IoPort_InvertIn:
+                settings.ioport.invert_in.mask = (uint8_t)(int_value & 0xFF);
+                break;
+
+            case Settings_IoPort_Pullup_Disable:
+                settings.ioport.pullup_disable_in.mask = (uint8_t)(int_value & 0xFF);
+                break;
+
+            case Settings_IoPort_InvertOut:
+                settings.ioport.invert_out.mask = (uint8_t)(int_value & 0xFF);
+                break;
+
+            case Settings_IoPort_OD_Enable:
+                settings.ioport.od_enable_out.mask = (uint8_t)(int_value & 0xFF);
+                break;
+
+            default:
+                return store_driver_setting(setting, value, svalue);
         }
     }
 
@@ -863,8 +912,8 @@ void settings_init() {
     if(!read_global_settings()) {
         settings_restore_t settings = settings_all;
         settings.defaults = 1; // Ensure global settings get restored
-        hal.report.status_message(Status_SettingReadFail);
-        settings_restore(settings); // Force restore all EEPROM data.
+        grbl.report.status_message(Status_SettingReadFail);
+        settings_restore(settings); // Force restore all non-volatile storage data.
         report_init();
 #if COMPATIBILITY_LEVEL <= 1
         report_grbl_settings(true);
@@ -883,7 +932,13 @@ void settings_init() {
         mc_backlash_init();
 #endif
         hal.settings_changed(&settings);
-        if(hal.probe_configure_invert_mask) // Initialize probe invert mask.
-            hal.probe_configure_invert_mask(false, false);
+        if(hal.probe.configure) // Initialize probe invert mask.
+            hal.probe.configure(false, false);
+    }
+
+    if(hal.nvs.driver_area.address != 0 && hal.driver_settings.load) {
+        hal.driver_settings.load();
+        if(hal.driver_settings.changed)
+            hal.driver_settings.changed(&settings);
     }
 }

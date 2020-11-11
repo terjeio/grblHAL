@@ -1,5 +1,5 @@
 # CMake for GrblHAL driver for ESP32
-# 2020-07-10
+# 2020-08-10
 
 cmake_minimum_required(VERSION 3.5)
 
@@ -13,6 +13,7 @@ OPTION(Trinamic "Trinamic driver support over I2C" OFF)
 OPTION(WebUI "WebUI services" OFF)
 OPTION(WebAuth "WebUI authentication" OFF)
 OPTION(MPGMode "MPG mode" OFF)
+OPTION(I2SStepping "Use I2S Stepping" OFF)
 OPTION(BoosterPack "Compile for CNC BoosterPack" OFF)
 OPTION(HUANYANG "Compile with Huanyang RS485 Spindle support" OFF)
 
@@ -27,13 +28,16 @@ set(HUANYANG_SOURCE spindle/huanyang.c spindle/modbus)
 set(MAIN_SRCS main.c driver.c nvs.c esp32-hal-uart.c
  i2c.c
  ioexpand.c
- eeprom.c
+ eeprom/eeprom_24LC16B.c
+ eeprom/eeprom_24AAxxx.c
+ i2s_out.c
  grbl/grbllib.c
  grbl/coolant_control.c
- grbl/eeprom_emulate.c
+ grbl/nvs_buffer.c
  grbl/gcode.c
  grbl/limits.c
  grbl/motion_control.c
+ grbl/my_plugin.c
  grbl/nuts_bolts.c
  grbl/override.c
  grbl/planner.c
@@ -86,6 +90,7 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(grbl)
 
 target_compile_definitions(grbl.elf PUBLIC GRBL_ESP32)
+target_compile_definitions(grbl.elf PUBLIC OVERRIDE_MY_MACHINE)
 
 if(Networking)
 target_compile_definitions(grbl.elf PUBLIC NETWORKING_ENABLE)
@@ -141,6 +146,7 @@ unset(WebUI CACHE)
 unset(WebAuth CACHE)
 unset(MPGMode CACHE)
 unset(BoosterPack CACHE)
+unset(HUANYANG CACHE)
 
 include_directories(BEFORE ".")
 

@@ -258,7 +258,7 @@ float convert_delta_vector_to_unit_vector (float *vector)
 }
 
 
-// calculate checksum byte for EEPROM data
+// calculate checksum byte for data
 uint8_t calc_checksum (uint8_t *data, uint32_t size) {
 
     uint8_t checksum = 0;

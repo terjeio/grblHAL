@@ -27,7 +27,7 @@
 #include "grbl_eeprom_extensions.h"
 #include "platform.h"
 
-#include "grbl/grbl.h"
+#include "grbl/hal.h"
 
 /* don't delay at all in validator */
 static void driver_delay_ms (uint32_t ms, void (*callback)(void))
@@ -76,7 +76,7 @@ static control_signals_t systemGetState (void)
     return signals;
 }
 
-static void probeConfigureInvertMask (bool is_probe_away)
+static void probeConfigureInvertMask (bool is_probe_away, bool probing)
 {
 }
 
@@ -173,41 +173,41 @@ uint16_t serial_get_rx_buffer_available()
 bool driver_init ()
 {
     hal.info = "Validator";
-    hal.driver_version = "200528";
+    hal.driver_version = "201024";
     hal.driver_setup = driver_setup;
     hal.rx_buffer_size = RX_BUFFER_SIZE;
     hal.f_step_timer = F_CPU;
     hal.delay_ms = driver_delay_ms;
     hal.settings_changed = settings_changed;
 
-    hal.stepper_wake_up = stepperWakeUp;
-    hal.stepper_go_idle = stepperGoIdle;
-    hal.stepper_enable = stepperEnable;
-    hal.stepper_cycles_per_tick = stepperCyclesPerTick;
-    hal.stepper_pulse_start = stepperPulseStart;
+    hal.stepper.wake_up = stepperWakeUp;
+    hal.stepper.go_idle = stepperGoIdle;
+    hal.stepper.enable = stepperEnable;
+    hal.stepper.cycles_per_tick = stepperCyclesPerTick;
+    hal.stepper.pulse_start = stepperPulseStart;
 
-    hal.limits_enable = limitsEnable;
+    hal.limits.enable = limitsEnable;
 
-    hal.limits_get_state = limitsGetState;
+    hal.limits.get_state = limitsGetState;
 
-    hal.coolant_set_state = coolantSetState;
-    hal.coolant_get_state = coolantGetState;
+    hal.coolant.set_state = coolantSetState;
+    hal.coolant.get_state = coolantGetState;
 
-    hal.probe_get_state = probeGetState;
-    hal.probe_configure_invert_mask = probeConfigureInvertMask;
+    hal.probe.get_state = probeGetState;
+    hal.probe.configure = probeConfigureInvertMask;
 
-    hal.spindle_set_state = spindleSetState;
-    hal.spindle_get_state = spindleGetState;
+    hal.spindle.set_state = spindleSetState;
+    hal.spindle.get_state = spindleGetState;
 #ifdef SPINDLE_PWM_DIRECT
-    hal.spindle_get_pwm = spindleGetPWM;
-    hal.spindle_update_pwm = spindle_set_speed;
+    hal.spindle.get_pwm = spindleGetPWM;
+    hal.spindle.update_pwm = spindle_set_speed;
 #else
-    hal.spindle_update_rpm = spindleUpdateRPM;
+    hal.spindle.update_rpm = spindleUpdateRPM;
 #endif
 
-    hal.system_control_get_state = systemGetState;
+    hal.control.get_state = systemGetState;
 
-    hal.eeprom.type = EEPROM_None;
+    hal.nvs.type = NVS_None;
 
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
@@ -232,5 +232,5 @@ bool driver_init ()
     hal.driver_cap.probe_pull_up = On;
 
     // no need to move version check before init - compiler will fail any signature mismatch for existing entries
-    return hal.version == 6;
+    return hal.version == 7;
 }

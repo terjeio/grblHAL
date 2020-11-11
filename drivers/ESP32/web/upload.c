@@ -24,11 +24,14 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "driver.h"
+
+#if WEBUI_ENABLE
+
 #include <stdio.h>
 #include <string.h>
 #include <sys/unistd.h>
 
-#include "driver.h"
 #include "upload.h"
 
 #include "networking/multipartparser.h"
@@ -245,3 +248,6 @@ size_t upload_chunk (httpd_req_t *req, const char* data, size_t size)
 {
     return multipartparser_execute(&parser, sd_callbacks, data, size);
 }
+
+#endif
+

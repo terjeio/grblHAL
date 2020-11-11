@@ -27,6 +27,8 @@
 
 #ifdef ARDUINO
 #include "../grbl/hal.h"
+#include "../grbl/state_machine.h"
+#include "../grbl/report.h"
 #else
 #include "grbl/hal.h"
 #include "grbl/state_machine.h"
@@ -52,6 +54,7 @@ typedef enum {
 
 static float rpm, rpm_programmed = -1.0f, rpm_low_limit = 0.0f, rpm_high_limit = 0.0f;
 static spindle_state_t vfd_state = {0};
+static on_report_options_ptr on_report_options;
 #if SPINDLE_HUANYANG == 2
 static uint32_t rpm_max = 0;
 #endif
@@ -62,7 +65,7 @@ static void spindleSetRPM (float rpm, bool block)
 
     if (rpm != rpm_programmed) {
 
-        rpm_cmd.xx = VFD_SetRPM;
+        rpm_cmd.xx = (void *)VFD_SetRPM;
         rpm_cmd.adu[0] = VFD_ADDRESS;
 
 #if SPINDLE_HUANYANG == 2
@@ -112,7 +115,7 @@ static void spindleSetState (spindle_state_t state, float rpm)
 {
     modbus_message_t mode_cmd;
 
-    mode_cmd.xx = VFD_SetStatus;
+    mode_cmd.xx = (void *)VFD_SetStatus;
     mode_cmd.adu[0] = VFD_ADDRESS;
 
 #if SPINDLE_HUANYANG == 2
@@ -145,7 +148,7 @@ static spindle_state_t spindleGetState (void)
 {
     modbus_message_t mode_cmd;
 
-    mode_cmd.xx = VFD_GetRPM;
+    mode_cmd.xx = (void *)VFD_GetRPM;
     mode_cmd.adu[0] = VFD_ADDRESS;
 
 #if SPINDLE_HUANYANG == 2
@@ -208,12 +211,22 @@ static void rx_exception (uint8_t code)
     report_alarm_message(Alarm_Spindle);
 }
 
+static void onReportOptions (void)
+{
+    on_report_options();
+#if SPINDLE_HUANYANG == 2
+    hal.stream.write("[PLUGIN:HUANYANG VFD P2A v0.01]" ASCII_EOL);
+#else
+    hal.stream.write("[PLUGIN:HUANYANG VFD v0.01]" ASCII_EOL);
+#endif
+}
+
 void huanyang_init (modbus_stream_t *stream)
 {
-    hal.spindle_set_state = spindleSetState;
-    hal.spindle_get_state = spindleGetState;
-    hal.spindle_reset_data = NULL;
-    hal.spindle_update_rpm = spindleUpdateRPM;
+    hal.spindle.set_state = spindleSetState;
+    hal.spindle.get_state = spindleGetState;
+    hal.spindle.reset_data = NULL;
+    hal.spindle.update_rpm = spindleUpdateRPM;
 
     hal.driver_cap.variable_spindle = On;
     hal.driver_cap.spindle_at_speed = On;
@@ -221,6 +234,9 @@ void huanyang_init (modbus_stream_t *stream)
 
     stream->on_rx_packet = rx_packet;
     stream->on_rx_exception = rx_exception;
+
+    on_report_options = grbl.on_report_options;
+    grbl.on_report_options = onReportOptions;
 
 #if SPINDLE_HUANYANG == 2
 
@@ -239,7 +255,6 @@ void huanyang_init (modbus_stream_t *stream)
     modbus_send(&cmd, true);
 
 #endif
-
 }
 
 #endif

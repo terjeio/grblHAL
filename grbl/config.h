@@ -1,7 +1,7 @@
 /*
   config.h - compile time configuration and default setting values
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 
@@ -42,7 +42,7 @@
 // Set to 2 to disable new settings as well, use #define parameters for setting default values.
 //  These can be found in in this file and in defaults.h.
 // Set to 10 to also disable new coordinate system offsets (G59.1 - G59.3) and some $# report extensions.
-// NOTE: if switching to a level > 1 please reset EEPROM with $RST=* after reflashing!
+// NOTE: if switching to a level > 1 please reset non-volatile storage with $RST=* after reflashing!
 //#define COMPATIBILITY_LEVEL 0
 
 //#define KINEMATICS_API // Remove comment to add HAL entry points for custom kinematics
@@ -233,20 +233,20 @@
 // #define HOMING_AXIS_SEARCH_SCALAR  1.5f // Uncomment to override defaults in limits.c.
 // #define HOMING_AXIS_LOCATE_SCALAR  10.0f // Uncomment to override defaults in limits.c.
 
-// Enable the '$RST=*', '$RST=$', and '$RST=#' eeprom restore commands. There are cases where
+// Enable the '$RST=*', '$RST=$', and '$RST=#' non-volatile storage restore commands. There are cases where
 // these commands may be undesirable. Simply comment the desired macro to disable it.
 // NOTE: See SETTINGS_RESTORE_ALL macro for customizing the `$RST=*` command.
-//#define DISABLE_RESTORE_EEPROM_WIPE_ALL         // '$RST=*' Default enabled. Uncomment to disable.
-//#define DISABLE_RESTORE_EEPROM_DEFAULT_SETTINGS // '$RST=$' Default enabled. Uncomment to disable.
-//#define DISABLE_RESTORE_EEPROM_CLEAR_PARAMETERS // '$RST=#' Default enabled. Uncomment to disable.
-//#define DISABLE_RESTORE_DRIVER_PARAMETERS       // '$RST=&' Default enabled. Uncomment to disable. For drivers that implements non-generic settings.
+//#define DISABLE_RESTORE_NVS_WIPE_ALL         // '$RST=*' Default enabled. Uncomment to disable.
+//#define DISABLE_RESTORE_NVS_DEFAULT_SETTINGS // '$RST=$' Default enabled. Uncomment to disable.
+//#define DISABLE_RESTORE_NVS_CLEAR_PARAMETERS // '$RST=#' Default enabled. Uncomment to disable.
+//#define DISABLE_RESTORE_DRIVER_PARAMETERS    // '$RST=&' Default enabled. Uncomment to disable. For drivers that implements non-generic settings.
 
-// Defines the EEPROM data restored upon a settings version change and `$RST=*` command. Whenever the
-// the settings or other EEPROM data structure changes between Grbl versions, Grbl will automatically
-// wipe and restore the EEPROM. These macros controls what data is wiped and restored. This is useful
+// Defines the non-volatile data restored upon a settings version change and `$RST=*` command. Whenever the
+// the settings or other non-volatile data structure changes between Grbl versions, Grbl will automatically
+// wipe and restore the non-volatile data. These macros controls what data is wiped and restored. This is useful
 // particularily for OEMs that need to retain certain data. For example, the BUILD_INFO string can be
-// written into the EEPROM via a separate program to contain product data. Altering these
-// macros to not restore the build info EEPROM will ensure this data is retained after firmware upgrades.
+// written into non-volatile storage via a separate program to contain product data. Altering these
+// macros to not restore the build info non-volatile storage will ensure this data is retained after firmware upgrades.
 //#define SETTINGS_RESTORE_DEFAULTS          0 // Default enabled, uncomment to disable
 //#define SETTINGS_RESTORE_PARAMETERS        0 // Default enabled, uncomment to disable
 //#define SETTINGS_RESTORE_STARTUP_LINES     0 // Default enabled, uncomment to disable
@@ -254,7 +254,7 @@
 //#define SETTINGS_RESTORE_DRIVER_PARAMETERS 0 // Default enabled, uncomment to disable
 
 // Enable the '$I=(string)' build info write command. If disabled, any existing build info data must
-// be placed into EEPROM via external means with a valid checksum value. This macro option is useful
+// be placed into non-volatile storage via external means with a valid checksum value. This macro option is useful
 // to prevent this data from being over-written by a user, when used to store OEM product data.
 // NOTE: If disabled and to ensure Grbl can never alter the build info line, you'll also need to enable
 // the SETTING_RESTORE_ALL macro above and remove SETTINGS_RESTORE_BUILD_INFO from the mask.
@@ -272,13 +272,11 @@
 //#define SLEEP_ENABLE  // Default disabled. Uncomment to enable.
 //#define SLEEP_DURATION 5.0f // Number of minutes before sleep mode is entered.
 
-// Disable EEPROM emulation/buffering in RAM (allocated from heap)
-// Can be used for MCUs with no EEPROM or as buffer in order to avoid writing to EEPROM when not in idle state.
-// The buffer will be written to EEPROM when in idle state.
-//#define EMULATE_EEPROM_DISABLE
-
-// Max number of entries in log for PID data reporting, to be used for tuning
-//#define PID_LOG 1000 // Default disabled. Uncomment to enable.
+// Disable non-volatile storage emulation/buffering in RAM (allocated from heap)
+// Can be used for MCUs with no non-volatile storage or as buffer in order to avoid writing to
+// non-volatile storage when not in idle state.
+// The buffer will be written to non-volatile storage when in idle state.
+//#define BUFFER_NVSDATA_DISABLE
 
 //#define ENABLE_BACKLASH_COMPENSATION
 
@@ -478,7 +476,7 @@
 //#define DEFAULT_SPINDLE_ENABLE_OFF_WITH_ZERO_SPEED 0
 //#define DEFAULT_STEP_PULSE_MICROSECONDS 10.0f
 //#define DEFAULT_STEP_PULSE_DELAY 5.0f // uncomment to set default > 0.0f
-//#define DEFAULT_STEPPER_IDLE_LOCK_TIME 25 // msec (0-254, 255 keeps steppers enabled)
+//#define DEFAULT_STEPPER_IDLE_LOCK_TIME 25 // msec (0-65535, 255 keeps steppers enabled)
 //#define DEFAULT_JUNCTION_DEVIATION 0.01f // mm
 //#define DEFAULT_ARC_TOLERANCE 0.002f // mm
 //#define DEFAULT_REPORT_INCHES
@@ -561,6 +559,17 @@
 // for professional CNC machines, regardless of where the limit switches are located. Set this
 // define to 1 to force Grbl to always set the machine origin at the homed location despite switch orientation.
 //#define HOMING_FORCE_SET_ORIGIN // Default disabled. Uncomment to enable.
+
+// To prevent the homing cycle from racking the dual axis, when one limit triggers before the
+// other due to switch failure or noise, the homing cycle will automatically abort if the second
+// motor's limit switch does not trigger within the three distance parameters defined below.
+// Axis length percent will automatically compute a fail distance as a percentage of the max
+// travel of the other non-dual axis, i.e. if dual axis select is X_AXIS at 5.0%, then the fail
+// distance will be computed as 5.0% of y-axis max travel. Fail distance max and min are the
+// limits of how far or little a valid fail distance is.
+//#define DUAL_AXIS_HOMING_FAIL_AXIS_LENGTH_PERCENT  5.0f  // Float (percent)
+//#define DUAL_AXIS_HOMING_FAIL_DISTANCE_MAX  25.0f  // Float (mm)
+//#define DUAL_AXIS_HOMING_FAIL_DISTANCE_MIN  2.5f // Float (mm)
 
 // Enables and configures parking motion methods upon a safety door state. Primarily for OEMs
 // that desire this feature for their integrated machines. At the moment, Grbl assumes that

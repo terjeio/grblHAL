@@ -1,7 +1,7 @@
 /*
   i2c.c - I2C support for EEPROM, keypad and Trinamic plugins
 
-  Part of GrblHAL driver for STM32F103C8
+  Part of GrblHAL driver for STM32F4xx
 
   Copyright (c) 2018-2020 Terje Io
 
@@ -82,7 +82,7 @@ void i2c_init (void)
 
 #if EEPROM_ENABLE
 
-void i2c_eeprom_transfer (i2c_eeprom_trans_t *i2c, bool read)
+nvs_transfer_result_t i2c_nvs_transfer (nvs_transfer_t *i2c, bool read)
 {
     while (HAL_I2C_GetState(&i2c_port) != HAL_I2C_STATE_READY);
 
@@ -97,6 +97,8 @@ void i2c_eeprom_transfer (i2c_eeprom_trans_t *i2c, bool read)
 #endif
     }
     i2c->data += i2c->count;
+
+    return NVS_TransferResult_OK;
 }
 
 #endif

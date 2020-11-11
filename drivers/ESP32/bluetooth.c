@@ -41,6 +41,8 @@
 
 #include "driver.h"
 #include "grbl/grbl.h"
+#include "grbl/report.h"
+#include "grbl/nvs_buffer.h"
 
 #define SPP_RUNNING      (1 << 0)
 #define SPP_CONNECTED    (1 << 1)
@@ -74,7 +76,7 @@ typedef struct {
 
 static uint32_t connection = 0;
 static bool is_second_attempt = false;
-static bluetooth_settings_t *bt_settings;
+static bluetooth_settings_t *bluetooth, *bluetooth;
 static SemaphoreHandle_t tx_busy = NULL;
 static EventGroupHandle_t event_group = NULL;
 static TaskHandle_t polltask = NULL;
@@ -85,6 +87,8 @@ static char client_mac[18];
 static bt_tx_buffer_t txbuffer;
 static stream_rx_buffer_t rxbuffer = {0};
 static stream_rx_buffer_t rxbackup;
+static driver_setting_ptrs_t driver_settings;
+static on_report_options_ptr on_report_options;
 
 uint32_t BTStreamAvailable (void)
 {
@@ -199,6 +203,23 @@ char *bluetooth_get_client_mac (void)
     return client_mac[0] == '\0' ? NULL : client_mac;
 }
 
+static void report_bt_MAC (void)
+{
+    char *client_mac;
+
+    on_report_options();
+
+    hal.stream.write("[BT DEVICE MAC:");
+    hal.stream.write(bluetooth_get_device_mac());
+    hal.stream.write("]" ASCII_EOL);
+
+    if((client_mac = bluetooth_get_client_mac())) {
+        hal.stream.write("[BT CLIENT MAC:");
+        hal.stream.write(client_mac);
+        hal.stream.write("]" ASCII_EOL);
+    }
+}
+
 bool BTStreamSuspendInput (bool suspend)
 {
     BT_MUTEX_LOCK();
@@ -235,9 +256,9 @@ static void esp_spp_cb (esp_spp_cb_event_t event, esp_spp_cb_param_t *param)
     switch (event) {
 
         case ESP_SPP_INIT_EVT:
-            esp_bt_dev_set_device_name(bt_settings->device_name);
+            esp_bt_dev_set_device_name(bluetooth->device_name);
             esp_bt_gap_set_scan_mode(ESP_BT_SCAN_MODE_CONNECTABLE_DISCOVERABLE);
-            esp_spp_start_srv(ESP_SPP_SEC_AUTHENTICATE, ESP_SPP_ROLE_SLAVE, 0, bt_settings->service_name);
+            esp_spp_start_srv(ESP_SPP_SEC_AUTHENTICATE, ESP_SPP_ROLE_SLAVE, 0, bluetooth->service_name);
             break;
 
         case ESP_SPP_SRV_OPEN_EVT:
@@ -414,12 +435,11 @@ static void pollTX (void * arg)
     }
 }
 
-bool bluetooth_init (bluetooth_settings_t *settings)
+bool bluetooth_start (void)
 {
     client_mac[0] = '\0';
-    bt_settings = settings;
 
-    if(!(event_group || (event_group = xEventGroupCreate())))
+    if(!bluetooth || bluetooth->device_name[0] == '\0' || !(event_group || (event_group = xEventGroupCreate())))
         return false;
 
     xEventGroupClearBits(event_group, 0xFFFFFF);
@@ -557,51 +577,78 @@ bool bluetooth_disable (void)
 
 #if BLUETOOTH_ENABLE
 
-status_code_t bluetooth_setting (uint_fast16_t param, float value, char *svalue)
+static status_code_t bluetooth_setting (uint_fast16_t setting, float value, char *svalue)
 {
-    status_code_t status = Status_Unhandled;
+    status_code_t status = svalue ? Status_OK : Status_Unhandled;
 
-    if(svalue) switch(param) {
+    if(svalue) switch(setting) {
 
         case Setting_BlueToothDeviceName:
-            if(strlcpy(driver_settings.bluetooth.device_name, svalue, sizeof(driver_settings.bluetooth.device_name)) <= sizeof(driver_settings.bluetooth.device_name))
-                status = Status_OK;
-            else
+            if(!(strlcpy(bluetooth->device_name, svalue, sizeof(bluetooth->device_name)) <= sizeof(bluetooth->device_name)))
                 status = Status_InvalidStatement; // too long...
             break;
 
         case Setting_BlueToothServiceName:
-            if(strlcpy(driver_settings.bluetooth.service_name, svalue, sizeof(driver_settings.bluetooth.service_name)) <= sizeof(driver_settings.bluetooth.service_name))
-                status = Status_OK;
-            else
+            if(!(strlcpy(bluetooth->service_name, svalue, sizeof(bluetooth->service_name)) <= sizeof(bluetooth->service_name)))
                 status = Status_InvalidStatement; // too long...
-            break;
-    }
-
-    return status;
-}
-
-void bluetooth_settings_report (setting_type_t setting)
-{
-    switch(setting) {
-
-        case Setting_BlueToothDeviceName:
-            report_string_setting(Setting_BlueToothDeviceName, driver_settings.bluetooth.device_name);
-            break;
-
-        case Setting_BlueToothServiceName:
-            report_string_setting(Setting_BlueToothServiceName, driver_settings.bluetooth.service_name);
             break;
 
         default:
+            status = Status_Unhandled;
             break;
     }
+
+    return status == Status_Unhandled && driver_settings.set ? driver_settings.set(setting, value, svalue) : status;
+
 }
 
-void bluetooth_settings_restore (void)
+static void bluetooth_settings_report (setting_type_t setting)
 {
-    strcpy(driver_settings.bluetooth.device_name, BLUETOOTH_DEVICE);
-    strcpy(driver_settings.bluetooth.service_name, BLUETOOTH_SERVICE);
+    bool reported = true;
+
+    switch(setting) {
+
+        case Setting_BlueToothDeviceName:
+            report_string_setting(Setting_BlueToothDeviceName, bluetooth->device_name);
+            break;
+
+        case Setting_BlueToothServiceName:
+            report_string_setting(Setting_BlueToothServiceName, bluetooth->service_name);
+            break;
+
+        default:
+            reported = false;
+            break;
+    }
+
+    if(!reported && driver_settings.report)
+        driver_settings.report(setting);
+}
+
+static void bluetooth_settings_restore (void)
+{
+    strcpy(bluetooth->device_name, BLUETOOTH_DEVICE);
+    strcpy(bluetooth->service_name, BLUETOOTH_SERVICE);
+
+    if(driver_settings.restore)
+        driver_settings.restore();
+}
+
+bool bluetooth_init (void)
+{
+    if((bluetooth = nvs_alloc(sizeof(bluetooth_settings_t)))) {
+        hal.driver_cap.bluetooth = On;
+        memcpy(&driver_settings, &hal.driver_settings, sizeof(driver_setting_ptrs_t));
+        hal.driver_cap.bluetooth = On;
+        hal.driver_settings.set = bluetooth_setting;
+        hal.driver_settings.report = bluetooth_settings_report;
+        hal.driver_settings.restore = bluetooth_settings_restore;
+
+        on_report_options = grbl.on_report_options;
+        grbl.on_report_options = report_bt_MAC;
+    }
+
+    return bluetooth != NULL;
 }
 
 #endif

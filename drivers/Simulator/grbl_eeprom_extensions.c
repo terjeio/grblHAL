@@ -23,9 +23,9 @@
 
 #include "eeprom.h"
 
-#include "grbl/grbl.h"
+#include "grbl/hal.h"
 
-void memcpy_to_eeprom_with_checksum(uint32_t destination, uint8_t *source, uint32_t size)
+nvs_transfer_result_t memcpy_to_eeprom(uint32_t destination, uint8_t *source, uint32_t size, bool with_checksum)
 {
     uint32_t dest = destination;
     uint8_t checksum = calc_checksum(source, size);
@@ -34,16 +34,18 @@ void memcpy_to_eeprom_with_checksum(uint32_t destination, uint8_t *source, uint3
         eeprom_put_char(dest++, *(source++));
 
     eeprom_put_char(dest, checksum);
+
+    return NVS_TransferResult_OK;
 }
 
-bool memcpy_from_eeprom_with_checksum(uint8_t *destination, uint32_t source, uint32_t size)
+nvs_transfer_result_t memcpy_from_eeprom(uint8_t *destination, uint32_t source, uint32_t size, bool with_checksum)
 {
     uint8_t *dest = destination; uint32_t sz = size;
 
     for(; size > 0; size--)
         *(destination++) = eeprom_get_char(source++);
 
-    return calc_checksum(dest, sz) == eeprom_get_char(source);
+    return with_checksum ? (calc_checksum(dest, sz) == eeprom_get_char(source) ? NVS_TransferResult_OK : NVS_TransferResult_Failed) : NVS_TransferResult_OK;
 }
 
 // end of file

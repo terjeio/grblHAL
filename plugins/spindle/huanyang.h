@@ -32,9 +32,12 @@
 
 #if SPINDLE_HUANYANG
 
-#include "modbus.h"
+#ifdef VFD_SPINDLE
+#undef VFD_SPINDLE
+#endif
+#define VFD_SPINDLE 1
 
-#define VFD_SPINDLE
+#include "modbus.h"
 
 void huanyang_init (modbus_stream_t *stream);
 

@@ -34,6 +34,10 @@
 
 #if SDCARD_ENABLE
 
+#if defined(STM32F103xB) || defined(STM32F401xC) || defined(STM32F411xE) || defined(STM32F446xx)
+#define STM32_PLATFORM
+#endif
+
 #ifdef __MSP432E401Y__
 #include "fatfs/ff.h"
 #include "fatfs/diskio.h"
@@ -47,7 +51,7 @@
 #elif defined(ARDUINO_SAMD_MKRZERO)
 #include "../../ff.h"
 #include "../../diskio.h"
-#elif defined(STM32F103xB) || defined(__LPC17XX__) || defined(__IMXRT1062__)
+#elif defined(STM32_PLATFORM) || defined(__LPC17XX__) || defined(__IMXRT1062__)
 #include "ff.h"
 #include "diskio.h"
 #else
