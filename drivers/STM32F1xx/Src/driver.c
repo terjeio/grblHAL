@@ -473,9 +473,8 @@ static spindle_state_t spindleGetState (void)
 
     state.on = (SPINDLE_ENABLE_PORT->IDR & SPINDLE_ENABLE_BIT) != 0;
     state.ccw = hal.driver_cap.spindle_dir && (SPINDLE_DIRECTION_PORT->IDR & SPINDLE_DIRECTION_BIT) != 0;
+
     state.value ^= settings.spindle.invert.mask;
-    if(pwmEnabled)
-        state.value = On;
 
     return state;
 }
@@ -940,7 +939,7 @@ bool driver_init (void)
     __HAL_AFIO_REMAP_SWJ_NOJTAG();
 
     hal.info = "STM32F103C8";
-    hal.driver_version = "201024";
+    hal.driver_version = "201108";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif

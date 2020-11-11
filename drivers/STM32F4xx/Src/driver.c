@@ -674,13 +674,13 @@ static spindle_state_t spindleGetState (void)
 
     state.on = (SPINDLE_ENABLE_PORT->IDR & SPINDLE_ENABLE_BIT) != 0;
     state.ccw = hal.driver_cap.spindle_dir && (SPINDLE_DIRECTION_PORT->IDR & SPINDLE_DIRECTION_BIT) != 0;
+
     state.value ^= settings.spindle.invert.mask;
-    if(pwmEnabled)
-        state.value = On;
 
 #ifdef SPINDLE_SYNC_ENABLE
     float rpm = spindleGetData(SpindleData_RPM).rpm;
     state.at_speed = settings.spindle.at_speed_tolerance <= 0.0f || (rpm >= spindle_data.rpm_low_limit && rpm <= spindle_data.rpm_high_limit);
+    state.encoder_error = spindle_encoder.error_count > 0;
 #endif
 
     return state;
@@ -757,6 +757,7 @@ static void spindleDataReset (void)
     spindle_encoder.timer.pulse_length = 0;
     spindle_encoder.counter.last_count = 0;
     spindle_encoder.counter.last_index = 0;
+    spindle_encoder.error_count = 0;
 
     spindle_data.pulse_count = 0;
     spindle_data.index_count = 0;
@@ -1088,7 +1089,7 @@ void settings_changed (settings_t *settings)
 
 #ifdef SPINDLE_SYNC_ENABLE
         GPIO_Init.Pin = SPINDLE_INDEX_BIT;
-        GPIO_Init.Mode = GPIO_MODE_IT_RISING;
+        GPIO_Init.Mode = GPIO_MODE_IT_FALLING;
         GPIO_Init.Pull = GPIO_PULLUP;
         HAL_GPIO_Init(SPINDLE_INDEX_PORT, &GPIO_Init);
 #endif
@@ -1377,7 +1378,7 @@ bool driver_init (void)
 #else
     hal.info = "STM32F401CC";
 #endif
-    hal.driver_version = "201103";
+    hal.driver_version = "201108";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1730,6 +1731,10 @@ void EXTI15_10_IRQHandler(void)
 
 #ifdef SPINDLE_INDEX_PORT
         if(ifg & SPINDLE_INDEX_BIT) {
+
+            if(spindle_data.index_count && (uint16_t)(RPM_COUNTER->CNT - (uint16_t)spindle_encoder.counter.last_index) != spindle_encoder.ppr)
+                spindle_encoder.error_count++;
+
             spindle_encoder.counter.last_index = RPM_COUNTER->CNT;
             spindle_encoder.timer.last_index = RPM_TIMER->CNT;
             spindle_data.index_count++;
