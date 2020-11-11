@@ -3,7 +3,7 @@
 
   Main state machine
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2018-2019 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -55,6 +55,7 @@ typedef struct {
     float retract_waypoint;
     bool retracting;
     bool restart_retract;
+    bool active;
     plan_line_data_t plan_data;
 } parking_data_t;
 
@@ -82,7 +83,6 @@ bool initiate_hold (uint_fast16_t new_state)
 {
     if(settings.parking.flags.enabled) {
         memset(&park.plan_data, 0, sizeof(plan_line_data_t));
-        park.retract_waypoint = settings.parking.pullout_increment;
         park.plan_data.condition.system_motion = On;
         park.plan_data.condition.no_feed_override = On;
         park.plan_data.line_number = PARKING_MOTION_LINE_NUMBER;
@@ -110,8 +110,10 @@ bool initiate_hold (uint_fast16_t new_state)
 
     if(new_state == STATE_HOLD)
         sys.holding_state = Hold_Pending;
-    else
+    else {
         sys.parking_state = Parking_Retracting;
+        park.active = false;
+    }
 
     sys.suspend = true;
     pending_state = sys.state == STATE_JOG ? new_state : STATE_IDLE;
@@ -221,6 +223,9 @@ void set_state (uint_fast16_t new_state)
                 stateHandler = state_noop;
                 break;
         }
+
+        if(!(sys.state & (STATE_ALARM|STATE_ESTOP)))
+            sys.alarm = Alarm_None;
 
         if(grbl.on_state_change)
             grbl.on_state_change(new_state);
@@ -364,21 +369,28 @@ static void state_await_hold (uint_fast16_t rt_exec)
                 // Ensure any prior spindle stop override is disabled at start of safety door routine.
                 sys.override.spindle_stop.value = 0;
 
-                if(settings.parking.flags.enabled) {
-                    // Get current position and store restore location and spindle retract waypoint.
-                    system_convert_array_steps_to_mpos(park.target, sys_position);
-                    if (!park.restart_retract) {
-                        memcpy(park.restore_target, park.target, sizeof(park.target));
-                        park.retract_waypoint += park.restore_target[settings.parking.axis];
-                        park.retract_waypoint = min(park.retract_waypoint, settings.parking.target);
+                // Parking requires parking axis homed, the current location not exceeding the
+                // parking target location, and laser mode disabled.
+                if(settings.parking.flags.enabled && !sys.override.control.parking_disable && settings.mode != Mode_Laser) {
+
+                    // Get current position and store as restore location.
+                    if (!park.active) {
+                        park.active = true;
+                        system_convert_array_steps_to_mpos(park.restore_target, sys_position);
                     }
 
-                    // Execute slow pull-out parking retract motion. Parking requires parking axis homed, the
-                    // current location not exceeding the parking target location, and laser mode disabled.
+                    // Execute slow pull-out parking retract motion.
                     // NOTE: State is will remain DOOR, until the de-energizing and retract is complete.
-                    if (bit_istrue(sys.homed.mask, bit(settings.parking.axis)) && (park.target[settings.parking.axis] < settings.parking.target) && settings.mode != Mode_Laser && !sys.override.control.parking_disable) {
+                    if (bit_istrue(sys.homed.mask, bit(settings.parking.axis)) && (park.restore_target[settings.parking.axis] < settings.parking.target)) {
+
                         handler_changed = true;
                         stateHandler = state_await_waypoint_retract;
+
+                        // Copy restore location to park target and calculate spindle retract waypoint.
+                        memcpy(park.target, park.restore_target, sizeof(park.target));
+                        park.retract_waypoint = settings.parking.pullout_increment + park.target[settings.parking.axis];
+                        park.retract_waypoint = min(park.retract_waypoint, settings.parking.target);
+
                         // Retract spindle by pullout distance. Ensure retraction motion moves away from
                         // the workpiece and waypoint motion doesn't exceed the parking target location.
                         if (park.target[settings.parking.axis] < park.retract_waypoint) {
@@ -419,10 +431,8 @@ static void state_await_hold (uint_fast16_t rt_exec)
 static void state_await_resume (uint_fast16_t rt_exec)
 {
     if((rt_exec & EXEC_CYCLE_COMPLETE) && settings.parking.flags.enabled) {
-        if(sys.step_control.execute_sys_motion) {
+        if(sys.step_control.execute_sys_motion)
             sys.step_control.execute_sys_motion = Off;
-            st_parking_restore_buffer(); // Restore step segment buffer to normal run state.
-        }
         sys.parking_state = Parking_DoorAjar;
     }
 
@@ -456,10 +466,14 @@ static void state_await_resume (uint_fast16_t rt_exec)
                         stateHandler = state_restore;
                         // Check to ensure the motion doesn't move below pull-out position.
                         if (park.target[settings.parking.axis] <= settings.parking.target) {
-                            park.target[settings.parking.axis] = park.retract_waypoint;
+                            float target[N_AXIS];
+                            memcpy(target, park.target, sizeof(target));
+                            target[settings.parking.axis] = park.retract_waypoint;
                             park.plan_data.feed_rate = settings.parking.rate;
-                            if(!mc_parking_motion(park.target, &park.plan_data))
+                            if(!mc_parking_motion(target, &park.plan_data))
                                 stateHandler(EXEC_CYCLE_COMPLETE);
+                            else
+                                st_parking_setup_buffer();
                         } else // tell next handler to proceed with final step immediately
                             stateHandler(EXEC_CYCLE_COMPLETE);
                     }
@@ -564,10 +578,8 @@ static void state_await_waypoint_retract (uint_fast16_t rt_exec)
 {
     if (rt_exec & EXEC_CYCLE_COMPLETE) {
 
-        if(sys.step_control.execute_sys_motion) {
+        if(sys.step_control.execute_sys_motion)
             sys.step_control.execute_sys_motion = Off;
-            st_parking_restore_buffer(); // Restore step segment buffer to normal run state.
-        }
 
         // NOTE: Clear accessory state after retract and after an aborted restore motion.
         park.plan_data.condition.spindle.value = 0;
@@ -581,9 +593,11 @@ static void state_await_waypoint_retract (uint_fast16_t rt_exec)
 
         // Execute fast parking retract motion to parking target location.
         if (park.target[settings.parking.axis] < settings.parking.target) {
-            park.target[settings.parking.axis] = settings.parking.target;
+            float target[N_AXIS];
+            memcpy(target, park.target, sizeof(target));
+            target[settings.parking.axis] = settings.parking.target;
             park.plan_data.feed_rate = settings.parking.rate;
-            if(mc_parking_motion(park.target, &park.plan_data))
+            if(mc_parking_motion(target, &park.plan_data))
                 park.retracting = true;
             else
                 stateHandler(EXEC_CYCLE_COMPLETE);
@@ -610,10 +624,8 @@ static void state_restore (uint_fast16_t rt_exec)
 
     else if (rt_exec & EXEC_CYCLE_COMPLETE) {
 
-        if(sys.step_control.execute_sys_motion) {
+        if(sys.step_control.execute_sys_motion)
             sys.step_control.execute_sys_motion = Off;
-            st_parking_restore_buffer(); // Restore step segment buffer to normal run state.
-        }
 
         stateHandler = state_await_resumed;
 

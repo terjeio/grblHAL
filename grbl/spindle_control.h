@@ -28,14 +28,14 @@ typedef union {
     uint8_t value;
     uint8_t mask;
     struct {
-        uint8_t on           :1,
-                ccw          :1,
-                pwm          :1, // NOTE: only used for PWM inversion setting
-                reserved3    :1,
-                reserved4    :1,
-                reserved5    :1,
-                at_speed     :1,
-                synchronized :1;
+        uint8_t on            :1,
+                ccw           :1,
+                pwm           :1, // NOTE: only used for PWM inversion setting
+                reserved3     :1,
+                reserved4     :1,
+                encoder_error :1,
+                at_speed      :1,
+                synchronized  :1;
     };
 } spindle_state_t;
 

@@ -1,7 +1,7 @@
 /*
   report.c - reporting and messaging methods
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2012-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -73,7 +73,6 @@ static char *(*get_axis_value)(float value);
 static char *(*get_rate_value)(float value);
 static uint8_t override_counter = 0; // Tracks when to add override data to status reports.
 static uint8_t wco_counter = 0;      // Tracks when to add work coordinate offset data to status reports.
-alarm_code_t current_alarm = Alarm_None;
 
 static const report_t report_fns = {
     .status_message = report_status_message,
@@ -212,7 +211,6 @@ inline static char *axis_signals_tostring (char *buf, axes_signals_t signals)
 
 void report_init (void)
 {
-    current_alarm = Alarm_None;
     get_axis_value = settings.flags.report_inches ? get_axis_value_inches : get_axis_value_mm;
     get_axis_values = settings.flags.report_inches ? get_axis_values_inches : get_axis_values_mm;
     get_rate_value = settings.flags.report_inches ? get_rate_value_inch : get_rate_value_mm;
@@ -249,7 +247,6 @@ status_code_t report_status_message (status_code_t status_code)
 // Prints alarm messages.
 alarm_code_t report_alarm_message (alarm_code_t alarm_code)
 {
-    current_alarm = alarm_code;
     hal.stream.write_all(appendbuf(3, "ALARM:", uitoa((uint32_t)alarm_code), ASCII_EOL));
     hal.delay_ms(500, NULL); // Force delay to ensure message clears output stream buffer.
 
@@ -891,14 +888,17 @@ void report_execute_startup_message (char *line, status_code_t status_code)
 }
 
 // Prints build info line
-void report_build_info (char *line)
+void report_build_info (char *line, bool extended)
 {
-
     hal.stream.write("[VER:" GRBL_VERSION "(");
     hal.stream.write(hal.info ? hal.info : "HAL");
     hal.stream.write(")." GRBL_VERSION_BUILD ":");
     hal.stream.write(line);
     hal.stream.write("]" ASCII_EOL);
+
+#if COMPATIBILITY_LEVEL == 0
+    extended = true;
+#endif
 
     // Generate compile-time build option list
 
@@ -977,103 +977,108 @@ void report_build_info (char *line)
     hal.stream.write(uitoa(hal.rx_buffer_size));
     hal.stream.write(",");
     hal.stream.write(uitoa((uint32_t)N_AXIS));
-#if COMPATIBILITY_LEVEL == 0
-    hal.stream.write(",");
+    if(extended) {
+        hal.stream.write(",");
   #ifdef N_TOOLS
-    hal.stream.write(uitoa((uint32_t)N_TOOLS));
+        hal.stream.write(uitoa((uint32_t)N_TOOLS));
   #else
-    hal.stream.write("0");
+        hal.stream.write("0");
   #endif
-#endif
+    }
     hal.stream.write("]" ASCII_EOL);
 
-#if COMPATIBILITY_LEVEL == 0
+    if(extended) {
 
-    nvs_io_t *nvs = nvs_buffer_get_physical();
+        nvs_io_t *nvs = nvs_buffer_get_physical();
 
-    strcpy(buf, "[NEWOPT:");
+        strcpy(buf, "[NEWOPT:");
 
-    if(!(nvs->type == NVS_None || nvs->type == NVS_Emulated)) {
-        if(hal.nvs.type == NVS_Emulated)
-            strcat(buf, "*");
-        strcat(buf, nvs->type == NVS_Flash ? "FLASH," : (nvs->type == NVS_FRAM ? "FRAM," : "EEPROM,"));
-    }
+        if(!(nvs->type == NVS_None || nvs->type == NVS_Emulated)) {
+            if(hal.nvs.type == NVS_Emulated)
+                strcat(buf, "*");
+            strcat(buf, nvs->type == NVS_Flash ? "FLASH," : (nvs->type == NVS_FRAM ? "FRAM," : "EEPROM,"));
+        }
 
-    if(hal.driver_cap.program_stop)
-        strcat(buf, "OS,");
+        if(hal.driver_cap.program_stop)
+            strcat(buf, "OS,");
 
-    if(hal.driver_cap.block_delete)
-        strcat(buf, "BD,");
+        if(hal.driver_cap.block_delete)
+            strcat(buf, "BD,");
 
-    if(hal.driver_cap.e_stop)
-        strcat(buf, "ES,");
+        if(hal.driver_cap.e_stop)
+            strcat(buf, "ES,");
 
-    if(hal.driver_cap.probe_connected)
-        strcat(buf, "PC,");
+        if(hal.driver_cap.probe_connected)
+            strcat(buf, "PC,");
 
-    if(hal.driver_cap.sd_card)
-        strcat(buf, "SD,");
+        if(hal.driver_cap.sd_card)
+            strcat(buf, "SD,");
 
-    if(hal.driver_cap.bluetooth)
-        strcat(buf, "BT,");
+        if(hal.driver_cap.bluetooth)
+            strcat(buf, "BT,");
 
-    if(hal.driver_cap.ethernet)
-        strcat(buf, "ETH,");
+        if(hal.driver_cap.ethernet)
+            strcat(buf, "ETH,");
 
-    if(hal.driver_cap.mpg_mode)
-        strcat(buf, "MPG,");
+        if(hal.driver_cap.mpg_mode)
+            strcat(buf, "MPG,");
 
-    if(hal.driver_cap.wifi)
-        strcat(buf, "WIFI,");
+        if(hal.driver_cap.wifi)
+            strcat(buf, "WIFI,");
 
-    if(settings.mode == Mode_Lathe)
-        strcat(buf, "LATHE,");
+        if(settings.mode == Mode_Lathe)
+            strcat(buf, "LATHE,");
 
-#ifdef N_TOOLS
-    if(hal.driver_cap.atc && hal.tool.change)
-        strcat(buf, "ATC,");
-    else
-#endif
-    if(hal.stream.suspend_read)
-        strcat(buf, "TC,"); // Manual tool change supported (M6)
+    #ifdef N_TOOLS
+        if(hal.driver_cap.atc && hal.tool.change)
+            strcat(buf, "ATC,");
+        else
+    #endif
+        if(hal.stream.suspend_read)
+            strcat(buf, "TC,"); // Manual tool change supported (M6)
 
-    if(hal.driver_cap.spindle_sync)
-        strcat(buf, "SS,");
+        if(hal.driver_cap.spindle_sync)
+            strcat(buf, "SS,");
 
-#ifdef PID_LOG
-    strcat(buf, "PID,");
-#endif
+    #ifdef PID_LOG
+        strcat(buf, "PID,");
+    #endif
 
-    append = &buf[strlen(buf) - 1];
-    if(*append == ',')
-        *append = '\0';
+        append = &buf[strlen(buf) - 1];
+        if(*append == ',')
+            *append = '\0';
 
-    if(*append != ':') {
-        hal.stream.write(buf);
+        if(*append != ':') {
+            hal.stream.write(buf);
+            hal.stream.write("]" ASCII_EOL);
+        }
+
+        if(hal.driver_version) {
+            hal.stream.write("[DRIVER VERSION:");
+            hal.stream.write(hal.driver_version);
+            hal.stream.write("]" ASCII_EOL);
+        }
+
+        if(hal.driver_options) {
+            hal.stream.write("[DRIVER OPTIONS:");
+            hal.stream.write(hal.driver_options);
+            hal.stream.write("]" ASCII_EOL);
+        }
+
+        if(hal.board) {
+            hal.stream.write("[BOARD:");
+            hal.stream.write(hal.board);
+            hal.stream.write("]" ASCII_EOL);
+        }
+
+#if COMPATIBILITY_LEVEL > 0
+        hal.stream.write("[COMPATIBILITY LEVEL:");
+        hal.stream.write(uitoa(COMPATIBILITY_LEVEL));
         hal.stream.write("]" ASCII_EOL);
-    }
-
-    if(hal.driver_version) {
-        hal.stream.write("[DRIVER VERSION:");
-        hal.stream.write(hal.driver_version);
-        hal.stream.write("]"  ASCII_EOL);
-    }
-
-    if(hal.driver_options) {
-        hal.stream.write("[DRIVER OPTIONS:");
-        hal.stream.write(hal.driver_options);
-        hal.stream.write("]"  ASCII_EOL);
-    }
-
-    if(hal.board) {
-        hal.stream.write("[BOARD:");
-        hal.stream.write(hal.board);
-        hal.stream.write("]"  ASCII_EOL);
-    }
-
-    grbl.on_report_options();
-
 #endif
+
+        grbl.on_report_options();
+    }
 }
 
 
@@ -1144,8 +1149,8 @@ void report_realtime_status (void)
 
         case STATE_ESTOP:
         case STATE_ALARM:
-            if(settings.status_report.alarm_substate)
-                hal.stream.write_all(appendbuf(2, "Alarm:", uitoa((uint32_t)current_alarm)));
+            if(settings.status_report.alarm_substate && sys.alarm)
+                hal.stream.write_all(appendbuf(2, "Alarm:", uitoa((uint32_t)sys.alarm)));
             else
                 hal.stream.write_all("Alarm");
             break;
@@ -1305,7 +1310,13 @@ void report_realtime_status (void)
             strcpy(buf, "|A:");
 
             if (sp_state.on)
+
                 *append++ = sp_state.ccw ? 'C' : 'S';
+
+#if COMPATIBILITY_LEVEL == 0
+            if(sp_state.encoder_error && hal.driver_cap.spindle_sync)
+                *append++ = 'E';
+#endif
 
             if (cl_state.flood)
                 *append++ = 'F';

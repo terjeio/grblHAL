@@ -1,7 +1,7 @@
 /*
   hal.h - HAL (Hardware Abstraction Layer) entry points structures and capabilities type
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2016-2020 Terje Io
 
@@ -153,6 +153,12 @@ typedef struct {
     limit_interrupt_callback_ptr interrupt_callback; // set up by core before driver_init() is called.
 } limits_ptrs_t;
 
+// Homing
+
+typedef struct {
+    limits_get_state_ptr get_state;
+} homing_ptrs_t;
+
 // Control signals
 
 typedef control_signals_t (*control_signals_get_state_ptr)(void);
@@ -271,6 +277,7 @@ typedef struct {
     void (*irq_disable)(void);
 
     limits_ptrs_t limits;
+    homing_ptrs_t homing;
     coolant_ptrs_t coolant;
     spindle_ptrs_t spindle;
     stepper_ptrs_t stepper;

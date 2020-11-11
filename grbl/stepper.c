@@ -1,7 +1,7 @@
 /*
   stepper.c - stepper motor driver: executes motion plans using stepper motors
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2016-2020 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -97,6 +97,7 @@ static segment_t *segment_buffer_head, *segment_next_head;
 // main program. Pointers may be planning segments or planner blocks ahead of what being executed.
 static plan_block_t *pl_block;     // Pointer to the planner block being prepped
 static st_block_t *st_prep_block;  // Pointer to the stepper block data being prepped
+static st_block_t st_hold_block;   // Copy of stepper block data for block put on hold during parking
 
 // Segment preparation data struct. Contains all the necessary information to compute new segments
 // based on the current executing planner block.
@@ -194,10 +195,14 @@ void st_deenergize ()
 // enabled. Startup init and limits call this function but shouldn't start the cycle.
 void st_wake_up ()
 {
+    if(sys.steppers_deenergize) {
+        sys.steppers_deenergize = false;
+//        hal.delay_ms(0, st_deenergize); // Cancel any pending steppers deenergize
+    }
+
     // Initialize stepper data to ensure first ISR call does not step and
     // cancel any pending steppers deenergize
-    st.exec_block = NULL;
-    sys.steppers_deenergize = false;
+    //st.exec_block = NULL;
 
     hal.stepper.wake_up();
 }
@@ -217,7 +222,7 @@ ISR_CODE void st_go_idle ()
         sys.steppers_deenergize = true;
         hal.delay_ms(settings.steppers.idle_lock_time, st_deenergize);
     } else
-        hal.stepper.enable(settings.steppers.deenergize);
+        hal.stepper.enable(settings.steppers.idle_lock_time == 255 ? (axes_signals_t){AXES_BITMASK} : settings.steppers.deenergize);
 }
 
 
@@ -286,7 +291,7 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
     // If there is no step segment, attempt to pop one from the stepper buffer
     if (st.exec_segment == NULL) {
         // Anything in the buffer? If so, load and initialize next step segment.
-        if (segment_buffer_head != segment_buffer_tail) {
+        if (segment_buffer_tail != segment_buffer_head) {
 
             // Initialize new step segment and load number of steps to execute
             st.exec_segment = (segment_t *)segment_buffer_tail;
@@ -380,6 +385,7 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
             if (st.exec_block->dynamic_rpm && settings.mode == Mode_Laser)
                 hal.spindle.set_state((spindle_state_t){0}, 0.0f);
 
+            st.exec_block = NULL;
             system_set_exec_state_flag(EXEC_CYCLE_COMPLETE); // Flag main program for cycle complete
 
             return; // Nothing to do but exit.
@@ -551,8 +557,9 @@ void st_update_plan_block_parameters ()
 void st_parking_setup_buffer()
 {
     // Store step execution data of partially completed block, if necessary.
-    if (prep.recalculate.hold_partial_block) {
+    if (prep.recalculate.hold_partial_block && !prep.recalculate.parking) {
         prep.last_st_block = st_prep_block;
+        memcpy(&st_hold_block, st_prep_block, sizeof(st_block_t));
         prep.last_steps_remaining = prep.steps_remaining;
         prep.last_dt_remainder = prep.dt_remainder;
         prep.last_steps_per_mm = prep.steps_per_mm;
@@ -569,6 +576,7 @@ void st_parking_restore_buffer()
 {
     // Restore step execution data and flags of partially completed block, if necessary.
     if (prep.recalculate.hold_partial_block) {
+        memcpy(prep.last_st_block, &st_hold_block, sizeof(st_block_t));
         st_prep_block = prep.last_st_block;
         prep.steps_remaining = prep.last_steps_remaining;
         prep.dt_remainder = prep.last_dt_remainder;

@@ -1,7 +1,7 @@
 /*
   system.h - Header for system level commands and real-time processes
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2014-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -230,6 +230,7 @@ typedef struct {
     bool mpg_mode;                      // To be moved to system_flags_t
     axes_signals_t tlo_reference_set;   // Axes with tool length reference offset set
     int32_t tlo_reference[N_AXIS];      // Tool length reference offset
+    alarm_code_t alarm;                 // Current alarm, only valid if sys.state STATE_ALARM flag set
     alarm_code_t alarm_pending;         // Delayed alarm, currently used for probe protection
     system_flags_t flags;               // Assorted state flags
     step_control_t step_control;        // Governs the step segment generator depending on system state.
@@ -276,6 +277,9 @@ bool system_check_travel_limits(float *target);
 
 // Checks and limit jog commands to within machine travel limits.
 void system_apply_jog_limits (float *target);
+
+// Raise and report alarm state
+void system_raise_alarm (alarm_code_t alarm);
 
 // Special handlers for setting and clearing Grbl's real-time execution flags.
 #define system_set_exec_state_flag(mask) hal.set_bits_atomic(&sys_rt_exec_state, (mask))

@@ -1,7 +1,7 @@
 /*
   spindle_control.c - spindle control methods
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2012-2015 Sungeun K. Jeon
@@ -89,8 +89,7 @@ bool spindle_sync (spindle_state_t state, float rpm)
                 if(ABORTED)
                     break;
                 if(delay >= SAFETY_DOOR_SPINDLE_DELAY) {
-                    set_state(STATE_ALARM); // Ensure alarm state is active.
-                    report_alarm_message(Alarm_Spindle);
+                    system_raise_alarm(Alarm_Spindle);
                     break;
                 }
             }
@@ -120,8 +119,7 @@ bool spindle_restore (spindle_state_t state, float rpm)
                     if(ABORTED)
                         break;
                     if(delay >= SAFETY_DOOR_SPINDLE_DELAY) {
-                        set_state(STATE_ALARM); // Ensure alarm state is active.
-                        report_alarm_message(Alarm_Spindle);
+                        system_raise_alarm(Alarm_Spindle);
                         break;
                     }
                 }

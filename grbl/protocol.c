@@ -1,7 +1,7 @@
 /*
   protocol.c - controls Grbl execution protocol and procedures
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -97,23 +97,20 @@ bool protocol_main_loop(bool cold_start)
 {
     if (hal.control.get_state().e_stop) {
         // Check for e-stop active. Blocks everything until cleared.
-        set_state(STATE_ESTOP);
-        report_alarm_message(Alarm_EStop);
+        system_raise_alarm(Alarm_EStop);
         grbl.report.feedback_message(Message_EStop);
-    } else if (settings.homing.flags.enabled && sys.homing.mask && settings.homing.flags.init_lock && (sys.homing.mask & sys.homed.mask) == sys.homing.mask) {
+    } else if (settings.homing.flags.enabled && sys.homing.mask && settings.homing.flags.init_lock && (sys.homing.mask & sys.homed.mask) != sys.homing.mask) {
         // Check for power-up and set system alarm if homing is enabled to force homing cycle
         // by setting Grbl's alarm state. Alarm locks out all g-code commands, including the
         // startup scripts, but allows access to settings and internal commands.
         // Only a successful homing cycle '$H' will disable the alarm.
         // NOTE: The startup script will run after successful completion of the homing cycle. Prevents motion startup
         // blocks from crashing into things uncontrollably. Very bad.
-        set_state(STATE_ALARM); // Ensure alarm state is active.
-        report_alarm_message(Alarm_HomingRequried);
+        system_raise_alarm(Alarm_HomingRequried);
         grbl.report.feedback_message(Message_HomingCycleRequired);
     } else if (settings.limits.flags.hard_enabled && settings.limits.flags.check_at_init && hal.limits.get_state().value) {
         // Check that no limit switches are engaged to make sure everything is good to go.
-        set_state(STATE_ALARM); // Ensure alarm state is active.
-        report_alarm_message(Alarm_LimitsEngaged);
+        system_raise_alarm(Alarm_LimitsEngaged);
         grbl.report.feedback_message(Message_CheckLimits);
     } else if(cold_start && (settings.flags.force_initialization_alarm || hal.control.get_state().reset)) {
         set_state(STATE_ALARM); // Ensure alarm state is set.
@@ -201,8 +198,7 @@ bool protocol_main_loop(bool cold_start)
                     gc_state.last_error = Status_OK;
                 else if (line[0] == '$') {// Grbl '$' system command
                     if((gc_state.last_error = system_execute_line(line)) == Status_LimitsEngaged) {
-                        set_state(STATE_ALARM); // Ensure alarm state is active.
-                        report_alarm_message(Alarm_LimitsEngaged);
+                        system_raise_alarm(Alarm_LimitsEngaged);
                         grbl.report.feedback_message(Message_CheckLimits);
                     }
                 } else if (line[0] == '[' && grbl.on_user_command)
@@ -397,8 +393,7 @@ bool protocol_exec_rt_system ()
         // System alarm. Everything has shutdown by something that has gone severely wrong. Report
         // the source of the error to the user. If critical, Grbl disables by entering an infinite
         // loop until system reset/abort.
-        set_state((alarm_code_t)rt_exec == Alarm_EStop ? STATE_ESTOP : STATE_ALARM); // Set system alarm state
-        report_alarm_message((alarm_code_t)rt_exec);
+        system_raise_alarm((alarm_code_t)rt_exec);
 
         if(sys_rt_exec_state & EXEC_RESET) {
             // Kill spindle and coolant.
@@ -480,7 +475,8 @@ bool protocol_exec_rt_system ()
             st_reset();
             sync_position();
             flush_override_buffers();
-            set_state(STATE_IDLE);
+            if(!((sys.state == STATE_ALARM) && (sys.alarm == Alarm_LimitsEngaged || sys.alarm == Alarm_HomingRequried)))
+                set_state(STATE_IDLE);
         }
 
         // Execute and print status to output stream

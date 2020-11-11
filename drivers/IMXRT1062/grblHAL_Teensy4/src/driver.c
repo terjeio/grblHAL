@@ -994,7 +994,7 @@ static void limitsEnable (bool on, bool homing)
     } while(i);
 
 #ifdef SQUARING_ENABLED
-    hal.limits.get_state = homing ? limitsGetHomeState : limitsGetState;
+    hal.homing.get_state = homing ? limitsGetHomeState : limitsGetState;
 #endif
 }
 
@@ -2054,7 +2054,7 @@ bool driver_init (void)
         options[strlen(options) - 1] = '\0';
 
     hal.info = "IMXRT1062";
-    hal.driver_version = "201014";
+    hal.driver_version = "201106";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -2077,6 +2077,7 @@ bool driver_init (void)
 
     hal.limits.enable = limitsEnable;
     hal.limits.get_state = limitsGetState;
+    hal.homing.get_state = limitsGetState;
 
     hal.coolant.set_state = coolantSetState;
     hal.coolant.get_state = coolantGetState;

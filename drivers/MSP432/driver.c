@@ -714,7 +714,9 @@ static spindle_state_t spindleGetState (void)
     state.value ^= settings.spindle.invert.mask;
     if(pwmEnabled)
         state.on = On;
+
     state.at_speed = settings.spindle.at_speed_tolerance <= 0.0f || (rpm >= spindle_data.rpm_low_limit && rpm <= spindle_data.rpm_high_limit);
+    state.encoder_error = spindle_encoder.error_count > 0;
 
     return state;
 }
@@ -774,7 +776,7 @@ static spindle_data_t spindleGetData (spindle_data_request_t request)
             break;
 
         case SpindleData_AngularPosition:;
-            int32_t d = (uint16_t)spindle_encoder.counter.last_count - (uint16_t)spindle_encoder.counter.last_index;
+            int32_t d = (uint16_t)((uint16_t)spindle_encoder.counter.last_count - (uint16_t)spindle_encoder.counter.last_index);
             if(d < 0)
                 d++;
             spindle_data.angular_position = (float)spindle_data.index_count +
@@ -794,7 +796,7 @@ static void spindleDataReset (void)
     uint32_t systick_state = SysTick->CTRL;
 
     SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
-
+/*
     uint32_t index_count = spindle_data.index_count + 2, timeout = elapsed_tics + 1000;
     if(spindleGetData(SpindleData_RPM).rpm > 0.0f) { // wait for index pulse if running
 
@@ -803,6 +805,7 @@ static void spindleDataReset (void)
 //        if(uwTick > timeout)
 //            alarm?
     }
+*/
 
 #ifdef SPINDLE_RPM_CONTROLLED
     if(spindle_control.pid_enabled)
@@ -816,11 +819,15 @@ static void spindleDataReset (void)
     spindle_encoder.timer.pulse_length = 0;
     spindle_encoder.counter.last_count = 0;
     spindle_encoder.counter.last_index = 0;
+    spindle_encoder.error_count = 0;
 
     spindle_data.pulse_count = 0;
     spindle_data.index_count = 0;
+
     RPM_COUNTER->CCR[0] = spindle_encoder.counter.tics_per_irq;
     RPM_COUNTER->CTL = TIMER_A_CTL_MC__CONTINUOUS|TIMER_A_CTL_CLR;
+
+    spindle_encoder.counter.last_count = RPM_COUNTER->R;
 
     if(systick_state & SysTick_CTRL_ENABLE_Msk)
         SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
@@ -987,6 +994,7 @@ void settings_changed (settings_t *settings)
         spindle_encoder.pulse_distance = 1.0f / spindle_encoder.ppr;
         spindle_encoder.maximum_tt = (uint32_t)(0.25f / timer_resolution) * spindle_encoder.counter.tics_per_irq; // 250 mS
         spindle_encoder.rpm_factor = 60.0f / ((timer_resolution * (float)spindle_encoder.ppr));
+        BITBAND_PERI(RPM_INDEX_PORT->IES, RPM_INDEX_PIN) = 1;
         BITBAND_PERI(RPM_INDEX_PORT->IE, RPM_INDEX_PIN) = 1;
         spindleDataReset();
     }
@@ -1407,7 +1415,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "MSP432";
-    hal.driver_version = "201103";
+    hal.driver_version = "201104";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1615,6 +1623,10 @@ void CONTROL_IRQHandler (void)
     CONTROL_PORT->IFG &= ~iflags;
 
     if(iflags & RPM_INDEX_BIT) {
+
+        if(spindle_data.index_count && (uint16_t)(RPM_COUNTER->R - (uint16_t)spindle_encoder.counter.last_index) != spindle_encoder.ppr)
+            spindle_encoder.error_count++;
+
         spindle_encoder.counter.last_index = RPM_COUNTER->R;
         spindle_encoder.timer.last_index = RPM_TIMER->VALUE;
         spindle_data.index_count++;

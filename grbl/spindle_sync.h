@@ -55,6 +55,7 @@ typedef struct {
     uint32_t maximum_tt;                // Maximum timer tics since last spindle encoder pulse before RPM = 0 is returned
     spindle_encoder_timer_t timer;      // Event timestamps
     spindle_encoder_counter_t counter;  // Encoder event counts
+    uint32_t error_count;               // Incremented when actual PPR count differs from ppr setting
 } spindle_encoder_t;
 
 typedef struct {

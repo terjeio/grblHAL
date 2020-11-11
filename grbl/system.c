@@ -1,7 +1,7 @@
 /*
   system.c - Handles system level commands and real-time processes
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2014-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -333,9 +333,10 @@ status_code_t system_execute_line (char *line)
         case 'I': // Print or store build info. [IDLE/ALARM]
             if (!(sys.state == STATE_IDLE || (sys.state & (STATE_ALARM|STATE_ESTOP|STATE_CHECK_MODE))))
                 retval = Status_IdleError;
-            else if (line[2] == '\0') {
+            else if (line[2] == '\0' || (line[2] == '+' && line[3] == '\0')) {
+                bool extended = line[2] == '+';
                 settings_read_build_info(line);
-                report_build_info(line);
+                report_build_info(line, extended);
             }
           #ifndef DISABLE_BUILD_INFO_WRITE_COMMAND
             else if (line[2] == '=' && strlen(&line[3]) < (sizeof(stored_line_t) - 1))
@@ -535,4 +536,11 @@ void system_apply_jog_limits (float *target)
             }
         }
     } while(idx);
+}
+
+void system_raise_alarm (alarm_code_t alarm)
+{
+    sys.alarm = alarm;
+    set_state(alarm == Alarm_EStop ? STATE_ESTOP : STATE_ALARM);
+    report_alarm_message(alarm);
 }

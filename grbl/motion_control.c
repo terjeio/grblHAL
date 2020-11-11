@@ -1,7 +1,7 @@
 /*
   motion_control.c - high level interface for issuing motion commands
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -328,7 +328,7 @@ static inline float interp(const float a, const float b, const float t)
 }
 
 /**
- * Compute a Bézier curve using the De Casteljau's algorithm (see
+ * Compute a Bï¿½zier curve using the De Casteljau's algorithm (see
  * https://en.wikipedia.org/wiki/De_Casteljau's_algorithm), which is
  * easy to code and has good numerical stability (very important,
  * since Arudino works with limited precision real numbers).
@@ -769,7 +769,7 @@ status_code_t mc_homing_cycle (axes_signals_t cycle)
         // Check and abort homing cycle, if hard limits are already enabled. Helps prevent problems
         // with machines with limits wired on both ends of travel to one limit pin.
         // TODO: Move the pin-specific LIMIT_PIN call to limits.c as a function.
-        if (settings.limits.flags.two_switches && hal.limits.get_state().value) {
+        if (settings.limits.flags.two_switches && hal.homing.get_state == hal.limits.get_state && hal.limits.get_state().value) {
             mc_reset(); // Issue system reset and ensure spindle and coolant are shutdown.
             system_set_exec_alarm(Alarm_HardLimit);
             return Status_Unhandled;
@@ -923,20 +923,20 @@ gc_probe_t mc_probe_cycle (float *target, plan_line_data_t *pl_data, gc_parser_f
 // NOTE: Uses the always free planner ring buffer head to store motion parameters for execution.
 bool mc_parking_motion (float *parking_target, plan_line_data_t *pl_data)
 {
+    bool ok;
+
     if (sys.abort)
         return false; // Block during abort.
 
-    if (plan_buffer_line(parking_target, pl_data)) {
+    if ((ok = plan_buffer_line(parking_target, pl_data))) {
         sys.step_control.execute_sys_motion = On;
-        sys.step_control.end_motion = Off; // Allow parking motion to execute, if feed hold is active.
-        st_parking_setup_buffer(); // Setup step segment buffer for special parking motion case
+        sys.step_control.end_motion = Off;  // Allow parking motion to execute, if feed hold is active.
+        st_parking_setup_buffer();          // Setup step segment buffer for special parking motion case.
         st_prep_buffer();
         st_wake_up();
-        return true;
-    } else { // no motion for execution
-        system_set_exec_state_flag(EXEC_CYCLE_COMPLETE); // Flag main program for cycle completed
-        return false;
     }
+
+    return ok;
 }
 
 void mc_override_ctrl_update (gc_override_flags_t override_state)

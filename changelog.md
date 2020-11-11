@@ -1,5 +1,14 @@
 ## grblHAL changelog
 
+Build 20201111 (test only):
+
+* "Hardened" parking functionality. It should now tolerate a bouncy door switch and multiple closing/reopenings of the door during retract/restore.  
+__NOTE:__ Not extensively tested. Use with care!
+* Added `$I+` system command. This can be used when [compatibility level](https://github.com/terjeio/grblHAL/wiki/Compatibility-level) is > 0 to get the extended version including the current compatibility setting.
+* Added basic support for separating limit switches from homing switches in the core. If a driver does not handle separate inputs for these the core "connects" the homing switches to the limit switches in code.
+* Improved auto squaring. If a limit switch is engaged when homing starts the axis will be moved pull-off distance * 5 away from them. If still engaged homing will fail.  
+__NOTE:__ Auto squaring is currently only tested with a simulator. Use with care!
+
 Build 20201103:
 
 * Added data structures for spindle encoder/spindle sync to the core. Used by drivers supporting spindle sync.
