@@ -3,7 +3,7 @@
 
   Manual tool change with option for automatic touch off
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 
@@ -193,6 +193,7 @@ static void execute_probe (uint_fast16_t state)
             system_convert_array_steps_to_mpos(target.values, sys_probe_position);
 
             // Retract a bit and perform slow probe.
+            plan_data.feed_rate = settings.tool_change.pulloff_rate;
             target.values[plane.axis_linear] += TOOL_CHANGE_PROBE_RETRACT_DISTANCE;
             if((ok = mc_line(target.values, &plan_data))) {
                 plan_data.feed_rate = settings.tool_change.feed_rate;
@@ -447,6 +448,7 @@ status_code_t tc_probe_workpiece (void)
         system_convert_array_steps_to_mpos(target.values, sys_probe_position);
 
         // Retract a bit and perform slow probe.
+        plan_data.feed_rate = settings.tool_change.pulloff_rate;
         target.values[plane.axis_linear] += TOOL_CHANGE_PROBE_RETRACT_DISTANCE;
         if((ok = mc_line(target.values, &plan_data))) {
 

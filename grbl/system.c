@@ -28,6 +28,7 @@
 #include "protocol.h"
 #include "tool_change.h"
 #include "state_machine.h"
+#include "limits.h"
 #ifdef KINEMATICS_API
 #include "kinematics.h"
 #endif
@@ -202,9 +203,9 @@ status_code_t system_execute_line (char *line)
                 // Block if safety reset is active.
                 else if(control_signals.reset)
                     retval = Status_Reset;
-                else if (settings.limits.flags.hard_enabled && settings.limits.flags.check_at_init && hal.limits.get_state().value)
+                else if(settings.limits.flags.hard_enabled && settings.limits.flags.check_at_init && hal.limits.get_state().value)
                     retval = Status_LimitsEngaged;
-                else if (settings.homing.flags.enabled && settings.homing.flags.init_lock && sys.homed.mask != sys.homing.mask)
+                else if(limits_homing_required())
                     retval = Status_HomingRequired;
                 else {
                     grbl.report.feedback_message(Message_AlarmUnlock);
@@ -275,11 +276,15 @@ status_code_t system_execute_line (char *line)
             }
 
             if (retval == Status_OK && !sys.abort) {
-                set_state(STATE_IDLE); // Set to IDLE when complete.
-                st_go_idle(); // Set steppers to the settings idle state before returning.
+                set_state(STATE_IDLE);  // Set to IDLE when complete.
+                st_go_idle();           // Set steppers to the settings idle state before returning.
                 // Execute startup scripts after successful homing.
                 if (sys.homing.mask && (sys.homing.mask & sys.homed.mask) == sys.homing.mask)
                     system_execute_startup(line);
+                else if(limits_homing_required()) { // Keep alarm state active if homing is required and not all axes homed.
+                    sys.alarm = Alarm_HomingRequried;
+                    set_state(STATE_ALARM);
+                }
             }
 
             if(retval == Status_Unhandled)
@@ -456,7 +461,7 @@ status_code_t system_execute_line (char *line)
     return retval;
 }
 
-void system_flag_wco_change ()
+void system_flag_wco_change (void)
 {
     if(!settings.status_report.sync_on_wco_change)
         protocol_buffer_synchronize();

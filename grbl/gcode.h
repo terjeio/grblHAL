@@ -1,7 +1,7 @@
 /*
   gcode.h - rs274/ngc parser.
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -554,10 +554,10 @@ typedef struct {
 } parser_block_t;
 
 // Initialize the parser
-void gc_init(bool cold_start);
+void gc_init (void);
 
 // Execute one block of rs275/ngc/g-code
-status_code_t gc_execute_block(char *block, char *message);
+status_code_t gc_execute_block (char *block, char *message);
 
 // Sets g-code parser position in mm. Input in steps. Called by the system abort and hard
 // limit pull-off routines.

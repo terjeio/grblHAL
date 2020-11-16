@@ -1,7 +1,7 @@
 /*
   gcode.c - rs274/ngc parser.
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -197,14 +197,14 @@ plane_t *gc_get_plane_data (plane_t *plane, plane_select_t select)
     return plane;
 }
 
-void gc_init (bool cold_start)
+void gc_init (void)
 {
 
 #if COMPATIBILITY_LEVEL > 1
     cold_start = true;
 #endif
 
-    if(cold_start) {
+    if(sys.cold_start) {
         memset(&gc_state, 0, sizeof(parser_state_t));
       #ifdef N_TOOLS
         gc_state.tool = &tool_table[0];
@@ -238,7 +238,7 @@ void gc_init (bool cold_start)
         grbl.report.status_message(Status_SettingReadFail);
 
 #if COMPATIBILITY_LEVEL <= 1
-    if (cold_start && !settings_read_coord_data(CoordinateSystem_G92, &gc_state.g92_coord_offset))
+    if (sys.cold_start && !settings_read_coord_data(CoordinateSystem_G92, &gc_state.g92_coord_offset))
         grbl.report.status_message(Status_SettingReadFail);
 #endif
 

@@ -640,10 +640,9 @@ static bool driver_setup (settings_t *settings)
 
   // Set defaults
 
-    IOInitDone = settings->version == 18;
+    IOInitDone = settings->version == 19;
 
-    settings_changed(settings);
-
+    hal.settings_changed(settings);
     hal.stepper.go_idle(true);
     hal.spindle.set_state((spindle_state_t){0}, 0.0f);
     hal.coolant.set_state((coolant_state_t){0});
@@ -665,7 +664,7 @@ bool driver_init (void)
     serialInit();
 
     hal.info = "MSP430F5529";
-    hal.driver_version = "201014";
+    hal.driver_version = "201115";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = 24000000;
     hal.rx_buffer_size = RX_BUFFER_SIZE;

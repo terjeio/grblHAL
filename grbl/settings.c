@@ -1,7 +1,7 @@
 /*
   settings.c - non-volatile storage configuration handling
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2011-2015 Sungeun K. Jeon
@@ -32,7 +32,9 @@
 #include "limits.h"
 #include "nvs_buffer.h"
 #include "tool_change.h"
-
+#ifdef ENABLE_BACKLASH_COMPENSATION
+#include "motion_control.h"
+#endif
 #ifdef ENABLE_SPINDLE_LINEARIZATION
 #include <stdio.h>
 #endif
@@ -103,6 +105,7 @@ const settings_t defaults = {
     .homing.flags.single_axis_commands = HOMING_SINGLE_AXIS_COMMANDS,
     .homing.flags.force_set_origin = HOMING_FORCE_SET_ORIGIN,
     .homing.flags.manual = DEFAULT_HOMING_ALLOW_MANUAL,
+    .homing.flags.override_locks = DEFAULT_HOMING_OVERRIDE_LOCKS,
 #else
     .homing.flags.value = 0,
 #endif
@@ -115,6 +118,9 @@ const settings_t defaults = {
     .homing.cycle[0].mask = HOMING_CYCLE_0,
     .homing.cycle[1].mask = HOMING_CYCLE_1,
     .homing.cycle[2].mask = HOMING_CYCLE_2,
+    .homing.dual_axis.fail_length_percent = DUAL_AXIS_HOMING_FAIL_AXIS_LENGTH_PERCENT,
+    .homing.dual_axis.fail_distance_min = DUAL_AXIS_HOMING_FAIL_DISTANCE_MIN,
+    .homing.dual_axis.fail_distance_max = DUAL_AXIS_HOMING_FAIL_DISTANCE_MAX,
 
     .status_report.machine_position = DEFAULT_REPORT_BUFFER_STATE,
     .status_report.buffer_state = DEFAULT_REPORT_BUFFER_STATE,
@@ -208,6 +214,7 @@ const settings_t defaults = {
     .tool_change.probing_distance = DEFAULT_TOOLCHANGE_PROBING_DISTANCE,
     .tool_change.feed_rate = DEFAULT_TOOLCHANGE_FEED_RATE,
     .tool_change.seek_rate = DEFAULT_TOOLCHANGE_SEEK_RATE,
+    .tool_change.pulloff_rate = DEFAULT_TOOLCHANGE_PULLOFF_RATE,
 
     .parking.flags.enabled = DEFAULT_PARKING_ENABLE,
     .parking.flags.deactivate_upon_init = DEFAULT_DEACTIVATE_PARKING_UPON_INIT,
@@ -416,6 +423,13 @@ static status_code_t store_driver_setting (setting_type_t setting, float value, 
     return status == Status_Unhandled ? Status_InvalidStatement : status;
 }
 
+static inline bool is_autosquareoffset (setting_type_t setting)
+{
+    uint_fast8_t ofs = Setting_AxisSettingsBase + AxisSetting_AutoSquareOffset * AXIS_SETTINGS_INCREMENT;
+
+    return setting >= ofs && setting < ofs + N_AXIS;
+}
+
 // A helper method to set settings from command line
 status_code_t settings_store_global_setting (setting_type_t setting, char *svalue)
 {
@@ -434,12 +448,8 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
             return Status_BadNumberFormat;
     }
 
-#if COMPATIBILITY_LEVEL <= 1
-
-    if (value < 0.0f && setting != Setting_ParkingTarget)
+    if (value < 0.0f && !(setting == Setting_ParkingTarget || is_autosquareoffset(setting)))
         return Status_NegativeValue;
-
-#endif
 
     if (setting >= Setting_AxisSettingsBase && setting <= Setting_AxisSettingsMax) {
         // Store axis configuration. Axis numbering sequence set by AXIS_SETTING defines.
@@ -478,12 +488,26 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                 settings.axis[axis_idx].max_travel = -value; // Store as negative for grbl internal use.
                 break;
 
-#ifdef ENABLE_BACKLASH_COMPENSATION
             case AxisSetting_Backlash:
                 found = true;
+#ifdef ENABLE_BACKLASH_COMPENSATION
                 settings.axis[axis_idx].backlash = value;
                 break;
+#else
+                return Status_SettingDisabled;
 #endif
+
+            case AxisSetting_AutoSquareOffset:
+                found = true;
+                if(hal.stepper.get_auto_squared && bit_istrue(hal.stepper.get_auto_squared().mask, bit(axis_idx))) {
+                    if(fabsf(value) <= 2.0f)
+                        settings.axis[axis_idx].dual_axis_offset = value;
+                    else
+                        return Status_GcodeValueOutOfRange;
+                } else
+                    return Status_SettingDisabled;
+                break;
+
 
             default: // for stopping compiler warning
                 break;
@@ -492,6 +516,8 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
         if(!found)
             return store_driver_setting(setting, value, svalue);
 
+    } else if(setting > Setting_AxisSettingsMax && setting <= Setting_AxisSettingsMax2) {
+        return store_driver_setting(setting, value, svalue);
     } else {
         // Store non-axis Grbl settings
         uint_fast16_t int_value = (uint_fast16_t)truncf(value);
@@ -652,8 +678,9 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
                     settings.homing.flags.enabled = On;
 #else
                     settings.homing.flags.value = int_value & 0x0F;
-                    settings.homing.flags.manual = bit_istrue(int_value, bit(5));
                     settings.limits.flags.two_switches = bit_istrue(int_value, bit(4));
+                    settings.homing.flags.manual = bit_istrue(int_value, bit(5));
+                    settings.homing.flags.override_locks = bit_istrue(int_value, bit(6));
 #endif
                 } else {
                     settings.homing.flags.value = 0;
@@ -875,6 +902,22 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
 
             case Setting_ToolChangeSeekRate:
                 settings.tool_change.seek_rate = value;
+                break;
+
+            case Setting_ToolChangePulloffRate:
+                settings.tool_change.pulloff_rate = value;
+                break;
+
+            case Setting_DualAxisLengthFailPercent:
+                settings.homing.dual_axis.fail_length_percent = value;
+                break;
+
+            case Setting_DualAxisLengthFailMin:
+                settings.homing.dual_axis.fail_distance_min = value;
+                break;
+
+            case Setting_DualAxisLengthFailMax:
+                settings.homing.dual_axis.fail_distance_max = value;
                 break;
 
             case Settings_IoPort_InvertIn:

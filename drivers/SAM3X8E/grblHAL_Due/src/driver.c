@@ -2,7 +2,7 @@
 
   driver.c - driver code for Atmel SAM3X8E ARM processor
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2019-2020 Terje Io
 
@@ -602,7 +602,7 @@ static void limitsEnable (bool on, bool homing)
     } while(i);
 
   #ifdef SQUARING_ENABLED
-    hal.limits.get_state = homing ? limitsGetHomeState : limitsGetState;
+    hal.homing.get_state = homing ? limitsGetHomeState : limitsGetState;
   #endif
 
   #if TRINAMIC_ENABLE
@@ -1339,10 +1339,9 @@ static bool driver_setup (settings_t *settings)
 
  // Set defaults
 
-    IOInitDone = settings->version == 18;
+    IOInitDone = settings->version == 19;
 
-    settings_changed(settings);
-
+    hal.settings_changed(settings);
     hal.stepper.go_idle(true);
     hal.spindle.set_state((spindle_state_t){0}, 0.0f);
     hal.coolant.set_state((coolant_state_t){0});
@@ -1467,7 +1466,7 @@ bool driver_init (void)
     NVIC_EnableIRQ(SysTick_IRQn);
 
     hal.info = "SAM3X8E";
-	hal.driver_version = "201014";
+	hal.driver_version = "201115";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1489,6 +1488,7 @@ bool driver_init (void)
 
     hal.limits.enable = limitsEnable;
     hal.limits.get_state = limitsGetState;
+    hal.homing.get_state = limitsGetState;
 
     hal.coolant.set_state = coolantSetState;
     hal.coolant.get_state = coolantGetState;

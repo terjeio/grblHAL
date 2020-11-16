@@ -2,7 +2,7 @@
 
   driver.c - driver code for STM32F4xx ARM processors
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2019-2020 Terje Io
 
@@ -62,6 +62,15 @@
 #include "flash.h"
 #endif
 
+typedef union {
+    uint8_t mask;
+    struct {
+        uint8_t limits :1,
+                door   :1,
+                unused :6;
+    };
+} debounce_t;
+
 extern __IO uint32_t uwTick;
 static uint32_t pulse_length, pulse_delay;
 static bool pwmEnabled = false, IOInitDone = false;
@@ -71,6 +80,7 @@ static axes_signals_t next_step_outbits;
 static spindle_pwm_t spindle_pwm;
 static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
 static status_code_t (*on_unknown_sys_command)(uint_fast16_t state, char *line, char *lcline);
+static debounce_t debounce;
 
 #ifdef SPINDLE_SYNC_ENABLE
 
@@ -980,10 +990,10 @@ void settings_changed (settings_t *settings)
 #if DRIVER_IRQMASK & (1<<4)
         HAL_NVIC_DisableIRQ(EXTI4_IRQn);
 #endif
-#if DRIVER_IRQMASK & 0x03F0
+#if DRIVER_IRQMASK & 0x03E0
         HAL_NVIC_DisableIRQ(EXTI9_5_IRQn);
 #endif
-#if DRIVER_IRQMASK & 0xFE00
+#if DRIVER_IRQMASK & 0xFC00
         HAL_NVIC_DisableIRQ(EXTI15_10_IRQn);
 #endif
 
@@ -1019,6 +1029,12 @@ void settings_changed (settings_t *settings)
 
             limit_ire.mask = ~(settings->limits.disable_pullup.mask ^ settings->limits.invert.mask);
 
+            // NOTE: Z limit must be first. Do not change!
+            GPIO_Init.Pin = Z_LIMIT_BIT;
+            GPIO_Init.Mode = limit_ire.z ? GPIO_MODE_IT_RISING : GPIO_MODE_IT_FALLING;
+            GPIO_Init.Pull = settings->limits.disable_pullup.z ? GPIO_NOPULL : GPIO_PULLUP;
+            HAL_GPIO_Init(Z_LIMIT_PORT, &GPIO_Init);
+
             GPIO_Init.Pin = X_LIMIT_BIT;
             GPIO_Init.Mode = limit_ire.x ? GPIO_MODE_IT_RISING : GPIO_MODE_IT_FALLING;
             GPIO_Init.Pull = settings->limits.disable_pullup.x ? GPIO_NOPULL : GPIO_PULLUP;
@@ -1029,10 +1045,6 @@ void settings_changed (settings_t *settings)
             GPIO_Init.Pull = settings->limits.disable_pullup.y ? GPIO_NOPULL : GPIO_PULLUP;
             HAL_GPIO_Init(Y_LIMIT_PORT, &GPIO_Init);
 
-            GPIO_Init.Pin = Z_LIMIT_BIT;
-            GPIO_Init.Mode = limit_ire.z ? GPIO_MODE_IT_RISING : GPIO_MODE_IT_FALLING;
-            GPIO_Init.Pull = settings->limits.disable_pullup.z ? GPIO_NOPULL : GPIO_PULLUP;
-            HAL_GPIO_Init(Z_LIMIT_PORT, &GPIO_Init);
 
 #ifdef A_LIMIT_BIT
             GPIO_Init.Pin = A_LIMIT_BIT;
@@ -1123,11 +1135,11 @@ void settings_changed (settings_t *settings)
         HAL_NVIC_SetPriority(EXTI4_IRQn, 0, 2);
         HAL_NVIC_EnableIRQ(EXTI4_IRQn);
 #endif
-#if DRIVER_IRQMASK & 0x03F0
+#if DRIVER_IRQMASK & 0x03E0
         HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 2);
         HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 #endif
-#if DRIVER_IRQMASK & 0xFE00
+#if DRIVER_IRQMASK & 0xFC00
         HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 2);
         HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 #endif
@@ -1336,7 +1348,7 @@ static bool driver_setup (settings_t *settings)
 
 #endif
 
-    IOInitDone = settings->version == 18;
+    IOInitDone = settings->version == 19;
 
     hal.settings_changed(settings);
     hal.spindle.set_state((spindle_state_t){0}, 0.0f);
@@ -1378,7 +1390,7 @@ bool driver_init (void)
 #else
     hal.info = "STM32F401CC";
 #endif
-    hal.driver_version = "201108";
+    hal.driver_version = "201115";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1549,10 +1561,19 @@ void DEBOUNCE_TIMER_IRQHandler (void)
 {
     DEBOUNCE_TIMER->SR = ~TIM_SR_UIF; // clear UIF flag;
 
-    axes_signals_t state = (axes_signals_t)limitsGetState();
+    if(debounce.limits) {
+        debounce.limits = Off;
+        axes_signals_t state = (axes_signals_t)limitsGetState();
+        if(state.value) //TODO: add check for limit switches having same state as when limit_isr were invoked?
+            hal.limits.interrupt_callback(state);
+    }
 
-    if(state.value) //TODO: add check for limit switches having same state as when limit_isr were invoked?
-        hal.limits.interrupt_callback(state);
+    if(debounce.door) {
+        debounce.door = Off;
+        control_signals_t state = (control_signals_t)systemGetState();
+        if(state.safety_door_ajar)
+            hal.control.interrupt_callback(state);
+    }
 }
 
 #if PPI_ENABLE
@@ -1596,8 +1617,16 @@ void EXTI0_IRQHandler(void)
         __HAL_GPIO_EXTI_CLEAR_IT(ifg);
 #if CONTROL_MASK & (1<<0)
         hal.control.interrupt_callback(systemGetState());
+  #if CONTROL_SAFETY_DOOR_BIT & (1<<0)
+        if(hal.driver_cap.software_debounce) {
+            debounce.door = On;
+            DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
+            DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
+        } else
+  #endif
 #else
         if(hal.driver_cap.software_debounce) {
+            debounce.limits = On;
             DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
             DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
         } else
@@ -1617,9 +1646,17 @@ void EXTI1_IRQHandler(void)
     if(ifg) {
         __HAL_GPIO_EXTI_CLEAR_IT(ifg);
 #if CONTROL_MASK & (1<<1)
+  #if CONTROL_SAFETY_DOOR_BIT & (1<<1)
+        if(hal.driver_cap.software_debounce) {
+            debounce.door = On;
+            DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
+            DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
+        } else
+  #endif
         hal.control.interrupt_callback(systemGetState());
 #else
         if(hal.driver_cap.software_debounce) {
+            debounce.limits = On;
             DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
             DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
         } else
@@ -1639,9 +1676,17 @@ void EXTI2_IRQHandler(void)
     if(ifg) {
         __HAL_GPIO_EXTI_CLEAR_IT(ifg);
 #if CONTROL_MASK & (1<<2)
+  #if CONTROL_SAFETY_DOOR_BIT & (1<<2)
+        if(hal.driver_cap.software_debounce) {
+            debounce.door = On;
+            DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
+            DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
+        } else
+ #endif
         hal.control.interrupt_callback(systemGetState());
 #else
         if(hal.driver_cap.software_debounce) {
+            debounce.limits = On;
             DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
             DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
         } else
@@ -1661,9 +1706,17 @@ void EXTI3_IRQHandler(void)
     if(ifg) {
         __HAL_GPIO_EXTI_CLEAR_IT(ifg);
 #if CONTROL_MASK & (1<<3)
-        hal.control.interrupt_callback(systemGetState());
+  #if CONTROL_SAFETY_DOOR_BIT & (1<<3)
+        if(hal.driver_cap.software_debounce) {
+            debounce.door = On;
+            DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
+            DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
+        } else
+  #endif
+          hal.control.interrupt_callback(systemGetState());
 #else
         if(hal.driver_cap.software_debounce) {
+            debounce.limits = On;
             DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
             DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
         } else
@@ -1683,9 +1736,17 @@ void EXTI4_IRQHandler(void)
     if(ifg) {
         __HAL_GPIO_EXTI_CLEAR_IT(ifg);
 #if CONTROL_MASK & (1<<4)
+  #if CONTROL_SAFETY_DOOR_BIT & (1<<4)
+        if(hal.driver_cap.software_debounce) {
+            debounce.door = On;
+            DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
+            DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
+        } else
+  #endif
         hal.control.interrupt_callback(systemGetState());
 #else
         if(hal.driver_cap.software_debounce) {
+            debounce.limits = On;
             DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
             DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
         } else
@@ -1696,35 +1757,47 @@ void EXTI4_IRQHandler(void)
 
 #endif
 
-#if DRIVER_IRQMASK & (0x03F0)
+#if DRIVER_IRQMASK & (0x03E0)
 
 void EXTI9_5_IRQHandler(void)
 {
-    uint32_t ifg = __HAL_GPIO_EXTI_GET_IT(0x03F0);
+    uint32_t ifg = __HAL_GPIO_EXTI_GET_IT(0x03E0);
 
     if(ifg) {
         __HAL_GPIO_EXTI_CLEAR_IT(ifg);
 
-        if(ifg & CONTROL_MASK)
-            hal.control.interrupt_callback(systemGetState());
-
+#if CONTROL_MASK & 0x03E0
+        if(ifg & CONTROL_MASK) {
+  #if CONTROL_SAFETY_DOOR_BIT & 0x03E0
+            if((ifg & CONTROL_SAFETY_DOOR_BIT) && hal.driver_cap.software_debounce) {
+                debounce.door = On;
+                DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
+                DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
+            } else
+  #endif
+                hal.control.interrupt_callback(systemGetState());
+        }
+#endif
+#if LIMIT_MASK & 0x03E0
         if(ifg & LIMIT_MASK) {
             if(hal.driver_cap.software_debounce) {
+                debounce.limits = On;
                 DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
                 DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
             } else
                 hal.limits.interrupt_callback(limitsGetState());
         }
+#endif
     }
 }
 
 #endif
 
-#if DRIVER_IRQMASK & (0xFE00)
+#if DRIVER_IRQMASK & (0xFC00)
 
 void EXTI15_10_IRQHandler(void)
 {
-    uint32_t ifg = __HAL_GPIO_EXTI_GET_IT(0xFE00);
+    uint32_t ifg = __HAL_GPIO_EXTI_GET_IT(0xFC00);
 
     if(ifg) {
         __HAL_GPIO_EXTI_CLEAR_IT(ifg);
@@ -1740,18 +1813,28 @@ void EXTI15_10_IRQHandler(void)
             spindle_data.index_count++;
         }
 #endif
-
-        if(ifg & CONTROL_MASK)
-            hal.control.interrupt_callback(systemGetState());
-
+#if CONTROL_MASK & 0xFC00
+        if(ifg & CONTROL_MASK) {
+  #if CONTROL_SAFETY_DOOR_BIT & 0xFC00
+            if((ifg & CONTROL_SAFETY_DOOR_BIT) && hal.driver_cap.software_debounce) {
+                debounce.door = On;
+                DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
+                DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
+            } else
+  #endif
+                hal.control.interrupt_callback(systemGetState());
+        }
+#endif
+#if LIMIT_MASK & 0xFC00
         if(ifg & LIMIT_MASK) {
             if(hal.driver_cap.software_debounce) {
+                debounce.limits = On;
                 DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
                 DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
             } else
                 hal.limits.interrupt_callback(limitsGetState());
         }
-
+#endif
 #if KEYPAD_ENABLE
         if(ifg & KEYPAD_STROBE_BIT)
             keypad_keyclick_handler(BITBAND_PERI(KEYPAD_PORT->IDR, KEYPAD_STROBE_PIN));
@@ -1764,6 +1847,22 @@ void EXTI15_10_IRQHandler(void)
 // Interrupt handler for 1 ms interval timer
 void HAL_IncTick(void)
 {
+#ifdef Z_LIMIT_POLL
+    static bool z_limit_state = false;
+    if(settings.limits.flags.hard_enabled) {
+        bool z_limit = BITBAND_PERI(Z_LIMIT_PORT->IDR, Z_LIMIT_PIN) ^ settings.limits.invert.z;
+        if(z_limit_state != z_limit) {
+            if((z_limit_state = z_limit)) {
+                if(hal.driver_cap.software_debounce) {
+                    DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
+                    DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
+                } else
+                    hal.limits.interrupt_callback(limitsGetState());
+            }
+        }
+    }
+#endif
+
 #if SDCARD_ENABLE
     static uint32_t fatfs_ticks = 10;
     if(!(--fatfs_ticks)) {

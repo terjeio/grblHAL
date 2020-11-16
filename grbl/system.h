@@ -221,8 +221,6 @@ typedef union {
 
 // Define global system variables
 typedef struct {
-    uint_fast16_t state;                // Tracks the current system state of Grbl.
-                                        // NOTE: Setting the state variable directly is NOT allowed! Use the set_state() function!
     bool abort;                         // System abort flag. Forces exit back to main loop for reset.
     bool cancel;                        // System cancel flag.
     bool suspend;                       // System suspend state flag.
@@ -230,7 +228,6 @@ typedef struct {
     bool mpg_mode;                      // To be moved to system_flags_t
     axes_signals_t tlo_reference_set;   // Axes with tool length reference offset set
     int32_t tlo_reference[N_AXIS];      // Tool length reference offset
-    alarm_code_t alarm;                 // Current alarm, only valid if sys.state STATE_ALARM flag set
     alarm_code_t alarm_pending;         // Delayed alarm, currently used for probe protection
     system_flags_t flags;               // Assorted state flags
     step_control_t step_control;        // Governs the step segment generator depending on system state.
@@ -246,6 +243,11 @@ typedef struct {
 #ifdef PID_LOG
     pid_data_t pid_log;
 #endif
+    // The following variables are not cleared upon soft reset, do NOT move. state must be first!
+    uint_fast16_t state;                // Tracks the current system state of Grbl.
+                                        // NOTE: Setting the state variable directly is NOT allowed! Use the set_state() function!
+    alarm_code_t alarm;                 // Current alarm, only valid if sys.state STATE_ALARM flag set
+    bool cold_start;                    // Set to true on boot, is false on subsequent soft resets
 } system_t;
 
 extern system_t sys;
@@ -259,21 +261,21 @@ extern volatile uint_fast16_t sys_rt_exec_state;   // Global realtime executor b
 extern volatile uint_fast16_t sys_rt_exec_alarm;   // Global realtimeate val executor bitflag variable for setting various alarms.
 
 // Executes an internal system command, defined as a string starting with a '$'
-status_code_t system_execute_line(char *line);
+status_code_t system_execute_line (char *line);
 
 // Execute the startup script lines stored in non-volatile storage upon initialization
-void system_execute_startup(char *line);
+void system_execute_startup (char *line);
 
-void system_flag_wco_change();
+void system_flag_wco_change (void);
 
 // Returns machine position of axis 'idx'. Must be sent a 'step' array.
 //float system_convert_axis_steps_to_mpos(int32_t *steps, uint_fast8_t idx);
 
 // Updates a machine 'position' array based on the 'step' array sent.
-void system_convert_array_steps_to_mpos(float *position, int32_t *steps);
+void system_convert_array_steps_to_mpos (float *position, int32_t *steps);
 
 // Checks and reports if target array exceeds machine travel limits.
-bool system_check_travel_limits(float *target);
+bool system_check_travel_limits (float *target);
 
 // Checks and limit jog commands to within machine travel limits.
 void system_apply_jog_limits (float *target);

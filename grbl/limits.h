@@ -32,6 +32,9 @@ bool limits_go_home(axes_signals_t cycle);
 // Check for soft limit violations
 void limits_soft_check(float *target);
 
+// Check if homing is required.
+bool limits_homing_required (void);
+
 // Set axes to be homed from settings.
 void limits_set_homing_axes (void);
 void limits_set_machine_positions (axes_signals_t cycle, bool add_pulloff);

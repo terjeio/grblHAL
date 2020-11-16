@@ -436,7 +436,8 @@ void report_grbl_settings (bool all)
     report_uint_setting(Setting_HardLimitsEnable, ((settings.limits.flags.hard_enabled & bit(0)) ? bit(0) | (settings.limits.flags.check_at_init ? bit(1) : 0) : 0));
     report_uint_setting(Setting_HomingEnable, (settings.homing.flags.value & 0x0F) |
                                                (settings.limits.flags.two_switches ? bit(4) : 0) |
-                                                (settings.homing.flags.manual ? bit(5) : 0));
+                                                (settings.homing.flags.manual ? bit(5) : 0) |
+                                                 (settings.homing.flags.override_locks ? bit(6) : 0));
     report_uint_setting(Setting_HomingDirMask, settings.homing.dir_mask.value);
     report_float_setting(Setting_HomingFeedRate, settings.homing.feed_rate, N_DECIMAL_SETTINGVALUE);
     report_float_setting(Setting_HomingSeekRate, settings.homing.seek_rate, N_DECIMAL_SETTINGVALUE);
@@ -528,7 +529,11 @@ void report_grbl_settings (bool all)
 
     // Print axis settings
     uint_fast8_t set_idx, val = (uint_fast8_t)Setting_AxisSettingsBase;
-    uint_fast8_t max_set = hal.driver_settings.report ? AXIS_SETTINGS_INCREMENT : AXIS_N_SETTINGS;
+    uint_fast8_t max_set = hal.driver_settings.report ? AXIS_SETTINGS_INCREMENT : AxisSetting_NumSettings;
+    axes_signals_t auto_squared = {0};
+    if(hal.stepper.get_auto_squared)
+        auto_squared = hal.stepper.get_auto_squared();
+
     for (set_idx = 0; set_idx < max_set; set_idx++) {
 
         for (idx = 0; idx < N_AXIS; idx++) {
@@ -551,11 +556,16 @@ void report_grbl_settings (bool all)
                     report_float_setting((setting_type_t)(val + idx), -settings.axis[idx].max_travel, N_DECIMAL_SETTINGVALUE);
                     break;
 
-#ifdef ENABLE_BACKLASH_COMPENSATION
                 case AxisSetting_Backlash:
+#ifdef ENABLE_BACKLASH_COMPENSATION
                     report_float_setting((setting_type_t)(val + idx), settings.axis[idx].backlash, N_DECIMAL_SETTINGVALUE);
-                    break;
 #endif
+                    break;
+
+                case AxisSetting_AutoSquareOffset:
+                    if(bit_istrue(auto_squared.mask, bit(idx)))
+                        report_float_setting((setting_type_t)(val + idx), settings.axis[idx].dual_axis_offset, N_DECIMAL_SETTINGVALUE);
+                    break;
 
                 default:
                     if(hal.driver_settings.axis_report)
@@ -566,7 +576,16 @@ void report_grbl_settings (bool all)
         val += AXIS_SETTINGS_INCREMENT;
     }
 
-    if(all) for(idx = Setting_AxisSettingsMax + 1; idx <= Setting_SettingsMax; idx++) {
+    // Print driver specific axis settings
+    if(hal.driver_settings.report && hal.driver_axis_settings > 0) {
+        max_set = AXIS_SETTINGS_INCREMENT + hal.driver_axis_settings;
+        for (set_idx = AXIS_SETTINGS_INCREMENT; set_idx < max_set; set_idx++) {
+            for (idx = 0; idx < N_AXIS; idx++)
+                hal.driver_settings.axis_report((axis_setting_type_t)set_idx, idx);
+        }
+    }
+
+    if(all) for(idx = Setting_AxisSettingsMax2 + 1; idx <= Setting_SettingsMax; idx++) {
 
         switch((setting_type_t)idx) {
 
@@ -593,6 +612,26 @@ void report_grbl_settings (bool all)
             case Setting_ToolChangeSeekRate:
                 if(!hal.driver_cap.atc && hal.stream.suspend_read)
                     report_float_setting(Setting_ToolChangeSeekRate, settings.tool_change.seek_rate, 1);
+                break;
+
+            case Setting_ToolChangePulloffRate:
+                if(!hal.driver_cap.atc && hal.stream.suspend_read)
+                    report_float_setting(Setting_ToolChangePulloffRate, settings.tool_change.pulloff_rate, 1);
+                break;
+
+            case Setting_DualAxisLengthFailPercent:
+                if(hal.stepper.get_auto_squared)
+                    report_float_setting(Setting_DualAxisLengthFailPercent, settings.homing.dual_axis.fail_length_percent, 1);
+                break;
+
+            case Setting_DualAxisLengthFailMin:
+                if(hal.stepper.get_auto_squared)
+                    report_float_setting(Setting_DualAxisLengthFailMin, settings.homing.dual_axis.fail_distance_min, N_DECIMAL_SETTINGVALUE);
+                break;
+
+            case Setting_DualAxisLengthFailMax:
+                if(hal.stepper.get_auto_squared)
+                    report_float_setting(Setting_DualAxisLengthFailMax, settings.homing.dual_axis.fail_distance_max, N_DECIMAL_SETTINGVALUE);
                 break;
 
             case Settings_IoPort_InvertIn:

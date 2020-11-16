@@ -267,6 +267,7 @@ typedef struct {
     char *board;
     uint32_t f_step_timer;
     uint32_t rx_buffer_size;
+    uint8_t driver_axis_settings;
 
     bool (*driver_setup)(settings_t *settings);
     void (*delay_ms)(uint32_t ms, void (*callback)(void));

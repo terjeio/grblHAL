@@ -47,11 +47,10 @@
 #endif
 
 // Declare system global variable structure
-system_t sys;
+system_t sys = {0};
 int32_t sys_position[N_AXIS];               // Real-time machine (aka home) position vector in steps.
 int32_t sys_probe_position[N_AXIS];         // Last probe position in machine coordinates and steps.
 bool prior_mpg_mode;                        // Enter MPG mode on startup?
-bool cold_start = true;
 volatile probing_state_t sys_probing_state; // Probing state value. Used to coordinate the probing cycle with stepper ISR.
 volatile uint_fast16_t sys_rt_exec_state;   // Global realtime executor bitflag variable for state management. See EXEC bitmasks.
 volatile uint_fast16_t sys_rt_exec_alarm;   // Global realtime executor bitflag variable for setting various alarms.
@@ -125,6 +124,8 @@ int grbl_enter (void)
     hal.control.interrupt_callback = control_interrupt_handler;
     hal.stepper.interrupt_callback = stepper_driver_interrupt_handler;
     hal.stream_blocking_callback = stream_tx_blocking;
+
+    sys.cold_start = true;
 
 #ifdef BUFFER_NVSDATA
     nvs_buffer_alloc(); // Allocate memory block for NVS buffer
@@ -218,10 +219,9 @@ int grbl_enter (void)
 
         // Reset system variables, keeping current state and MPG mode.
         bool prior_mpg_mode = sys.mpg_mode;
-        uint_fast16_t prior_state = sys.state;
 
-        memset(&sys, 0, sizeof(system_t)); // Clear system struct variable.
-        set_state(prior_state);
+        memset(&sys, 0, offsetof(system_t, state)); // Clear system struct variables except state & alarm.
+
         sys.override.feed_rate = DEFAULT_FEED_OVERRIDE;          // Set to 100%
         sys.override.rapid_rate = DEFAULT_RAPID_OVERRIDE;        // Set to 100%
         sys.override.spindle_rpm = DEFAULT_SPINDLE_RPM_OVERRIDE; // Set to 100%
@@ -238,13 +238,13 @@ int grbl_enter (void)
 
         // Reset Grbl primary systems.
         hal.stream.reset_read_buffer(); // Clear input stream buffer
-        gc_init(cold_start); // Set g-code parser to default state
+        gc_init();                      // Set g-code parser to default state
         hal.limits.enable(settings.limits.flags.hard_enabled, false);
-        plan_reset(); // Clear block buffer and planner variables
-        st_reset(); // Clear stepper subsystem variables.
-        limits_set_homing_axes(); // Set axes to be homed from settings.
+        plan_reset();                   // Clear block buffer and planner variables
+        st_reset();                     // Clear stepper subsystem variables.
+        limits_set_homing_axes();       // Set axes to be homed from settings.
 #ifdef ENABLE_BACKLASH_COMPENSATION
-        mc_backlash_init(); // Init backlash configuration.
+        mc_backlash_init();             // Init backlash configuration.
 #endif
         // Sync cleared gcode and planner positions to current system position.
         sync_position();
@@ -267,10 +267,10 @@ int grbl_enter (void)
         }
 
         // Start Grbl main loop. Processes program inputs and executes them.
-        if(!(looping = protocol_main_loop(cold_start)))
+        if(!(looping = protocol_main_loop()))
             looping = hal.driver_release == NULL || hal.driver_release();
 
-        cold_start = false;
+        sys.cold_start = false;
         sys_rt_exec_state = 0;
     }
 

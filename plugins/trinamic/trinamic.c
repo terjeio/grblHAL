@@ -1,7 +1,7 @@
 /*
   trinamic.c - Trinamic TMC2130 plugin
 
-  Part of Grbl
+  Part of grblHAL
 
   Copyright (c) 2018-2020 Terje Io
 
@@ -142,10 +142,12 @@ status_code_t trinamic_setting (setting_type_t setting, float value, char *svalu
         }
     } else switch((setting_type_t)setting) {
 
+        case 256: // TODO: remove, for migrating from settings version 18 or earlier
         case Setting_TrinamicDriver:
             trinamic.driver_enable.mask = (uint8_t)value & AXES_BITMASK;
             break;
 
+        case 257: // TODO: remove, for migrating from settings version 18 or earlier
         case Setting_TrinamicHoming:
             trinamic.homing_enable.mask = (uint8_t)value & AXES_BITMASK;
             break;

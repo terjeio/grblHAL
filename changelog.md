@@ -1,5 +1,22 @@
 ## grblHAL changelog
 
+Build 20201115 (test only):
+
+__NOTE:__ Settings data format has been changed and settings will be reset to default on update. Backup and restore.
+
+* Moved `#define` values to settings for auto square failure distances:  
+`$347` - default value from `DUAL_AXIS_HOMING_FAIL_AXIS_LENGTH_PERCENT` \(5%\) in grbl/config.h.  
+`$348` - default value from `DUAL_AXIS_HOMING_FAIL_DISTANCE_MIN` \(2.5mm\) in grbl/config.h.  
+`$349` - default value from `DUAL_AXIS_HOMING_FAIL_DISTANCE_MAX` \(25mm\) in grbl/config.h.
+* Added settings and functionality for moving the second axis up to &plusmn;2mm after successful auto squaring to compensate for any switch alignment error.  
+The settings is per axis, `$17n` where `n` is the axis index: `n` = `0` -> X axis, `1` -> Y axis, ...  
+Note that settings values will only be reported for axes with dual motors installed and configured for auto squaring. 
+* Added setting `$345` for pull-off rate from tool length sensor used for tool change. Default value is 100mm/min.
+* Added setting flag to `$10` for enabling override of _Homing on startup required_ \(if enabled\) by a soft reset.
+* Blocked loophole where machine could be unlocked by issuing a single axis homing command when _Homing on startup required_ is enabled.  
+Alarm 11 will now be reissued until all axes configured for homing are homed.
+* Added software debounce for the safety door switch to STM32 drivers.
+
 Build 20201111 (test only):
 
 * "Hardened" parking functionality. It should now tolerate a bouncy door switch and multiple closing/reopenings of the door during retract/restore.  

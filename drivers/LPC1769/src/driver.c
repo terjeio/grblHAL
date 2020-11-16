@@ -2,7 +2,7 @@
 
   driver.c - driver code for NXP LPC176x ARM processors
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2018-2020 Terje Io
 
@@ -1013,10 +1013,9 @@ static bool driver_setup (settings_t *settings)
 
  // Set defaults
 
-    IOInitDone = settings->version == 18;
+    IOInitDone = settings->version == 19;
 
-    settings_changed(settings);
-
+    hal.settings_changed(settings);
     hal.spindle.set_state((spindle_state_t){0}, 0.0f);
     hal.coolant.set_state((coolant_state_t){0});
     stepperSetDirOutputs((axes_signals_t){0});
@@ -1047,7 +1046,7 @@ bool driver_init (void) {
     NVIC_SetPriority(SysTick_IRQn, (1 << __NVIC_PRIO_BITS) - 1);
 
     hal.info = "LCP1769";
-    hal.driver_version = "201014";
+    hal.driver_version = "201115";
     hal.driver_setup = driver_setup;
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;

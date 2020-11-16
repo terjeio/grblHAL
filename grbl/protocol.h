@@ -1,7 +1,7 @@
 /*
   protocol.h - controls Grbl execution protocol and procedures
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
@@ -35,25 +35,22 @@
 
 // Starts Grbl main loop. It handles all incoming characters from the input stream and executes
 // them as they complete. It is also responsible for finishing the initialization procedures.
-bool protocol_main_loop(bool cold_start);
+bool protocol_main_loop (void);
 
 // Checks and executes a realtime command at various stop points in main program
-bool protocol_execute_realtime();
-bool protocol_exec_rt_system();
+bool protocol_execute_realtime (void);
+bool protocol_exec_rt_system (void);
 void protocol_execute_noop (uint_fast16_t state);
 bool protocol_enqueue_rt_command (on_execute_realtime_ptr fn);
 
 // Executes the auto cycle feature, if enabled.
-void protocol_auto_cycle_start();
+void protocol_auto_cycle_start (void);
 
 // Block until all buffered steps are executed
-bool protocol_buffer_synchronize();
+bool protocol_buffer_synchronize (void);
 
 bool protocol_enqueue_realtime_command (char c);
 bool protocol_enqueue_gcode (char *data);
 void protocol_message (char *message);
-
-// work in progress...
-//void set_state (uint_fast16_t state);
 
 #endif

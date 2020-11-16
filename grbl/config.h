@@ -344,6 +344,7 @@
 //#define DEFAULT_TOOLCHANGE_PROBING_DISTANCE 30  // max probing distance in mm for mode 3
 //#define DEFAULT_TOOLCHANGE_FEED_RATE 25.0f      // mm/min
 //#define DEFAULT_TOOLCHANGE_SEEK_RATE 200.0f     // mm/min
+//#define DEFAULT_TOOLCHANGE_PULLOFF_RATE 200.0f  // mm/min
 
 // By default, Grbl sets all input pins to normal-low operation with their internal pull-up resistors
 // enabled. This simplifies the wiring for users by requiring only a normally closed (NC) switch connected
@@ -519,10 +520,14 @@
 // greater.
 //#define DEFAULT_N_HOMING_LOCATE_CYCLE 1 // Integer (1-127)
 
-// If homing is enabled, homing init lock sets Grbl into an alarm state upon power up. This forces
-// the user to perform the homing cycle (or override the locks) before doing anything else. This is
+// If homing is enabled, homing init lock sets Grbl into an alarm state upon power up or a soft reset.
+// This forces the user to perform the homing cycle before doing anything else. This is
 // mainly a safety feature to remind the user to home, since position is unknown to Grbl.
 //#define DEFAULT_HOMING_INIT_LOCK // Default disabled. Uncomment to enable.
+
+// If homing init lock is enabled this sets Grbl into an alarm state upon power up or a soft reset.
+// To allow a soft reset to override the lock uncomment the line below.
+//#define DEFAULT_HOMING_OVERRIDE_LOCKS // Default disabled. Uncomment to enable.
 
 // Define the homing cycle patterns with bitmasks. The homing cycle first performs a search mode
 // to quickly engage the limit switches, followed by a slower locate mode, and finished by a short

@@ -108,7 +108,7 @@ void limits_set_machine_positions (axes_signals_t cycle, bool add_pulloff)
 
 // Pulls off axes from asserted homing switches before homing starts.
 // For now only for auto squared axes.
-static bool limits_pull_off (axes_signals_t axis)
+static bool limits_pull_off (axes_signals_t axis, float distance)
 {
     uint_fast8_t n_axis = 0, idx = N_AXIS;
     coord_data_t target = {0};
@@ -125,9 +125,9 @@ static bool limits_pull_off (axes_signals_t axis)
         if(bit_istrue(axis.mask, bit(idx))) {
             n_axis++;
             if (bit_istrue(settings.homing.dir_mask.value, bit(idx)))
-                target.values[idx] += settings.homing.pulloff * HOMING_AXIS_LOCATE_SCALAR;
+                target.values[idx] += distance;
             else
-                target.values[idx] -= settings.homing.pulloff * HOMING_AXIS_LOCATE_SCALAR;
+                target.values[idx] -= distance;
         }
     } while(idx);
 
@@ -203,8 +203,7 @@ static bool limits_homing_cycle (axes_signals_t cycle, axes_signals_t auto_squar
     uint_fast8_t n_cycle = (2 * settings.homing.locate_cycles + 1);
     uint_fast8_t step_pin[N_AXIS], n_active_axis, dual_motor_axis = 0;
     float target[N_AXIS];
-    float max_travel = 0.0f;
-    float homing_rate = settings.homing.seek_rate;
+    float max_travel = 0.0f, homing_rate = settings.homing.seek_rate;
     bool approach = true, autosquare_check = false, both_motors = !!auto_square.mask;
     axes_signals_t axislock, homing_state;
     plan_line_data_t plan_data;
@@ -238,9 +237,9 @@ static bool limits_homing_cycle (axes_signals_t cycle, axes_signals_t auto_squar
     } while(idx);
 
     if(auto_square.mask) {
-        float fail_distance = (-DUAL_AXIS_HOMING_FAIL_AXIS_LENGTH_PERCENT / 100.0f) * settings.axis[dual_motor_axis].max_travel;
-        fail_distance = min(fail_distance, DUAL_AXIS_HOMING_FAIL_DISTANCE_MAX);
-        fail_distance = max(fail_distance, DUAL_AXIS_HOMING_FAIL_DISTANCE_MIN);
+        float fail_distance = (-settings.homing.dual_axis.fail_length_percent / 100.0f) * settings.axis[dual_motor_axis].max_travel;
+        fail_distance = min(fail_distance, settings.homing.dual_axis.fail_distance_min);
+        fail_distance = max(fail_distance, settings.homing.dual_axis.fail_distance_max);
         autosquare_fail_distance = truncf(fail_distance * settings.axis[dual_motor_axis].steps_per_mm);
     }
 
@@ -396,6 +395,14 @@ static bool limits_homing_cycle (axes_signals_t cycle, axes_signals_t auto_squar
 
     } while (cycle.mask && n_cycle-- > 0);
 
+    // Pull off B motor to compensate for switch inaccuracy when configured.
+    if(auto_square.mask && settings.axis[dual_motor_axis].dual_axis_offset != 0.0f) {
+        hal.stepper.disable_motors(auto_square, SquaringMode_A);
+        if(!limits_pull_off(auto_square, settings.axis[dual_motor_axis].dual_axis_offset))
+            return false;
+        hal.stepper.disable_motors((axes_signals_t){0}, SquaringMode_Both);
+    }
+
     // The active cycle axes should now be homed and machine limits have been located. By
     // default, Grbl defines machine space as all negative, as do most CNCs. Since limit switches
     // can be on either side of an axes, check and set axes machine zero appropriately. Also,
@@ -442,7 +449,7 @@ bool limits_go_home (axes_signals_t cycle)
         if(auto_squared.mask != auto_square.mask)
             return false; // Attempt at squaring more than one auto squared axis at the same time.
 
-        if((auto_squared.mask & hal.homing.get_state().mask) && !limits_pull_off(auto_square))
+        if((auto_squared.mask & hal.homing.get_state().mask) && !limits_pull_off(auto_square, settings.homing.pulloff * HOMING_AXIS_LOCATE_SCALAR))
             return false; // Auto squaring with limit switch asserted is not allowed.
     }
 
@@ -489,3 +496,12 @@ void limits_set_homing_axes (void)
 
     sys.homed.mask &= sys.homing.mask;
 }
+
+// Check if homing is required.
+bool limits_homing_required (void)
+{
+    return settings.homing.flags.enabled && settings.homing.flags.init_lock &&
+            (sys.cold_start || !settings.homing.flags.override_locks) &&
+              sys.homing.mask && (sys.homing.mask & sys.homed.mask) != sys.homing.mask;
+}
+

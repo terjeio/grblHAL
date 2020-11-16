@@ -3,7 +3,7 @@
 
   Driver code for ESP32
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2018-2020 Terje Io
 
@@ -1442,10 +1442,9 @@ static bool driver_setup (settings_t *settings)
 
   // Set defaults
 
-    IOInitDone = settings->version == 18;
+    IOInitDone = settings->version == 19;
 
-    settings_changed(settings);
-
+    hal.settings_changed(settings);
     hal.stepper.go_idle(true);
 
     return IOInitDone;
@@ -1471,7 +1470,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "ESP32";
-    hal.driver_version = "201014";
+    hal.driver_version = "201115";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif

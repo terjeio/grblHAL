@@ -2,7 +2,7 @@
 
   driver.c - driver code for Atmel SAMD21 ARM processor
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2018-2020 Terje Io
 
@@ -834,9 +834,9 @@ static bool driver_setup (settings_t *settings)
 
  // Set defaults
 
-    IOInitDone = settings->version == 18;
+    IOInitDone = settings->version == 19;
 
-    settings_changed(settings);
+    hal.settings_changed(settings);
 
     hal.stepper.go_idle(true);
     hal.spindle.set_state((spindle_state_t){0}, 0.0f);
@@ -966,7 +966,7 @@ bool driver_init (void) {
     IRQRegister(SysTick_IRQn, SysTick_IRQHandler);
 
     hal.info = "SAMD21";
-    hal.driver_version = "201014";
+    hal.driver_version = "201115";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif

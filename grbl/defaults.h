@@ -6,7 +6,7 @@
 
   NOTE: This file is only used by settings.c and should NOT be referenced elsewhere!
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2012-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -390,6 +390,13 @@
 #define HOMING_FORCE_SET_ORIGIN 0
 #endif
 
+#ifdef DEFAULT_HOMING_OVERRIDE_LOCKS
+#undef DEFAULT_HOMING_OVERRIDE_LOCKS
+#define DEFAULT_HOMING_OVERRIDE_LOCKS 1
+#else
+#define DEFAULT_HOMING_OVERRIDE_LOCKS 0
+#endif
+
 #ifndef DUAL_AXIS_HOMING_FAIL_AXIS_LENGTH_PERCENT
 #define DUAL_AXIS_HOMING_FAIL_AXIS_LENGTH_PERCENT  5.0f
 #endif
@@ -462,6 +469,9 @@
 #endif
 #ifndef DEFAULT_TOOLCHANGE_SEEK_RATE
 #define DEFAULT_TOOLCHANGE_SEEK_RATE 200.0f
+#endif
+#ifndef DEFAULT_TOOLCHANGE_PULLOFF_RATE
+#define DEFAULT_TOOLCHANGE_PULLOFF_RATE 100.0f
 #endif
 
 #ifdef DEFAULT_HOMING_ENABLE

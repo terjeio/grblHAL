@@ -1,7 +1,7 @@
 /*
   settings.h - non-volatile storage configuration handling
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
@@ -29,15 +29,9 @@
 
 // Version of the persistent storage data. Will be used to migrate existing data from older versions of Grbl
 // when firmware is upgraded. Always stored in byte 0 of non-volatile storage
-#define SETTINGS_VERSION 18  // NOTE: Check settings_reset() when moving to next version.
-
+#define SETTINGS_VERSION 19  // NOTE: Check settings_reset() when moving to next version.
 
 // Define axis settings numbering scheme. Starts at Setting_AxisSettingsBase, every INCREMENT, over N_SETTINGS.
-#ifdef ENABLE_BACKLASH_COMPENSATION
-#define AXIS_N_SETTINGS          6
-#else
-#define AXIS_N_SETTINGS          4
-#endif
 #define AXIS_SETTINGS_INCREMENT  10 // Must be greater than the number of axis settings TODO: change to 100 to allow for a logical wider range of parameters?
 
 // Define encoder settings numbering scheme. Starts at Setting_EncoderSettingsBase, every INCREMENT, over N_SETTINGS.
@@ -152,12 +146,14 @@ typedef enum {
     Setting_PositionDMaxError = 96,
 //
 
-    Setting_AxisSettingsBase = 100, // NOTE: Reserving settings values >= 100 for axis settings. Up to 255.
-    Setting_AxisSettingsMax = 255,
+// Reserving settings values >= 100 for axis settings. Up to 259. TODO: Or should that be 299...
+    Setting_AxisSettingsBase = 100,     // Reserved for core settings, up to 100 + AXIS_SETTINGS_INCREMENT * N_AXIS
+    Setting_AxisSettingsMax = 199,
+    Setting_AxisSettingsBase2 = 200,    // Reserved for driver settings, up to 200 + AXIS_SETTINGS_INCREMENT * N_AXIS
+    Setting_AxisSettingsMax2 = 255,
+//
 
 // Optional driver implemented settings
-    Setting_TrinamicDriver = 256,
-    Setting_TrinamicHoming = 257,
 
     // Normally used for Ethernet or WiFi Station
     Setting_Hostname = 300,
@@ -191,11 +187,19 @@ typedef enum {
     Setting_AdminPassword = 330,
     Setting_UserPassword = 331,
 
+    Setting_TrinamicDriver = 338,
+    Setting_TrinamicHoming = 339,
+
     Setting_SpindleAtSpeedTolerance = 340,
     Setting_ToolChangeMode = 341,
     Setting_ToolChangeProbingDistance = 342,
     Setting_ToolChangeFeedRate = 343,
     Setting_ToolChangeSeekRate = 344,
+    Setting_ToolChangePulloffRate = 345,
+
+    Setting_DualAxisLengthFailPercent = 347,
+    Setting_DualAxisLengthFailMin = 348,
+    Setting_DualAxisLengthFailMax = 349,
 
     Setting_THC_Mode = 350,
     Setting_THC_Delay = 351,
@@ -243,15 +247,11 @@ typedef enum {
     AxisSetting_MaxRate = 1,
     AxisSetting_Acceleration = 2,
     AxisSetting_MaxTravel = 3,
-    AxisSetting_StepperCurrent = 4,
-    AxisSetting_MicroSteps = 5,
-    AxisSetting_Backlash = 6
-    /*
-    AxisSetting_P_Gain = 7,
-    AxisSetting_I_Gain = 8,
-    AxisSetting_D_Gain = 9,
-    AxisSetting_I_MaxError = 10
-    */
+    AxisSetting_StepperCurrent = 4, // TODO: move to axis settings for driver?, 200+
+    AxisSetting_MicroSteps = 5,     // TODO: move to axis settings for driver?, 200+
+    AxisSetting_Backlash = 6,
+    AxisSetting_AutoSquareOffset = 7,
+    AxisSetting_NumSettings
 } axis_setting_type_t;
 
 typedef union {
@@ -376,7 +376,8 @@ typedef union {
                 init_lock            :1,
                 force_set_origin     :1,
                 manual               :1,
-                unassigned           :3;
+                override_locks       :1,
+                unassigned           :2;
     };
 } homing_settings_flags_t;
 
@@ -395,7 +396,7 @@ typedef struct {
     uint16_t debounce_delay;
     homing_settings_flags_t flags;
     axes_signals_t cycle[N_AXIS];
-//    homing_dual_axis_t dual_axis;
+    homing_dual_axis_t dual_axis;
 } homing_settings_t;
 
 typedef struct {
@@ -413,6 +414,7 @@ typedef struct {
     float max_rate;
     float acceleration;
     float max_travel;
+    float dual_axis_offset;
 #ifdef ENABLE_BACKLASH_COMPENSATION
     float backlash;
 #endif
@@ -475,6 +477,7 @@ typedef enum {
 typedef struct {
     float feed_rate;
     float seek_rate;
+    float pulloff_rate;
     float probing_distance;
     toolchange_mode_t mode;
 } tool_change_settings_t;
