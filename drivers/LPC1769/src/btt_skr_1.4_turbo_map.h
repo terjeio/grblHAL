@@ -1,5 +1,5 @@
 /*
-  smoothieboard.h - driver code for LPC176x processor, pin mappings compatible with Smoothieboard
+  btt_skr_1.4_turbo_map.h - driver code for LPC176x processor, pin mappings compatible with BTT SKR v1.4 Turbo board
 
   Part of grblHAL
 
@@ -23,127 +23,157 @@
 // P0.27, P0.28 are dedicated I2C pins without pull up/down.
 // P0.29, P0.30 must have same direction as used for USB operation.
 
-#define BOARD_NAME "Smoothieboard"
+#define BOARD_NAME "BTT SKR V1.4 Turbo"
+
+#if EEPROM_ENABLE
+#error "This board cannot be used with current EEPROM code!"
+#endif
 
 // Define step pulse output pins.
-
-#define STEP_PN             2
-#define STEP_PORT           port(STEP_PN)
-#define X_STEP_PIN          0
+#define X_STEP_PN           2
+#define X_STEP_PORT         port(X_STEP_PN)
+#define X_STEP_PIN          2
 #define X_STEP_BIT          (1<<X_STEP_PIN)
-#define Y_STEP_PIN          1
+#define Y_STEP_PN           0
+#define Y_STEP_PORT         port(Y_STEP_PN)
+#define Y_STEP_PIN          19
 #define Y_STEP_BIT          (1<<Y_STEP_PIN)
-#define Z_STEP_PIN          2
+#define Z_STEP_PN           0
+#define Z_STEP_PORT         port(Z_STEP_PN)
+#define Z_STEP_PIN          22
 #define Z_STEP_BIT          (1<<Z_STEP_PIN)
 #ifdef A_AXIS
-#define A_STEP_PIN          3
+#define A_STEP_PN           2
+#define A_STEP_PORT         port(A_STEP_PN)
+#define A_STEP_PIN          13
 #define A_STEP_BIT          (1<<A_STEP_PIN)
-#define STEP_MASK           (X_STEP_BIT|Y_STEP_BIT|Z_STEP_BIT|A_STEP_BIT)
-#else
-#define STEP_MASK           (X_STEP_BIT|Y_STEP_BIT|Z_STEP_BIT)
 #endif
-#define STEP_OUTMODE GPIO_SHIFT0
+#ifdef B_AXIS
+#define B_STEP_PN           1
+#define B_STEP_PORT         port(B_STEP_PN)
+#define B_STEP_PIN          15
+#define B_STEP_BIT          (1<<B_STEP_PIN)
+#endif
+#define STEP_OUTMODE GPIO_BITBAND
 
 // Define step direction output pins.
-#define DIRECTION_PN        0
-#define DIRECTION_PORT      port(DIRECTION_PN)
-#define X_DIRECTION_PIN     5
+#define X_DIRECTION_PN      2
+#define X_DIRECTION_PORT    port(X_DIRECTION_PN)
+#define X_DIRECTION_PIN     6
 #define X_DIRECTION_BIT     (1<<X_DIRECTION_PIN)
-#define Y_DIRECTION_PIN     11
+#define Y_DIRECTION_PN      0
+#define Y_DIRECTION_PORT    port(Y_DIRECTION_PN)
+#define Y_DIRECTION_PIN     20
 #define Y_DIRECTION_BIT     (1<<Y_DIRECTION_PIN)
-#define Z_DIRECTION_PIN     20
+#define Z_DIRECTION_PN      2
+#define Z_DIRECTION_PORT    port(Z_DIRECTION_PN)
+#define Z_DIRECTION_PIN     11
 #define Z_DIRECTION_BIT     (1<<Z_STEP_PIN)
 #ifdef A_AXIS
-#define A_DIRECTION_PIN     22
+#define A_DIRECTION_PN      0
+#define A_DIRECTION_PORT    port(A_DIRECTION_PN)
+#define A_DIRECTION_PIN     11
 #define A_DIRECTION_BIT     (1<<A_DIRECTION_PIN)
-#define DIRECTION_MASK      (X_DIRECTION_BIT|Y_DIRECTION_BIT|Z_DIRECTION_BIT|A_DIRECTION_BIT)
-#else
-#define DIRECTION_MASK      (X_DIRECTION_BIT|Y_DIRECTION_BIT|Z_DIRECTION_BIT)
 #endif
-#define DIRECTION_OUTMODE GPIO_SHIFT0
+#ifdef B_AXIS
+#define B_DIRECTION_PN      1
+#define B_DIRECTION_PORT    port(B_DIRECTION_PN)
+#define B_DIRECTION_PIN     14
+#define B_DIRECTION_BIT     (1<<B_DIRECTION_PIN)
+#endif
+#define DIRECTION_OUTMODE GPIO_BITBAND
 
 // Define stepper driver enable/disable output pin(s).
-#define DISABLE_PN          0
-#define DISABLE_PORT        port(DISABLE_PN)
-#define X_DISABLE_PIN       4
+#define X_DISABLE_PN        2
+#define X_DISABLE_PORT      port(X_DISABLE_PN)
+#define X_DISABLE_PIN       1
 #define X_DISABLE_BIT       (1<<X_DISABLE_PIN)
-#define Y_DISABLE_PN        0
+#define Y_DISABLE_PN        2
 #define Y_DISABLE_PORT      port(Y_DISABLE_PN)
-#define Y_DISABLE_PIN       10
+#define Y_DISABLE_PIN       8
 #define Y_DISABLE_BIT       (1<<Y_DISABLE_PIN)
 #define Z_DISABLE_PN        0
 #define Z_DISABLE_PORT      port(Z_DISABLE_PN)
-#define Z_DISABLE_PIN       19
+#define Z_DISABLE_PIN       21
 #define Z_DISABLE_BIT       (1<<Z_DISABLE_PIN)
 #ifdef A_AXIS
-#define A_DISABLE_PN        0
+#define A_DISABLE_PN        2
 #define A_DISABLE_PORT      port(A_DISABLE_PN)
-#define A_DISABLE_PIN       21
+#define A_DISABLE_PIN       12
 #define A_DISABLE_BIT       (1<<A_DISABLE_PIN)
-#define DISABLE_MASK        (X_DISABLE_BIT|Y_DISABLE_BIT|Z_DISABLE_BIT|A_DISABLE_BIT)
-#else
-#define DISABLE_MASK        (X_DISABLE_BIT|Y_DISABLE_BIT|Z_DISABLE_BIT)
 #endif
-#define DISABLE_OUTMODE GPIO_SHIFT0
+#ifdef B_AXIS
+#define B_DISABLE_PN        1
+#define B_DISABLE_PORT      port(B_DISABLE_PN)
+#define B_DISABLE_PIN       16
+#define B_DISABLE_BIT       (1<<B_DISABLE_PIN)
+#endif
+#define DISABLE_OUTMODE GPIO_BITBAND
 
 // Define homing/hard limit switch input pins.
 // NOTE: Port 1 is not interrupt capable!
 #define LIMIT_PN            1
 #define LIMIT_PORT          port(LIMIT_PN)
-#define X_LIMIT_PIN         24
+#define X_LIMIT_PIN         29
 #define X_LIMIT_BIT         (1<<X_LIMIT_PIN)
-#define Y_LIMIT_PIN         26
+#define Y_LIMIT_PIN         28
 #define Y_LIMIT_BIT         (1<<Y_LIMIT_PIN)
-#define Z_LIMIT_PIN         28
+#define Z_LIMIT_PIN         27
 #define Z_LIMIT_BIT         (1<<Z_LIMIT_PIN)
 #ifdef A_AXIS
-#define A_LIMIT_PORT        LIMIT_PORT
-#define A_LIMIT_PIN         29
+#define A_LIMIT_PIN         26
 #define A_LIMIT_BIT         (1<<A_LIMIT_PIN)
-#define LIMIT_MASK (X_LIMIT_BIT|Y_LIMIT_BIT|Z_LIMIT_BIT|A_LIMIT_BIT) // All limit bits (needs to be on same port)
-#else
-#define LIMIT_MASK (X_LIMIT_BIT|Y_LIMIT_BIT|Z_LIMIT_BIT) // All limit bits (needs to be on same port)
 #endif
+#ifdef B_AXIS
+#define B_LIMIT_PIN         25
+#define B_LIMIT_BIT         (1<<A_LIMIT_PIN)
+#endif
+#define LIMIT_MASK (X_LIMIT_BIT|Y_LIMIT_BIT|Z_LIMIT_BIT) // All limit bits (needs to be on same port)
 #define LIMIT_INMODE GPIO_BITBAND
 
 // Define probe switch input pin.
-#define PROBE_PN    4
+#define PROBE_PN    0
 #define PROBE_PORT  port(PROBE_PN)
-#define PROBE_PIN   6
+#define PROBE_PIN   10
 #define PROBE_BIT   (1<<PROBE_PIN)
 
 // Define spindle enable and spindle direction output pins.
 #define SPINDLE_ENABLE_PN       1
 #define SPINDLE_ENABLE_PORT     port(SPINDLE_ENABLE_PN)
-#define SPINDLE_ENABLE_PIN      18  // Due Digital Pin 4
+#define SPINDLE_ENABLE_PIN      23  // Due Digital Pin 4
 #define SPINDLE_ENABLE_BIT      (1<<SPINDLE_ENABLE_PIN)
 #define SPINDLE_DIRECTION_PN    1
 #define SPINDLE_DIRECTION_PORT  port(SPINDLE_DIRECTION_PN)
-#define SPINDLE_DIRECTION_PIN   19  // Due Digital Pin 5
+#define SPINDLE_DIRECTION_PIN   21  // Due Digital Pin 5
 #define SPINDLE_DIRECTION_BIT   (1<<SPINDLE_DIRECTION_PIN)
 
 // Start of PWM & Stepper Enabled Spindle
 
 // Define flood and mist coolant enable output pins.
-#define COOLANT_FLOOD_PN    0
+#define COOLANT_FLOOD_PN    1
 #define COOLANT_FLOOD_PORT  port(COOLANT_FLOOD_PN)
-#define COOLANT_FLOOD_PIN   26  // Due Analog port 9
+#define COOLANT_FLOOD_PIN   19  // Due Analog port 9
 #define COOLANT_FLOOD_BIT   (1<<COOLANT_FLOOD_PIN)
+
+#define COOLANT_MIST_PN     1
+#define COOLANT_MIST_PORT   port(COOLANT_MIST_PN)
+#define COOLANT_MIST_PIN    30
+#define COOLANT_MIST_BIT    (1<<COOLANT_MIST_PIN)
 
 // Define user-control CONTROLs (cycle start, reset, feed hold) input pins.
 #define RESET_PORT_PN       0
 #define RESET_PORT          port(RESET_PORT_PN)
-#define RESET_PIN           27  // DUE Analog Pin 3
+#define RESET_PIN           18  // DUE Analog Pin 3
 #define RESET_BIT           (1<<RESET_PIN)
 
 #define FEED_HOLD_PN        0
 #define FEED_HOLD_PORT      port(FEED_HOLD_PN)
-#define FEED_HOLD_PIN       28  // DUE Analog Pin 4
+#define FEED_HOLD_PIN       16  // DUE Analog Pin 4
 #define FEED_HOLD_BIT       (1<<FEED_HOLD_PIN)
 
-#define CYCLE_START_PN      2
+#define CYCLE_START_PN      0
 #define CYCLE_START_PORT    port(CYCLE_START_PN)
-#define CYCLE_START_PIN     6   // DUE Analog Pin 5
+#define CYCLE_START_PIN     15   // DUE Analog Pin 5
 #define CYCLE_START_BIT     (1<<CYCLE_START_PIN)
 
 #define CONTROL_INMODE GPIO_BITBAND

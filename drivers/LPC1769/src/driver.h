@@ -2,7 +2,7 @@
 
   driver.h - driver code for NXP LPC176x ARM processors
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2018-2020 Terje Io
 
@@ -72,6 +72,8 @@
     #include "smoothieboard_map.h"
 #elif defined(BOARD_RAMPS_16)
     #include "ramps_1.6_map.h"
+#elif defined(BOARD_BTT_SKR_14_TURBO)
+    #include <btt_skr_1.4_turbo_map.h>
 #else
     #include "generic_map.h"
 #endif

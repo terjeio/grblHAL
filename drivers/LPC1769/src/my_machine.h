@@ -1,7 +1,7 @@
 /*
   my_machine.h - configuration for NXP LPC176x ARM processors
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 
@@ -23,6 +23,7 @@
 // If none is enabled pin mappings from generic_map.h will be used
 #define SMOOTHIEBOARD
 //#define BOARD_RAMPS_16
+//#define BOARD_BTT_SKR_14_TURBO
 
 // Configuration
 // Uncomment to enable, for some a value > 1 may be assigned, if so the default value is shown.
