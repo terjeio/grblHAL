@@ -21,6 +21,10 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#ifdef VFD_SPINDLE
+#error "Board BOARD_BDRING_I2S6A does not have support for VFD spindle."
+#endif
+
 #define BOARD_NAME "BDRING 6-axis I2S"
 
 #define USE_I2S_OUT

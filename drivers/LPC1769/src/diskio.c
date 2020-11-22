@@ -18,7 +18,7 @@
 #include "diskio.h"
 #include "driver.h"
 
-#define LPC_SD_PORT LPC_SSP1
+#if SDCARD_ENABLE
 
 #if SD_SPI_PORT == 0
     #define LPC_SD_PORT LPC_SSP0
@@ -684,3 +684,5 @@ DWORD get_fattime (void)
             ;
 
 }
+
+#endif

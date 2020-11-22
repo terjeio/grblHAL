@@ -21,6 +21,10 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#ifdef VFD_SPINDLE
+#error "Board BOARD_BDRING_V3P5 does not have support for VFD spindle."
+#endif
+
 #define BOARD_NAME "BDRING v3.5"
 
 // timer definitions

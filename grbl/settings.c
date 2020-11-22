@@ -430,6 +430,87 @@ static inline bool is_autosquareoffset (setting_type_t setting)
     return setting >= ofs && setting < ofs + N_AXIS;
 }
 
+bool settings_is_group_available (setting_group_t group)
+{
+    bool available = false;
+
+    switch(group) {
+
+        case Group_AuxPorts:
+            available = hal.port.digital_out != NULL || hal.port.analog_out != NULL;
+            break;
+
+        case Group_Bluetooth:
+            available = hal.driver_cap.bluetooth;
+            break;
+
+        case Group_Networking:
+            available = hal.driver_cap.ethernet || hal.driver_cap.wifi;
+            break;
+
+        case Group_Networking_Wifi:
+            available = hal.driver_cap.wifi;
+            break;
+
+        case Group_Encoder:
+            available = hal.encoder.on_event != NULL;
+            break;
+
+        case Group_Probing:
+            available = hal.probe.get_state != NULL;
+            break;
+
+        case Group_Spindle_Sync:
+            available = hal.driver_cap.spindle_sync;
+            break;
+
+        case Group_Spindle_ClosedLoop:
+            available = hal.driver_cap.spindle_pid;
+            break;
+
+        case Group_Limits_DualAxis:
+            available = hal.stepper.get_auto_squared != NULL;
+            break;
+
+        case Group_Plasma:
+            available = false;
+            break;
+
+        default:
+            available = true;
+            break;
+    }
+
+    return available;
+}
+
+bool settings_is_setting_available (setting_type_t setting, setting_group_t group)
+{
+    bool available = settings_is_group_available(group);
+
+    if(available) switch(setting) {
+
+        case Setting_SpindlePPR:
+        case Setting_SpindleAtSpeedTolerance:
+            available = hal.spindle.get_data != NULL;
+            break;
+
+        case Setting_RpmMax:
+        case Setting_RpmMin:
+        case Setting_PWMFreq:
+        case Setting_PWMOffValue:
+        case Setting_PWMMinValue:
+        case Setting_PWMMaxValue:
+            available = hal.driver_cap.variable_spindle;
+            break;
+
+        default:
+            break;
+    }
+
+    return available;
+}
+
 // A helper method to set settings from command line
 status_code_t settings_store_global_setting (setting_type_t setting, char *svalue)
 {

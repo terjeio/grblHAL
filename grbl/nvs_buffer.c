@@ -227,7 +227,7 @@ bool nvs_buffer_init (void)
             settings_restore(settings_all);
             if(physical_nvs.type == NVS_Flash)
                 physical_nvs.memcpy_to_flash(nvsbuffer);
-            else
+            else if(physical_nvs.memcpy_to_nvs)
                 physical_nvs.memcpy_to_nvs(0, nvsbuffer, GRBL_NVS_SIZE + hal.nvs.driver_area.size, false);
             grbl.report.status_message(Status_SettingReadFail);
         }

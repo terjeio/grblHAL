@@ -1,5 +1,29 @@
 ## grblHAL changelog
 
+Build 20201120 (test only):
+
+* Moved board selection etc. to [CMakeLists.txt](drivers/ESP32/CMakeLists.txt) for [ESP32 driver](drivers/ESP32/README.md) for simpler configuration.
+* Fixed regression for VFD spindle code, should now be able to run tests.
+* Added build configurations for processor variants and Nucleo-64 boards for the [STM32F4xx driver](drivers/STM32F4xx/README.md).
+* Added initial board map file for [BTT SKR 1.4 Turbo board](https://www.bigtree-tech.com/products/btt-skr-v1-4-skr-v1-4-turbo-32-bit-control-board.html) to the [LPC176x driver](drivers/LPC1769/README.md) including build configuration for bootloader compatible executable.
+* Added polling of limit switches to the LPC176x driver, enabling hard limits is now possible.
+* Added `$` commands for getting details about alarm codes, error codes, settings and settings groups.  
+`$EA` - enumerate alarm codes.  
+`$EE` - enumerate error codes.  
+`$ES` - enumerate settings.  
+`$EG` - enumerate setting groups.  
+`$E*` - enumerate all above.  
+The output from these is intended for sender developers and can be used instead of loading this information from .csv files.  
+The settings enumeration contains additional information such as group assignment, datatype and format, value list for bitfields, min allowed value and max allowed value. 
+For now descriptions of the settings are not included.  
+__NOTE:__ This is a preview version, format and group codes may change for settings and setting groups.
+* Added `$HELP` command and `$$<n>` command for listing information about a specific setting.  
+`$HELP` on its own prints arguments that can be used with `$HELP`.  
+`$HELP Commands` - print `$` commands available with a short description.  
+`$HELP Settings` - print information about all available settings.  
+`$HELP <argument>` print information about settings from the setting group provided in `<argument>`. E.g. `$HELP Spindle` will print information about spindle settings.  
+__NOTE:__ do _NOT_ issue these commands from a sender MDI as the output may crash it, output is in plaintext and thus intended for use from a terminal only.
+
 Build 20201115 (test only):
 
 __NOTE:__ Settings data format has been changed and settings will be reset to default on update. Backup and restore.

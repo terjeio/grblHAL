@@ -25,6 +25,7 @@
 
 #include "gcode.h"
 #include "probe.h"
+#include "alarms.h"
 
 // Define system executor bit map. Used internally by realtime protocol as realtime command flags,
 // which notifies the main program to execute the specified realtime command asynchronously.
@@ -82,26 +83,6 @@ typedef enum {
     Message_ReferenceTLOEstablished = 15,
     Message_NextMessage // Next unassigned message number
 } message_code_t;
-
-// Alarm executor codes. Valid values (1-255). Zero is reserved.
-typedef enum {
-    Alarm_None = 0,
-    Alarm_HardLimit = 1,
-    Alarm_SoftLimit = 2,
-    Alarm_AbortCycle = 3,
-    Alarm_ProbeFailInitial = 4,
-    Alarm_ProbeFailContact = 5,
-    Alarm_HomingFailReset = 6,
-    Alarm_HomingFailDoor = 7,
-    Alarm_FailPulloff = 8,
-    Alarm_HomingFailApproach = 9,
-    Alarm_EStop = 10,
-    Alarm_HomingRequried = 11,
-    Alarm_LimitsEngaged = 12,
-    Alarm_ProbeProtect = 13,
-    Alarm_Spindle = 14,
-    Alarm_HomingFailAutoSquaringApproach = 15
-} alarm_code_t;
 
 typedef enum {
     Parking_DoorClosed = 0,

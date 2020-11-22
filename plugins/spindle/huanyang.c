@@ -2,7 +2,7 @@
 
   huanyang.c - Huanyang VFD spindle support
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 
@@ -207,8 +207,7 @@ static void rx_packet (modbus_message_t *msg)
 
 static void rx_exception (uint8_t code)
 {
-    set_state(STATE_ALARM); // Ensure alarm state is active.
-    report_alarm_message(Alarm_Spindle);
+    system_raise_alarm(Alarm_Spindle);
 }
 
 static void onReportOptions (void)

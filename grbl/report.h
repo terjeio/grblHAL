@@ -52,6 +52,7 @@ message_code_t report_feedback_message (message_code_t message_code);
 void report_init_message (void);
 
 // Prints Grbl help.
+status_code_t report_help (char *args, char *lcargs);
 void report_grbl_help();
 
 // Prints Grbl setting(s)
@@ -84,6 +85,11 @@ void report_execute_startup_message (char *line, status_code_t status_code);
 
 // Prints build info and user info.
 void report_build_info (char *line, bool extended);
+
+status_code_t report_alarm_details (void);
+status_code_t report_error_details (void);
+status_code_t report_setting_group_details (void);
+status_code_t report_settings_details (bool human_readable, setting_type_t setting, setting_group_t group);
 
 // Prints current PID log.
 void report_pid_log (void);

@@ -1,7 +1,7 @@
 /*
   generic_map.h - driver code for NXP LPC176x ARM processors
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 
@@ -18,6 +18,8 @@
   You should have received a copy of the GNU General Public License
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
+
+#include "driver.h"
 
 // Define step pulse output pins. NOTE: All step bit pins must be on the same port.
 
@@ -130,9 +132,11 @@
 #define SPINDLE_PWM_USE_PRIMARY_PIN   false
 #define SPINDLE_PWM_USE_SECONDARY_PIN true
 
+#if SDCARD_ENABLE
 #define SD_SPI_PORT 0
 #define SD_CS_PN    0
 #define SD_CS_PORT  port(SD_CS_PN)
 #define SD_CS_PIN   16
+#endif
 
 /**/

@@ -42,19 +42,6 @@
 //
 #else
 //
-// options for cmake (idf.py)
-//
-#ifdef CNC_BOOSTERPACK
-#define BOARD_CNC_BOOSTERPACK  1
-#else
-// NOTE: Only one board may be enabled!
-// If none is enabled pin mappings from generic_map.h will be used
-//#define BOARD_BDRING_V3P5
-//#define BOARD_BDRING_V4
-//#define BOARD_BDRING_I2S6A // NOT production ready!
-#endif
-
-//
 // Set options from CMakeLists.txt
 //
 #ifdef WEBUI_ENABLE
@@ -108,7 +95,9 @@
 #define HTTP_ENABLE 1
 #endif
 
+#ifndef EEPROM_ENABLE
 #define EEPROM_ENABLE 0
+#endif
 
 #endif
 
@@ -247,6 +236,7 @@ typedef struct {
 // End configuration
 
 #ifdef BOARD_CNC_BOOSTERPACK
+cccc
   #include "cnc_boosterpack_map.h"
 #elif defined(BOARD_BDRING_V4)
   #include "bdring_v4_map.h"
@@ -255,6 +245,7 @@ typedef struct {
 #elif defined(BOARD_BDRING_I2S6A)
   #include "bdring_i2s_6_axis_map.h"
 #else // default board - NOTE: NOT FINAL VERSION!
+  #warning "Compiling for generic board!"
   #include "generic_map.h"
 #endif
 

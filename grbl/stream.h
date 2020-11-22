@@ -25,6 +25,7 @@
 #define ASCII_ETX  0x03
 #define ASCII_ACK  0x06
 #define ASCII_BS   0x08
+#define ASCII_TAB  0x09
 #define ASCII_LF   0x0A
 #define ASCII_CR   0x0D
 #define ASCII_XON  0x11

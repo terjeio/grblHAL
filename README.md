@@ -7,9 +7,7 @@ It has been written to complement grblHAL and has features such as proper keyboa
 
 ---
 
-Latest build date is 20201115, see the [changelog](changelog.md) for details.
-
-__NOTE:__ Builds since 20201020 has changes to auto-squaring and spindle sync only. There is no need to update to the latest unless these changes are of use.
+Latest build date is 20201120, see the [changelog](changelog.md) for details.
 
 ---
 

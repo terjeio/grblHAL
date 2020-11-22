@@ -19,6 +19,10 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#ifdef VFD_SPINDLE
+#error "Generic board does not have support for VFD spindle."
+#endif
+
 #if SDCARD_ENABLE
 
 // Pin mapping when using SPI mode.

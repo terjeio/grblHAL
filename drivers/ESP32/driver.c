@@ -88,6 +88,10 @@ static spindle_pwm_t spindle_pwm;
 #undef SPINDLE_RPM_CONTROLLED
 #endif
 
+#ifndef SPINDLE_MASK
+#define SPINDLE_MASK 0
+#endif
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/timers.h"
@@ -320,7 +324,6 @@ static ledc_channel_config_t ledConfig = {
 #define MODBUS_BAUD 19200
 #endif
 static modbus_stream_t modbus_stream = {0};
-static TimerHandle_t xModBusTimer = NULL;
 #endif
 
 // Interrupt handler prototypes
@@ -1309,7 +1312,7 @@ static void reportConnection (void)
 // Initializes MCU peripherals for Grbl use
 static bool driver_setup (settings_t *settings)
 {
-#if TRINAMIC_ENABLE && CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
+#if TRINAMIC_ENABLE && BOARD_BDRING_V3P5 // Trinamic BoosterPack does not support mixed drivers
     driver_settings.trinamic.driver_enable.mask = AXES_BITMASK;
 #endif
 
@@ -1450,13 +1453,6 @@ static bool driver_setup (settings_t *settings)
     return IOInitDone;
 }
 
-#if MODBUS_ENABLE
-static void vModBusPollCallback (TimerHandle_t xTimer)
-{
-    modbus_poll();
-}
-#endif
-
 // Initialize HAL pointers, setup serial comms and enable EEPROM
 // NOTE: Grbl is not yet configured (from EEPROM data), driver_setup() will be called when done
 bool driver_init (void)
@@ -1470,7 +1466,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "ESP32";
-    hal.driver_version = "201115";
+    hal.driver_version = "201122";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1588,9 +1584,6 @@ bool driver_init (void)
     modbus_stream.set_direction = serial2Direction;
   #endif
     modbus_init(&modbus_stream);
-
-    if((xModBusTimer = xTimerCreate("ModBusPoll", pdMS_TO_TICKS(10), pdTRUE, NULL, vModBusPollCallback)))
-        xTimerStart(xModBusTimer, 0);
 #endif
 
 #if WIFI_ENABLE

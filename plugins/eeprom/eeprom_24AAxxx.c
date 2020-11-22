@@ -4,7 +4,7 @@
 
   NOTE: only tested with 24AA256
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 
@@ -25,13 +25,17 @@
 
 #include "driver.h"
 
-#if EEPROM_ENABLE == 2
+#if EEPROM_ENABLE >= 2
 
 #include "grbl/hal.h"
 #include "grbl/nuts_bolts.h"
 
 #define EEPROM_I2C_ADDRESS (0xA0 >> 1)
+#if EEPROM_ENABLE == 2
 #define EEPROM_PAGE_SIZE 64
+#else
+#define EEPROM_PAGE_SIZE 32
+#endif
 
 static nvs_transfer_t i2c = { .word_addr_bytes = 2 };
 

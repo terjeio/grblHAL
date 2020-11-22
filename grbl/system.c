@@ -95,6 +95,21 @@ void system_execute_startup (char *line)
     }
 }
 
+status_code_t read_int (char *s, int32_t *value)
+{
+    uint_fast8_t counter = 0;
+    float parameter;
+    if(!read_float(s, &counter, &parameter))
+        return Status_BadNumberFormat;
+
+    if(parameter - truncf(parameter) != 0.0f)
+        return Status_InvalidStatement;
+
+    *value = (int32_t)parameter;
+
+    return Status_OK;
+}
+
 
 // Directs and executes one line of formatted input from protocol_process. While mostly
 // incoming streaming g-code blocks, this also executes Grbl internal commands, such as
@@ -139,11 +154,42 @@ status_code_t system_execute_line (char *line)
                 retval = line[2] != '=' ? Status_InvalidStatement : gc_execute_block(line, NULL); // NOTE: $J= is ignored inside g-code parser and used to detect jog motions.
             break;
 
+        case 'E': // Enumerate and print setting, error and alarm codes with details
+            if(line[3] == '\0') switch(line[2]) {
+
+                case 'A':
+                    retval = report_alarm_details();
+                    break;
+
+                case 'E':
+                    retval = report_error_details();
+                    break;
+
+                case 'G':
+                    retval = report_setting_group_details();
+                    break;
+
+                case 'S':
+                    retval = report_settings_details(false, Setting_SettingsAll, Group_All);
+                    break;
+
+                case '*':
+                    report_alarm_details();
+                    report_error_details();
+                    report_setting_group_details();
+                    retval = report_settings_details(false, Setting_SettingsAll, Group_All);
+                    break;
+            }
+            break;
+
         case '$': // Prints Grbl settings
         case '+':
-            if (line[2] != '\0' )
-                retval = Status_InvalidStatement;
-            else if (sys.state & (STATE_CYCLE|STATE_HOLD))
+            if (line[2] != '\0') {
+                int32_t id;
+                retval = read_int(&line[3], &id);
+                if(retval == Status_OK && id >= 0)
+                    retval = report_settings_details(true, (setting_type_t)id, Group_All);
+            } else if (sys.state & (STATE_CYCLE|STATE_HOLD))
                 retval =  Status_IdleError; // Block during cycle. Takes too long to print.
             else
 #if COMPATIBILITY_LEVEL <= 1
@@ -215,11 +261,16 @@ status_code_t system_execute_line (char *line)
             } // Otherwise, no effect.
             break;
 
-        case 'H': // Perform homing cycle [IDLE/ALARM]
+        case 'H': // Perform homing cycle [IDLE/ALARM] or report help
+
+            if(!strncmp(&line[2], "ELP", 3)) {
+                retval = report_help(&line[5], &lcline[5]);
+                return retval;
+            }
+
             if(!(sys.state == STATE_IDLE || sys.state == STATE_ALARM))
                 retval = Status_IdleError;
             else {
-
                 control_signals_t control_signals = hal.control.get_state();
 
                 // Block if e-stop is active.

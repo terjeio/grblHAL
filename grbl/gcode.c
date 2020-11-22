@@ -201,9 +201,14 @@ void gc_init (void)
 {
 
 #if COMPATIBILITY_LEVEL > 1
-    cold_start = true;
-#endif
-
+    memset(&gc_state, 0, sizeof(parser_state_t));
+  #ifdef N_TOOLS
+    gc_state.tool = &tool_table[0];
+  #else
+    memset(&tool_table, 0, sizeof(tool_table));
+    gc_state.tool = &tool_table;
+  #endif
+#else
     if(sys.cold_start) {
         memset(&gc_state, 0, sizeof(parser_state_t));
       #ifdef N_TOOLS
@@ -219,6 +224,7 @@ void gc_init (void)
             hal.tool.select(gc_state.tool, false);
         // TODO: restore offsets, tool offset mode?
     }
+#endif
 
     // Clear any pending output commands
     while(output_commands) {

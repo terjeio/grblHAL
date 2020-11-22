@@ -50,7 +50,7 @@
 #endif
 
 #if EEPROM_ENABLE
-#include "eeprom.h"
+#include "eeprom/eeprom.h"
 #endif
 
 static bool pwmEnabled = false, IOInitDone = false;
@@ -978,6 +978,9 @@ static bool driver_setup (settings_t *settings)
     BITBAND_GPIO(STEPPERS_DISABLE_PORT->DIR, STEPPERS_DISABLE_PIN) = 1;
 #endif
 
+    Chip_TIMER_Init(STEPPER_TIMER);
+    Chip_TIMER_Init(PULSE_TIMER);
+
     STEPPER_TIMER->TCR = 0;            // disable
     STEPPER_TIMER->CTCR = 0;           // timer mode
     STEPPER_TIMER->PR = 0;             // no prescale
@@ -1068,11 +1071,15 @@ bool driver_init (void) {
 
     // Enable and set SysTick IRQ to lowest priority
     SysTick->LOAD = (SystemCoreClock / 1000) - 1;
-    SysTick->CTRL |= SysTick_CTRL_CLKSOURCE_Msk|SysTick_CTRL_TICKINT_Msk;
+    SysTick->CTRL |= SysTick_CTRL_CLKSOURCE_Msk|SysTick_CTRL_TICKINT_Msk|SysTick_CTRL_ENABLE_Msk;
     NVIC_SetPriority(SysTick_IRQn, (1 << __NVIC_PRIO_BITS) - 1);
 
+#if I2C_ENABLE
+    i2c_init();
+#endif
+
     hal.info = "LCP1769";
-    hal.driver_version = "201115";
+    hal.driver_version = "201120";
     hal.driver_setup = driver_setup;
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
@@ -1129,7 +1136,7 @@ bool driver_init (void) {
 #endif
 
 #if EEPROM_ENABLE
-    eepromInit();
+    i2c_eeprom_init();
 #elif FLASH_ENABLE
     hal.nvs.type = NVS_Flash;
     hal.nvs.memcpy_from_flash = memcpy_from_flash;

@@ -1,7 +1,17 @@
 # CMake for GrblHAL driver for ESP32
-# 2020-08-10
+# 2020-11-22
 
 cmake_minimum_required(VERSION 3.5)
+
+# Select board to compile for:
+
+# NOTE: Only one board may be enabled!
+# If none is enabled pin mappings from generic_map.h will be used.
+
+OPTION(BOARD_BDRING_V3P5 "Compile for v3.5 3-axis board" OFF)
+OPTION(BOARD_BDRING_V4 "Compile for bdring v4 3-axis board" ON)
+OPTION(BOARD_BDRING_I2S6A "Compile for bdring 6-axis I2S board - untested!" OFF)
+OPTION(BOARD_CNC_BOOSTERPACK "Compile for CNC BoosterPack" OFF)
 
 # The following plugins/options are supported:
 
@@ -14,8 +24,13 @@ OPTION(WebUI "WebUI services" OFF)
 OPTION(WebAuth "WebUI authentication" OFF)
 OPTION(MPGMode "MPG mode" OFF)
 OPTION(I2SStepping "Use I2S Stepping" OFF)
-OPTION(BoosterPack "Compile for CNC BoosterPack" OFF)
+
+# For Huanyan spindle support copy the spindle plugin code to the project.
 OPTION(HUANYANG "Compile with Huanyang RS485 Spindle support" OFF)
+
+# For EEPROM/FRAM support copy the EEPROM plugin code to the project.
+OPTION(EEPROM "Compile with I2C EEPROM support" OFF)
+OPTION(FRAM "Compile with I2C FRAM support" OFF)
 
 set(SDCARD_SOURCE sdcard/sdcard.c)
 set(KEYPAD_SOURCE keypad/keypad.c)
@@ -24,12 +39,11 @@ set(NETWORKING_SOURCE wifi.c dns_server.c web/backend.c web/upload.c networking/
 set(WEBUI_SOURCE webui/server.c webui/response.c webui/commands.c webui/flashfs.c )
 set(BLUETOOTH_SOURCE bluetooth.c )
 set(HUANYANG_SOURCE spindle/huanyang.c spindle/modbus)
+set(EEPROM_SOURCE eeprom/eeprom_24LC16B.c eeprom/eeprom_24AAxxx.c)
 
 set(MAIN_SRCS main.c driver.c nvs.c esp32-hal-uart.c
  i2c.c
  ioexpand.c
- eeprom/eeprom_24LC16B.c
- eeprom/eeprom_24AAxxx.c
  i2s_out.c
  grbl/grbllib.c
  grbl/coolant_control.c
@@ -80,6 +94,10 @@ if(HUANYANG)
 list (APPEND MAIN_SRCS ${HUANYANG_SOURCE})
 endif()
 
+if(EEPROM OR FRAM OR BOARD_CNC_BOOSTERPACK)
+list (APPEND MAIN_SRCS ${EEPROM_SOURCE})
+endif()
+
 set(INCLUDE_DIRS ".")
 
 #file(GLOB GRBL_SOURCE "grbl/*.c")
@@ -91,6 +109,16 @@ project(grbl)
 
 target_compile_definitions(grbl.elf PUBLIC GRBL_ESP32)
 target_compile_definitions(grbl.elf PUBLIC OVERRIDE_MY_MACHINE)
+
+if(BOARD_BDRING_V3P5)
+target_compile_definitions(grbl.elf PUBLIC BOARD_BDRING_V3P5)
+elseif(BOARD_BDRING_V4)
+target_compile_definitions(grbl.elf PUBLIC BOARD_BDRING_V4)
+elseif(BOARD_BDRING_I2S6A)
+target_compile_definitions(grbl.elf PUBLIC BOARD_BDRING_I2S6A)
+elseif(BOARD_CNC_BOOSTERPACK)
+target_compile_definitions(grbl.elf PUBLIC BOARD_CNC_BOOSTERPACK)
+endif()
 
 if(Networking)
 target_compile_definitions(grbl.elf PUBLIC NETWORKING_ENABLE)
@@ -129,13 +157,22 @@ target_compile_definitions(grbl.elf PUBLIC SPINDLE_HUANYANG=1)
 target_compile_definitions(grbl.elf PUBLIC SPINDLE_RPM_CONTROLLED)
 endif()
 
-if(BoosterPack)
-target_compile_definitions(grbl.elf PUBLIC CNC_BOOSTERPACK)
+if(EEPROM OR BOARD_CNC_BOOSTERPACK)
+target_compile_definitions(grbl.elf PUBLIC EEPROM_ENABLE)
+endif()
+
+if(FRAM)
+target_compile_definitions(grbl.elf PUBLIC EEPROM_IS_FRAM)
 endif()
 
 target_add_binary_data(grbl.elf "favicon.ico" BINARY)
 target_add_binary_data(grbl.elf "index.html" BINARY)
 target_add_binary_data(grbl.elf "ap_login.html" BINARY)
+
+unset(BOARD_BDRING_V3P5 CACHE)
+unset(BOARD_BDRING_V4 CACHE)
+unset(BOARD_BDRING_I2S6A CACHE)
+unset(BOARD_CNC_BOOSTERPACK CACHE)
 
 unset(Networking CACHE)
 unset(Bluetooth CACHE)
@@ -145,8 +182,9 @@ unset(Trinamic CACHE)
 unset(WebUI CACHE)
 unset(WebAuth CACHE)
 unset(MPGMode CACHE)
-unset(BoosterPack CACHE)
 unset(HUANYANG CACHE)
+unset(EEPROM CACHE)
+unset(FRAM CACHE)
 
 include_directories(BEFORE ".")
 

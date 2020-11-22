@@ -93,6 +93,12 @@
 #define FLASH_ENABLE 0
 #endif
 
+#if EEPROM_ENABLE
+#define I2C_ENABLE 1
+#else
+#define I2C_ENABLE 0
+#endif
+
 #ifndef X_STEP_PORT
 #define X_STEP_PORT STEP_PORT
 #endif

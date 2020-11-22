@@ -1,12 +1,9 @@
 /*
+  i2c.h - I2C support for EEPROM, keypad and Trinamic plugins
 
-  eeprom.h - driver code for NXP LPC176x ARM processors
+  Part of grblHAL driver for NXP LPC176x
 
-  for 8K EEPROM on OM13085 dev board (Microchip 24LC64) connected to I2C1
-
-  Part of GrblHAL
-
-  Copyright (c) 2019 Terje Io
+  Copyright (c) 2018-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -20,17 +17,31 @@
 
   You should have received a copy of the GNU General Public License
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
-
 */
 
-#ifndef __EEPROM_H__
-#define __EEPROM_H__
+#ifndef __I2C_DRIVER_H__
+#define __I2C_DRIVER_H__
 
-void eepromInit (void);
-uint8_t eepromGetByte (uint32_t addr);
-void eepromPutByte (uint32_t addr, uint8_t new_value);
-void eepromWriteBlockWithChecksum (uint32_t destination, uint8_t *source, uint32_t size);
-bool eepromReadBlockWithChecksum (uint8_t *destination, uint32_t source, uint32_t size);
+#include "driver.h"
+#include "grbl/plugins.h"
+
+#if TRINAMIC_ENABLE && TRINAMIC_I2C
+
+#include "trinamic\trinamic2130.h"
+#include "trinamic\TMC2130_I2C_map.h"
+
+#define I2C_ADR_I2CBRIDGE 0x47
+
+void I2C_DriverInit (TMC_io_driver_t *drv);
 
 #endif
 
+#if KEYPAD_ENABLE
+
+#include "keypad/keypad.h"
+
+void I2C_GetKeycode (uint32_t i2cAddr, keycode_callback_ptr callback);
+
+#endif
+
+#endif

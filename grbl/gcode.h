@@ -27,73 +27,7 @@
 #include "nuts_bolts.h"
 #include "coolant_control.h"
 #include "spindle_control.h"
-
-// Define Grbl status codes. Valid values (0-255)
-typedef enum {
-    Status_OK = 0,
-    Status_ExpectedCommandLetter = 1,
-    Status_BadNumberFormat = 2,
-    Status_InvalidStatement = 3,
-    Status_NegativeValue = 4,
-    Status_SettingDisabled = 5,
-    Status_SettingStepPulseMin = 6,
-    Status_SettingReadFail = 7,
-    Status_IdleError = 8,
-    Status_SystemGClock = 9,
-    Status_SoftLimitError = 10,
-    Status_Overflow = 11,
-    Status_MaxStepRateExceeded = 12,
-    Status_CheckDoor = 13,
-    Status_LineLengthExceeded = 14,
-    Status_TravelExceeded = 15,
-    Status_InvalidJogCommand = 16,
-    Status_SettingDisabledLaser = 17,
-    Status_Reset = 18,
-    Status_NonPositiveValue = 19,
-
-    Status_GcodeUnsupportedCommand = 20,
-    Status_GcodeModalGroupViolation = 21,
-    Status_GcodeUndefinedFeedRate = 22,
-    Status_GcodeCommandValueNotInteger = 23,
-    Status_GcodeAxisCommandConflict = 24,
-    Status_GcodeWordRepeated = 25,
-    Status_GcodeNoAxisWords = 26,
-    Status_GcodeInvalidLineNumber = 27,
-    Status_GcodeValueWordMissing = 28,
-    Status_GcodeUnsupportedCoordSys = 29,
-    Status_GcodeG53InvalidMotionMode = 30,
-    Status_GcodeAxisWordsExist = 31,
-    Status_GcodeNoAxisWordsInPlane = 32,
-    Status_GcodeInvalidTarget = 33,
-    Status_GcodeArcRadiusError = 34,
-    Status_GcodeNoOffsetsInPlane = 35,
-    Status_GcodeUnusedWords = 36,
-    Status_GcodeG43DynamicAxisError = 37,
-    Status_GcodeIllegalToolTableEntry = 38,
-    Status_GcodeValueOutOfRange = 39,
-    Status_GcodeToolChangePending = 40,
-    Status_GcodeSpindleNotRunning = 41,
-    Status_GcodeIllegalPlane = 42,
-    Status_GcodeMaxFeedRateExceeded = 43,
-    Status_GcodeRPMOutOfRange = 44,
-    Status_LimitsEngaged = 45,
-    Status_HomingRequired = 46,
-    Status_GCodeToolError = 47,
-    Status_ValueWordConflict = 48,
-
-    Status_EStop = 50,
-    Status_Unhandled = 59, // For internal use only
-
-// Some error codes as defined in bdring's ESP32 port
-    Status_SDMountError = 60,
-    Status_SDReadError = 61,
-    Status_SDFailedOpenDir = 62,
-    Status_SDDirNotFound = 63,
-    Status_SDFileEmpty = 64,
-
-    Status_BTInitError = 70
-} status_code_t;
-
+#include "errors.h"
 
 // Define modal group internal numbers for checking multiple command violations and tracking the
 // type of command that is called in the block. A modal group is a group of g-code commands that are
