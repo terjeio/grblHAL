@@ -2,7 +2,7 @@
 
   modbus.h - a lightweigth ModBus implementation
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 
@@ -30,6 +30,7 @@
 
 typedef enum {
     ModBus_Idle,
+    ModBus_Silent,
     ModBus_TX,
     ModBus_AwaitReply,
     ModBus_Timeout,
@@ -56,7 +57,7 @@ typedef struct {
 } modbus_message_t;
 
 typedef struct {
-    uint16_t rx_timeout;
+    bool (*set_baud_rate)(uint32_t baud);
     void (*set_direction)(bool tx); // NULL if auto direction
     uint16_t (*get_tx_buffer_count)(void);
     uint16_t (*get_rx_buffer_count)(void);
@@ -69,7 +70,7 @@ typedef struct {
     void (*on_rx_exception)(uint8_t code);
 } modbus_stream_t;
 
-void modbus_init (modbus_stream_t *stream);
+bool modbus_init (modbus_stream_t *stream);
 bool modbus_send (modbus_message_t *msg, bool block);
 modbus_state_t modbus_get_state (void);
 

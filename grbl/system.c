@@ -186,7 +186,7 @@ status_code_t system_execute_line (char *line)
         case '+':
             if (line[2] != '\0') {
                 int32_t id;
-                retval = read_int(&line[3], &id);
+                retval = read_int(&line[2], &id);
                 if(retval == Status_OK && id >= 0)
                     retval = report_settings_details(true, (setting_type_t)id, Group_All);
             } else if (sys.state & (STATE_CYCLE|STATE_HOLD))

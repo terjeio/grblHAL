@@ -28,6 +28,9 @@ OPTION(I2SStepping "Use I2S Stepping" OFF)
 # For Huanyan spindle support copy the spindle plugin code to the project.
 OPTION(HUANYANG "Compile with Huanyang RS485 Spindle support" OFF)
 
+# ModBus options
+OPTION(RS485_DIR_OUT "Compile with RS485 direction pin enabled" ON)
+
 # For EEPROM/FRAM support copy the EEPROM plugin code to the project.
 OPTION(EEPROM "Compile with I2C EEPROM support" OFF)
 OPTION(FRAM "Compile with I2C FRAM support" OFF)
@@ -157,6 +160,10 @@ target_compile_definitions(grbl.elf PUBLIC SPINDLE_HUANYANG=1)
 target_compile_definitions(grbl.elf PUBLIC SPINDLE_RPM_CONTROLLED)
 endif()
 
+if(RS485_DIR_OUT)
+target_compile_definitions(grbl.elf PUBLIC RS485_DIR_ENABLE)
+endif()
+
 if(EEPROM OR BOARD_CNC_BOOSTERPACK)
 target_compile_definitions(grbl.elf PUBLIC EEPROM_ENABLE)
 endif()
@@ -183,6 +190,7 @@ unset(WebUI CACHE)
 unset(WebAuth CACHE)
 unset(MPGMode CACHE)
 unset(HUANYANG CACHE)
+unset(RS485_DIR_OUT CACHE)
 unset(EEPROM CACHE)
 unset(FRAM CACHE)
 

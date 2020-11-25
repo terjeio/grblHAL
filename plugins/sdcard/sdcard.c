@@ -114,6 +114,7 @@ static bool frewind = false;
 static io_stream_t active_stream;
 static driver_reset_ptr driver_reset;
 static on_unknown_sys_command_ptr on_unknown_sys_command;
+static on_report_command_help_ptr on_report_command_help;
 static on_realtime_report_ptr on_realtime_report;
 static on_state_change_ptr state_change_requested;
 static on_program_completed_ptr on_program_completed;
@@ -486,7 +487,7 @@ static bool sdcard_suspend (bool suspend)
 }
 #endif
 
-static status_code_t sdcard_parse (uint_fast16_t state, char *line, char *lcline)
+static status_code_t commandExecute (uint_fast16_t state, char *line, char *lcline)
 {
     status_code_t retval = Status_Unhandled;
 
@@ -576,6 +577,18 @@ static void sdcard_reset (void)
     driver_reset();
 }
 
+static void onReportCommandHelp (void)
+{
+    hal.stream.write("$F - list files on SD card" ASCII_EOL);
+    hal.stream.write("$F=<filename> - run SD card file" ASCII_EOL);
+    hal.stream.write("$FM - mount SD card" ASCII_EOL);
+    hal.stream.write("$FR - enable rewind mode for next SD card file to run" ASCII_EOL);
+    hal.stream.write("$F<<filename> - dump SD card file to output" ASCII_EOL);
+
+    if(on_report_command_help)
+        on_report_command_help();
+}
+
 void sdcard_init (void)
 {
     hal.driver_cap.sd_card = On;
@@ -584,7 +597,10 @@ void sdcard_init (void)
     hal.driver_reset = sdcard_reset;
 
     on_unknown_sys_command = grbl.on_unknown_sys_command;
-    grbl.on_unknown_sys_command = sdcard_parse;
+    grbl.on_unknown_sys_command = commandExecute;
+
+    on_report_command_help = grbl.on_report_command_help;
+    grbl.on_report_command_help = onReportCommandHelp;
 }
 
 FATFS *sdcard_getfs(void)

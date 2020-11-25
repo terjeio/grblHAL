@@ -390,6 +390,7 @@ bool protocol_execute_realtime (void)
 bool protocol_exec_rt_system (void)
 {
     uint_fast16_t rt_exec;
+    bool killed = false;
 
     if (sys_rt_exec_alarm && (rt_exec = system_clear_exec_alarm())) { // Enter only if any bit flag is true
 
@@ -400,6 +401,7 @@ bool protocol_exec_rt_system (void)
 
         if(sys_rt_exec_state & EXEC_RESET) {
             // Kill spindle and coolant.
+            killed = true;
             hal.spindle.set_state((spindle_state_t){0}, 0.0f);
             hal.coolant.set_state((coolant_state_t){0});
             // Tell driver/plugins about reset.
@@ -432,13 +434,13 @@ bool protocol_exec_rt_system (void)
 
         // Execute system abort.
         if (rt_exec & EXEC_RESET) {
-
-            // Kill spindle and coolant.
-            hal.spindle.set_state((spindle_state_t){0}, 0.0f);
-            hal.coolant.set_state((coolant_state_t){0});
-            // Tell driver/plugins about reset.
-            hal.driver_reset();
-
+            if(!killed) {
+                // Kill spindle and coolant.
+                hal.spindle.set_state((spindle_state_t){0}, 0.0f);
+                hal.coolant.set_state((coolant_state_t){0});
+                // Tell driver/plugins about reset.
+                hal.driver_reset();
+            }
             sys.abort = !hal.control.get_state().e_stop;  // Only place this is set true.
             return !sys.abort; // Nothing else to do but exit.
         }

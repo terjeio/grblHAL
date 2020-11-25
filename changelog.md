@@ -1,5 +1,10 @@
 ## grblHAL changelog
 
+Build 20201125 (test only):
+* Enhanced and improved ModBus support code for VFD spindle, added settings for baud rate and receive timeout.
+* Added support for enumeration of and help for driver and plugin provided settings and setting groups.
+* Some bug fixes.
+
 Build 20201120 (test only):
 
 * Moved board selection etc. to [CMakeLists.txt](drivers/ESP32/CMakeLists.txt) for [ESP32 driver](drivers/ESP32/README.md) for simpler configuration.

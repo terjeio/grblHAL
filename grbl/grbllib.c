@@ -34,6 +34,9 @@
 #include "report.h"
 #include "state_machine.h"
 #include "nvs_buffer.h"
+#ifdef ENABLE_BACKLASH_COMPENSATION
+#include "motion_control.h"
+#endif
 #ifdef KINEMATICS_API
 #include "kinematics.h"
 #endif
@@ -63,6 +66,9 @@ grbl_hal_t hal;
 static bool stream_tx_blocking (void)
 {
     // TODO: Restructure st_prep_buffer() calls to be executed here during a long print.
+
+    grbl.on_execute_realtime(sys.state);
+
     return !(sys_rt_exec_state & EXEC_RESET);
 }
 

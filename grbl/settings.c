@@ -176,39 +176,67 @@ const settings_t defaults = {
     .coolant_invert.mist = INVERT_COOLANT_MIST_PIN,
 
     .axis[X_AXIS].steps_per_mm = DEFAULT_X_STEPS_PER_MM,
-    .axis[Y_AXIS].steps_per_mm = DEFAULT_Y_STEPS_PER_MM,
-    .axis[Z_AXIS].steps_per_mm = DEFAULT_Z_STEPS_PER_MM,
     .axis[X_AXIS].max_rate = DEFAULT_X_MAX_RATE,
-    .axis[Y_AXIS].max_rate = DEFAULT_Y_MAX_RATE,
-    .axis[Z_AXIS].max_rate = DEFAULT_Z_MAX_RATE,
     .axis[X_AXIS].acceleration = DEFAULT_X_ACCELERATION,
-    .axis[Y_AXIS].acceleration = DEFAULT_Y_ACCELERATION,
-    .axis[Z_AXIS].acceleration = DEFAULT_Z_ACCELERATION,
     .axis[X_AXIS].max_travel = (-DEFAULT_X_MAX_TRAVEL),
-    .axis[Y_AXIS].max_travel = (-DEFAULT_Y_MAX_TRAVEL),
-    .axis[Z_AXIS].max_travel = (-DEFAULT_Z_MAX_TRAVEL),
+    .axis[X_AXIS].dual_axis_offset = 0.0f,
+#ifdef ENABLE_BACKLASH_COMPENSATION
+    .axis[X_AXIS].backlash = 0.0f,
+#endif
 
-  #ifdef A_AXIS
+    .axis[Y_AXIS].steps_per_mm = DEFAULT_Y_STEPS_PER_MM,
+    .axis[Y_AXIS].max_rate = DEFAULT_Y_MAX_RATE,
+    .axis[Y_AXIS].max_travel = (-DEFAULT_Y_MAX_TRAVEL),
+    .axis[Y_AXIS].acceleration = DEFAULT_Y_ACCELERATION,
+    .axis[Y_AXIS].dual_axis_offset = 0.0f,
+#ifdef ENABLE_BACKLASH_COMPENSATION
+    .axis[Y_AXIS].backlash = 0.0f,
+#endif
+
+    .axis[Z_AXIS].steps_per_mm = DEFAULT_Z_STEPS_PER_MM,
+    .axis[Z_AXIS].max_rate = DEFAULT_Z_MAX_RATE,
+    .axis[Z_AXIS].acceleration = DEFAULT_Z_ACCELERATION,
+    .axis[Z_AXIS].max_travel = (-DEFAULT_Z_MAX_TRAVEL),
+    .axis[Z_AXIS].dual_axis_offset = 0.0f,
+#ifdef ENABLE_BACKLASH_COMPENSATION
+    .axis[Z_AXIS].backlash = 0.0f,
+#endif
+
+#ifdef A_AXIS
     .axis[A_AXIS].steps_per_mm = DEFAULT_A_STEPS_PER_MM,
     .axis[A_AXIS].max_rate = DEFAULT_A_MAX_RATE,
     .axis[A_AXIS].acceleration = DEFAULT_A_ACCELERATION,
     .axis[A_AXIS].max_travel = (-DEFAULT_A_MAX_TRAVEL),
+    .axis[A_AXIS].dual_axis_offset = 0.0f,
+#ifdef ENABLE_BACKLASH_COMPENSATION
+    .axis[A_AXIS].backlash = 0.0f,
+#endif
     .homing.cycle[3].mask = HOMING_CYCLE_3,
-  #endif
-  #ifdef B_AXIS
+#endif
+
+#ifdef B_AXIS
     .axis[B_AXIS].steps_per_mm = DEFAULT_B_STEPS_PER_MM,
     .axis[B_AXIS].max_rate = DEFAULT_B_MAX_RATE,
     .axis[B_AXIS].acceleration = DEFAULT_B_ACCELERATION,
     .axis[B_AXIS].max_travel = (-DEFAULT_B_MAX_TRAVEL),
+    .axis[B_AXIS].dual_axis_offset = 0.0f,
+#ifdef ENABLE_BACKLASH_COMPENSATION
+    .axis[B_AXIS].backlash = 0.0f,
+#endif
     .homing.cycle[4].mask = HOMING_CYCLE_4,
-  #endif
-  #ifdef C_AXIS
+#endif
+
+#ifdef C_AXIS
     .axis[C_AXIS].steps_per_mm = DEFAULT_C_STEPS_PER_MM,
     .axis[C_AXIS].acceleration = DEFAULT_C_ACCELERATION,
     .axis[C_AXIS].max_rate = DEFAULT_C_MAX_RATE,
     .axis[C_AXIS].max_travel = (-DEFAULT_C_MAX_TRAVEL),
+    .axis[C_AXIS].dual_axis_offset = 0.0f,
+#ifdef ENABLE_BACKLASH_COMPENSATION
+    .axis[C_AXIS].backlash = 0.0f,
+#endif
     .homing.cycle[5].mask = HOMING_CYCLE_5,
-  #endif
+#endif
 
     .tool_change.mode = (toolchange_mode_t)DEFAULT_TOOLCHANGE_MODE,
     .tool_change.probing_distance = DEFAULT_TOOLCHANGE_PROBING_DISTANCE,

@@ -1330,7 +1330,7 @@ static bool driver_setup (settings_t *settings)
     atc_init();
 #endif
 
-    IOInitDone = settings->version == 18;
+    IOInitDone = settings->version == 19;
 
     hal.settings_changed(settings);
     hal.stepper.go_idle(true);
@@ -1415,7 +1415,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "MSP432";
-    hal.driver_version = "201104";
+    hal.driver_version = "201125";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1515,21 +1515,22 @@ bool driver_init (void)
 #endif
 
 #if MODBUS_ENABLE
-    serial2Init(19200);
 
-    modbus_stream.rx_timeout = 500;
     modbus_stream.write = serial2Write;
     modbus_stream.read = serial2GetC;
     modbus_stream.flush_rx_buffer = serial2RxFlush;
     modbus_stream.flush_tx_buffer = serial2TxFlush;
     modbus_stream.get_rx_buffer_count = serial2RxCount;
     modbus_stream.get_tx_buffer_count = serial2TxCount;
+    modbus_stream.set_baud_rate = serial2SetBaudRate;
 
-    modbus_init(&modbus_stream);
-#endif
+    bool modbus = modbus_init(&modbus_stream);
 
 #if SPINDLE_HUANYANG > 0
-    huanyang_init(&modbus_stream);
+    if(modbus)
+        huanyang_init(&modbus_stream);
+#endif
+
 #endif
 
 #if PLASMA_ENABLE
@@ -1695,7 +1696,7 @@ void LIMIT_X_IRQHandler (void)
         if(hal.driver_cap.software_debounce)
             DEBOUNCE_TIMER->CTL |= TIMER_A_CTL_CLR|TIMER_A_CTL_MC0;
         else
-            hal.limit_interrupt_callback(limitsGetState());
+            hal.limits.interrupt_callback(limitsGetState());
     }
 }
 
@@ -1710,11 +1711,11 @@ void LIMIT_YZ_RST_IRQHandler (void)
         if(hal.driver_cap.software_debounce)
             DEBOUNCE_TIMER->CTL |= TIMER_A_CTL_CLR|TIMER_A_CTL_MC0;
         else
-            hal.limit_interrupt_callback(limitsGetState());
+            hal.limits.interrupt_callback(limitsGetState());
     }
 
     if(iflags & RESET_BIT)
-        hal.control_interrupt_callback(systemGetState());
+        hal.control.interrupt_callback(systemGetState());
 }
 
 void CONTROL_FH_CS_IRQHandler (void)
@@ -1730,7 +1731,7 @@ void CONTROL_FH_CS_IRQHandler (void)
     }
 
     if(iflags & (FEED_HOLD_BIT|CYCLE_START_BIT))
-        hal.control_interrupt_callback(systemGetState());
+        hal.control.interrupt_callback(systemGetState());
 }
 
 void CONTROL_SD_MODE_Handler (void)
@@ -1751,7 +1752,7 @@ void CONTROL_SD_MODE_Handler (void)
     else
   #endif
     if(iflags & SAFETY_DOOR_BIT)
-        hal.control_interrupt_callback(systemGetState());
+        hal.control.interrupt_callback(systemGetState());
 }
 #endif
 
@@ -1794,11 +1795,7 @@ void SysTick_Handler (void)
 {
     elapsed_tics++;
 
-#if MODBUS_ENABLE
-
-    modbus_poll();
-
-#elif defined(SPINDLE_RPM_CONTROLLED)
+#if defined(SPINDLE_RPM_CONTROLLED)
 
     static uint32_t spid = SPINDLE_PID_SAMPLE_RATE, tpp = 0;
 

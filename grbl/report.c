@@ -28,6 +28,7 @@
   methods to accomodate their needs.
 */
 
+#include <math.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
@@ -383,6 +384,26 @@ void report_grbl_help (void)
 
 #define CAPS(c) ((c >= 'a' && c <= 'z') ? c & 0x5F : c)
 
+static void report_group_settings (const setting_group_detail_t *groups, const uint_fast8_t n_groups, char *lcargs)
+{
+    uint_fast8_t idx;
+    uint_fast8_t len = strlen(lcargs);
+
+    for(idx = 0; idx < n_groups; idx++) {
+        if(strlen(groups[idx].name) == len) {
+            char *s1 = lcargs, *s2 = (char *)groups[idx].name;
+            while(*s1 && CAPS(*s1) == CAPS(*s2)) {
+                s1++;
+                s2++;
+            }
+            if(*s1 == '\0') {
+                report_settings_details(true, Setting_SettingsAll, groups[idx].id);
+                break;
+            }
+        }
+    }
+}
+
 status_code_t report_help (char *args, char *lcargs)
 {
     uint_fast16_t idx, n_groups = sizeof(setting_group_detail) / sizeof(setting_group_detail_t);
@@ -405,6 +426,23 @@ status_code_t report_help (char *args, char *lcargs)
             }
         }
 
+        if(grbl.on_report_settings) {
+
+            on_report_settings_ptr on_report_settings = grbl.on_report_settings;
+
+            while(on_report_settings) {
+                setting_details_t *settings = on_report_settings();
+                if(settings->groups) {
+                    for(idx = 0; idx < settings->n_groups; idx++) {
+                        hal.stream.write(" ");
+                        hal.stream.write(settings->groups[idx].name);
+                        hal.stream.write(ASCII_EOL);
+                    }
+                }
+                on_report_settings = settings->on_report_settings;
+            }
+        }
+
     } else {
         if(!strncmp(args, "COMMANDS", 8)) {
             hal.stream.write("$I - list system information" ASCII_EOL);
@@ -419,13 +457,17 @@ status_code_t report_help (char *args, char *lcargs)
             hal.stream.write("$X - unlock machine" ASCII_EOL);
             hal.stream.write("$SLP - enter sleep mode" ASCII_EOL);
             hal.stream.write("$HELP <arg> - help" ASCII_EOL);
-            if(hal.driver_cap.sd_card) {
-                hal.stream.write("$F - list files on SD card" ASCII_EOL);
-                hal.stream.write("$F=<filename> - run SD card file" ASCII_EOL);
-                hal.stream.write("$FM - mount SD card" ASCII_EOL);
-                hal.stream.write("$FR - enable rewind mode for next SD card file to run" ASCII_EOL);
-                hal.stream.write("$F<<filename> - dump SD card file to output" ASCII_EOL);
-            }
+            hal.stream.write("$RST=* - restore/reset all" ASCII_EOL);
+            hal.stream.write("$RST=$ - restore default settings" ASCII_EOL);
+            if(hal.driver_settings.restore)
+                hal.stream.write("$RST=& - restore driver and plugin default settings" ASCII_EOL);
+#ifdef N_TOOLS
+            hal.stream.write("$RST=# - reset offsets and tool data" ASCII_EOL);
+#else
+            hal.stream.write("$RST=# - reset offsets" ASCII_EOL);
+#endif
+            if(grbl.on_report_command_help)
+                grbl.on_report_command_help();
         } else if(!strncmp(args, "SETTINGS", 8))
             report_settings_details(true, Setting_SettingsAll, Group_All);
         else {
@@ -434,19 +476,17 @@ status_code_t report_help (char *args, char *lcargs)
             while(*lcargs == ' ')
                 lcargs++;
 
-            uint_fast8_t len = strlen(lcargs);
+            report_group_settings(setting_group_detail, n_groups, lcargs);
 
-            for(idx = 0; idx < n_groups; idx++) {
-                if(strlen(setting_group_detail[idx].name) == len) {
-                    char *s1 = lcargs, *s2 = setting_group_detail[idx].name;
-                    while(*s1 && CAPS(*s1) == CAPS(*s2)) {
-                        s1++;
-                        s2++;
-                    }
-                    if(*s1 == '\0') {
-                        report_settings_details(true, Setting_SettingsAll, setting_group_detail[idx].id);
-                        break;
-                    }
+            if(grbl.on_report_settings) {
+
+                on_report_settings_ptr on_report_settings = grbl.on_report_settings;
+
+                while(on_report_settings) {
+                    setting_details_t *settings = on_report_settings();
+                    if(settings->groups)
+                        report_group_settings(settings->groups, settings->n_groups, lcargs);
+                    on_report_settings = settings->on_report_settings;
                 }
             }
         }
@@ -1324,9 +1364,9 @@ void report_realtime_status (void)
     if(settings.status_report.feed_speed) {
         if(hal.driver_cap.variable_spindle) {
             hal.stream.write_all(appendbuf(2, "|FS:", get_rate_value(st_get_realtime_rate())));
-            hal.stream.write_all(appendbuf(2, ",", uitoa(sp_state.on ? (uint32_t)sys.spindle_rpm : 0)));
+            hal.stream.write_all(appendbuf(2, ",", uitoa(sp_state.on ? lroundf(sys.spindle_rpm) : 0)));
             if(hal.spindle.get_data /* && sys.mpg_mode */)
-                hal.stream.write_all(appendbuf(2, ",", uitoa((uint32_t)hal.spindle.get_data(SpindleData_RPM).rpm)));
+                hal.stream.write_all(appendbuf(2, ",", uitoa(lroundf(hal.spindle.get_data(SpindleData_RPM).rpm))));
         } else
             hal.stream.write_all(appendbuf(2, "|F:", get_rate_value(st_get_realtime_rate())));
     }
@@ -1508,7 +1548,7 @@ void report_realtime_status (void)
     sys.report.wco = settings.status_report.work_coord_offset && wco_counter == 0; // Set to report on next request
 }
 
-static void report_bitfield (char *format)
+static void report_bitfield (const char *format, bool bitmap)
 {
     char *s;
     uint_fast8_t bit = 0;
@@ -1526,10 +1566,12 @@ static void report_bitfield (char *format)
             hal.stream.write(uitoa(bit++));
             hal.stream.write(" - ");
             hal.stream.write(element);
-            hal.stream.write(" (");
-            hal.stream.write(uitoa(val));
-            hal.stream.write(")");
-            val <<= 1;
+            if(bitmap) {
+                hal.stream.write(" (");
+                hal.stream.write(uitoa(val));
+                hal.stream.write(")");
+                val <<= 1;
+            }
             element = strtok(NULL, ",");
         }
 
@@ -1564,23 +1606,21 @@ void report_settings_detail (bool human_readable, setting_type_t id, const setti
 
             case Format_Bitfield:
                 hal.stream.write(" as bitfield:");
-                report_bitfield(setting_detail->format);
+                report_bitfield(setting_detail->format, true);
                 break;
 
             case Format_XBitfield:
                 hal.stream.write(" as bitfield where setting bit 0 enables the rest:");
-                report_bitfield(setting_detail->format);
+                report_bitfield(setting_detail->format, true);
                 break;
 
             case Format_RadioButtons:
                 hal.stream.write(":");
-                report_bitfield(setting_detail->format);
+                report_bitfield(setting_detail->format, false);
                 break;
 
             case Format_IPv4:
                 hal.stream.write(" as IP address");
-                if(setting_detail->format)
-                    report_bitfield(setting_detail->format);
                 break;
 
             default:
@@ -1716,7 +1756,34 @@ status_code_t report_settings_details (bool human_readable, setting_type_t setti
         return Status_OK;
     }
 
-    return print_settings_details(human_readable, setting, group, axis_rpt);
+    status_code_t status = print_settings_details(human_readable, setting, group, axis_rpt);
+
+    if(grbl.on_report_settings) {
+
+        on_report_settings_ptr on_report_settings = grbl.on_report_settings;
+
+        uint_fast8_t idx;
+
+        while(on_report_settings) {
+            setting_details_t *settings = on_report_settings();
+            if(settings->settings) {
+                for(idx = 0; idx < settings->n_settings; idx++) {
+
+                    if(setting != Setting_SettingsAll && settings->settings[idx].id != setting)
+                        continue;
+
+                    if(group != Group_All && settings->settings[idx].group != group)
+                        continue;
+
+                    status = Status_OK;
+                    report_settings_detail(human_readable, settings->settings[idx].id, &settings->settings[idx], NULL);
+                }
+            }
+            on_report_settings = settings->on_report_settings;
+        }
+    }
+
+    return status;
 }
 
 status_code_t report_alarm_details (void)
@@ -1759,20 +1826,36 @@ status_code_t report_error_details (void)
     return Status_OK;
 }
 
+static void print_setting_group (const setting_group_detail_t *group)
+{
+    hal.stream.write("[SETTINGGROUP:");
+    hal.stream.write(uitoa(group->id));
+    hal.stream.write(vbar);
+    hal.stream.write(uitoa(group->parent));
+    hal.stream.write(vbar);
+    hal.stream.write(group->name);
+    hal.stream.write("]" ASCII_EOL);
+}
+
 status_code_t report_setting_group_details (void)
 {
     uint_fast16_t idx, n_groups = sizeof(setting_group_detail) / sizeof(setting_group_detail_t);
 
-    for(idx = 0; idx < n_groups; idx++) {
+    for(idx = 0; idx < n_groups; idx++)
+        print_setting_group(&setting_group_detail[idx]);
 
-        hal.stream.write("[SETTINGGROUP:");
+    if(grbl.on_report_settings) {
 
-        hal.stream.write(uitoa(setting_group_detail[idx].id));
-        hal.stream.write(vbar);
-        hal.stream.write(uitoa(setting_group_detail[idx].parent));
-        hal.stream.write(vbar);
-        hal.stream.write(setting_group_detail[idx].name);
-        hal.stream.write("]" ASCII_EOL);
+        on_report_settings_ptr on_report_settings = grbl.on_report_settings;
+
+        while(on_report_settings) {
+            setting_details_t *settings = on_report_settings();
+            if(settings->groups) {
+                for(idx = 0; idx < settings->n_groups; idx++)
+                    print_setting_group(&settings->groups[idx]);
+            }
+            on_report_settings = settings->on_report_settings;
+        }
     }
 
     return Status_OK;

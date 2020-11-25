@@ -25,6 +25,8 @@
 
 #if SPINDLE_HUANYANG
 
+#include <math.h>
+
 #ifdef ARDUINO
 #include "../grbl/hal.h"
 #include "../grbl/state_machine.h"
@@ -52,8 +54,10 @@ typedef enum {
     VFD_SetStatus
 } vfd_response_t;
 
-static float rpm, rpm_programmed = -1.0f, rpm_low_limit = 0.0f, rpm_high_limit = 0.0f;
+static float rpm_programmed = -1.0f, rpm_low_limit = 0.0f, rpm_high_limit = 0.0f;
 static spindle_state_t vfd_state = {0};
+static spindle_data_t spindle_data = {0};
+static settings_changed_ptr settings_changed;
 static on_report_options_ptr on_report_options;
 #if SPINDLE_HUANYANG == 2
 static uint32_t rpm_max = 0;
@@ -82,7 +86,7 @@ static void spindleSetRPM (float rpm, bool block)
 
 #else
 
-        uint16_t data = (uint16_t)(rpm * 100 / 60); // send Hz * 10  (Ex:1500 RPM = 25Hz .... Send 2500)
+        uint32_t data = lroundf(rpm * 100.0f / 60.0f); // send Hz * 10  (Ex:1500 RPM = 25Hz .... Send 2500)
 
         rpm_cmd.adu[1] = ModBus_WriteCoil;
         rpm_cmd.adu[2] = 0x02;
@@ -139,6 +143,12 @@ static void spindleSetState (spindle_state_t state, float rpm)
 
 #endif
 
+    if(vfd_state.ccw != state.ccw)
+        rpm_programmed = 0.0f;
+
+    vfd_state.on = state.on;
+    vfd_state.ccw = state.ccw;
+
     if(modbus_send(&mode_cmd, true))
         spindleSetRPM(rpm, true);
 }
@@ -180,6 +190,12 @@ static spindle_state_t spindleGetState (void)
     return vfd_state; // return previous state as we do not want to wait for the response
 }
 
+static spindle_data_t spindleGetData (spindle_data_request_t request)
+{
+    return spindle_data;
+}
+
+
 static void rx_packet (modbus_message_t *msg)
 {
     if(!(msg->adu[0] & 0x80)) {
@@ -188,11 +204,11 @@ static void rx_packet (modbus_message_t *msg)
 
             case VFD_GetRPM:
 #if SPINDLE_HUANYANG == 2
-                rpm = (float)((msg->adu[4] << 8) | msg->adu[5]);
+                spindle_data.rpm = (float)((msg->adu[4] << 8) | msg->adu[5]);
 #else
-                rpm = (float)((msg->adu[4] << 8) | msg->adu[5]) * 60.0f / 100.0f;
+                spindle_data.rpm = (float)((msg->adu[4] << 8) | msg->adu[5]) * 60.0f / 100.0f;
 #endif
-                vfd_state.at_speed = settings.spindle.at_speed_tolerance <= 0.0f || (rpm >= rpm_low_limit && rpm <= rpm_high_limit);
+                vfd_state.at_speed = settings.spindle.at_speed_tolerance <= 0.0f || (spindle_data.rpm >= rpm_low_limit && spindle_data.rpm <= rpm_high_limit);
                 break;
 #if SPINDLE_HUANYANG == 2
             case VFD_GetMaxRPM:
@@ -214,28 +230,40 @@ static void onReportOptions (void)
 {
     on_report_options();
 #if SPINDLE_HUANYANG == 2
-    hal.stream.write("[PLUGIN:HUANYANG VFD P2A v0.01]" ASCII_EOL);
+    hal.stream.write("[PLUGIN:HUANYANG VFD P2A v0.02]" ASCII_EOL);
 #else
-    hal.stream.write("[PLUGIN:HUANYANG VFD v0.01]" ASCII_EOL);
+    hal.stream.write("[PLUGIN:HUANYANG VFD v0.02]" ASCII_EOL);
 #endif
+}
+
+void huanyang_settings_changed (settings_t *settings)
+{
+    if(settings_changed)
+        settings_changed(settings);
+
+    hal.spindle.get_data = spindleGetData;
 }
 
 void huanyang_init (modbus_stream_t *stream)
 {
     hal.spindle.set_state = spindleSetState;
     hal.spindle.get_state = spindleGetState;
-    hal.spindle.reset_data = NULL;
+    hal.spindle.get_data = spindleGetData;
     hal.spindle.update_rpm = spindleUpdateRPM;
+    hal.spindle.reset_data = NULL;
 
     hal.driver_cap.variable_spindle = On;
     hal.driver_cap.spindle_at_speed = On;
     hal.driver_cap.spindle_dir = On;
 
-    stream->on_rx_packet = rx_packet;
-    stream->on_rx_exception = rx_exception;
+    settings_changed = hal.settings_changed;
+    hal.settings_changed = huanyang_settings_changed;
 
     on_report_options = grbl.on_report_options;
     grbl.on_report_options = onReportOptions;
+
+    stream->on_rx_packet = rx_packet;
+    stream->on_rx_exception = rx_exception;
 
 #if SPINDLE_HUANYANG == 2
 

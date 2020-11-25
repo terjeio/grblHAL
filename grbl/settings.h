@@ -235,6 +235,8 @@ typedef enum {
     Settings_IoPort_Pullup_Disable = 371,
     Settings_IoPort_InvertOut = 372,
     Settings_IoPort_OD_Enable = 373,
+    Settings_ModBus_BaudRate = 374,
+    Settings_ModBus_RXTimeout = 375,
 
     Setting_EncoderSettingsBase = 400, // NOTE: Reserving settings values >= 400 for encoder settings. Up to 449.
     Setting_EncoderSettingsMax = 449,
@@ -547,6 +549,8 @@ typedef enum {
     Group_Probing,
     Group_Parking,
     Group_MotorDriver,
+    Group_ModBus,
+    Group_UserSettings,
     Group_Axis,
 // NOTE: axis groups MUST be sequential AND last
     Group_XAxis,
@@ -580,19 +584,27 @@ typedef enum {
 typedef struct {
     setting_group_t parent;
     setting_group_t id;
-    char *name;
+    const char *name;
 } setting_group_detail_t;
 
 typedef struct {
     setting_type_t id;
     setting_group_t group;
-    char *name;
-    char *unit;
+    const char *name;
+    const char *unit;
     setting_format_t type;
-    char *format;
-    char *min_value;
-    char *max_value;
+    const char *format;
+    const char *min_value;
+    const char *max_value;
 } setting_detail_t;
+
+typedef struct setting_details {
+    const uint8_t n_groups;
+    const setting_group_detail_t *groups;
+    const uint8_t n_settings;
+    const setting_detail_t *settings;
+    struct setting_details *(*on_report_settings)(void);
+} setting_details_t;
 
 static const setting_group_detail_t setting_group_detail [] = {
     { Group_Root, Group_Root, "Root"},
@@ -621,10 +633,10 @@ static const setting_group_detail_t setting_group_detail [] = {
     { Group_Axis, Group_YAxis, "Yaxis"},
     { Group_Axis, Group_ZAxis, "Zaxis"},
 #ifdef A_AXIS
-    { Group_Axis, Group_AAxis, "Aaxis"}
+    { Group_Axis, Group_AAxis, "Aaxis"},
 #endif
 #ifdef B_AXIS
-    { Group_Axis, Group_BAxis, "Baxis"}
+    { Group_Axis, Group_BAxis, "Baxis"},
 #endif
 #ifdef C_AXIS
     { Group_Axis, Group_CAxis, "Caxis"}

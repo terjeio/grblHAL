@@ -94,8 +94,8 @@ typedef enum {
 
 typedef struct {
     status_code_t id;
-    char *name;
-    char *description;
+    const char *name;
+    const char *description;
 } status_detail_t;
 
 static const status_detail_t status_detail[] = {

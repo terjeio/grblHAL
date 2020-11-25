@@ -106,6 +106,11 @@ typedef struct {
     char service_name[33];
 } bluetooth_settings_t;
 
+typedef struct {
+    uint32_t baud_rate;
+    uint32_t rx_timeout;
+} modbus_settings_t;
+
 // Quadrature encoder interface
 
 typedef enum {

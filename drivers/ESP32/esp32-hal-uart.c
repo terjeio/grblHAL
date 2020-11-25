@@ -348,6 +348,14 @@ static void IRAM_ATTR _uart2_isr (void *arg)
     uart2->dev->int_clr.frm_err = 1;
     uart2->dev->int_clr.rxfifo_tout = 1;
 
+#if MODBUS_ENABLE && defined(MODBUS_DIRECTION_PIN)
+    if(uart2->dev->int_st.tx_done) {
+    //    uart2->dev->int_clr.tx_done = 1;
+        uart2->dev->int_ena.tx_done = 0;
+        gpio_set_level(MODBUS_DIRECTION_PIN, false);
+    }
+#endif
+
     while(uart2->dev->status.rxfifo_cnt || (uart2->dev->mem_rx_status.wr_addr != uart2->dev->mem_rx_status.rd_addr)) {
 
         c = uart2->dev->fifo.rw_byte;
@@ -447,6 +455,20 @@ void serial2Init (uint32_t baud_rate)
 #endif
 }
 
+bool serial2SetBaudRate (uint32_t baud_rate)
+{
+    static bool init_ok = false;
+
+    if(!init_ok) {
+        serial2Init(baud_rate);
+        init_ok = true;
+    }
+
+    uartSetBaudRate(uart2, baud_rate);
+
+    return true;
+}
+
 uint16_t serial2Available (void)
 {
     uint16_t head = rxbuffer2.head, tail = rxbuffer2.tail;
@@ -456,7 +478,7 @@ uint16_t serial2Available (void)
 
 uint16_t serial2txCount (void)
 {
-    return (uint16_t)uart2->dev->status.txfifo_cnt;
+    return (uint16_t)uart2->dev->status.txfifo_cnt + (uart2->dev->int_raw.tx_done ? 0 : 1);
 }
 
 uint16_t serial2RXFree (void)
@@ -484,8 +506,17 @@ void serial2Write (const char *s, uint16_t length)
 {
     char *ptr = (char *)s;
 
+#if MODBUS_ENABLE && defined(MODBUS_DIRECTION_PIN)
+    gpio_set_level(MODBUS_DIRECTION_PIN, true);
+#endif
+
     while(length--)
         serial2PutC(*ptr++);
+
+#if MODBUS_ENABLE && defined(MODBUS_DIRECTION_PIN)
+    uart2->dev->int_clr.tx_done = 1;
+    uart2->dev->int_ena.tx_done = 1;
+#endif
 }
 
 

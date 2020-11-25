@@ -320,9 +320,6 @@ static ledc_channel_config_t ledConfig = {
 #endif
 
 #if MODBUS_ENABLE
-#ifndef MODBUS_BAUD
-#define MODBUS_BAUD 19200
-#endif
 static modbus_stream_t modbus_stream = {0};
 #endif
 
@@ -1466,7 +1463,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "ESP32";
-    hal.driver_version = "201122";
+    hal.driver_version = "201125";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1572,18 +1569,22 @@ bool driver_init (void)
 #endif
 
 #if MODBUS_ENABLE
-    serial2Init(MODBUS_BAUD);
-    modbus_stream.rx_timeout = 50;
+
     modbus_stream.write = serial2Write;
     modbus_stream.read = serial2Read;
     modbus_stream.flush_rx_buffer = serial2Flush;
     modbus_stream.flush_tx_buffer = serial2Flush;
     modbus_stream.get_rx_buffer_count = serial2Available;
     modbus_stream.get_tx_buffer_count = serial2txCount;
-  #ifdef MODBUS_DIRECTION_PIN
-    modbus_stream.set_direction = serial2Direction;
-  #endif
-    modbus_init(&modbus_stream);
+    modbus_stream.set_baud_rate = serial2SetBaudRate;
+
+    bool modbus = modbus_init(&modbus_stream);
+
+#if SPINDLE_HUANYANG > 0
+    if(modbus)
+        huanyang_init(&modbus_stream);
+#endif
+
 #endif
 
 #if WIFI_ENABLE
@@ -1602,9 +1603,6 @@ bool driver_init (void)
     keypad_init();
 #endif
 
-#ifdef SPINDLE_HUANYANG
-    huanyang_init(&modbus_stream);
-#endif
 
     my_plugin_init();
 

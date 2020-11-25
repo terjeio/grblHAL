@@ -104,7 +104,7 @@
 // If spindle RPM is set by high-level commands to a spindle controller (eg. via Modbus) or the driver supports closed loop
 // spindle RPM control either uncomment the #define SPINDLE_RPM_CONTROLLED below or add SPINDLE_RPM_CONTROLLED as predefined symbol
 // on the compiler command line. This will send spindle speed as a RPM value instead of a PWM value to the driver.
-//#define SPINDLE_RPM_CONTROLLED
+#define SPINDLE_RPM_CONTROLLED
 
 
 // Some status report data isn't necessary for realtime, only intermittently, because the values don't
@@ -199,7 +199,7 @@
 // available RAM, like when re-compiling for MCU with ample amounts of RAM. Or decrease if the MCU begins to
 // crash due to the lack of available RAM or if the CPU is having trouble keeping up with planning
 // new incoming motions as they are executed.
-// #define BLOCK_BUFFER_SIZE 16 // Uncomment to override default in planner.h.
+// #define BLOCK_BUFFER_SIZE 36 // Uncomment to override default in planner.h.
 
 // Governs the size of the intermediary step segment buffer between the step execution algorithm
 // and the planner blocks. Each segment is set of steps executed at a constant velocity over a
@@ -207,7 +207,7 @@
 // block velocity profile is traced exactly. The size of this buffer governs how much step
 // execution lead time there is for other Grbl processes have to compute and do their thing
 // before having to come back and refill this buffer, currently at ~50msec of step moves.
-// #define SEGMENT_BUFFER_SIZE 6 // Uncomment to override default in stepper.h.
+// #define SEGMENT_BUFFER_SIZE 10 // Uncomment to override default in stepper.h.
 
 // Configures the position after a probing cycle during Grbl's check mode. Disabled sets
 // the position to the probe target, when enabled sets the position to the start position.

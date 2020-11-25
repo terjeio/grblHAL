@@ -46,8 +46,8 @@ typedef enum {
 
 typedef struct {
     alarm_code_t id;
-    char *name;
-    char *description;
+    const char *name;
+    const char *description;
 } alarm_detail_t;
 
 static const alarm_detail_t alarm_detail[] = {

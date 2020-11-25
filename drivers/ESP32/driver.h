@@ -95,6 +95,15 @@
 #define HTTP_ENABLE 1
 #endif
 
+#ifdef RS485_DIR_ENABLE
+#undef RS485_DIR_ENABLE
+#if SPINDLE_HUANYANG
+#define RS485_DIR_ENABLE 1
+#else
+#define RS485_DIR_ENABLE 0
+#endif
+#endif
+
 #ifndef EEPROM_ENABLE
 #define EEPROM_ENABLE 0
 #endif
