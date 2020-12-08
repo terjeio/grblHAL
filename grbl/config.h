@@ -104,7 +104,7 @@
 // If spindle RPM is set by high-level commands to a spindle controller (eg. via Modbus) or the driver supports closed loop
 // spindle RPM control either uncomment the #define SPINDLE_RPM_CONTROLLED below or add SPINDLE_RPM_CONTROLLED as predefined symbol
 // on the compiler command line. This will send spindle speed as a RPM value instead of a PWM value to the driver.
-#define SPINDLE_RPM_CONTROLLED
+//#define SPINDLE_RPM_CONTROLLED
 
 
 // Some status report data isn't necessary for realtime, only intermittently, because the values don't

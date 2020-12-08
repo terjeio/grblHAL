@@ -111,12 +111,12 @@ USB_INTERFACE_DESCRIPTOR *find_IntfDesc(const uint8_t *pDesc, uint32_t intfClass
 
 #include "grbl/grbl.h"
 
-#define USB_TXLEN 128
+#define USB_TXLEN 256
 
 typedef struct {
     size_t length;
     char *s;
-    char data[USB_TXLEN];
+    char data[BLOCK_TX_BUFFER_SIZE];
 } usb_tx_buf;
 
 static usb_tx_buf txbuf = {0};
@@ -197,20 +197,22 @@ void usbWriteS (const char *s)
 {
     size_t length = strlen(s);
 
-    if(vcom_connected() && length + txbuf.length < USB_TXLEN) {
+    if(vcom_connected() && length + txbuf.length < sizeof(txbuf.data)) {
         memcpy(txbuf.s, s, length);
         txbuf.length += length;
         txbuf.s += length;
         if(s[length - 1] == '\n' || txbuf.length > 40) {
             length = txbuf.length;
-            txbuf.length = 0;
             txbuf.s = txbuf.data;
-            while((txbuf.length = vcom_write((uint8_t *)txbuf.data, length)) != length) {
+            while(length) {
+                txbuf.length = vcom_write((uint8_t *)txbuf.s, length > 64 ? 64 : length);
+                txbuf.s += txbuf.length;
                 length -= txbuf.length;
                 if(!hal.stream_blocking_callback())
                     return;
             }
             txbuf.length = 0;
+            txbuf.s = txbuf.data;
         }
     }
 }

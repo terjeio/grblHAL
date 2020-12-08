@@ -26,6 +26,7 @@
 #if SPINDLE_HUANYANG
 
 #include <math.h>
+#include <string.h>
 
 #ifdef ARDUINO
 #include "../grbl/hal.h"
@@ -236,26 +237,69 @@ static void onReportOptions (void)
 #endif
 }
 
-void huanyang_settings_changed (settings_t *settings)
+static void huanyang_settings_changed (settings_t *settings)
 {
-    if(settings_changed)
+    static bool init_ok = false;
+    static driver_cap_t driver_cap;
+    static spindle_ptrs_t spindle_org;
+
+    if(init_ok && settings_changed)
         settings_changed(settings);
 
-    hal.spindle.get_data = spindleGetData;
+    if(!init_ok && hal.driver_cap.dual_spindle) {
+        driver_cap = hal.driver_cap;
+        memcpy(&spindle_org, &hal.spindle, sizeof(spindle_ptrs_t));
+    }
+
+    if(hal.driver_cap.dual_spindle && settings->mode == Mode_Laser) {
+
+        if(hal.spindle.set_state == spindleSetState) {
+            hal.driver_cap = driver_cap;
+            memcpy(&spindle_org, &hal.spindle, sizeof(spindle_ptrs_t));
+        }
+
+    } else {
+
+        if(settings->spindle.ppr == 0)
+            hal.spindle.get_data = spindleGetData;
+
+        if(hal.spindle.set_state != spindleSetState) {
+
+            hal.spindle.set_state = spindleSetState;
+            hal.spindle.get_state = spindleGetState;
+            hal.spindle.update_rpm = spindleUpdateRPM;
+            hal.spindle.reset_data = NULL;
+
+            hal.driver_cap.variable_spindle = On;
+            hal.driver_cap.spindle_at_speed = On;
+            hal.driver_cap.spindle_dir = On;
+        }
+
+#if SPINDLE_HUANYANG == 2
+        if(!init_ok) {
+
+            modbus_message_t cmd;
+
+            cmd.xx = VFD_GetMaxRPM;
+            cmd.adu[0] = VFD_ADDRESS;
+            cmd.adu[1] = ModBus_ReadHoldingRegisters;
+            cmd.adu[2] = 0xB0;
+            cmd.adu[3] = 0x05;
+            cmd.adu[4] = 0x00;
+            cmd.adu[5] = 0x02;
+            cmd.tx_length = 8;
+            cmd.rx_length = 8;
+
+            modbus_send(&cmd, true);
+        }
+#endif
+    }
+
+    init_ok = true;
 }
 
 void huanyang_init (modbus_stream_t *stream)
 {
-    hal.spindle.set_state = spindleSetState;
-    hal.spindle.get_state = spindleGetState;
-    hal.spindle.get_data = spindleGetData;
-    hal.spindle.update_rpm = spindleUpdateRPM;
-    hal.spindle.reset_data = NULL;
-
-    hal.driver_cap.variable_spindle = On;
-    hal.driver_cap.spindle_at_speed = On;
-    hal.driver_cap.spindle_dir = On;
-
     settings_changed = hal.settings_changed;
     hal.settings_changed = huanyang_settings_changed;
 
@@ -265,23 +309,7 @@ void huanyang_init (modbus_stream_t *stream)
     stream->on_rx_packet = rx_packet;
     stream->on_rx_exception = rx_exception;
 
-#if SPINDLE_HUANYANG == 2
-
-    modbus_message_t cmd;
-
-    cmd.xx = VFD_GetMaxRPM;
-    cmd.adu[0] = VFD_ADDRESS;
-    cmd.adu[1] = ModBus_ReadHoldingRegisters;
-    cmd.adu[2] = 0xB0;
-    cmd.adu[3] = 0x05;
-    cmd.adu[4] = 0x00;
-    cmd.adu[5] = 0x02;
-    cmd.tx_length = 8;
-    cmd.rx_length = 8;
-
-    modbus_send(&cmd, true);
-
-#endif
+    if(!hal.driver_cap.dual_spindle)
+        huanyang_settings_changed(&settings);
 }
-
 #endif

@@ -2,7 +2,7 @@
 
   uart.h - driver code for IMXRT1062 processor (on Teensy 4.0 board)
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 
@@ -27,6 +27,7 @@
 #include <stdint.h>
 
 void serialInit (uint32_t baud_rate);
+bool serialSetBaudRate (uint32_t baud_rate);
 int16_t serialGetC (void);
 bool serialPutC (const char c);
 void serialWrite(const char *s, uint16_t length);

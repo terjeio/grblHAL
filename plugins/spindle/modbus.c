@@ -312,7 +312,7 @@ static setting_details_t details = {
     .n_settings = sizeof(modbus_settings) / sizeof(setting_detail_t)
 };
 
-setting_details_t *on_report_settings (void)
+static setting_details_t *on_report_settings (void)
 {
     return &details;
 }

@@ -406,7 +406,7 @@ static void report_group_settings (const setting_group_detail_t *groups, const u
 
 status_code_t report_help (char *args, char *lcargs)
 {
-    uint_fast16_t idx, n_groups = sizeof(setting_group_detail) / sizeof(setting_group_detail_t);
+    setting_details_t *settings_info = settings_get_details();
 
     // Strip leading spaces
     while(*args == ' ')
@@ -417,32 +417,7 @@ status_code_t report_help (char *args, char *lcargs)
         hal.stream.write("Help arguments:" ASCII_EOL);
         hal.stream.write(" Commands" ASCII_EOL);
         hal.stream.write(" Settings" ASCII_EOL);
-
-        for(idx = 0; idx < n_groups; idx++) {
-            if(setting_group_detail[idx].id != Group_Root && settings_is_group_available(setting_group_detail[idx].id)) {
-                hal.stream.write(" ");
-                hal.stream.write(setting_group_detail[idx].name);
-                hal.stream.write(ASCII_EOL);
-            }
-        }
-
-        if(grbl.on_report_settings) {
-
-            on_report_settings_ptr on_report_settings = grbl.on_report_settings;
-
-            while(on_report_settings) {
-                setting_details_t *settings = on_report_settings();
-                if(settings->groups) {
-                    for(idx = 0; idx < settings->n_groups; idx++) {
-                        hal.stream.write(" ");
-                        hal.stream.write(settings->groups[idx].name);
-                        hal.stream.write(ASCII_EOL);
-                    }
-                }
-                on_report_settings = settings->on_report_settings;
-            }
-        }
-
+        report_setting_group_details(false, " ");
     } else {
         if(!strncmp(args, "COMMANDS", 8)) {
             hal.stream.write("$I - list system information" ASCII_EOL);
@@ -476,17 +451,17 @@ status_code_t report_help (char *args, char *lcargs)
             while(*lcargs == ' ')
                 lcargs++;
 
-            report_group_settings(setting_group_detail, n_groups, lcargs);
+            report_group_settings(settings_info->groups, settings_info->n_groups, lcargs);
 
             if(grbl.on_report_settings) {
 
                 on_report_settings_ptr on_report_settings = grbl.on_report_settings;
 
                 while(on_report_settings) {
-                    setting_details_t *settings = on_report_settings();
-                    if(settings->groups)
-                        report_group_settings(settings->groups, settings->n_groups, lcargs);
-                    on_report_settings = settings->on_report_settings;
+                    settings_info = on_report_settings();
+                    if(settings_info->groups)
+                        report_group_settings(settings_info->groups, settings_info->n_groups, lcargs);
+                    on_report_settings = settings_info->on_report_settings;
                 }
             }
         }
@@ -519,7 +494,7 @@ void report_string_setting (setting_type_t n, char *val)
 
 void report_grbl_settings (bool all)
 {
-    uint_fast8_t idx;
+    uint_fast16_t idx;
 
     // Print Grbl settings.
     report_float_setting(Setting_PulseMicroseconds, settings.steppers.pulse_microseconds, 1);
@@ -644,8 +619,8 @@ void report_grbl_settings (bool all)
     }
 
     // Print axis settings
-    uint_fast8_t set_idx, val = (uint_fast8_t)Setting_AxisSettingsBase;
-    uint_fast8_t max_set = hal.driver_settings.report ? AXIS_SETTINGS_INCREMENT : AxisSetting_NumSettings;
+    uint_fast16_t set_idx, val = (uint_fast8_t)Setting_AxisSettingsBase;
+    uint_fast16_t max_set = hal.driver_settings.report ? AXIS_SETTINGS_INCREMENT : AxisSetting_NumSettings;
     axes_signals_t auto_squared = {0};
     if(hal.stepper.get_auto_squared)
         auto_squared = hal.stepper.get_auto_squared();
@@ -748,26 +723,6 @@ void report_grbl_settings (bool all)
             case Setting_DualAxisLengthFailMax:
                 if(hal.stepper.get_auto_squared)
                     report_float_setting(Setting_DualAxisLengthFailMax, settings.homing.dual_axis.fail_distance_max, N_DECIMAL_SETTINGVALUE);
-                break;
-
-            case Settings_IoPort_InvertIn:
-                if(hal.port.num_digital_in)
-                    report_uint_setting(Settings_IoPort_InvertIn, settings.ioport.invert_in.mask);
-                break;
-
-            case Settings_IoPort_Pullup_Disable:
-                if(hal.port.num_digital_in)
-                    report_uint_setting(Settings_IoPort_Pullup_Disable, settings.ioport.pullup_disable_in.mask);
-                break;
-
-            case Settings_IoPort_InvertOut:
-                if(hal.port.num_digital_out)
-                    report_uint_setting(Settings_IoPort_InvertOut, settings.ioport.invert_out.mask);
-                break;
-
-            case Settings_IoPort_OD_Enable:
-                if(hal.port.num_digital_out)
-                    report_uint_setting(Settings_IoPort_OD_Enable, settings.ioport.od_enable_out.mask);
                 break;
 
             default:
@@ -1045,9 +1000,7 @@ void report_execute_startup_message (char *line, status_code_t status_code)
 // Prints build info line
 void report_build_info (char *line, bool extended)
 {
-    hal.stream.write("[VER:" GRBL_VERSION "(");
-    hal.stream.write(hal.info ? hal.info : "HAL");
-    hal.stream.write(")." GRBL_VERSION_BUILD ":");
+    hal.stream.write("[VER:" GRBL_VERSION "." GRBL_VERSION_BUILD ":");
     hal.stream.write(line);
     hal.stream.write("]" ASCII_EOL);
 
@@ -1122,6 +1075,9 @@ void report_build_info (char *line, bool extended)
     if(!settings.status_report.sync_on_wco_change) // NOTE: Shown when disabled.
         *append++ = 'W';
 
+    if(hal.stepper.get_auto_squared)
+        *append++ = '2';
+
     *append++ = ',';
     *append = '\0';
     hal.stream.write(buf);
@@ -1130,9 +1086,9 @@ void report_build_info (char *line, bool extended)
     hal.stream.write(uitoa((uint32_t)(BLOCK_BUFFER_SIZE - 1)));
     hal.stream.write(",");
     hal.stream.write(uitoa(hal.rx_buffer_size));
-    hal.stream.write(",");
-    hal.stream.write(uitoa((uint32_t)N_AXIS));
     if(extended) {
+        hal.stream.write(",");
+        hal.stream.write(uitoa((uint32_t)N_AXIS));
         hal.stream.write(",");
   #ifdef N_TOOLS
         hal.stream.write(uitoa((uint32_t)N_TOOLS));
@@ -1146,7 +1102,7 @@ void report_build_info (char *line, bool extended)
 
         nvs_io_t *nvs = nvs_buffer_get_physical();
 
-        strcpy(buf, "[NEWOPT:");
+        strcpy(buf, "[NEWOPT:ENUMS,");
 
         if(!(nvs->type == NVS_None || nvs->type == NVS_Emulated)) {
             if(hal.nvs.type == NVS_Emulated)
@@ -1205,6 +1161,14 @@ void report_build_info (char *line, bool extended)
 
         if(*append != ':') {
             hal.stream.write(buf);
+            hal.stream.write("]" ASCII_EOL);
+        }
+
+        hal.stream.write("[FIRMWARE:grblHAL]" ASCII_EOL);
+
+        if(hal.info) {
+            hal.stream.write("[DRIVER:");
+            hal.stream.write(hal.info);
             hal.stream.write("]" ASCII_EOL);
         }
 
@@ -1579,7 +1543,7 @@ static void report_bitfield (const char *format, bool bitmap)
     }
 }
 
-void report_settings_detail (bool human_readable, setting_type_t id, const setting_detail_t *setting_detail, const char *prefix)
+void report_settings_detail (bool human_readable, setting_type_t id, const setting_detail_t *setting_detail, uint_fast8_t group_offset)
 {
     if(human_readable)
         hal.stream.write("$");
@@ -1590,8 +1554,8 @@ void report_settings_detail (bool human_readable, setting_type_t id, const setti
 
     if(human_readable) {
         hal.stream.write(": ");
-        if(prefix)
-            hal.stream.write(prefix);
+        if(setting_detail->group == Group_Axis)
+            hal.stream.write(axis_letter[group_offset]);
         hal.stream.write(setting_detail->name[0] == '?' ? &setting_detail->name[1] : setting_detail->name); // temporary hack for ? prefix...
 
         switch(setting_detail->type) {
@@ -1648,10 +1612,10 @@ void report_settings_detail (bool human_readable, setting_type_t id, const setti
         }
     } else {
         hal.stream.write(vbar);
-        hal.stream.write(uitoa(setting_detail->group));
+        hal.stream.write(uitoa(setting_detail->group + group_offset));
         hal.stream.write(vbar);
-        if(prefix)
-            hal.stream.write(prefix);
+        if(setting_detail->group == Group_Axis0)
+            hal.stream.write(axis_letter[group_offset]);
         hal.stream.write(setting_detail->name[0] == '?' ? &setting_detail->name[1] : setting_detail->name); // temporary hack for ? prefix...
         hal.stream.write(vbar);
         if(setting_detail->unit)
@@ -1677,11 +1641,12 @@ void report_settings_detail (bool human_readable, setting_type_t id, const setti
 
 setting_group_t get_parent_group (setting_group_t group)
 {
-    uint_fast16_t idx, n_groups = sizeof(setting_group_detail) / sizeof(setting_group_detail_t);
+    uint_fast16_t idx;
+    setting_details_t *settings = settings_get_details();
 
-    for(idx = 0; idx < n_groups; idx++) {
-        if(setting_group_detail[idx].id == group) {
-            group = setting_group_detail[idx].parent;
+    for(idx = 0; idx < settings->n_groups; idx++) {
+        if(settings->groups[idx].id == group) {
+            group = settings->groups[idx].parent;
             break;
         }
     }
@@ -1689,51 +1654,174 @@ setting_group_t get_parent_group (setting_group_t group)
     return group;
 }
 
+static int cmp_settings (const void *a, const void *b)
+{
+  return (*(setting_detail_t **)(a))->id - (*(setting_detail_t **)(b))->id;
+}
+
+static status_code_t sort_settings_details (bool human_readable, setting_group_t group)
+{
+    bool reported = group == Group_All;
+
+    setting_details_t *details = settings_get_details();
+    uint16_t n_settings = details->n_settings;
+
+    while(details->on_report_settings) {
+        details = details->on_report_settings();
+        n_settings += details->n_settings;
+    }
+
+    setting_detail_t **all_settings, **setting;
+
+    if((all_settings = calloc(n_settings, sizeof(setting_detail_t *)))) {
+
+        uint_fast16_t idx;
+
+        details = settings_get_details();
+
+        setting = all_settings;
+        n_settings = 0;
+
+        for(idx = 0; idx < details->n_settings; idx++) {
+            if(group == Group_All || details->settings[idx].group == group) {
+                *setting++ = (setting_detail_t *)&details->settings[idx];
+                n_settings++;
+            }
+        }
+
+        while(details->on_report_settings) {
+            details = details->on_report_settings();
+            for(idx = 0; idx < details->n_settings; idx++) {
+                if(group == Group_All || details->settings[idx].group == group) {
+                    *setting++ = (setting_detail_t *)&details->settings[idx];
+                    n_settings++;
+                }
+            }
+        }
+
+        qsort(all_settings, n_settings, sizeof(setting_detail_t *), cmp_settings);
+
+        for(idx = 0; idx < n_settings; idx++) {
+
+            switch(all_settings[idx]->id) {
+
+                case Setting_AxisStepsPerMMBase:
+                case Setting_AxisMaxRateBase:
+                case Setting_AxisAccelerationBase:
+                case Setting_AxisMaxTravelBase:
+                case Setting_AxisStepperCurrentBase:
+                case Setting_AxisMicroStepsBase:
+                case Setting_AxisBacklashBase:
+                case Setting_AxisAutoSquareOffsetBase:
+//                case Setting_DriverAxisStepsPerMMBase:
+                    if(settings_is_setting_available(all_settings[idx]->id, all_settings[idx]->group)) {
+                        uint_fast8_t axis_idx = 0;
+                        reported = true;
+                        for(axis_idx = 0; axis_idx < N_AXIS; axis_idx++) {
+                            report_settings_detail(human_readable, (setting_type_t)(all_settings[idx]->id + axis_idx), all_settings[idx], axis_idx);
+                        }
+                    }
+                    break;
+
+                case Setting_EncoderModeBase:
+                case Setting_EncoderCPRBase:
+                case Setting_EncoderCPDBase:
+                case Setting_EncoderDblClickWindowBase:
+                    if(settings_is_setting_available(all_settings[idx]->id, all_settings[idx]->group)) {
+                        uint_fast8_t encoder_idx = 0, n_encoders = hal.encoder.get_n_encoders();
+                        for(encoder_idx = 0; encoder_idx < n_encoders; encoder_idx++) {
+                            report_settings_detail(human_readable, (setting_type_t)(all_settings[idx]->id + encoder_idx * ENCODER_SETTINGS_INCREMENT), all_settings[idx], encoder_idx);
+                        }
+                    }
+                    break;
+
+                default:
+                    if(settings_is_setting_available(all_settings[idx]->id, all_settings[idx]->group)) {
+                        reported = true;
+                        report_settings_detail(human_readable, all_settings[idx]->id, all_settings[idx], 0);
+                    }
+                    break;
+            }
+        }
+
+        free(all_settings);
+    }
+
+    return all_settings == NULL ? Status_Unhandled : (reported ? Status_OK : Status_SettingDisabled);
+}
+
 static status_code_t print_settings_details (bool human_readable, setting_type_t setting, setting_group_t group, uint_fast16_t axis_rpt)
 {
-    bool reported = setting == Setting_SettingsAll && group == 0;
-    uint_fast16_t idx, axis_idx, n_settings = sizeof(setting_detail) / sizeof(setting_detail_t);
+    status_code_t status;
+
+    if(setting == Setting_SettingsAll && (status = sort_settings_details(human_readable, group)) != Status_Unhandled)
+        return status;
+
+    bool reported = setting == Setting_SettingsAll && group == Group_All;
+    uint_fast16_t idx;
+    setting_details_t *settings = settings_get_details();
 
     if(group == Group_All && setting >= Setting_AxisSettingsBase && setting < Setting_AxisSettingsBase + (AxisSetting_NumSettings + 1) * AXIS_SETTINGS_INCREMENT) {
         axis_rpt = setting % AXIS_SETTINGS_INCREMENT;
         setting -= axis_rpt;
     }
 
-    for(idx = 0; idx < n_settings; idx++) {
+    do {
 
-        if(setting != Setting_SettingsAll && setting_detail[idx].id != setting)
-            continue;
+        for(idx = 0; idx < settings->n_settings; idx++) {
 
-        if(group != Group_All && setting_detail[idx].group != group)
-            continue;
+            if(setting != Setting_SettingsAll && settings->settings[idx].id != setting)
+                continue;
 
-        switch(setting_detail[idx].id) {
+            if(group != Group_All && settings->settings[idx].group != group)
+                continue;
 
-            case Setting_AxisStepsPerMMBase:
-            case Setting_AxisMaxRateBase:
-            case Setting_AxisAccelerationBase:
-            case Setting_AxisMaxTravelBase:
-            case Setting_AxisStepperCurrentBase:
-            case Setting_AxisMicroStepsBase:
-            case Setting_AxisBacklashBase:
-            case Setting_AxisAutoSquareOffsetBase:
-                axis_idx = 0;
-                for(axis_idx = 0; axis_idx < N_AXIS; axis_idx++) {
-                    if(setting == Setting_SettingsAll || axis_idx == axis_rpt) {
-                        reported = true;
-                        report_settings_detail(human_readable, (setting_type_t)(setting_detail[idx].id + axis_idx), &setting_detail[idx], axis_letter[axis_idx]);
+            switch(settings->settings[idx].id) {
+
+                case Setting_AxisStepsPerMMBase:
+                case Setting_AxisMaxRateBase:
+                case Setting_AxisAccelerationBase:
+                case Setting_AxisMaxTravelBase:
+                case Setting_AxisStepperCurrentBase:
+                case Setting_AxisMicroStepsBase:
+                case Setting_AxisBacklashBase:
+                case Setting_AxisAutoSquareOffsetBase:
+                    if(settings_is_setting_available(settings->settings[idx].id, settings->settings[idx].group)) {
+                        uint_fast8_t axis_idx = 0;
+                        for(axis_idx = 0; axis_idx < N_AXIS; axis_idx++) {
+                            if(setting == Setting_SettingsAll || axis_idx == axis_rpt) {
+                                reported = true;
+                                report_settings_detail(human_readable, (setting_type_t)(settings->settings[idx].id + axis_idx), &settings->settings[idx], axis_idx);
+                            }
+                        }
                     }
-                }
-                break;
+                    break;
 
-            default:
-                if(settings_is_setting_available(setting_detail[idx].id, setting_detail[idx].group)) {
-                    reported = true;
-                    report_settings_detail(human_readable, setting_detail[idx].id, &setting_detail[idx], NULL);
-                }
-                break;
+                case Setting_EncoderModeBase:
+                case Setting_EncoderCPRBase:
+                case Setting_EncoderCPDBase:
+                case Setting_EncoderDblClickWindowBase:
+                    if(settings_is_setting_available(settings->settings[idx].id, settings->settings[idx].group)) {
+                        uint_fast8_t encoder_idx = 0, n_encoders = hal.encoder.get_n_encoders();
+                        for(encoder_idx = 0; encoder_idx < n_encoders; encoder_idx++) {
+                            reported = true;
+                            report_settings_detail(human_readable, (setting_type_t)(settings->settings[idx].id + encoder_idx * ENCODER_SETTINGS_INCREMENT), &settings->settings[idx], 0);
+                        }
+                    }
+                    break;
+
+                default:
+                    if(settings_is_setting_available(settings->settings[idx].id, settings->settings[idx].group)) {
+                        reported = true;
+                        report_settings_detail(human_readable, settings->settings[idx].id, &settings->settings[idx], 0);
+                    }
+                    break;
+            }
         }
-    }
+
+        settings = settings->on_report_settings ? settings->on_report_settings() : NULL;
+
+    } while(settings);
 
     return reported ? Status_OK : Status_SettingDisabled;
 }
@@ -1756,34 +1844,7 @@ status_code_t report_settings_details (bool human_readable, setting_type_t setti
         return Status_OK;
     }
 
-    status_code_t status = print_settings_details(human_readable, setting, group, axis_rpt);
-
-    if(grbl.on_report_settings) {
-
-        on_report_settings_ptr on_report_settings = grbl.on_report_settings;
-
-        uint_fast8_t idx;
-
-        while(on_report_settings) {
-            setting_details_t *settings = on_report_settings();
-            if(settings->settings) {
-                for(idx = 0; idx < settings->n_settings; idx++) {
-
-                    if(setting != Setting_SettingsAll && settings->settings[idx].id != setting)
-                        continue;
-
-                    if(group != Group_All && settings->settings[idx].group != group)
-                        continue;
-
-                    status = Status_OK;
-                    report_settings_detail(human_readable, settings->settings[idx].id, &settings->settings[idx], NULL);
-                }
-            }
-            on_report_settings = settings->on_report_settings;
-        }
-    }
-
-    return status;
+    return print_settings_details(human_readable, setting, group, axis_rpt);
 }
 
 status_code_t report_alarm_details (void)
@@ -1826,37 +1887,84 @@ status_code_t report_error_details (void)
     return Status_OK;
 }
 
-static void print_setting_group (const setting_group_detail_t *group)
+static void print_setting_group (const setting_group_detail_t *group, char *prefix)
 {
-    hal.stream.write("[SETTINGGROUP:");
-    hal.stream.write(uitoa(group->id));
-    hal.stream.write(vbar);
-    hal.stream.write(uitoa(group->parent));
-    hal.stream.write(vbar);
-    hal.stream.write(group->name);
-    hal.stream.write("]" ASCII_EOL);
-}
-
-status_code_t report_setting_group_details (void)
-{
-    uint_fast16_t idx, n_groups = sizeof(setting_group_detail) / sizeof(setting_group_detail_t);
-
-    for(idx = 0; idx < n_groups; idx++)
-        print_setting_group(&setting_group_detail[idx]);
-
-    if(grbl.on_report_settings) {
-
-        on_report_settings_ptr on_report_settings = grbl.on_report_settings;
-
-        while(on_report_settings) {
-            setting_details_t *settings = on_report_settings();
-            if(settings->groups) {
-                for(idx = 0; idx < settings->n_groups; idx++)
-                    print_setting_group(&settings->groups[idx]);
-            }
-            on_report_settings = settings->on_report_settings;
+    if(settings_is_group_available(group->id)) {
+        if(!prefix) {
+            hal.stream.write("[SETTINGGROUP:");
+            hal.stream.write(uitoa(group->id));
+            hal.stream.write(vbar);
+            hal.stream.write(uitoa(group->parent));
+            hal.stream.write(vbar);
+            hal.stream.write(group->name);
+            hal.stream.write("]" ASCII_EOL);
+        } else if(group->id != Group_Root && settings_is_group_available(group->id)) {
+            hal.stream.write(prefix);
+            hal.stream.write(group->name);
+            hal.stream.write(ASCII_EOL);
         }
     }
+}
+
+static int cmp_setting_group_id (const void *a, const void *b)
+{
+    return (*(setting_detail_t **)(a))->id - (*(setting_detail_t **)(b))->id;
+}
+
+static int cmp_setting_group_name (const void *a, const void *b)
+{
+    return strcmp((*(setting_detail_t **)(a))->name, (*(setting_detail_t **)(b))->name);
+}
+
+static status_code_t sort_setting_group_details (bool by_id, char *prefix)
+{
+    setting_details_t *details = settings_get_details();
+    uint8_t n_groups = details->n_groups;
+
+    while(details->on_report_settings) {
+        details = details->on_report_settings();
+        n_groups += details->n_groups;
+    }
+
+    setting_group_detail_t **all_groups, **group;
+
+    if((all_groups = calloc(n_groups, sizeof(setting_group_detail_t *)))) {
+
+        uint_fast16_t idx;
+
+        group = all_groups;
+        details = settings_get_details();
+
+        do {
+            for(idx = 0; idx < details->n_groups; idx++)
+                *group++ = (setting_group_detail_t *)&details->groups[idx];
+            details = details->on_report_settings ? details->on_report_settings() : NULL;
+        } while(details);
+
+        qsort(all_groups, n_groups, sizeof(setting_group_detail_t *), by_id ? cmp_setting_group_id : cmp_setting_group_name);
+
+        for(idx = 0; idx < n_groups; idx++)
+            print_setting_group(all_groups[idx], prefix);
+
+        free(all_groups);
+    }
+
+    return all_groups == NULL ? Status_Unhandled : Status_OK;
+}
+
+status_code_t report_setting_group_details (bool by_id, char *prefix)
+{
+    if(sort_setting_group_details(by_id, prefix) != Status_Unhandled)
+        return Status_OK;
+
+    uint_fast16_t idx;
+    setting_details_t *details = settings_get_details();
+
+    do {
+        for(idx = 0; idx < details->n_groups; idx++)
+            print_setting_group(&details->groups[idx], prefix);
+        details = details->on_report_settings ? details->on_report_settings() : NULL;
+    } while(details);
 
     return Status_OK;
 }

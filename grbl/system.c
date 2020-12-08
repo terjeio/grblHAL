@@ -166,7 +166,7 @@ status_code_t system_execute_line (char *line)
                     break;
 
                 case 'G':
-                    retval = report_setting_group_details();
+                    retval = report_setting_group_details(true, NULL);
                     break;
 
                 case 'S':
@@ -176,7 +176,7 @@ status_code_t system_execute_line (char *line)
                 case '*':
                     report_alarm_details();
                     report_error_details();
-                    report_setting_group_details();
+                    report_setting_group_details(true, NULL);
                     retval = report_settings_details(false, Setting_SettingsAll, Group_All);
                     break;
             }

@@ -60,6 +60,31 @@ static driver_setting_ptrs_t driver_settings;
 static on_report_options_ptr on_report_options;
 
 keypad_t keypad = {0};
+/*
+static const setting_group_detail_t keypad_groups [] = {
+    { Group_Root, Group_Jogging, "Jogging"}
+};
+*/
+static const setting_detail_t keypad_settings[] = {
+    { Setting_JogStepSpeed, Group_Jogging, "Step jog speed", "mm/min", Format_Decimal, "###0.0", NULL, NULL },
+    { Setting_JogSlowSpeed, Group_Jogging, "Slow jog speed", "mm/min", Format_Decimal, "###0.0", NULL, NULL },
+    { Setting_JogFastSpeed, Group_Jogging, "Fast jog speed", "mm/min", Format_Decimal, "###0.0", NULL, NULL },
+    { Setting_JogStepDistance, Group_Jogging, "Step jog distance", "mm", Format_Decimal, "#0.000", NULL, NULL },
+    { Setting_JogSlowDistance, Group_Jogging, "Slow jog distance", "mm", Format_Decimal, "###0.0", NULL, NULL },
+    { Setting_JogFastDistance, Group_Jogging, "Fast jog distance", "mm", Format_Decimal, "###0.0", NULL, NULL }
+};
+
+static setting_details_t details = {
+//    .groups = keypad_groups,
+//    .n_groups = sizeof(keypad_groups) / sizeof(setting_group_detail_t),
+    .settings = keypad_settings,
+    .n_settings = sizeof(keypad_settings) / sizeof(setting_detail_t)
+};
+
+static setting_details_t *onReportSettings (void)
+{
+    return &details;
+}
 
 static status_code_t keypad_settings_set (setting_type_t setting, float value, char *svalue)
 {
@@ -346,6 +371,9 @@ bool keypad_init (void)
 
         on_report_options = grbl.on_report_options;
         grbl.on_report_options = onReportOptions;
+
+        details.on_report_settings = grbl.on_report_settings;
+        grbl.on_report_settings = onReportSettings;
 
         if(keypad.on_jogmode_changed)
             keypad.on_jogmode_changed(jogMode);

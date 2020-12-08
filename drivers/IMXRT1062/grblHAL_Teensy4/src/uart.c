@@ -1,7 +1,7 @@
 /*
   uart.c - driver code for IMXRT1062 processor (on Teensy 4.0 board)
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Some parts of this code is Copyright (c) 2020 Terje Io
 
@@ -47,7 +47,7 @@
 #define CTRL_ENABLE         (LPUART_CTRL_TE | LPUART_CTRL_RE | LPUART_CTRL_RIE | LPUART_CTRL_ILIE)
 #define CTRL_TX_ACTIVE      (CTRL_ENABLE | LPUART_CTRL_TIE)
 #define CTRL_TX_COMPLETING  (CTRL_ENABLE | LPUART_CTRL_TCIE)
-#define CTRL_TX_INACTIVE    CTRL_ENABLE 
+#define CTRL_TX_INACTIVE    CTRL_ENABLE
 
 #ifndef UART_PORT
 #define UART uart1_hardware
@@ -73,7 +73,7 @@ static const uart_hardware_t uart1_hardware =
 {
     .port = &IMXRT_LPUART6,
     .ccm_register = &CCM_CCGR3,
-    .ccm_value = CCM_CCGR3_LPUART6(CCM_CCGR_ON), 
+    .ccm_value = CCM_CCGR3_LPUART6(CCM_CCGR_ON),
     .irq = IRQ_LPUART6,
     .irq_handler = uart_interrupt_handler,
     .rx_pin = {
@@ -94,7 +94,7 @@ static const uart_hardware_t uart5_hardware =
 {
     .port = &IMXRT_LPUART8,
     .ccm_register = &CCM_CCGR6,
-    .ccm_value = CCM_CCGR6_LPUART8(CCM_CCGR_ON), 
+    .ccm_value = CCM_CCGR6_LPUART8(CCM_CCGR_ON),
     .irq = IRQ_LPUART8,
     .irq_handler = uart_interrupt_handler,
     .rx_pin = {
@@ -172,12 +172,12 @@ void serialInit (uint32_t baud_rate)
     *(portControlRegister(UART.rx_pin.pin)) = IOMUXC_PAD_DSE(7) | IOMUXC_PAD_PKE | IOMUXC_PAD_PUE | IOMUXC_PAD_PUS(3) | IOMUXC_PAD_HYS;
     *(portConfigRegister(UART.rx_pin.pin)) = UART.rx_pin.mux_val;
     if (UART.rx_pin.select_reg)
-        *(UART.rx_pin.select_reg) = UART.rx_pin.select_val;        
-  
+        *(UART.rx_pin.select_reg) = UART.rx_pin.select_val;
+
     *(portControlRegister(UART.tx_pin.pin)) = IOMUXC_PAD_SRE | IOMUXC_PAD_DSE(3) | IOMUXC_PAD_SPEED(3);
     *(portConfigRegister(UART.tx_pin.pin)) = UART.tx_pin.mux_val;
     if (UART.tx_pin.select_reg)
-        *(UART.tx_pin.select_reg) = UART.tx_pin.select_val;        
+        *(UART.tx_pin.select_reg) = UART.tx_pin.select_val;
 
     UART.port->BAUD = LPUART_BAUD_OSR(bestosr - 1) | LPUART_BAUD_SBR(bestdiv) | (bestosr <= 8 ? LPUART_BAUD_BOTHEDGE : 0);
     UART.port->PINCFG = 0;
@@ -196,7 +196,7 @@ void serialInit (uint32_t baud_rate)
     uint8_t rx_water = (rx_fifo_size < 16) ? rx_fifo_size >> 1 : 7;
     /*
     Serial.printf("SerialX::begin stat:%x ctrl:%x fifo:%x water:%x\n", UART.port->STAT, UART.port->CTRL, UART.port->FIFO, UART.port->WATER );
-    Serial.printf("  FIFO sizes: tx:%d rx:%d\n",tx_fifo_size, rx_fifo_size);    
+    Serial.printf("  FIFO sizes: tx:%d rx:%d\n",tx_fifo_size, rx_fifo_size);
     Serial.printf("  Watermark tx:%d, rx: %d\n", tx_water, rx_water);
     */
     UART.port->WATER = LPUART_WATER_RXWATER(rx_water) | LPUART_WATER_TXWATER(tx_water);
@@ -207,7 +207,7 @@ void serialInit (uint32_t baud_rate)
 uint16_t format = 0;
 
     // Now process the bits in the Format value passed in
-    // Bits 0-2 - Parity plus 9  bit. 
+    // Bits 0-2 - Parity plus 9  bit.
     ctrl |= (format & (LPUART_CTRL_PT | LPUART_CTRL_PE) );  // configure parity - turn off PT, PE, M and configure PT, PE
     if (format & 0x04) ctrl |= LPUART_CTRL_M;       // 9 bits (might include parity)
     if ((format & 0x0F) == 0x04) ctrl |=  LPUART_CTRL_R9T8; // 8N2 is 9 bit with 9th bit always 1
@@ -222,7 +222,7 @@ uint16_t format = 0;
     // process some other bits which change other registers.
     if (format & 0x08)  UART.port->BAUD |= LPUART_BAUD_M10;
 
-    // Bit 4 RXINVERT 
+    // Bit 4 RXINVERT
     uint32_t c = UART.port->STAT & ~LPUART_STAT_RXINV;
     if (format & 0x10) c |= LPUART_STAT_RXINV;      // rx invert
     UART.port->STAT = c;
@@ -231,6 +231,18 @@ uint16_t format = 0;
     if ( format & 0x100) UART.port->BAUD |= LPUART_BAUD_SBNS;
 
 //transmitterEnable(1);
+}
+
+bool serialSetBaudRate (uint32_t baud_rate)
+{
+    static bool init_ok = false;
+
+    if(!init_ok) {
+        serialInit(baud_rate);
+        init_ok = true;
+    }
+
+    return true;
 }
 
 //
@@ -291,7 +303,7 @@ bool serialPutC (const char c)
     if(txbuffer.head == txbuffer.tail && ((UART.port->WATER >> 8) & 0x7) < tx_fifo_size) {
         UART.port->DATA  = c;
         return true;
-    } 
+    }
 
     next_head = (txbuffer.head + 1) & (TX_BUFFER_SIZE - 1);     // Get and update head pointer
 
@@ -373,7 +385,7 @@ static void uart_interrupt_handler (void)
         txbuffer.tail = bptr;                                       //  Update tail pinter
 
         if(bptr == txbuffer.head)      {                            // Disable TX interrups
-            UART.port->CTRL &= ~LPUART_CTRL_TIE; 
+            UART.port->CTRL &= ~LPUART_CTRL_TIE;
 //            UART.port->CTRL |= LPUART_CTRL_TCIE; // Actually wondering if we can just leave this one on...
         }
     }
@@ -414,6 +426,6 @@ static void uart_interrupt_handler (void)
         }
 
         if (UART.port->STAT & LPUART_STAT_IDLE)
-            UART.port->STAT |= LPUART_STAT_IDLE; // writing a 1 to idle should clear it. 
+            UART.port->STAT |= LPUART_STAT_IDLE; // writing a 1 to idle should clear it.
     }
 }

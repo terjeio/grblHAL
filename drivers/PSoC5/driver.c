@@ -3,7 +3,7 @@
 
   Driver for Cypress PSoC 5 (CY8CKIT-059)
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017-2020 Terje Io
 
@@ -391,10 +391,9 @@ static bool driver_setup (settings_t *settings)
     DelayTimer_Interrupt_Enable();
     DelayTimer_Start();
 
-    IOInitDone = settings->version == 18;
+    IOInitDone = settings->version == 19;
 
-    settings_changed(settings);
-
+    hal.settings_changed(settings);
     hal.spindle.set_state((spindle_state_t){0}, 0.0f);
     hal.coolant.set_state((coolant_state_t){0});
     DirOutput_Write(0);
@@ -420,7 +419,7 @@ bool driver_init (void)
     EEPROM_Start();
 
     hal.info = "PSoC 5";
-    hal.driver_version = "2001014";
+    hal.driver_version = "2001115";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = 24000000UL;
     hal.rx_buffer_size = RX_BUFFER_SIZE;

@@ -516,6 +516,35 @@ static void encoder_rt_report(stream_write_ptr stream_write, report_tracking_fla
         on_realtime_report(stream_write, report);
 }
 
+static const setting_group_detail_t encoder_groups [] = {
+    { Group_Root, Group_Encoders, "Encoders"},
+    { Group_Encoders, Group_Encoder0, "Encoder 0"},
+    { Group_Encoders, Group_Encoder1, "Encoder 1"},
+    { Group_Encoders, Group_Encoder2, "Encoder 2"},
+    { Group_Encoders, Group_Encoder3, "Encoder 3"},
+    { Group_Encoders, Group_Encoder4, "Encoder 4"}
+};
+
+static const setting_detail_t encoder_settings[] = {
+    { Setting_EncoderModeBase, Group_Encoder0, "Encoder mode", NULL, Format_RadioButtons, "Universal,Feed rate override,Rapid rate override,Spindle RPM override", NULL, NULL },
+    { Setting_EncoderCPRBase, Group_Encoder0, "Encoder counts per revolution", NULL, Format_Integer, "###0", "1", NULL },
+    { Setting_EncoderCPDBase, Group_Encoder0, "Encoder counts per detent", NULL, Format_Integer, "#0", "1", NULL },
+    { Setting_EncoderDblClickWindowBase, Group_Encoder0, "Encoder double click sensitivity", "ms", Format_Integer, "##0", "100", "900" }
+};
+
+static setting_details_t details = {
+    .groups = encoder_groups,
+    .n_groups = QEI_ENABLE + 1,
+    .settings = encoder_settings,
+    .n_settings = sizeof(encoder_settings) / sizeof(setting_detail_t)
+};
+
+static setting_details_t *on_report_settings (void)
+{
+    return &details;
+}
+
+
 static status_code_t encoder_setting (setting_type_t setting, float value, char *svalue)
 {
     status_code_t status = setting >= Setting_EncoderSettingsBase && setting <= Setting_EncoderSettingsMax ? Status_OK : Status_Unhandled;
@@ -745,6 +774,11 @@ static void onReportOptions (void)
     hal.stream.write("[PLUGIN:ENCODER v0.01]" ASCII_EOL);
 }
 
+static uint8_t get_n_encoders (void)
+{
+    return QEI_ENABLE;
+}
+
 bool encoder_init (uint_fast8_t n_encoders)
 {
     if((hal.driver_settings.nvs_address = nvs_alloc(sizeof(encoder_settings_t) * n_encoders))) {
@@ -755,10 +789,14 @@ bool encoder_init (uint_fast8_t n_encoders)
         hal.driver_settings.load = encoder_settings_load;
         hal.driver_settings.restore = encoder_settings_restore;
 
+        hal.encoder.get_n_encoders = get_n_encoders;
         hal.encoder.on_event = encoder_event;
 
         on_report_options = grbl.on_report_options;
         grbl.on_report_options = onReportOptions;
+
+        details.on_report_settings = grbl.on_report_settings;
+        grbl.on_report_settings = on_report_settings;
     }
 
     return driver_settings.nvs_address != 0;

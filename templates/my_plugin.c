@@ -2,7 +2,7 @@
 
   my_plugin.c - user defined plugin template with settings handling
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 
@@ -47,6 +47,29 @@ static driver_setting_ptrs_t driver_settings;
 static on_report_options_ptr on_report_options;
 static plugin_settings_t my_settings;
 
+// Add info about our settings for $help and enumerations potentially used by senders for settings UI.
+// This is optional and can be removed.
+static const setting_group_detail_t user_groups [] = {
+    { Group_Root, Group_UserSettings, "My settings"}
+};
+
+static const setting_detail_t user_settings[] = {
+    { Setting_UserDefined_0, Group_UserSettings, "My setting 1", NULL, Format_Decimal, "#0.0", "0", "15" },
+    { Setting_UserDefined_1, Group_UserSettings, "My setting 2", "milliseconds", Format_Integer, "####0", "50", "250" }
+};
+
+static setting_details_t details = {
+    .groups = user_groups,
+    .n_groups = sizeof(user_groups) / sizeof(setting_group_detail_t),
+    .settings = user_settings,
+    .n_settings = sizeof(user_settings) / sizeof(setting_detail_t)
+};
+
+static setting_details_t *on_report_settings (void)
+{
+    return &details;
+}
+
 // Set a settings value.
 // Call set() function of next plugin in chain if not our setting.
 static status_code_t plugin_settings_set (setting_type_t setting, float value, char *svalue)
@@ -60,9 +83,9 @@ static status_code_t plugin_settings_set (setting_type_t setting, float value, c
             break;
 
         case Setting_UserDefined_1:
-            // Return error if not integer or not in range 0 - 5
+            // Return error if not integer or not in range 0 - 15
             if(isintf(value)) {
-                if(value >= 0.0f && value <= 5.0f)
+                if(value >= 0.0f && value <= 15.0f)
                     my_settings.ivalue = (uint32_t)value;
                 else
                     status = Status_GcodeValueOutOfRange;
@@ -132,10 +155,10 @@ static void plugin_settings_load (void)
 }
 
 // Add info about our plugin to the $I report.
-static void onReportOptions (void)
+static void on_report_options (void)
 {
     on_report_options();
-    hal.stream.write("[PLUGIN:My plugin v1.00]"  ASCII_EOL);
+    hal.stream.write("[PLUGIN:My plugin v1.01]"  ASCII_EOL);
 }
 
 // A call my_plugin_init will be issued automatically at startup.
@@ -153,7 +176,12 @@ void my_plugin_init (void)
 
         // Add info about our plugin to the $I report.
         on_report_options = grbl.on_report_options;
-        grbl.on_report_options = onReportOptions;
+        grbl.on_report_options = on_report_options;
+
+        // Add info about our settings for $help and enumerations potentially used by senders for settings UI.
+        // This is optional and can be removed.
+        details.on_report_settings = grbl.on_report_settings;
+        grbl.on_report_settings = on_report_settings;
 
         // "Hook" into other HAL pointers here to provide functionality.
     }

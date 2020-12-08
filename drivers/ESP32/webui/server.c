@@ -326,6 +326,7 @@ esp_err_t webui_sdcard_handler (httpd_req_t *req)
     size_t qlen = httpd_req_get_url_query_len(req);
 
     *status = '\0';
+    *path = '\0';
 
     if(qlen && (query = malloc(qlen + 1))) {
 
@@ -420,6 +421,8 @@ esp_err_t webui_sdcard_upload_handler (httpd_req_t *req)
     fs_path_t path;
     char *scratch = ((file_server_data_t *)req->user_ctx)->scratch;
     file_upload_t *upload = (file_upload_t *)req->sess_ctx;
+
+    *path == '\0';
 
     if (ok) do { // Process received data
 
@@ -891,7 +894,7 @@ esp_err_t webui_login_handler (httpd_req_t *req)
 {
     bool ok = false;
     uint32_t status = 200;
-    char msg[20] = "Ok";
+    char msg[40] = "Ok";
     webui_auth_level_t auth_level = WebUIAuth_None;
 
 #if AUTH_ENABLE

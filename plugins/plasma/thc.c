@@ -2,7 +2,7 @@
 
   thc.c - plasma cutter tool height control plugin
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 
@@ -373,6 +373,41 @@ static void onRealtimeReport (stream_write_ptr stream_write, report_tracking_fla
         on_realtime_report(stream_write, report);
 }
 
+static const setting_group_detail_t plasma_groups [] = {
+    { Group_Root, Group_Plasma, "Plasma"},
+};
+
+static const setting_detail_t plasma_settings[] = {
+    { Setting_THC_Mode, Group_Plasma, "Plasma mode", NULL, Format_RadioButtons, "Off,Up/down,Voltage", NULL, NULL },
+    { Setting_THC_Delay, Group_Plasma, "Plasma THC delay", "s", Format_Decimal, "#0.0", NULL, NULL },
+    { Setting_THC_Threshold, Group_Plasma, "Plasma THC threshold", "V", Format_Decimal, "#0.00", NULL, NULL },
+    { Setting_THC_PGain, Group_Plasma, "Plasma THC P-gain", NULL, Format_Decimal, "###0.000", NULL, NULL },
+    { Setting_THC_IGain, Group_Plasma, "Plasma THC I-gain", NULL, Format_Decimal, "###0.000", NULL, NULL },
+    { Setting_THC_DGain, Group_Plasma, "Plasma THC D-gain", NULL, Format_Decimal, "###0.000", NULL, NULL },
+    { Setting_THC_VADThreshold, Group_Plasma, "Plasma THC VAD threshold", "percent", Format_Integer, "#0", NULL, NULL },
+    { Setting_THC_VoidOverride, Group_Plasma, "Plasma THC Void override", "percent", Format_Integer, "#0", NULL, NULL },
+    { Setting_Arc_FailTimeout, Group_Plasma, "Plasma Arc fail timeout", "seconds", Format_Decimal, "#0.0", NULL, NULL },
+    { Setting_Arc_RetryDelay, Group_Plasma, "Plasma Arc retry delay", "seconds", Format_Decimal, "#0.0", NULL, NULL },
+    { Setting_Arc_MaxRetries, Group_Plasma, "Plasma Arc max retries", NULL, Format_Integer, "#0", NULL, NULL },
+    { Setting_Arc_VoltageScale, Group_Plasma, "Plasma Arc voltage scale", NULL, Format_Decimal, "###0.000", NULL, NULL },
+    { Setting_Arc_VoltageOffset, Group_Plasma, "Plasma Arc voltage offset", NULL, Format_Decimal, "###0.000", NULL, NULL },
+    { Setting_Arc_HeightPerVolt, Group_Plasma, "Plasma Arc height per volt", "mm", Format_Decimal, "###0.000", NULL, NULL },
+    { Setting_Arc_OkHighVoltage, Group_Plasma, "Plasma Arc ok high volts", "V", Format_Decimal, "###0.000", NULL, NULL },
+    { Setting_Arc_OkLowVoltage, Group_Plasma, "Plasma Arc ok low volts", "V", Format_Decimal, "###0.000", NULL, NULL }
+};
+
+static setting_details_t details = {
+    .groups = plasma_groups,
+    .n_groups = sizeof(plasma_groups) / sizeof(setting_group_detail_t),
+    .settings = plasma_settings,
+    .n_settings = sizeof(plasma_settings) / sizeof(setting_detail_t)
+};
+
+static setting_details_t *onReportSettings (void)
+{
+    return &details;
+}
+
 static status_code_t plasma_setting (setting_type_t setting, float value, char *svalue)
 {
     status_code_t status = svalue ? Status_OK : Status_Unhandled;
@@ -624,9 +659,6 @@ bool plasma_init (void)
                 control_interrupt_callback = hal.control_interrupt_callback;
                 hal.control_interrupt_callback = trap_control_interrupts;
         */
-                on_realtime_report = grbl.on_realtime_report;
-                grbl.on_realtime_report = onRealtimeReport;
-
                 driver_reset = hal.driver_reset;
                 hal.driver_reset = reset;
 
@@ -638,6 +670,13 @@ bool plasma_init (void)
 
                 on_report_options = grbl.on_report_options;
                 grbl.on_report_options = onReportOptions;
+
+                on_realtime_report = grbl.on_realtime_report;
+                grbl.on_realtime_report = onRealtimeReport;
+
+                details.on_report_settings = grbl.on_report_settings;
+                grbl.on_report_settings = onReportSettings;
+
 
                 hal.driver_cap.spindle_at_speed = Off;
 

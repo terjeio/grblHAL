@@ -53,6 +53,12 @@ typedef enum {
 } axis_setting_type_t;
 
 typedef enum {
+    DriverAxisSetting_MicroSteps = 0,
+    DriverAxisSetting_StepperCurrent = 1,
+    DriverAxisSetting_NumSettings
+} driver_axis_setting_type_t;
+
+typedef enum {
     Setting_PulseMicroseconds = 0,
     Setting_StepperIdleLockTime = 1,
     Setting_StepInvertMask = 2,
@@ -266,11 +272,15 @@ typedef enum {
     Setting_AxisBacklashBase         = Setting_AxisSettingsBase + AxisSetting_Backlash * AXIS_SETTINGS_INCREMENT,
     Setting_AxisAutoSquareOffsetBase = Setting_AxisSettingsBase + AxisSetting_AutoSquareOffset * AXIS_SETTINGS_INCREMENT,
 
+    // Calculated base values for driver stepper settings
+    Setting_DriverAxisStepsPerMMBase    = Setting_AxisSettingsBase2 + DriverAxisSetting_MicroSteps * AXIS_SETTINGS_INCREMENT,
+    Setting_DriverAxisMaxRateBase       = Setting_AxisSettingsBase2 + DriverAxisSetting_StepperCurrent * AXIS_SETTINGS_INCREMENT,
+
     // Calculated base values for encoder settings
-    Setting_EncoderModeBase           = Setting_EncoderSettingsBase + Setting_EncoderMode * ENCODER_SETTINGS_INCREMENT,
-    Setting_EncoderCPRBase            = Setting_EncoderSettingsBase + Setting_EncoderCPR * ENCODER_SETTINGS_INCREMENT,
-    Setting_EncoderCPDBase            = Setting_EncoderSettingsBase + Setting_EncoderCPD * ENCODER_SETTINGS_INCREMENT,
-    Setting_EncoderDblClickWindowBase = Setting_EncoderSettingsBase + Setting_EncoderDblClickWindow * ENCODER_SETTINGS_INCREMENT
+    Setting_EncoderModeBase           = Setting_EncoderSettingsBase + Setting_EncoderMode,
+    Setting_EncoderCPRBase            = Setting_EncoderSettingsBase + Setting_EncoderCPR,
+    Setting_EncoderCPDBase            = Setting_EncoderSettingsBase + Setting_EncoderCPD,
+    Setting_EncoderDblClickWindowBase = Setting_EncoderSettingsBase + Setting_EncoderDblClickWindow
 } setting_type_t;
 
 typedef union {
@@ -542,7 +552,6 @@ typedef enum {
     Group_Networking_Wifi,
     Group_Toolchange,
     Group_Plasma,
-    Group_Encoder,
     Group_Bluetooth,
     Group_AuxPorts,
     Group_Stepper,
@@ -551,9 +560,16 @@ typedef enum {
     Group_MotorDriver,
     Group_ModBus,
     Group_UserSettings,
+    Group_Encoders,
+    Group_Encoder0,
+    Group_Encoder1,
+    Group_Encoder2,
+    Group_Encoder3,
+    Group_Encoder4,
     Group_Axis,
 // NOTE: axis groups MUST be sequential AND last
-    Group_XAxis,
+    Group_Axis0,
+    Group_XAxis = Group_Axis0,
     Group_YAxis,
     Group_ZAxis,
 #ifdef A_AXIS
@@ -601,196 +617,18 @@ typedef struct {
 typedef struct setting_details {
     const uint8_t n_groups;
     const setting_group_detail_t *groups;
-    const uint8_t n_settings;
+    const uint16_t n_settings;
     const setting_detail_t *settings;
     struct setting_details *(*on_report_settings)(void);
 } setting_details_t;
-
-static const setting_group_detail_t setting_group_detail [] = {
-    { Group_Root, Group_Root, "Root"},
-    { Group_Root, Group_General, "General"},
-    { Group_Root, Group_Stepper, "Stepper"},
-    { Group_Root, Group_Homing, "Homing"},
-    { Group_Root, Group_Probing, "Probing"},
-    { Group_Root, Group_Parking, "Parking"},
-    { Group_Root, Group_Jogging, "Jogging"},
-    { Group_Root, Group_Limits, "Limits"},
-    { Group_Limits, Group_Limits_DualAxis, "Dual axis"},
-    { Group_Root, Group_ControlSignals, "Control signals"},
-    { Group_Root, Group_Spindle, "Spindle"},
-    { Group_Root, Group_Coolant, "Coolant"},
-    { Group_Spindle, Group_Spindle_Sync, "Spindle sync"},
-    { Group_Root, Group_Networking, "Networking"},
-    { Group_Networking, Group_Networking_Wifi, "WiFi"},
-    { Group_Root, Group_Bluetooth, "Bluetooth"},
-    { Group_Root, Group_AuxPorts, "Aux ports"},
-    { Group_Root, Group_Toolchange, "Toolchange"},
-    { Group_Root, Group_Plasma, "Plasma"},
-    { Group_Root, Group_Encoder, "Encoder"},
-    { Group_Root, Group_MotorDriver, "Motor driver"},
-    { Group_Root, Group_Axis, "Axis"},
-    { Group_Axis, Group_XAxis, "Xaxis"},
-    { Group_Axis, Group_YAxis, "Yaxis"},
-    { Group_Axis, Group_ZAxis, "Zaxis"},
-#ifdef A_AXIS
-    { Group_Axis, Group_AAxis, "Aaxis"},
-#endif
-#ifdef B_AXIS
-    { Group_Axis, Group_BAxis, "Baxis"},
-#endif
-#ifdef C_AXIS
-    { Group_Axis, Group_CAxis, "Caxis"}
-#endif
-};
-
-static const setting_detail_t setting_detail[] = {
-    { Setting_PulseMicroseconds, Group_Stepper, "Step pulse time", "microseconds", Format_Decimal, "#0.0", "2.0", NULL },
-    { Setting_StepperIdleLockTime, Group_Stepper, "Step idle delay", "milliseconds", Format_Integer, "####0", NULL, "65535" },
-    { Setting_StepInvertMask, Group_Stepper, "Step pulse invert", NULL, Format_AxisMask, NULL, NULL, NULL },
-    { Setting_DirInvertMask, Group_Stepper, "Step direction invert", NULL, Format_AxisMask, NULL, NULL, NULL },
-    { Setting_InvertStepperEnable, Group_Stepper, "Invert step enable pin(s)", NULL, Format_AxisMask, NULL, NULL, NULL },
-    { Setting_LimitPinsInvertMask, Group_Limits, "Invert limit pins", NULL, Format_AxisMask, NULL, NULL, NULL },
-    { Setting_InvertProbePin, Group_Probing, "Invert probe pin", NULL, Format_Bool, NULL, NULL, NULL },
-    { Setting_StatusReportMask, Group_General, "Status report options", NULL, Format_Bitfield, "Position in machine coordinate,Buffer state,Line numbers,Feed & speed,Pin state,Work coordinate offset,Overrides,Probe coordinates,Buffer sync on WCO change,Parser state,Alarm substatus,Run substatus", NULL, NULL },
-    { Setting_JunctionDeviation, Group_General, "Junction deviation", "mm", Format_Decimal, "#####0.000", NULL, NULL },
-    { Setting_ArcTolerance, Group_General, "Arc tolerance", "mm", Format_Decimal, "#####0.000", NULL, NULL },
-    { Setting_ReportInches, Group_General, "Report in inches", NULL, Format_Bool, NULL, NULL, NULL },
-    { Setting_ControlInvertMask, Group_ControlSignals, "Invert control pins", NULL, Format_Bitfield, "Reset,Feed hold,Cycle start,Safety door,Block delete,Optional stop,EStop,Probe connected", NULL, NULL },
-    { Setting_CoolantInvertMask, Group_Coolant, "Invert coolant pins", NULL, Format_Bitfield, "Flood,Mist", NULL, NULL },
-    { Setting_SpindleInvertMask, Group_Spindle, "Invert spindle signals", NULL, Format_Bitfield, "Spindle on,Spindle CCW,Invert PWM", NULL, NULL },
-    { Setting_ControlPullUpDisableMask, Group_ControlSignals, "Pullup disable control pins", NULL, Format_Bitfield, "Reset,Feed hold,Cycle start,Safety door,Block delete,Optional stop,EStop,Probe connected", NULL, NULL },
-    { Setting_LimitPullUpDisableMask, Group_Limits, "Pullup disable limit pins", NULL, Format_AxisMask, NULL, NULL, NULL },
-    { Setting_ProbePullUpDisable, Group_Probing, "Pullup disable probe pin", NULL, Format_Bool, NULL, NULL, NULL },
-    { Setting_SoftLimitsEnable, Group_Limits, "Soft limits enable", NULL, Format_Bool, NULL, NULL, NULL },
-    { Setting_HardLimitsEnable, Group_Limits, "Hard limits enable", NULL, Format_XBitfield, "Enable,Strict mode", NULL, NULL },
-    { Setting_HomingEnable, Group_Homing, "Homing cycle", NULL, Format_XBitfield, "Enable,Enable single axis commands,Homing on startup required,Set machine origin to 0,Two switches shares one input pin,Allow manual,Override locks", NULL, NULL },
-    { Setting_HomingDirMask, Group_Homing, "Homing direction invert", NULL, Format_AxisMask, NULL, NULL, NULL },
-    { Setting_HomingFeedRate, Group_Homing, "Homing locate feed rate", "mm/min", Format_Decimal, "#####0.0", NULL, NULL },
-    { Setting_HomingSeekRate, Group_Homing, "Homing search seek rate", "mm/min", Format_Decimal, "#####0.0", NULL, NULL },
-    { Setting_HomingDebounceDelay, Group_Homing, "Homing switch debounce delay", "milliseconds", Format_Integer, "##0", NULL, NULL },
-    { Setting_HomingPulloff, Group_Homing, "Homing switch pull-off distance", "mm", Format_Decimal, "#####0.000", NULL, NULL },
-    { Setting_G73Retract, Group_General, "G73 Retract distance", "mm", Format_Decimal, "#####0.000", NULL, NULL },
-    { Setting_PulseDelayMicroseconds, Group_Stepper, "Pulse delay", "microseconds", Format_Decimal, "#0.0", NULL, "10" },
-    { Setting_RpmMax, Group_Spindle, "Maximum spindle speed", "RPM", Format_Decimal, "#####0.000", NULL, NULL },
-    { Setting_RpmMin, Group_Spindle, "Minimum spindle speed", "RPM", Format_Decimal, "#####0.000", NULL, NULL },
-    { Setting_Mode, Group_General, "Mode of operation", NULL, Format_RadioButtons, "Normal,Laser mode,Lathe mode", NULL, NULL },
-    { Setting_PWMFreq, Group_Spindle, "Spindle PWM frequency", "Hz", Format_Decimal, "#####0", NULL, NULL },
-    { Setting_PWMOffValue, Group_Spindle, "Spindle PWM off value", "percent", Format_Decimal, "##0.0", NULL, "100" },
-    { Setting_PWMMinValue, Group_Spindle, "Spindle PWM min value", "percent", Format_Decimal, "##0.0", NULL, "100" },
-    { Setting_PWMMaxValue, Group_Spindle, "Spindle PWM max value", "percent", Format_Decimal, "##0.0", NULL, "100" },
-    { Setting_StepperDeenergizeMask, Group_Stepper, "Steppers deenergize", NULL, Format_AxisMask, NULL, NULL, NULL },
-    { Setting_SpindlePPR, Group_Spindle, "Spindle pulses per revolution (PPR)", NULL, Format_Integer, "###0", NULL, NULL },
-    { Setting_EnableLegacyRTCommands, Group_General, "Enable legacy RT commands", NULL, Format_Bool, NULL, NULL, NULL },
-    { Setting_JogSoftLimited, Group_Jogging, "Limit jog commands", NULL, Format_Bool, NULL, NULL, NULL },
-    { Setting_ParkingEnable, Group_Parking, "Parking cycle", NULL, Format_XBitfield, "Enable,Enable parking override control,Deactivate upon init", NULL, NULL },
-    { Setting_ParkingAxis, Group_Parking, "Parking axis", NULL, Format_RadioButtons, "X,Y,Z", NULL, NULL },
-    { Setting_HomingLocateCycles, Group_Homing, "Homing passes", NULL, Format_Integer, "##0", "1", "128" },
-    { Setting_HomingCycle_1, Group_Homing, "Axes homing, first pass", NULL, Format_AxisMask, NULL, NULL, NULL },
-    { Setting_HomingCycle_2, Group_Homing, "Axes homing, second pass", NULL, Format_AxisMask, NULL, NULL, NULL },
-    { Setting_HomingCycle_3, Group_Homing, "Axes homing, third pass", NULL, Format_AxisMask, NULL, NULL, NULL },
-#ifdef A_AXIS
-    { Setting_HomingCycle_4, Group_Homing, "Axes homing, fourth pass", NULL, Format_AxisMask, NULL, NULL, NULL },
-#endif
-#ifdef B_AXIS
-    { Setting_HomingCycle_5, Group_Homing, "Axes homing, fifth pass", NULL, Format_AxisMask, NULL, NULL, NULL },
-#endif
-#ifdef C_AXIS
-    { Setting_HomingCycle_6, Group_Homing, "Axes homing, sixth pass", NULL, Format_AxisMask, NULL, NULL, NULL },
-#endif
-    { Setting_JogStepSpeed, Group_Jogging, "Step jog speed", "mm/min", Format_Decimal, "###0.0", NULL, NULL },
-    { Setting_JogSlowSpeed, Group_Jogging, "Slow jog speed", "mm/min", Format_Decimal, "###0.0", NULL, NULL },
-    { Setting_JogFastSpeed, Group_Jogging, "Fast jog speed", "mm/min", Format_Decimal, "###0.0", NULL, NULL },
-    { Setting_JogStepDistance, Group_Jogging, "Step jog distance", "mm", Format_Decimal, "#0.000", NULL, NULL },
-    { Setting_JogSlowDistance, Group_Jogging, "Slow jog distance", "mm", Format_Decimal, "###0.0", NULL, NULL },
-    { Setting_JogFastDistance, Group_Jogging, "Fast jog distance", "mm", Format_Decimal, "###0.0", NULL, NULL },
-    { Setting_ParkingPulloutIncrement, Group_Parking, "Parking pull-out distance", "mm", Format_Decimal, "###0.0", NULL, NULL },
-    { Setting_ParkingPulloutRate, Group_Parking, "Parking pull-out rate", "mm/min", Format_Decimal, "###0.0", NULL, NULL },
-    { Setting_ParkingTarget, Group_Parking, "Parking target", "mm", Format_Decimal, "-###0.0", "-100000", NULL },
-    { Setting_ParkingFastRate, Group_Parking, "Parking fast rate", "mm/min", Format_Decimal, "###0.0", NULL, NULL },
-    { Setting_RestoreOverrides, Group_General, "Restore overrides", NULL, Format_Bool, NULL, NULL, NULL },
-    { Setting_IgnoreDoorWhenIdle, Group_Parking, "Ignore door when idle", NULL, Format_Bool, NULL, NULL, NULL },
-    { Setting_SleepEnable, Group_General, "Sleep enable", NULL, Format_Bool, NULL, NULL, NULL },
-    { Setting_HoldActions, Group_General, "Feed hold actions", NULL, Format_Bitfield, "Disable laser during hold,Restore spindle and coolant state on resume", NULL, NULL },
-    { Setting_ForceInitAlarm, Group_General, "Force init alarm", NULL, Format_Bool, NULL, NULL, NULL },
-    { Setting_ProbingFeedOverride, Group_Probing, "Probing feed override", NULL, Format_Bool, NULL, NULL, NULL },
-    { Setting_NetworkServices, Group_Networking, "Network Services", NULL, Format_Bitfield, "Telnet,Websocket,HTTP,DNS,MDNS,SSDP", NULL, NULL },
-    { Setting_BlueToothDeviceName, Group_AuxPorts, "Bluetooth device", NULL, Format_String, "x(32)", NULL, "32" },
-    { Setting_BlueToothServiceName, Group_AuxPorts, "Bluetooth service", NULL, Format_String, "x(32)", NULL, "32" },
-    { Setting_WifiMode, Group_Networking_Wifi, "WiFi Mode", NULL, Format_RadioButtons, "Off,Station,Access Point,Access Point/Station", NULL, NULL },
-    { Setting_WiFi_STA_SSID, Group_Networking_Wifi, "WiFi Station (STA) SSID", NULL, Format_String, "x(64)", NULL, "64" },
-    { Setting_WiFi_STA_Password, Group_Networking_Wifi, "WiFi Station (STA) Password", NULL, Format_Password, "x(32)", NULL, "32" },
-    { Setting_WiFi_AP_SSID, Group_Networking_Wifi, "WiFi Access Point (AP) SSID", NULL, Format_String, "x(64)", NULL, "64" },
-    { Setting_WiFi_AP_Password, Group_Networking_Wifi, "WiFi Access Point (AP) Password", NULL, Format_Password, "x(32)", NULL, "32" },
-    { Setting_SpindlePGain, Group_Spindle_ClosedLoop, "Spindle P-gain", NULL, Format_Decimal, "###0.000", NULL, NULL },
-    { Setting_SpindleIGain, Group_Spindle_ClosedLoop, "Spindle I-gain", NULL, Format_Decimal, "###0.000", NULL, NULL },
-    { Setting_SpindleDGain, Group_Spindle_ClosedLoop, "Spindle D-gain", NULL, Format_Decimal, "###0.000", NULL, NULL },
-    { Setting_SpindleMaxError, Group_Spindle_ClosedLoop, "Spindle PID max error", NULL, Format_Decimal, "###0.000", NULL, NULL },
-    { Setting_SpindleIMaxError, Group_Spindle_ClosedLoop, "Spindle PID max I error", NULL, Format_Decimal, "###0.000", NULL, NULL },
-    { Setting_PositionPGain, Group_Spindle_Sync, "Spindle sync P-gain", NULL, Format_Decimal, "###0.000", NULL, NULL },
-    { Setting_PositionIGain, Group_Spindle_Sync, "Spindle sync I-gain", NULL, Format_Decimal, "###0.000", NULL, NULL },
-    { Setting_PositionDGain, Group_Spindle_Sync, "Spindle sync D-gain", NULL, Format_Decimal, "###0.000", NULL, NULL },
-    { Setting_PositionIMaxError, Group_Spindle_Sync, "Spindle sync PID max I error", NULL, Format_Decimal, "###0.000", NULL, NULL },
-    { Setting_AxisStepsPerMMBase, Group_Axis, "?-axis travel resolution", "step/mm", Format_Decimal, "#####0.000", NULL, NULL },
-    { Setting_AxisMaxRateBase, Group_Axis, "?-axis maximum rate", "mm/min", Format_Decimal, "#####0.000", NULL, NULL },
-    { Setting_AxisAccelerationBase, Group_Axis, "?-axis acceleration", "mm/sec^2", Format_Decimal, "#####0.000", NULL, NULL },
-    { Setting_AxisMaxTravelBase, Group_Axis, "?-axis maximum travel", "mm", Format_Decimal, "#####0.000", NULL, NULL },
-    { Setting_AxisStepperCurrentBase, Group_Axis, "?-axis motor current", "mA", Format_Integer, "###0", NULL, NULL },
-    { Setting_AxisMicroStepsBase, Group_Axis, "?-axis microsteps", "steps", Format_Integer, "###0", NULL, NULL },
-#ifdef ENABLE_BACKLASH_COMPENSATION
-    { Setting_AxisBacklashBase, Group_Axis, "?-axis backlash compensation", "mm", Format_Decimal, "#####0.000", NULL, NULL },
-#endif
-    { Setting_AxisAutoSquareOffsetBase, Group_Axis, "?-axis dual axis offset", "mm", Format_Decimal, "-0.000", "-2", "2" },
-    { Setting_Hostname, Group_Networking, "Hostname", NULL, Format_String, "x(64)", NULL, "64" },
-    { Setting_IpMode, Group_Networking, "IP Mode", NULL, Format_RadioButtons, "Static,DHCP,AutoIP", NULL, NULL },
-    { Setting_IpAddress, Group_Networking, "IP Address", NULL, Format_IPv4, NULL, NULL, NULL },
-    { Setting_Gateway, Group_Networking, "Gateway", NULL, Format_IPv4, NULL, NULL, NULL },
-    { Setting_NetMask, Group_Networking, "Netmask", NULL, Format_IPv4, NULL, NULL, NULL },
-    { Setting_TelnetPort, Group_Networking, "Telnet Port", NULL, Format_Integer, "####0", "1", "65535" },
-    { Setting_HttpPort, Group_Networking, "HTTP Port", NULL, Format_Integer, "####0", "1", "65535" },
-    { Setting_WebSocketPort, Group_Networking, "Websocket Port", NULL, Format_Integer, "####0", "1", "65535" },
-    { Setting_AdminPassword, Group_General, "Admin Password", NULL, Format_Password, "x(32)", NULL, "32" },
-    { Setting_UserPassword, Group_General, "User Password", NULL, Format_Password, "x(32)", NULL, "32" },
-    { Setting_TrinamicDriver, Group_MotorDriver, "Trinamic driver", NULL, Format_AxisMask, NULL, NULL, NULL },
-    { Setting_TrinamicHoming, Group_MotorDriver, "Sensorless homing", NULL, Format_AxisMask, NULL, NULL, NULL },
-    { Setting_SpindleAtSpeedTolerance, Group_Spindle, "Spindle at speed tolerance", "percent", Format_Decimal, "##0.0", NULL, NULL },
-    { Setting_ToolChangeMode, Group_Toolchange, "Tool change mode", NULL, Format_RadioButtons, "Normal,Manual touch off,Manual touch off @ G59.3,Automatic touch off @ G59.3,Ignore M6", NULL, NULL },
-    { Setting_ToolChangeProbingDistance, Group_Toolchange, "Tool change probing distance", "mm", Format_Decimal, "#####0.0", NULL, NULL },
-    { Setting_ToolChangeFeedRate, Group_Toolchange, "Tool change locate feed rate", "mm/min", Format_Decimal, "#####0.0", NULL, NULL },
-    { Setting_ToolChangeSeekRate, Group_Toolchange, "Tool change search seek rate", "mm/min", Format_Decimal, "#####0.0", NULL, NULL },
-    { Setting_ToolChangePulloffRate, Group_Toolchange, "Tool change probe pull-off rate", "mm/min", Format_Decimal, "#####0.0", NULL, NULL },
-    { Setting_DualAxisLengthFailPercent, Group_Limits_DualAxis, "Dual axis length fail", "percent", Format_Decimal, "##0.0", "0", "100" },
-    { Setting_DualAxisLengthFailMin, Group_Limits_DualAxis, "Dual axis length fail min", "mm/min", Format_Decimal, "#####0.0", NULL, NULL },
-    { Setting_DualAxisLengthFailMax, Group_Limits_DualAxis, "Dual axis length fail max", "mm/min", Format_Decimal, "#####0.0", NULL, NULL },
-    { Setting_THC_Mode, Group_Plasma, "Plasma mode", NULL, Format_RadioButtons, "Off,Up/down,Voltage", NULL, NULL },
-    { Setting_THC_Delay, Group_Plasma, "Plasma THC delay", "s", Format_Decimal, "#0.0", NULL, NULL },
-    { Setting_THC_Threshold, Group_Plasma, "Plasma THC threshold", "V", Format_Decimal, "#0.00", NULL, NULL },
-    { Setting_THC_PGain, Group_Plasma, "Plasma THC P-gain", NULL, Format_Decimal, "###0.000", NULL, NULL },
-    { Setting_THC_IGain, Group_Plasma, "Plasma THC I-gain", NULL, Format_Decimal, "###0.000", NULL, NULL },
-    { Setting_THC_DGain, Group_Plasma, "Plasma THC D-gain", NULL, Format_Decimal, "###0.000", NULL, NULL },
-    { Setting_THC_VADThreshold, Group_Plasma, "Plasma THC VAD threshold", "percent", Format_Integer, "#0", NULL, NULL },
-    { Setting_THC_VoidOverride, Group_Plasma, "Plasma THC Void override", "percent", Format_Integer, "#0", NULL, NULL },
-    { Setting_Arc_FailTimeout, Group_Plasma, "Plasma Arc fail timeout", "seconds", Format_Decimal, "#0.0", NULL, NULL },
-    { Setting_Arc_RetryDelay, Group_Plasma, "Plasma Arc retry delay", "seconds", Format_Decimal, "#0.0", NULL, NULL },
-    { Setting_Arc_MaxRetries, Group_Plasma, "Plasma Arc max retries", NULL, Format_Integer, "#0", NULL, NULL },
-    { Setting_Arc_VoltageScale, Group_Plasma, "Plasma Arc voltage scale", NULL, Format_Decimal, "###0.000", NULL, NULL },
-    { Setting_Arc_VoltageOffset, Group_Plasma, "Plasma Arc voltage offset", NULL, Format_Decimal, "###0.000", NULL, NULL },
-    { Setting_Arc_HeightPerVolt, Group_Plasma, "Plasma Arc height per volt", "mm", Format_Decimal, "###0.000", NULL, NULL },
-    { Setting_Arc_OkHighVoltage, Group_Plasma, "Plasma Arc ok high volts", "V", Format_Decimal, "###0.000", NULL, NULL },
-    { Setting_Arc_OkLowVoltage, Group_Plasma, "Plasma Arc ok low volts", "V", Format_Decimal, "###0.000", NULL, NULL },
-    { Settings_IoPort_InvertIn, Group_AuxPorts, "Invert I/O Port inputs", NULL, Format_Bitfield, "Port 0,Port 1,Port 2,Port 3,Port 4,Port 5,Port 6,Port 7", NULL, NULL },
-    { Settings_IoPort_Pullup_Disable, Group_AuxPorts, "I/O Port inputs pullup disable", NULL, Format_Bitfield, "Port 0,Port 1,Port 2,Port 3,Port 4,Port 5,Port 6,Port 7", NULL, NULL },
-    { Settings_IoPort_InvertOut, Group_AuxPorts, "Invert I/O Port outputs", NULL, Format_Bitfield, "Port 0,Port 1,Port 2,Port 3,Port 4,Port 5,Port 6,Port 7", NULL, NULL },
-    { Settings_IoPort_OD_Enable, Group_AuxPorts, "I/O Port outputs as open drain", NULL, Format_Bitfield, "Port 0,Port 1,Port 2,Port 3,Port 4,Port 5,Port 6,Port 7", NULL, NULL },
-    { Setting_EncoderModeBase, Group_Encoder, "Encoder mode", NULL, Format_RadioButtons, "Universal,Feed rate override,Rapid rate override,Spindle RPM override", NULL, NULL },
-    { Setting_EncoderCPRBase, Group_Encoder, "Encoder counts per revolution (CPR)", NULL, Format_Integer, "###0", "1", NULL },
-    { Setting_EncoderCPDBase, Group_Encoder, "Encoder counts per detent (CPD)", NULL, Format_Integer, "#0", "1", NULL },
-    { Setting_EncoderDblClickWindowBase, Group_Encoder, "Encoder double click sensitivity", "ms", Format_Integer, "##0", "100", "900" }
-};
 
 extern settings_t settings;
 
 // Initialize the configuration subsystem (load settings from persistent storage)
 void settings_init();
+
+// Write Grbl global settings and version number to persistent storage
+void settings_write_global(void);
 
 // Helper function to clear and restore persistent storage defaults
 void settings_restore(settings_restore_t restore_flags);
@@ -822,6 +660,7 @@ bool settings_write_tool_data (tool_data_t *tool_data);
 // Read selected tool data from persistent storage
 bool settings_read_tool_data (uint32_t tool, tool_data_t *tool_data);
 
+setting_details_t *settings_get_details (void);
 bool settings_is_group_available (setting_group_t group);
 bool settings_is_setting_available (setting_type_t setting, setting_group_t group);
 

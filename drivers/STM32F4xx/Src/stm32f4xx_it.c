@@ -57,6 +57,7 @@
 
 /* External variables --------------------------------------------------------*/
 extern PCD_HandleTypeDef hpcd_USB_OTG_FS;
+
 /* USER CODE BEGIN EV */
 
 /* USER CODE END EV */

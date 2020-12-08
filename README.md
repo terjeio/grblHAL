@@ -7,7 +7,7 @@ It has been written to complement grblHAL and has features such as proper keyboa
 
 ---
 
-Latest build date is 20201125, see the [changelog](changelog.md) for details.
+Latest build date is 20201205, see the [changelog](changelog.md) for details.
 
 ---
 
@@ -72,4 +72,4 @@ List of Supported G-Codes:
 ```
 
 ---
-2020-11-16
+2020-12-08

@@ -68,7 +68,8 @@ typedef union {
                  probe_connected           :1,
                  atc                       :1,
                  no_gcode_message_handling :1,
-                 unassigned                :4;
+                 dual_spindle              :1,
+                 unassigned                :3;
     };
 } driver_cap_t;
 
@@ -247,10 +248,12 @@ typedef struct {
 
 // Encoder (optional)
 
+typedef uint8_t (*encoder_get_n_encoders_ptr)(void);
 typedef void (*encoder_on_event_ptr)(encoder_t *encoder, int32_t position);
 typedef void (*encoder_reset_ptr)(uint_fast8_t id);
 
 typedef struct {
+    encoder_get_n_encoders_ptr get_n_encoders;
     encoder_on_event_ptr on_event;
     encoder_reset_ptr reset;
 } encoder_ptrs_t;

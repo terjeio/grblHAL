@@ -1,5 +1,11 @@
 ## grblHAL changelog
 
+Build 20201205 (test only):
+* Updated _[my_plugin.c](templates/my_plugin.c)_ [template](templates/README.md) with settings details for `$HELP` and `$ES`/`$EG` enumerations.
+* Settings/setting groups handling enhanced, moved some to plugins and added sorting (requres enough heap).
+* Removed external dependecies by adding driver source/USB blob to LPC176x driver.
+* Some bug fixes.
+
 Build 20201125 (test only):
 * Enhanced and improved ModBus support code for VFD spindle, added settings for baud rate and receive timeout.
 * Added support for enumeration of and help for driver and plugin provided settings and setting groups.

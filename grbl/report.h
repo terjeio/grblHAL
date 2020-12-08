@@ -88,7 +88,7 @@ void report_build_info (char *line, bool extended);
 
 status_code_t report_alarm_details (void);
 status_code_t report_error_details (void);
-status_code_t report_setting_group_details (void);
+status_code_t report_setting_group_details (bool by_id, char *prefix);
 status_code_t report_settings_details (bool human_readable, setting_type_t setting, setting_group_t group);
 
 // Prints current PID log.

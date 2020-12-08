@@ -113,6 +113,23 @@ void trinamic_configure (void)
     } while(idx);
 }
 
+static const setting_detail_t trinamic_settings[] = {
+    { Setting_TrinamicDriver, Group_MotorDriver, "Trinamic driver", NULL, Format_AxisMask, NULL, NULL, NULL },
+    { Setting_TrinamicHoming, Group_MotorDriver, "Sensorless homing", NULL, Format_AxisMask, NULL, NULL, NULL },
+    { Setting_AxisStepperCurrentBase, Group_Axis, "?-axis motor current", "mA", Format_Integer, "###0", NULL, NULL },
+    { Setting_AxisMicroStepsBase, Group_Axis, "?-axis microsteps", "steps", Format_Integer, "###0", NULL, NULL }
+};
+
+static setting_details_t details = {
+    .settings = trinamic_settings,
+    .n_settings = sizeof(trinamic_settings) / sizeof(setting_detail_t)
+};
+
+static setting_details_t *on_report_settings (void)
+{
+    return &details;
+}
+
 // Parse and set driver specific parameters
 status_code_t trinamic_setting (setting_type_t setting, float value, char *svalue)
 {
@@ -972,6 +989,9 @@ bool trinamic_init (void)
 
         on_report_options = grbl.on_report_options;
         grbl.on_report_options = onReportOptions;
+
+        details.on_report_settings = grbl.on_report_settings;
+        grbl.on_report_settings = on_report_settings;
     }
 
     return driver_settings.nvs_address != 0;

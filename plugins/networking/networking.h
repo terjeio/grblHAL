@@ -27,11 +27,11 @@
 #endif
 
 #if TELNET_ENABLE
-#include "TCPSTream.h"
+#include "TCPStream.h"
 #endif
 
 #if WEBSOCKET_ENABLE
-#include "WsSTream.h"
+#include "WsStream.h"
 #endif
 
 //*****************************************************************************

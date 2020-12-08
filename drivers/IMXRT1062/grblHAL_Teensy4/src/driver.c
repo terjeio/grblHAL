@@ -2037,24 +2037,12 @@ bool driver_init (void)
 #if USB_SERIAL_CDC == 2
     strcat(options, "USB.2 ");
 #endif
-#if KEYPAD
-    strcat(options, "KEYPAD ");
-#endif
-#if IOPORTS_ENABLE
-    strcat(options, "IOPORTS ");
-#endif
-#if SPINDLE_HUANYANG
-    strcat(options, "HUANYANG ");
-#endif
-#if PLASMA_ENABLE
-    strcat(options, "PLASMA ");
-#endif
 
     if(*options != '\0')
         options[strlen(options) - 1] = '\0';
 
-    hal.info = "IMXRT1062";
-    hal.driver_version = "201115";
+    hal.info = "iMXRT1062";
+    hal.driver_version = "201025";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -2142,17 +2130,21 @@ bool driver_init (void)
 #endif
 
 #if MODBUS_ENABLE
-    serialInit(19200);
-
-    modbus_stream.rx_timeout = 500;
     modbus_stream.write = serialWrite;
     modbus_stream.read = serialGetC;
     modbus_stream.flush_rx_buffer = serialRxFlush;
     modbus_stream.flush_tx_buffer = serialTxFlush;
     modbus_stream.get_rx_buffer_count = serialRxCount;
     modbus_stream.get_tx_buffer_count = serialTxCount;
+    modbus_stream.set_baud_rate = serialSetBaudRate;
 
-    modbus_init(&modbus_stream);
+    bool modbus = modbus_init(&modbus_stream);
+
+#if SPINDLE_HUANYANG
+    if(modbus)
+        huanyang_init(&modbus_stream);
+#endif
+
 #endif
 
   // Driver capabilities, used for announcing and negotiating (with Grbl) driver functionality.
@@ -2203,10 +2195,6 @@ bool driver_init (void)
 
 #if QEI_ENABLE
     qei_enable = encoder_init(QEI_ENABLE);
-#endif
-
-#if SPINDLE_HUANYANG
-    huanyang_init(&modbus_stream);
 #endif
 
 #if PLASMA_ENABLE

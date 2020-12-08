@@ -3,7 +3,7 @@
 
   WiFi comms
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2018-2020 Terje Io
 
@@ -521,6 +521,43 @@ wifi_settings_t *get_wifi_settings (void)
     return &wifi;
 }
 
+static const setting_group_detail_t ethernet_groups [] = {
+    { Group_Root, Group_Networking, "Networking" },
+    { Group_Networking, Group_Networking_Wifi, "WiFi" }
+};
+
+static const setting_detail_t ethernet_settings[] = {
+    { Setting_WifiMode, Group_Networking_Wifi, "WiFi Mode", NULL, Format_RadioButtons, "Off,Station,Access Point,Access Point/Station", NULL, NULL },
+    { Setting_WiFi_STA_SSID, Group_Networking_Wifi, "WiFi Station (STA) SSID", NULL, Format_String, "x(64)", NULL, "64" },
+    { Setting_WiFi_STA_Password, Group_Networking_Wifi, "WiFi Station (STA) Password", NULL, Format_Password, "x(32)", NULL, "32" },
+    { Setting_WiFi_AP_SSID, Group_Networking_Wifi, "WiFi Access Point (AP) SSID", NULL, Format_String, "x(64)", NULL, "64" },
+    { Setting_WiFi_AP_Password, Group_Networking_Wifi, "WiFi Access Point (AP) Password", NULL, Format_Password, "x(32)", NULL, "32" },
+    { Setting_NetworkServices, Group_Networking, "Network Services", NULL, Format_Bitfield, "Telnet,Websocket,HTTP,DNS", NULL, NULL },
+    { Setting_Hostname, Group_Networking, "Hostname", NULL, Format_String, "x(64)", NULL, "64" },
+    { Setting_IpMode, Group_Networking, "IP Mode", NULL, Format_RadioButtons, "Static,DHCP,AutoIP", NULL, NULL },
+    { Setting_IpAddress, Group_Networking, "IP Address", NULL, Format_IPv4, NULL, NULL, NULL },
+    { Setting_Gateway, Group_Networking, "Gateway", NULL, Format_IPv4, NULL, NULL, NULL },
+    { Setting_NetMask, Group_Networking, "Netmask", NULL, Format_IPv4, NULL, NULL, NULL },
+    { Setting_TelnetPort, Group_Networking, "Telnet port", NULL, Format_Integer, "####0", "1", "65535" },
+#if HTTP_ENABLE
+    { Setting_HttpPort, Group_Networking, "HTTP port", NULL, Format_Integer, "####0", "1", "65535" },
+#endif
+    { Setting_WebSocketPort, Group_Networking, "Websocket port", NULL, Format_Integer, "####0", "1", "65535" }
+};
+
+static setting_details_t details = {
+    .groups = ethernet_groups,
+    .n_groups = sizeof(ethernet_groups) / sizeof(setting_group_detail_t),
+    .settings = ethernet_settings,
+    .n_settings = sizeof(ethernet_settings) / sizeof(setting_detail_t)
+};
+
+static setting_details_t *on_report_settings (void)
+{
+    return &details;
+}
+
+
 static status_code_t wifi_setting (uint_fast16_t setting, float value, char *svalue)
 {
     status_code_t status = svalue ? Status_OK : Status_Unhandled;
@@ -928,6 +965,9 @@ bool wifi_init (void)
 
         on_report_options = grbl.on_report_options;
         grbl.on_report_options = reportIP;
+
+        details.on_report_settings = grbl.on_report_settings;
+        grbl.on_report_settings = on_report_settings;
     }
 
     return driver_settings.nvs_address != 0;
