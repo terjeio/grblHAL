@@ -53,6 +53,10 @@
 #include "eeprom/eeprom.h"
 #endif
 
+#if defined(X_LIMIT_PORT_MAX) || defined(Z_LIMIT_PORT_MAX) || defined(Z_LIMIT_PORT_MAX)
+#define HAS_MAX_LIMIT_INPUTS
+#endif
+
 static bool pwmEnabled = false, IOInitDone = false;
 static uint16_t pulse_length, pulse_delay;
 // Inverts the probe pin state depending on user settings and probing cycle mode.
@@ -375,38 +379,40 @@ inline static axes_signals_t limitsGetState()
 #if LIMIT_INMODE == LIMIT_SHIFT
     signals.value = (uint32_t)(LIMIT_PORT->PIN & LIMIT_MASK) >> LIMIT_SHIFT;
 #elif LIMIT_INMODE == GPIO_BITBAND
-    signals.x = BITBAND_GPIO(X_LIMIT_PORT->PIN, X_LIMIT_PIN)
-  #ifdef X_LIMIT_PORT_MAX
-    | BITBAND_GPIO(X_LIMIT_PORT_MAX->PIN, X_LIMIT_PIN_MAX);
-  #else
-    ;
-  #endif
-    signals.y = BITBAND_GPIO(Y_LIMIT_PORT->PIN, Y_LIMIT_PIN)
-  #ifdef X_LIMIT_PORT_MAX
-    | BITBAND_GPIO(Y_LIMIT_PORT_MAX->PIN, Y_LIMIT_PIN_MAX);
-  #else
-    ;
-  #endif
-    signals.z = BITBAND_GPIO(Z_LIMIT_PORT->PIN, Z_LIMIT_PIN)
-  #ifdef X_LIMIT_PORT_MAX
-    | BITBAND_GPIO(Y_LIMIT_PORT_MAX->PIN, Y_LIMIT_PIN_MAX);
-  #else
-    ;
-#endif
+    signals.x = BITBAND_GPIO(X_LIMIT_PORT->PIN, X_LIMIT_PIN);
+    signals.y = BITBAND_GPIO(Y_LIMIT_PORT->PIN, Y_LIMIT_PIN);
+    signals.z = BITBAND_GPIO(Z_LIMIT_PORT->PIN, Z_LIMIT_PIN);
 #else
     uint32_t bits = LIMIT_PORT->PIN;
-    signals.x = (bits & X_LIMIT_BIT) != 0
-#ifdef X_LIMIT_PORT_MAX
-  | (bits & X_LIMIT_BIT_MAX) != 0;
-#else
-  ;
-#endif
+    signals.x = (bits & X_LIMIT_BIT) != 0;
     signals.y = (bits & Y_LIMIT_BIT) != 0;
     signals.z = (bits & Z_LIMIT_BIT) != 0;
 #endif
 
     if (settings.limits.invert.mask)
         signals.value ^= settings.limits.invert.mask;
+
+#ifdef HAS_MAX_LIMIT_INPUTS
+
+    axes_signals_t signals_max;
+
+#ifdef X_LIMIT_PORT_MAX
+    signals_max.x = BITBAND_GPIO(X_LIMIT_PORT_MAX->PIN, X_LIMIT_PIN_MAX);
+#else
+    signals_max.x = (bits & X_LIMIT_BIT_MAX) != 0;
+#endif
+#ifdef Y_LIMIT_PORT_MAX
+    signals_max.y = BITBAND_GPIO(Y_LIMIT_PORT_MAX->PIN, Y_LIMIT_PIN_MAX);
+#else
+    signals_max.y = (bits & Y_LIMIT_BIT_MAX) != 0;
+#endif
+#ifdef Z_LIMIT_PORT_MAX
+    signals_max.z = BITBAND_GPIO(Z_LIMIT_PORT_MAX->PIN, Z_LIMIT_PIN_MAX);
+#else
+    signals_max.z = (bits & Z_LIMIT_BIT_MAX) != 0;
+#endif
+    signals.value |= (signals_max.value ^ settings.limits.invert.mask);
+#endif
 
     return signals;
 }
@@ -1079,7 +1085,7 @@ bool driver_init (void) {
 #endif
 
     hal.info = "LCP1769";
-    hal.driver_version = "201120";
+    hal.driver_version = "201211";
     hal.driver_setup = driver_setup;
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;

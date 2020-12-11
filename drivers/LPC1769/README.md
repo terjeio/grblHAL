@@ -8,8 +8,11 @@ See the Wiki-page for [compiling grblHAL](https://github.com/terjeio/grblHAL/wik
 
 Available driver options can be found [here](src/my_machine.h).
 
+__Update 2020-12-11:__
+* Added initial board map file for Bigtreetech SKR V1.3 Turbo board.
+
 __Update 2020-11-21:__
-* Added initial board map file for [BTT SKR 1.4 Turbo board](https://www.bigtree-tech.com/products/btt-skr-v1-4-skr-v1-4-turbo-32-bit-control-board.html).
+* Added initial board map file for [BTT SKR V1.4 Turbo board](https://www.bigtree-tech.com/products/btt-skr-v1-4-skr-v1-4-turbo-32-bit-control-board.html).
 * Added polling of limit switches, enabling hard limits is now possible.
 
 A build option for creating a _Firmware.bin_ file that can be used for programming via the Smoothieboard DFU-bootloader has been added to build configurations.  
@@ -26,4 +29,4 @@ __Update 2019-08-08:__
 * Changed IDE to [MCUXpresso v11](https://www.nxp.com/design/software/development-software/mcuxpresso-software-and-tools/mcuxpresso-integrated-development-environment-ide:MCUXpresso-IDE) and linked against [LPCOpen development platform](https://www.nxp.com/design/microcontrollers-developer-resources/lpcopen-libraries-and-examples/lpcopen-software-development-platform-lpc17xx:LPCOPEN-SOFTWARE-FOR-LPC17XX) libraries. I2C EEPROM on [OM13085 LPCXpresso board](https://www.nxp.com/design/microcontrollers-developer-resources/lpc-microcontroller-utilities/lpcxpresso-board-for-lpc1769-with-cmsis-dap-probe:OM13085) and SD card supported. 
 
 ---
-2020-11-21
+2020-12-11

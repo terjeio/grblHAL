@@ -72,6 +72,8 @@
     #include "smoothieboard_map.h"
 #elif defined(BOARD_RAMPS_16)
     #include "ramps_1.6_map.h"
+#elif defined(BOARD_BTT_SKR_13)
+    #include <btt_skr_1.3_map.h>
 #elif defined(BOARD_BTT_SKR_14_TURBO)
     #include <btt_skr_1.4_turbo_map.h>
 #else

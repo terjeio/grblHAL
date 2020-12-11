@@ -23,6 +23,7 @@
 // If none is enabled pin mappings from generic_map.h will be used
 #define SMOOTHIEBOARD
 //#define BOARD_RAMPS_16
+//#define BOARD_BTT_SKR_13
 //#define BOARD_BTT_SKR_14_TURBO
 
 // Configuration

@@ -1268,7 +1268,7 @@ void report_realtime_status (void)
 
         case STATE_ESTOP:
         case STATE_ALARM:
-            if(settings.status_report.alarm_substate && sys.alarm)
+            if((sys.report.all || settings.status_report.alarm_substate) && sys.alarm)
                 hal.stream.write_all(appendbuf(2, "Alarm:", uitoa((uint32_t)sys.alarm)));
             else
                 hal.stream.write_all("Alarm");
