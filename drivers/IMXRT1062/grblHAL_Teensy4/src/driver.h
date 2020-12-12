@@ -241,6 +241,7 @@ typedef enum {
     Input_FeedHold,
     Input_CycleStart,
     Input_SafetyDoor,
+    Input_LimitsOverride,
     Input_EStop,
     Input_ModeSelect,
     Input_LimitX,

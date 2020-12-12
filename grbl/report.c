@@ -508,7 +508,7 @@ void report_grbl_settings (bool all)
     if(all)
         report_uint_setting(Setting_StatusReportMask, (uint32_t)settings.status_report.mask);
     else
-        report_uint_setting(Setting_StatusReportMask, settings.status_report.mask & 0x3);
+        report_uint_setting(Setting_StatusReportMask, settings.status_report.mask & ~0b11);
     report_float_setting(Setting_JunctionDeviation, settings.junction_deviation, N_DECIMAL_SETTINGVALUE);
     report_float_setting(Setting_ArcTolerance, settings.arc_tolerance, N_DECIMAL_SETTINGVALUE);
     report_uint_setting(Setting_ReportInches, settings.flags.report_inches);
@@ -1151,6 +1151,9 @@ void report_build_info (char *line, bool extended)
         if(hal.driver_cap.spindle_sync)
             strcat(buf, "SS,");
 
+        if(hal.driver_cap.odometers)
+            strcat(buf, "ODO,");
+
     #ifdef PID_LOG
         strcat(buf, "PID,");
     #endif
@@ -1352,7 +1355,7 @@ void report_realtime_status (void)
             if(!probe_state.connected)
                 *append++ = 'O';
 
-            if (lim_pin_state.value)
+            if (lim_pin_state.value && !hal.control.get_state().limits_override)
                 append = axis_signals_tostring(append, lim_pin_state);
 
             if (ctrl_pin_state.value) {

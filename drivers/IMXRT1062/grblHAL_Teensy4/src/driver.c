@@ -74,6 +74,15 @@ static void ppi_timeout_isr (void);
 #include "usb_serial_pjrc.h"
 #endif
 
+#if defined(ENABLE_SAFETY_DOOR_INPUT_PIN) && defined(SAFETY_DOOR_PIN)
+#define SAFETY_DOOR_ENABLE 1
+#else
+#define SAFETY_DOOR_ENABLE 0
+#ifdef SAFETY_DOOR_PIN
+//#define LIMITS_OVERRIDE_PIN SAFETY_DOOR_PIN
+#endif
+#endif
+
 #define DEBOUNCE_QUEUE 8 // Must be a power of 2
 
 #define F_BUS_MHZ (F_BUS_ACTUAL / 1000000)
@@ -145,8 +154,11 @@ static gpio_t spindleEnable, spindleDir;
 #endif
 
 // Optional I/O
-#ifdef SAFETY_DOOR_PIN
+#if SAFETY_DOOR_ENABLE
 static gpio_t SafetyDoor;
+#endif
+#ifdef LIMITS_OVERRIDE_PIN
+static gpio_t LimitsOverride;
 #endif
 #ifdef A_AXIS
 static gpio_t stepA, dirA, LimitA;
@@ -235,51 +247,54 @@ static gpio_t QEI_A, QEI_B;
 
 static input_signal_t inputpin[] = {
 #if ESTOP_ENABLE
-    { .id = Input_EStop,        .port = &Reset,        .pin = RESET_PIN,         .group = INPUT_GROUP_CONTROL },
+    { .id = Input_EStop,          .port = &Reset,          .pin = RESET_PIN,           .group = INPUT_GROUP_CONTROL },
 #else
-    { .id = Input_Reset,        .port = &Reset,        .pin = RESET_PIN,         .group = INPUT_GROUP_CONTROL },
+    { .id = Input_Reset,          .port = &Reset,          .pin = RESET_PIN,           .group = INPUT_GROUP_CONTROL },
 #endif
-    { .id = Input_FeedHold,     .port = &FeedHold,     .pin = FEED_HOLD_PIN,     .group = INPUT_GROUP_CONTROL },
-    { .id = Input_CycleStart,   .port = &CycleStart,   .pin = CYCLE_START_PIN,   .group = INPUT_GROUP_CONTROL },
-#ifdef SAFETY_DOOR_PIN
-    { .id = Input_SafetyDoor,   .port = &SafetyDoor ,  .pin = SAFETY_DOOR_PIN,   .group = INPUT_GROUP_CONTROL },
+    { .id = Input_FeedHold,       .port = &FeedHold,       .pin = FEED_HOLD_PIN,       .group = INPUT_GROUP_CONTROL },
+    { .id = Input_CycleStart,     .port = &CycleStart,     .pin = CYCLE_START_PIN,     .group = INPUT_GROUP_CONTROL },
+#if SAFETY_DOOR_ENABLE
+    { .id = Input_SafetyDoor,     .port = &SafetyDoor,     .pin = SAFETY_DOOR_PIN,     .group = INPUT_GROUP_CONTROL },
 #endif
-    { .id = Input_Probe,        .port = &Probe,        .pin = PROBE_PIN,         .group = INPUT_GROUP_PROBE },
-    { .id = Input_LimitX,       .port = &LimitX,       .pin = X_LIMIT_PIN,       .group = INPUT_GROUP_LIMIT },
+#if defined(LIMITS_OVERRIDE_PIN)
+    { .id = Input_LimitsOverride, .port = &LimitsOverride, .pin = LIMITS_OVERRIDE_PIN, .group = INPUT_GROUP_CONTROL },
+#endif
+    { .id = Input_Probe,          .port = &Probe,          .pin = PROBE_PIN,           .group = INPUT_GROUP_PROBE },
+    { .id = Input_LimitX,         .port = &LimitX,         .pin = X_LIMIT_PIN,         .group = INPUT_GROUP_LIMIT },
 #ifdef X2_LIMIT_PIN
-    { .id = Input_LimitX_Max,   .port = &LimitX2,      .pin = X2_LIMIT_PIN,      .group = INPUT_GROUP_LIMIT },
+    { .id = Input_LimitX_Max,     .port = &LimitX2,        .pin = X2_LIMIT_PIN,        .group = INPUT_GROUP_LIMIT },
 #endif
-    { .id = Input_LimitY,       .port = &LimitY,       .pin = Y_LIMIT_PIN,       .group = INPUT_GROUP_LIMIT },
+    { .id = Input_LimitY,         .port = &LimitY,         .pin = Y_LIMIT_PIN,         .group = INPUT_GROUP_LIMIT },
 #ifdef Y2_LIMIT_PIN
-    { .id = Input_LimitY_Max,   .port = &LimitY2,      .pin = Y2_LIMIT_PIN,      .group = INPUT_GROUP_LIMIT },
+    { .id = Input_LimitY_Max,     .port = &LimitY2,        .pin = Y2_LIMIT_PIN,        .group = INPUT_GROUP_LIMIT },
 #endif
-    { .id = Input_LimitZ,       .port = &LimitZ,       .pin = Z_LIMIT_PIN,       .group = INPUT_GROUP_LIMIT }
+    { .id = Input_LimitZ,         .port = &LimitZ,         .pin = Z_LIMIT_PIN,         .group = INPUT_GROUP_LIMIT }
 #ifdef Z2_LIMIT_PIN
-  , { .id = Input_LimitZ_Max,   .port = &LimitZ2,      .pin = Z2_LIMIT_PIN,      .group = INPUT_GROUP_LIMIT }
+  , { .id = Input_LimitZ_Max,     .port = &LimitZ2,        .pin = Z2_LIMIT_PIN,        .group = INPUT_GROUP_LIMIT }
 #endif
 #ifdef A_LIMIT_PIN
-  , { .id = Input_LimitA,       .port = &LimitA,       .pin = A_LIMIT_PIN,       .group = INPUT_GROUP_LIMIT }
+  , { .id = Input_LimitA,         .port = &LimitA,         .pin = A_LIMIT_PIN,         .group = INPUT_GROUP_LIMIT }
 #endif
 #ifdef B_LIMIT_PIN
-  , { .id = Input_LimitB,       .port = &LimitB,       .pin = B_LIMIT_PIN,       .group = INPUT_GROUP_LIMIT }
+  , { .id = Input_LimitB,         .port = &LimitB,         .pin = B_LIMIT_PIN,         .group = INPUT_GROUP_LIMIT }
 #endif
 #if MPG_MODE_ENABLE
-  ,  { .id = Input_ModeSelect,  .port = &ModeSelect,   .pin = MODE_PIN,          .group = INPUT_GROUP_MPG }
+  ,  { .id = Input_ModeSelect,    .port = &ModeSelect,     .pin = MODE_PIN,            .group = INPUT_GROUP_MPG }
 #endif
 #if KEYPAD_ENABLE && defined(KEYPAD_STROBE_PIN)
-  , { .id = Input_KeypadStrobe, .port = &KeypadStrobe, .pin = KEYPAD_STROBE_PIN, .group = INPUT_GROUP_KEYPAD }
+  , { .id = Input_KeypadStrobe,   .port = &KeypadStrobe,   .pin = KEYPAD_STROBE_PIN,   .group = INPUT_GROUP_KEYPAD }
 #endif
 #ifdef SPINDLE_INDEX_PIN
-  , { .id = Input_SpindleIndex, .port = &SpindleIndex, .pin = SPINDLE_INDEX_PIN, .group = INPUT_GROUP_SPINDLE_INDEX }
+  , { .id = Input_SpindleIndex,   .port = &SpindleIndex,   .pin = SPINDLE_INDEX_PIN,   .group = INPUT_GROUP_SPINDLE_INDEX }
 #endif
 #if QEI_ENABLE
-  , { .id = Input_QEI_A,        .port = &QEI_A,        .pin = QEI_A_PIN,         .group = INPUT_GROUP_QEI }
-  , { .id = Input_QEI_B,        .port = &QEI_B,        .pin = QEI_B_PIN,         .group = INPUT_GROUP_QEI }
+  , { .id = Input_QEI_A,          .port = &QEI_A,          .pin = QEI_A_PIN,           .group = INPUT_GROUP_QEI }
+  , { .id = Input_QEI_B,          .port = &QEI_B,          .pin = QEI_B_PIN,           .group = INPUT_GROUP_QEI }
   #if QEI_SELECT_ENABLED
-  , { .id = Input_QEI_Select,   .port = &QEI_Select,   .pin = QEI_SELECT_PIN,    .group = INPUT_GROUP_QEI_SELECT }
+  , { .id = Input_QEI_Select,     .port = &QEI_Select,     .pin = QEI_SELECT_PIN,      .group = INPUT_GROUP_QEI_SELECT }
   #endif
   #if QEI_INDEX_ENABLED
-  , { .id = Input_QEI_Index,    .port = &QEI_Index,    .pin = QEI_INDEX_PIN,     .group = INPUT_GROUP_QEI }
+  , { .id = Input_QEI_Index,      .port = &QEI_Index,      .pin = QEI_INDEX_PIN,       .group = INPUT_GROUP_QEI }
   #endif
 #endif
 };
@@ -1016,12 +1031,16 @@ inline static control_signals_t systemGetState (void)
 #endif
     signals.feed_hold = (FeedHold.reg->DR & FeedHold.bit) != 0;
     signals.cycle_start = (CycleStart.reg->DR & CycleStart.bit) != 0;
-#if defined(ENABLE_SAFETY_DOOR_INPUT_PIN) && defined(SAFETY_DOOR_PIN)
+#if SAFETY_DOOR_ENABLE
     signals.safety_door_ajar = (SafetyDoor.reg->DR & SafetyDoor.bit) != 0;
 #endif
 
     if(settings.control_invert.value)
         signals.value ^= settings.control_invert.value;
+
+#ifdef LIMITS_OVERRIDE_PIN
+    signals.limits_override = (LimitsOverride.reg->DR & LimitsOverride.bit) == 0;
+#endif
 
     return signals;
 }
@@ -1479,12 +1498,19 @@ static void settings_changed (settings_t *settings)
                     signal->irq_mode = control_fei.cycle_start ? IRQ_Mode_Falling : IRQ_Mode_Rising;
                     break;
 
+#if SAFETY_DOOR_ENABLE
                 case Input_SafetyDoor:
                     pullup = !settings->control_disable_pullup.safety_door_ajar;
                     signal->debounce = hal.driver_cap.software_debounce;
                     signal->irq_mode = control_fei.safety_door_ajar ? IRQ_Mode_Falling : IRQ_Mode_Rising;
                     break;
-
+#endif
+#ifdef LIMITS_OVERRIDE_PIN
+                case Input_LimitsOverride:
+                    pullup = true;
+                    signal->debounce = false;
+                    break;
+#endif
                 case Input_Probe:
                     pullup = hal.driver_cap.probe_pull_up;
                     break;
@@ -2042,7 +2068,7 @@ bool driver_init (void)
         options[strlen(options) - 1] = '\0';
 
     hal.info = "iMXRT1062";
-    hal.driver_version = "201025";
+    hal.driver_version = "201212";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -2162,8 +2188,11 @@ bool driver_init (void)
 #if ESTOP_ENABLE
     hal.driver_cap.e_stop = On;
 #endif
-#ifdef SAFETY_DOOR_PIN
+#if SAFETY_DOOR_ENABLE
     hal.driver_cap.safety_door = On;
+#endif
+#ifdef LIMITS_OVERRIDE_PIN
+    hal.driver_cap.limits_override = On;
 #endif
     hal.driver_cap.software_debounce = On;
     hal.driver_cap.step_pulse_delay = On;

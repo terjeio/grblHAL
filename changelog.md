@@ -1,5 +1,15 @@
 ## grblHAL changelog
 
+Build 20201212 (test only):
+* Error 7 is no longer issued on startup if non-volatile storage \(Flash/EEPROM/FRAM\) for settings is not available.
+* [Alarm substate](https://github.com/terjeio/grblHAL/wiki/Report-extensions#realtime-report) \(if available\) is always added to the real-time report if a complete report is requested by sending `0x87`.
+* Added input signal and handling for limit switches override.  
+The pin is pulled high and requires a normally open \(NO\) push switch for operation. When closed limit pins are excluded from the status report and alarm 12 will not be raised if a limit switch is asserted _on a soft reset_ when "Hard limits" and "Strict mode" is enabled with `$21`.
+This allows normal operation so that a manual pull-off can be done before e.g. homing the machine.  
+Currently only the iMXRT1062 \(Teensy 4.x\) driver has support for this, for now by reassigning the safety door input when this is not used for its intended purpose.  
+__NOTE:__ A override will _not_ affect handling of homing and limit switch events elsewhere.
+* Now adds `ODO` to `NEWOPT` tag values if odometer data is available.
+
 Build 20201205 (test only):
 * Updated _[my_plugin.c](templates/my_plugin.c)_ [template](templates/README.md) with settings details for `$HELP` and `$ES`/`$EG` enumerations.
 * Settings/setting groups handling enhanced, moved some to plugins and added sorting (requres enough heap).

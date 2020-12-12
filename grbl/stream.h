@@ -47,7 +47,7 @@
 #endif
 
 #ifndef BLOCK_TX_BUFFER_SIZE
-#define BLOCK_TX_BUFFER_SIZE 200
+#define BLOCK_TX_BUFFER_SIZE 256
 #endif
 
 // Serial baud rate

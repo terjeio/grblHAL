@@ -293,7 +293,11 @@ static const setting_detail_t setting_detail[] = {
     { Setting_InvertStepperEnable, Group_Stepper, "Invert step enable pin(s)", NULL, Format_AxisMask, NULL, NULL, NULL },
     { Setting_LimitPinsInvertMask, Group_Limits, "Invert limit pins", NULL, Format_AxisMask, NULL, NULL, NULL },
     { Setting_InvertProbePin, Group_Probing, "Invert probe pin", NULL, Format_Bool, NULL, NULL, NULL },
+#if COMPATIBILITY_LEVEL <= 1
     { Setting_StatusReportMask, Group_General, "Status report options", NULL, Format_Bitfield, "Position in machine coordinate,Buffer state,Line numbers,Feed & speed,Pin state,Work coordinate offset,Overrides,Probe coordinates,Buffer sync on WCO change,Parser state,Alarm substatus,Run substatus", NULL, NULL },
+#else
+    { Setting_StatusReportMask, Group_General, "Status report options", NULL, Format_Bitfield, "Position in machine coordinate,Buffer state", NULL, NULL },
+#endif
     { Setting_JunctionDeviation, Group_General, "Junction deviation", "mm", Format_Decimal, "#####0.000", NULL, NULL },
     { Setting_ArcTolerance, Group_General, "Arc tolerance", "mm", Format_Decimal, "#####0.000", NULL, NULL },
     { Setting_ReportInches, Group_General, "Report in inches", NULL, Format_Bool, NULL, NULL, NULL },
@@ -304,8 +308,16 @@ static const setting_detail_t setting_detail[] = {
     { Setting_LimitPullUpDisableMask, Group_Limits, "Pullup disable limit pins", NULL, Format_AxisMask, NULL, NULL, NULL },
     { Setting_ProbePullUpDisable, Group_Probing, "Pullup disable probe pin", NULL, Format_Bool, NULL, NULL, NULL },
     { Setting_SoftLimitsEnable, Group_Limits, "Soft limits enable", NULL, Format_Bool, NULL, NULL, NULL },
+#if COMPATIBILITY_LEVEL <= 1
     { Setting_HardLimitsEnable, Group_Limits, "Hard limits enable", NULL, Format_XBitfield, "Enable,Strict mode", NULL, NULL },
+#else
+    { Setting_HardLimitsEnable, Group_Limits, "Hard limits enable", NULL, Format_Bool, NULL, NULL, NULL },
+#endif
+#if COMPATIBILITY_LEVEL <= 1
     { Setting_HomingEnable, Group_Homing, "Homing cycle", NULL, Format_XBitfield, "Enable,Enable single axis commands,Homing on startup required,Set machine origin to 0,Two switches shares one input pin,Allow manual,Override locks", NULL, NULL },
+#else
+    { Setting_HomingEnable, Group_Homing, "Homing cycle enable", NULL, Format_Bool, NULL, NULL, NULL },
+#endif
     { Setting_HomingDirMask, Group_Homing, "Homing direction invert", NULL, Format_AxisMask, NULL, NULL, NULL },
     { Setting_HomingFeedRate, Group_Homing, "Homing locate feed rate", "mm/min", Format_Decimal, "#####0.0", NULL, NULL },
     { Setting_HomingSeekRate, Group_Homing, "Homing search seek rate", "mm/min", Format_Decimal, "#####0.0", NULL, NULL },
@@ -870,8 +882,8 @@ status_code_t settings_store_global_setting (setting_type_t setting, char *svalu
 #if COMPATIBILITY_LEVEL <= 1
                 settings.status_report.mask = int_value;
 #else
-                int_value &= 0b111;
-                settings.status_report.mask = (settings.status_report.mask & ~0b111) | int_value;
+                int_value &= 0b11;
+                settings.status_report.mask = (settings.status_report.mask & ~0b11) | int_value;
 #endif
                 break;
 
@@ -1243,7 +1255,8 @@ void settings_init() {
     if(!read_global_settings()) {
         settings_restore_t settings = settings_all;
         settings.defaults = 1; // Ensure global settings get restored
-        grbl.report.status_message(Status_SettingReadFail);
+        if(hal.nvs.type != NVS_None)
+            grbl.report.status_message(Status_SettingReadFail);
         settings_restore(settings); // Force restore all non-volatile storage data.
         report_init();
 #if COMPATIBILITY_LEVEL <= 1

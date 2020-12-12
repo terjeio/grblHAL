@@ -77,6 +77,9 @@
 #ifndef CNC_BOOSTERPACK_A4998
 #define CNC_BOOSTERPACK_A4998   0
 #endif
+#ifndef LIMITS_OVERRIDE_ENABLE
+#define LIMITS_OVERRIDE_ENABLE  0
+#endif
 
 #define CNC_BOOSTERPACK         0
 

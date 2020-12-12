@@ -125,7 +125,8 @@ typedef union {
                  probe_disconnected :1,
                  motor_fault        :1,
                  motor_warning      :1,
-                 unassigned         :4,
+                 limits_override    :1,
+                 unassigned         :3,
                  probe_triggered    :1, // used for probe protection
                  deasserted         :1; // this flag is set if signals are deasserted. Note: do NOT pass on to Grbl control_interrupt_handler if set.
     };

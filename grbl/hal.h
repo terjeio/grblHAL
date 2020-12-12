@@ -69,7 +69,9 @@ typedef union {
                  atc                       :1,
                  no_gcode_message_handling :1,
                  dual_spindle              :1,
-                 unassigned                :3;
+                 limits_override           :1,
+                 odometers                 :1,
+                 unassigned                :1;
     };
 } driver_cap_t;
 

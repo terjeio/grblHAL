@@ -110,9 +110,13 @@ bool protocol_main_loop (void)
         system_raise_alarm(Alarm_HomingRequried);
         grbl.report.feedback_message(Message_HomingCycleRequired);
     } else if (settings.limits.flags.hard_enabled && settings.limits.flags.check_at_init && hal.limits.get_state().value) {
-        // Check that no limit switches are engaged to make sure everything is good to go.
-        system_raise_alarm(Alarm_LimitsEngaged);
-        grbl.report.feedback_message(Message_CheckLimits);
+        if(sys.alarm == Alarm_LimitsEngaged && hal.control.get_state().limits_override)
+            set_state(STATE_IDLE); // Clear alarm state to enable limit switch pulloff.
+        else {
+            // Check that no limit switches are engaged to make sure everything is good to go.
+            system_raise_alarm(Alarm_LimitsEngaged);
+            grbl.report.feedback_message(Message_CheckLimits);
+        }
     } else if(sys.cold_start && (settings.flags.force_initialization_alarm || hal.control.get_state().reset)) {
         set_state(STATE_ALARM); // Ensure alarm state is set.
         grbl.report.feedback_message(Message_AlarmLock);

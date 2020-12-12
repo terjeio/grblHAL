@@ -460,11 +460,6 @@ inline static axes_signals_t limitsGetState()
     if (settings.limits.invert.mask)
         signals.value ^= settings.limits.invert.mask;
 
-#if LIMITS_OVERRIDE_ENABLE
-    if(!BITBAND_PERI(LIMITS_OVERRIDE_PORT->IN, LIMITS_OVERRIDE_SWITCH_PIN))
-        signals.value = 0;
-#endif
-
     return signals;
 }
 
@@ -528,6 +523,10 @@ static control_signals_t systemGetState (void)
 
     if(settings.control_invert.mask)
         signals.value ^= settings.control_invert.mask;
+
+#if LIMITS_OVERRIDE_ENABLE
+    signals.limits_override = BITBAND_PERI(LIMITS_OVERRIDE_PORT->IN, LIMITS_OVERRIDE_SWITCH_PIN) == 0;
+#endif
 
     return signals;
 }
@@ -1415,7 +1414,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "MSP432";
-    hal.driver_version = "201125";
+    hal.driver_version = "201212";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1498,6 +1497,9 @@ bool driver_init (void)
     hal.driver_cap.e_stop = On;
 #endif
     hal.driver_cap.safety_door = On;
+#if LIMITS_OVERRIDE_ENABLE
+    hal.driver_cap.limits_override = On;
+#endif
     hal.driver_cap.control_pull_up = On;
     hal.driver_cap.limits_pull_up = On;
     hal.driver_cap.probe_pull_up = On;
