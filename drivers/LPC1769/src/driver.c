@@ -1085,7 +1085,7 @@ bool driver_init (void) {
 #endif
 
     hal.info = "LCP1769";
-    hal.driver_version = "201211";
+    hal.driver_version = "201213";
     hal.driver_setup = driver_setup;
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
@@ -1177,6 +1177,10 @@ bool driver_init (void) {
     hal.driver_cap.probe_pull_up = On;
 #if SDCARD_ENABLE
     hal.driver_cap.sd_card = On;
+#endif
+
+#ifdef HAS_BOARD_INIT
+    board_init();
 #endif
 
     my_plugin_init();

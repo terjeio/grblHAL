@@ -257,6 +257,8 @@ void odometer_init()
         if(nvs.memcpy_from_nvs((uint8_t *)&odometers, odometers_address, sizeof(odometer_data_t), true) != NVS_TransferResult_OK)
             odometer_data_reset(false);
 
+        hal.driver_cap.odometers = On;
+
         on_unknown_sys_command = grbl.on_unknown_sys_command;
         grbl.on_unknown_sys_command = commandExecute;
 

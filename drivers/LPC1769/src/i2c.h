@@ -25,6 +25,8 @@
 #include "driver.h"
 #include "grbl/plugins.h"
 
+void i2c_write (uint8_t addr, uint8_t *data, uint8_t len);
+
 #if TRINAMIC_ENABLE && TRINAMIC_I2C
 
 #include "trinamic\trinamic2130.h"

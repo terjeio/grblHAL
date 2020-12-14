@@ -268,7 +268,7 @@ static const setting_group_detail_t setting_group_detail [] = {
     { Group_Root, Group_Spindle, "Spindle"},
     { Group_Root, Group_Coolant, "Coolant"},
     { Group_Spindle, Group_Spindle_Sync, "Spindle sync"},
-    { Group_Root, Group_Toolchange, "Toolchange"},
+    { Group_Root, Group_Toolchange, "Tool change"},
     { Group_Root, Group_MotorDriver, "Motor driver"},
     { Group_Root, Group_Axis, "Axis"},
     { Group_Axis, Group_XAxis, "X-axis"},
@@ -615,6 +615,10 @@ bool settings_is_group_available (setting_group_t group)
 
     switch(group) {
 
+        case Group_Toolchange:
+            available = !hal.driver_cap.atc && hal.stream.suspend_read;
+            break;
+
         case Group_Bluetooth:
             available = hal.driver_cap.bluetooth;
             break;
@@ -697,8 +701,11 @@ bool settings_is_setting_available (setting_type_t setting, setting_group_t grou
     if(available) switch(setting) {
 
         case Setting_SpindlePPR:
+            available = hal.driver_cap.spindle_sync || hal.driver_cap.spindle_pid;
+            break;
+
         case Setting_SpindleAtSpeedTolerance:
-            available = hal.spindle.get_data != NULL;
+            available = hal.driver_cap.spindle_at_speed;
             break;
 
         case Setting_RpmMax:

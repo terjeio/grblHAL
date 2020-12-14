@@ -116,8 +116,8 @@ void trinamic_configure (void)
 static const setting_detail_t trinamic_settings[] = {
     { Setting_TrinamicDriver, Group_MotorDriver, "Trinamic driver", NULL, Format_AxisMask, NULL, NULL, NULL },
     { Setting_TrinamicHoming, Group_MotorDriver, "Sensorless homing", NULL, Format_AxisMask, NULL, NULL, NULL },
-    { Setting_AxisStepperCurrentBase, Group_Axis, "?-axis motor current", "mA", Format_Integer, "###0", NULL, NULL },
-    { Setting_AxisMicroStepsBase, Group_Axis, "?-axis microsteps", "steps", Format_Integer, "###0", NULL, NULL }
+    { Setting_AxisStepperCurrentBase, Group_Axis0, "?-axis motor current", "mA", Format_Integer, "###0", NULL, NULL },
+    { Setting_AxisMicroStepsBase, Group_Axis0, "?-axis microsteps", "steps", Format_Integer, "###0", NULL, NULL }
 };
 
 static setting_details_t details = {

@@ -1104,6 +1104,9 @@ void report_build_info (char *line, bool extended)
 
         strcpy(buf, "[NEWOPT:ENUMS,");
 
+        if(!settings.flags.legacy_rt_commands)
+            strcat(buf, "RT-,");
+
         if(!(nvs->type == NVS_None || nvs->type == NVS_Emulated)) {
             if(hal.nvs.type == NVS_Emulated)
                 strcat(buf, "*");

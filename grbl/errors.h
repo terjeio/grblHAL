@@ -105,7 +105,7 @@ static const status_detail_t status_detail[] = {
     { Status_InvalidStatement, "Invalid statement", "Grbl '$' system command was not recognized or supported." },
     { Status_NegativeValue, "Value < 0", "Negative value received for an expected positive value." },
     { Status_SettingDisabled, "Setting disabled", "Homing cycle failure. Homing is not enabled via settings." },
-    { Status_SettingStepPulseMin, "Value < 3 usec", "Minimum step pulse time must be greater than 3usec." },
+    { Status_SettingStepPulseMin, "Value < 2 microseconds", "Step pulse time must be greater or equal to 2 microseconds." },
     { Status_SettingReadFail, "EEPROM read fail. Using defaults", "An EEPROM read failed. Auto-restoring affected EEPROM to default values." },
     { Status_IdleError, "Not idle", "Grbl '$' command cannot be used unless Grbl is IDLE. Ensures smooth operation during a job." },
     { Status_SystemGClock, "G-code lock", "G-code commands are locked out during alarm or jog state." },

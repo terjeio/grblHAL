@@ -73,9 +73,11 @@
 #elif defined(BOARD_RAMPS_16)
     #include "ramps_1.6_map.h"
 #elif defined(BOARD_BTT_SKR_13)
-    #include <btt_skr_1.3_map.h>
+    #include "btt_skr_1.3_map.h"
 #elif defined(BOARD_BTT_SKR_14_TURBO)
-    #include <btt_skr_1.4_turbo_map.h>
+    #include "btt_skr_1.4_turbo_map.h"
+#elif defined(BOARD_MKS_SBASE_13)
+#include "mks_sbase_map.h"
 #else
     #include "generic_map.h"
 #endif
@@ -97,7 +99,7 @@
 
 #if EEPROM_ENABLE
 #define I2C_ENABLE 1
-#else
+#elif !defined(I2C_ENABLE)
 #define I2C_ENABLE 0
 #endif
 

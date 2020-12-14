@@ -35,10 +35,18 @@
 
 void i2c_init (void)
 {
+
+#if I2C_ENABLE == 1
     Chip_IOCON_PinMux(LPC_IOCON, 0, 19, IOCON_MODE_INACT, IOCON_FUNC3);
     Chip_IOCON_PinMux(LPC_IOCON, 0, 20, IOCON_MODE_INACT, IOCON_FUNC3);
     Chip_IOCON_EnableOD(LPC_IOCON, 0, 19);
     Chip_IOCON_EnableOD(LPC_IOCON, 0, 20);
+#else
+    Chip_IOCON_PinMux(LPC_IOCON, 0, 0, IOCON_MODE_INACT, IOCON_FUNC3);
+    Chip_IOCON_PinMux(LPC_IOCON, 0, 1, IOCON_MODE_INACT, IOCON_FUNC3);
+    Chip_IOCON_EnableOD(LPC_IOCON, 0, 0);
+    Chip_IOCON_EnableOD(LPC_IOCON, 0, 1);
+#endif
 
     Chip_I2C_Init(I2C1);
     Chip_I2C_SetClockRate(I2C1, 100000);
@@ -84,3 +92,15 @@ nvs_transfer_result_t i2c_nvs_transfer (nvs_transfer_t *i2c, bool read)
 
 #endif
 
+void i2c_write (uint8_t addr, uint8_t *data, uint8_t len)
+{
+    static I2C_XFER_T xfer;
+
+    xfer.slaveAddr = addr;
+    xfer.rxSz = 0;
+    xfer.rxBuff = NULL;
+    xfer.txBuff = data;
+    xfer.txSz = len;
+
+    Chip_I2C_MasterTransfer(I2C1, &xfer);
+}
