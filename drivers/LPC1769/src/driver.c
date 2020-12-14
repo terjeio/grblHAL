@@ -60,7 +60,10 @@
 static bool pwmEnabled = false, IOInitDone = false;
 static uint16_t pulse_length, pulse_delay;
 // Inverts the probe pin state depending on user settings and probing cycle mode.
-static uint8_t probe_invert_mask;
+static probe_state_t probe = {
+    .connected = On
+};
+
 static axes_signals_t next_step_outbits;
 static spindle_pwm_t spindle_pwm;
 static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
@@ -454,20 +457,21 @@ static control_signals_t systemGetState (void)
 // and the probing cycle modes for toward-workpiece/away-from-workpiece.
 static void probeConfigure(bool is_probe_away, bool probing)
 {
-  probe_invert_mask = settings.probe.invert_probe_pin ? 0 : PROBE_BIT;
+    probe.triggered = Off;
+    probe.is_probing = probing;
+    probe.inverted = settings.probe.invert_probe_pin;
 
-  if (is_probe_away)
-      probe_invert_mask ^= PROBE_BIT;
+    if (is_probe_away)
+        probe.inverted = !probe.inverted;
 }
 
 // Returns the probe connected and triggered pin states.
 probe_state_t probeGetState (void)
 {
-    probe_state_t state = {
-        .connected = On
-    };
+    probe_state_t state = {0};
 
-    state.triggered = ((PROBE_PORT->PIN & PROBE_BIT) ^ probe_invert_mask) != 0;
+    state.connected = probe.connected;
+    state.triggered = !!(PROBE_PORT->PIN & PROBE_BIT) ^ probe.inverted;
 
     return state;
 }
@@ -1085,7 +1089,7 @@ bool driver_init (void) {
 #endif
 
     hal.info = "LCP1769";
-    hal.driver_version = "201213";
+    hal.driver_version = "201214";
     hal.driver_setup = driver_setup;
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
