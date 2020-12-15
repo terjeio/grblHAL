@@ -24,9 +24,6 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "grbl/hal.h"
-#include "grbl/nuts_bolts.h"
-
 #include "driver.h"
 #include "serial.h"
 #include "grbl-lpc/pwm_driver.h"
@@ -39,10 +36,6 @@
 
 #if FLASH_ENABLE
 #include "flash.h"
-#endif
-
-#if SDCARD_ENABLE
-#include "sdcard/sdcard.h"
 #endif
 
 #if USB_SERIAL_CDC
@@ -178,35 +171,91 @@ static input_signal_t inputpin[] = {
 
 #if STEP_OUTMODE == GPIO_MAP
 
-    static const uint32_t c_step_outmap[8] = {
-        0,
-        X_STEP_BIT,
-        Y_STEP_BIT,
-        X_STEP_BIT|Y_STEP_BIT,
-        Z_STEP_BIT,
-        X_STEP_BIT|Z_STEP_BIT,
-        Y_STEP_BIT|Z_STEP_BIT,
-        X_STEP_BIT|Y_STEP_BIT|Z_STEP_BIT
-    };
+static const uint32_t c_step_outmap[] = {
+    0,
+    X_STEP_BIT,
+    Y_STEP_BIT,
+    Y_STEP_BIT | X_STEP_BIT,
+    Z_STEP_BIT,
+    Z_STEP_BIT | X_STEP_BIT,
+    Z_STEP_BIT | Y_STEP_BIT,
+    Z_STEP_BIT | Y_STEP_BIT | X_STEP_BIT,
+#if N_AXIS > 3
+    A_STEP_BIT,
+    A_STEP_BIT | X_STEP_BIT,
+    A_STEP_BIT | Y_STEP_BIT,
+    A_STEP_BIT | Y_STEP_BIT | X_STEP_BIT,
+    A_STEP_BIT | Z_STEP_BIT,
+    A_STEP_BIT | Z_STEP_BIT | X_STEP_BIT,
+    A_STEP_BIT | Z_STEP_BIT | Y_STEP_BIT,
+    A_STEP_BIT | Z_STEP_BIT | Y_STEP_BIT | X_STEP_BIT,
+#endif
+#if N_AXIS > 4
+    B_STEP_BIT,
+    B_STEP_BIT | X_STEP_BIT,
+    B_STEP_BIT | Y_STEP_BIT,
+    B_STEP_BIT | X_STEP_BIT,
+    B_STEP_BIT | Z_STEP_BIT,
+    B_STEP_BIT | Z_STEP_BIT | X_STEP_BIT,
+    B_STEP_BIT | Z_STEP_BIT | Y_STEP_BIT,
+    B_STEP_BIT | Z_STEP_BIT | Y_STEP_BIT | X_STEP_BIT,
+    B_STEP_BIT | A_STEP_BIT,
+    B_STEP_BIT | A_STEP_BIT | X_STEP_BIT,
+    B_STEP_BIT | A_STEP_BIT | Y_STEP_BIT,
+    B_STEP_BIT | A_STEP_BIT | Y_STEP_BIT | X_STEP_BIT,
+    B_STEP_BIT | A_STEP_BIT | Z_STEP_BIT,
+    B_STEP_BIT | A_STEP_BIT | Z_STEP_BIT | X_STEP_BIT,
+    B_STEP_BIT | A_STEP_BIT | Z_STEP_BIT | Y_STEP_BIT,
+    B_STEP_BIT | A_STEP_BIT | Z_STEP_BIT | Y_STEP_BIT | X_STEP_BIT,
+#endif
+};
 
-    static uint32_t step_outmap[8];
+static uint32_t step_outmap[sizeof(c_step_outmap) / sizeof(uint32_t)];
 
 #endif
 
 #if DIRECTION_OUTMODE == GPIO_MAP
 
-    static const uint32_t c_dir_outmap[8] = {
-        0,
-        X_DIRECTION_BIT,
-        Y_DIRECTION_BIT,
-        X_DIRECTION_BIT|Y_DIRECTION_BIT,
-        Z_DIRECTION_BIT,
-        X_DIRECTION_BIT|Z_DIRECTION_BIT,
-        Y_DIRECTION_BIT|Z_DIRECTION_BIT,
-        X_DIRECTION_BIT|Y_DIRECTION_BIT|Z_DIRECTION_BIT
-    };
+static const uint32_t c_dir_outmap[] = {
+    0,
+    X_DIRECTION_BIT,
+    Y_DIRECTION_BIT,
+    Y_DIRECTION_BIT | X_DIRECTION_BIT,
+    Z_DIRECTION_BIT,
+    Z_DIRECTION_BIT | X_DIRECTION_BIT,
+    Z_DIRECTION_BIT | Y_DIRECTION_BIT,
+    Z_DIRECTION_BIT | Y_DIRECTION_BIT | X_DIRECTION_BIT,
+#if N_AXIS > 3
+    A_DIRECTION_BIT,
+    A_DIRECTION_BIT | X_DIRECTION_BIT,
+    A_DIRECTION_BIT | Y_DIRECTION_BIT,
+    A_DIRECTION_BIT | Y_DIRECTION_BIT | X_DIRECTION_BIT,
+    A_DIRECTION_BIT | Z_DIRECTION_BIT,
+    A_DIRECTION_BIT | Z_DIRECTION_BIT | X_DIRECTION_BIT,
+    A_DIRECTION_BIT | Z_DIRECTION_BIT | Y_DIRECTION_BIT,
+    A_DIRECTION_BIT | Z_DIRECTION_BIT | Y_DIRECTION_BIT | X_DIRECTION_BIT,
+#endif
+#if N_AXIS > 4
+    B_DIRECTION_BIT,
+    B_DIRECTION_BIT | X_DIRECTION_BIT,
+    B_DIRECTION_BIT | Y_DIRECTION_BIT,
+    B_DIRECTION_BIT | X_DIRECTION_BIT,
+    B_DIRECTION_BIT | Z_DIRECTION_BIT,
+    B_DIRECTION_BIT | Z_DIRECTION_BIT | X_DIRECTION_BIT,
+    B_DIRECTION_BIT | Z_DIRECTION_BIT | Y_DIRECTION_BIT,
+    B_DIRECTION_BIT | Z_DIRECTION_BIT | Y_DIRECTION_BIT | X_DIRECTION_BIT,
+    B_DIRECTION_BIT | A_DIRECTION_BIT,
+    B_DIRECTION_BIT | A_DIRECTION_BIT | X_DIRECTION_BIT,
+    B_DIRECTION_BIT | A_DIRECTION_BIT | Y_DIRECTION_BIT,
+    B_DIRECTION_BIT | A_DIRECTION_BIT | Y_DIRECTION_BIT | X_DIRECTION_BIT,
+    B_DIRECTION_BIT | A_DIRECTION_BIT | Z_DIRECTION_BIT,
+    B_DIRECTION_BIT | A_DIRECTION_BIT | Z_DIRECTION_BIT | X_DIRECTION_BIT,
+    B_DIRECTION_BIT | A_DIRECTION_BIT | Z_DIRECTION_BIT | Y_DIRECTION_BIT,
+    B_DIRECTION_BIT | A_DIRECTION_BIT | Z_DIRECTION_BIT | Y_DIRECTION_BIT | X_DIRECTION_BIT,
+#endif
+};
 
-    static uint32_t dir_outmap[8];
+static uint32_t dir_outmap[sizeof(c_dir_outmap) / sizeof(uint32_t)];
 
 #endif
 

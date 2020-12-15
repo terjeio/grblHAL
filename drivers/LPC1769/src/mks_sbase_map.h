@@ -70,7 +70,7 @@ void board_init (void);
 #define Z_DIRECTION_PN      0
 #define Z_DIRECTION_PORT    port(Z_DIRECTION_PN)
 #define Z_DIRECTION_PIN     20
-#define Z_DIRECTION_BIT     (1<<Z_STEP_PIN)
+#define Z_DIRECTION_BIT     (1<<Z_DIRECTION_PIN)
 #ifdef A_AXIS
 #define A_DIRECTION_PN      0
 #define A_DIRECTION_PORT    port(A_DIRECTION_PN)
@@ -174,20 +174,27 @@ void board_init (void);
 #define COOLANT_MIST_BIT    (1<<COOLANT_FLOOD_PIN)
 
 // Define user-control CONTROLs (cycle start, reset, feed hold) input pins.
-#define RESET_PORT_PN       2
+#define RESET_PORT_PN       0
 #define RESET_PORT          port(RESET_PORT_PN)
-#define RESET_PIN           12
+#define RESET_PIN           23
 #define RESET_BIT           (1<<RESET_PIN)
 
-#define FEED_HOLD_PN        1
+#define FEED_HOLD_PN        0
 #define FEED_HOLD_PORT      port(FEED_HOLD_PN)
-#define FEED_HOLD_PIN       22
+#define FEED_HOLD_PIN       24
 #define FEED_HOLD_BIT       (1<<FEED_HOLD_PIN)
 
-#define CYCLE_START_PN      1
+#define CYCLE_START_PN      0
 #define CYCLE_START_PORT    port(CYCLE_START_PN)
-#define CYCLE_START_PIN     23
+#define CYCLE_START_PIN     25
 #define CYCLE_START_BIT     (1<<CYCLE_START_PIN)
+
+#ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
+#define SAFETY_DOOR_PN      0
+#define SAFETY_DOOR_PORT    port(SAFETY_DOOR_PN)
+#define SAFETY_DOOR_PIN     26
+#define SAFETY_DOOR_BIT     (1<<CYCLE_START_PIN)
+#endif
 
 #define CONTROL_INMODE GPIO_BITBAND
 

@@ -31,6 +31,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "grbl/hal.h"
+#include "grbl/nuts_bolts.h"
+
 #ifndef OVERRIDE_MY_MACHINE
 #include "my_machine.h"
 #endif
@@ -112,6 +115,12 @@
 #ifndef Z_STEP_PORT
 #define Z_STEP_PORT STEP_PORT
 #endif
+#if defined(A_AXIS) && !defined(A_STEP_PORT)
+#define A_STEP_PORT STEP_PORT
+#endif
+#if defined(B_AXIS) && !defined(B_STEP_PORT)
+#define B_STEP_PORT STEP_PORT
+#endif
 
 #ifndef X_DIRECTION_PORT
 #define X_DIRECTION_PORT DIRECTION_PORT
@@ -121,6 +130,28 @@
 #endif
 #ifndef Z_DIRECTION_PORT
 #define Z_DIRECTION_PORT DIRECTION_PORT
+#endif
+#if defined(A_AXIS) && !defined(A_DIRECTION_PORT)
+#define A_DIRECTION_PORT DIRECTION_PORT
+#endif
+#if defined(B_AXIS) && !defined(B_DIRECTION_PORT)
+#define B_DIRECTION_PORT DIRECTION_PORT
+#endif
+
+#ifndef X_DISABLE_PORT
+#define X_DISABLE_PORT DISABLE_PORT
+#endif
+#ifndef Y_DISABLE_PORT
+#define Y_DISABLE_PORT DISABLE_PORT
+#endif
+#ifndef Z_DISABLE_PORT
+#define Z_DISABLE_PORT DISABLE_PORT
+#endif
+#if defined(A_AXIS) && !defined(A_DISABLE_PORT)
+#define A_DISABLE_PORT DISABLE_PORT
+#endif
+#if defined(B_AXIS) && !defined(B_DISABLE_PORT)
+#define B_DISABLE_PORT DISABLE_PORT
 #endif
 
 #ifndef X_LIMIT_PORT

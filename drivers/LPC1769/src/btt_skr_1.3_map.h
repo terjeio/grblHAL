@@ -68,7 +68,7 @@
 #define Z_DIRECTION_PN      2
 #define Z_DIRECTION_PORT    port(Z_DIRECTION_PN)
 #define Z_DIRECTION_PIN     11
-#define Z_DIRECTION_BIT     (1<<Z_STEP_PIN)
+#define Z_DIRECTION_BIT     (1<<Z_DIRECTION_PIN)
 #ifdef A_AXIS
 #define A_DIRECTION_PN      0
 #define A_DIRECTION_PORT    port(A_DIRECTION_PN)

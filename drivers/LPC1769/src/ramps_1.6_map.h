@@ -3,7 +3,7 @@
 
   NOTE: board must be modified for 3.3V IO before use!
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2019-2020 Terje Io
 
@@ -69,7 +69,7 @@
 #define Z_DIRECTION_PN      0
 #define Z_DIRECTION_PORT    port(Z_DIRECTION_PN)
 #define Z_DIRECTION_PIN     22  // Due Digital Pin 48
-#define Z_DIRECTION_BIT     (1<<Z_STEP_PIN)
+#define Z_DIRECTION_BIT     (1<<Z_DIRECTION_PIN)
 #ifdef A_AXIS
 #define A_DIRECTION_PN      0
 #define A_DIRECTION_PORT    port(A_DIRECTION_PN)
