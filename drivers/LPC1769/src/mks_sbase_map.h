@@ -113,7 +113,7 @@ void board_init (void);
 #define DISABLE_OUTMODE GPIO_BITBAND
 
 // Define homing/hard limit switch input pins.
-// NOTE: Port 1 is not interrupt capable!
+// NOTE: All limit bits (needs to be on same port)
 #define X_LIMIT_PN          1
 #define X_LIMIT_PORT        port(X_LIMIT_PN)
 #define X_LIMIT_PIN         24
@@ -127,7 +127,8 @@ void board_init (void);
 #define Z_LIMIT_PIN         28
 #define Z_LIMIT_BIT         (1<<Z_LIMIT_PIN)
 
-// Define homing/hard limit switch input pins.
+// Define max homing/hard limit switch input pins.
+#if LIMIT_MAX_ENABLE
 #define X_LIMIT_PN_MAX      1
 #define X_LIMIT_PORT_MAX    port(X_LIMIT_PN_MAX)
 #define X_LIMIT_PIN_MAX     25
@@ -140,8 +141,12 @@ void board_init (void);
 #define Z_LIMIT_PORT_MAX    port(Z_LIMIT_PN_MAX)
 #define Z_LIMIT_PIN_MAX     29
 #define Z_LIMIT_BIT_MAX     (1<<Z_LIMIT_PIN_MAX)
+#define LIMIT_MASK (X_LIMIT_BIT|X_LIMIT_BIT_MAX|Y_LIMIT_BIT|Y_LIMIT_BIT_MAX|Z_LIMIT_BIT|Z_LIMIT_BIT_MAX)
+#else
+#define LIMIT_MASK (X_LIMIT_BIT|Y_LIMIT_BIT|Z_LIMIT_BIT)
+#endif
 
-#define LIMIT_MASK (X_LIMIT_BIT|X_LIMIT_BIT_MAX|Y_LIMIT_BIT|Y_LIMIT_BIT_MAX|Z_LIMIT_BIT|Z_LIMIT_BIT_MAX) // All limit bits (needs to be on same port)
+#define LIMITS_POLL_PORT port(1) // NOTE: Port 1 is not interrupt capable, use polling instead!
 #define LIMIT_INMODE GPIO_BITBAND
 
 // Define probe switch input pin.

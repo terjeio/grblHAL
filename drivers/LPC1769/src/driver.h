@@ -55,6 +55,9 @@
 #ifndef EEPROM_IS_FRAM
 #define EEPROM_IS_FRAM      0
 #endif
+#ifndef LIMIT_MAX_ENABLE
+#define LIMIT_MAX_ENABLE    0
+#endif
 
 // Define GPIO output mode options
 

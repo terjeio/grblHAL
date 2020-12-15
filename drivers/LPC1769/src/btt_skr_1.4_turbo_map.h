@@ -96,7 +96,7 @@
 #define Z_DISABLE_PORT      port(Z_DISABLE_PN)
 #define Z_DISABLE_PIN       21
 #define Z_DISABLE_BIT       (1<<Z_DISABLE_PIN)
-#ifndef A_AXIS
+#ifdef A_AXIS
 #define A_DISABLE_PN        2
 #define A_DISABLE_PORT      port(A_DISABLE_PN)
 #define A_DISABLE_PIN       12
@@ -111,7 +111,7 @@
 #define DISABLE_OUTMODE GPIO_BITBAND
 
 // Define homing/hard limit switch input pins.
-// NOTE: Port 1 is not interrupt capable!
+// NOTE: All limit bits (needs to be on same port)
 #define LIMIT_PN            1
 #define LIMIT_PORT          port(LIMIT_PN)
 #define X_LIMIT_PIN         29
@@ -128,7 +128,16 @@
 #define B_LIMIT_PIN         25
 #define B_LIMIT_BIT         (1<<A_LIMIT_PIN)
 #endif
-#define LIMIT_MASK (X_LIMIT_BIT|Y_LIMIT_BIT|Z_LIMIT_BIT) // All limit bits (needs to be on same port)
+
+#if N_AXIS > 4
+#define LIMIT_MASK (X_LIMIT_BIT|Y_LIMIT_BIT|Z_LIMIT_BIT|A_LIMIT_BIT|B_LIMIT_BIT)
+#elif N_AXIS > 3
+#define LIMIT_MASK (X_LIMIT_BIT|Y_LIMIT_BIT|Z_LIMIT_BIT|A_LIMIT_BIT)
+#else
+#define LIMIT_MASK (X_LIMIT_BIT|Y_LIMIT_BIT|Z_LIMIT_BIT)
+#endif
+
+#define LIMITS_POLL_PORT port(1) // NOTE: Port 1 is not interrupt capable, use polling instead!
 #define LIMIT_INMODE GPIO_BITBAND
 
 // Define probe switch input pin.

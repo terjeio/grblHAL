@@ -1138,7 +1138,7 @@ bool driver_init (void) {
 #endif
 
     hal.info = "LCP1769";
-    hal.driver_version = "201214";
+    hal.driver_version = "201215";
     hal.driver_setup = driver_setup;
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
@@ -1402,10 +1402,10 @@ void GPIO_IRQHandler (void)
 // Interrupt handler for 1 ms interval timer
 void SysTick_Handler (void)
 {
-#if LIMIT_PN == 1 // Poll limit pins when hard limits enabled
+#ifdef LIMITS_POLL_PORT // Poll limit pins when hard limits enabled
     static uint32_t limits_state = 0, limits = 0;
     if(settings.limits.flags.hard_enabled) {
-        limits = (LIMIT_PORT->PIN ^ limits_invert) & LIMIT_MASK;
+        limits = (LIMITS_POLL_PORT->PIN ^ limits_invert) & LIMIT_MASK;
         if(limits_state && limits == 0 && !limits_debounce)
             limits_state = 0;
         else if(limits_state != limits && limits) {
