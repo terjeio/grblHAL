@@ -554,10 +554,10 @@ static control_signals_t systemGetState (void)
 // and the probing cycle modes for toward-workpiece/away-from-workpiece.
 static void probeConfigure(bool is_probe_away, bool probing)
 {
-    probe_invert = settings.probe.invert_probe_pin;
+    probe_invert = settings.probe.invert_probe_pin ? 1 : 0;
 #ifdef PROBE_PIN
     if (is_probe_away)
-        probe_invert ^= PROBE_BIT;
+        probe_invert ^= 1;
 #endif
 }
 
