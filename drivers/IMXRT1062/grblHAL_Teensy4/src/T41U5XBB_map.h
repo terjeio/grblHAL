@@ -22,6 +22,9 @@
 */
 
 #define BOARD_NAME "T41U5XBB"
+#define HAS_BOARD_INIT
+
+void board_init (void);
 
 #if N_AXIS > 5
 #error Max number of axes is 5 for T41U5XBB
@@ -113,9 +116,22 @@
 
 // Define auxillary input pins
 #define AUXINPUT0_PIN       (36u) // ST0
+#if !QEI_ENABLE
 #define AUXINPUT1_PIN       (30u) // ST1
 #define AUXINPUT2_PIN       (34u) // ST2
 #define AUXINPUT3_PIN       (35u) // ST3
+#define AUX_N_IN 4
+#define AUX_IN_MASK 0b1111
+#else
+#define AUX_N_IN 1
+#define AUX_IN_MASK 0b1
+#endif
+
+#define AUXOUTPUT0_PIN      (31u) // AUX0
+#define AUXOUTPUT1_PIN      (32u) // AUX1
+#define AUXOUTPUT2_PIN      (33u) // AUX2
+#define AUX_N_OUT 3
+#define AUX_OUT_MASK 0b111
 
 #if KEYPAD_ENABLE
 #define KEYPAD_STROBE_PIN   (41u) // I2C ST

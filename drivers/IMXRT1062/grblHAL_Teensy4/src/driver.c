@@ -299,18 +299,19 @@ static input_signal_t inputpin[] = {
 #endif
 };
 
-#define DIGITAL_OUT(gpio, on) { if(on) gpio.reg->DR_SET = gpio.bit; else gpio.reg->DR_CLEAR = gpio.bit; } 
-
 #if USB_SERIAL_CDC || QEI_ENABLE
 #define ADD_MSEVENT 1
 static volatile bool ms_event = false;
 #else
 #define ADD_MSEVENT 0
 #endif
-static bool IOInitDone = false, probe_invert = false;
+static bool IOInitDone = false;
 static uint16_t pulse_length, pulse_delay;
 static axes_signals_t next_step_outbits;
 static delay_t grbl_delay = { .ms = 0, .callback = NULL };
+static probe_state_t probe = {
+    .connected = On
+};
 #ifdef SQUARING_ENABLED
 static axes_signals_t motors_1 = {AXES_BITMASK}, motors_2 = {AXES_BITMASK};
 #endif
@@ -1048,22 +1049,20 @@ inline static control_signals_t systemGetState (void)
 // Sets up the probe pin invert mask to
 // appropriately set the pin logic according to setting for normal-high/normal-low operation
 // and the probing cycle modes for toward-workpiece/away-from-workpiece.
-static void probeConfigure (bool is_probe_away, bool probing)
+static void probeConfigure(bool is_probe_away, bool probing)
 {
-    probe_invert = !settings.probe.invert_probe_pin;
-
-    if (is_probe_away)
-        probe_invert = !probe_invert;
+    probe.triggered = Off;
+    probe.is_probing = probing;
+    probe.inverted = is_probe_away ? !settings.probe.invert_probe_pin : settings.probe.invert_probe_pin;
 }
 
 // Returns the probe connected and triggered pin states.
 probe_state_t probeGetState (void)
 {
-    probe_state_t state = {
-        .connected = On
-    };
+    probe_state_t state = {0};
 
-    state.triggered = ((Probe.reg->DR & Probe.bit) != 0) ^ probe_invert;
+    state.connected = probe.connected;
+    state.triggered = !!(Probe.reg->DR & Probe.bit) ^ probe.inverted;
 
     return state;
 }
@@ -2068,7 +2067,7 @@ bool driver_init (void)
         options[strlen(options) - 1] = '\0';
 
     hal.info = "iMXRT1062";
-    hal.driver_version = "201212";
+    hal.driver_version = "201218";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif

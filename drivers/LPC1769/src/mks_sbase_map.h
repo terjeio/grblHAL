@@ -25,7 +25,7 @@
 
 #define BOARD_NAME "MKS SBASE V1.3"
 
-//#define HAS_BOARD_INIT - uncomment to add driver current control (untested!)
+#define HAS_BOARD_INIT // comment out to disable driver current control
 #define I2C_ENABLE 2
 
 void board_init (void);
@@ -150,7 +150,7 @@ void board_init (void);
 #define LIMIT_INMODE GPIO_BITBAND
 
 // Define probe switch input pin.
-#define PROBE_PN    0
+#define PROBE_PN    1
 #define PROBE_PORT  port(PROBE_PN)
 #define PROBE_PIN   23
 #define PROBE_BIT   (1<<PROBE_PIN)

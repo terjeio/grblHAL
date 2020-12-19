@@ -125,4 +125,5 @@
 #define SD_CS_PORT  GPIOA
 #define SD_CS_PIN   3
 #define SD_CS_BIT   (1<<SD_CS_PIN)
+#define SPI_PORT    1 // GPIOA, SCK_PIN = 5, MISO_PIN = 6, MOSI_PIN = 7
 #endif

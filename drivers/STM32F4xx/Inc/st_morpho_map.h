@@ -19,8 +19,10 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#define BOARD_NAME "ST Nucleo-64"
+
 #define HAS_BOARD_INIT
-#define SPINDLE_SYNC_ENABLE
+//#define SPINDLE_SYNC_ENABLE
 
 void board_init (void);
 
@@ -132,6 +134,7 @@ void board_init (void);
 #define PROBE_BIT                   (1<<PROBE_PIN)
 
 // Spindle encoder pins.
+#ifdef SPINDLE_SYNC_ENABLE
 
 #define SPINDLE_INDEX_PORT  GPIOB
 #define SPINDLE_INDEX_PIN   14
@@ -141,13 +144,17 @@ void board_init (void);
 #define SPINDLE_PULSE_PIN   2
 #define SPINDLE_PULSE_BIT   (1<<SPINDLE_PULSE_PIN)
 
+#endif
+
 // Auxiliary I/O
 #define AUXINPUT0_PORT  GPIOB
-#define AUXINPUT0_PIN   13
+#define AUXINPUT0_PIN   14
 #define AUXINPUT0_BIT   (1<<AUXINPUT0_PIN)
-#define AUXINPUT1_PORT  GPIOB
-#define AUXINPUT1_PIN   14
+#define AUXINPUT1_PORT  GPIOA
+#define AUXINPUT1_PIN   15
 #define AUXINPUT1_BIT   (1<<AUXINPUT1_PIN)
+#define AUX_N_IN 2
+#define AUX_IN_MASK 0b11
 
 #define AUXOUTPUT0_PORT GPIOB
 #define AUXOUTPUT0_PIN  15
@@ -155,6 +162,8 @@ void board_init (void);
 #define AUXOUTPUT1_PORT GPIOB
 #define AUXOUTPUT1_PIN  2
 #define AUXOUTPUT1_BIT  (1<<AUXOUTPUT1_PIN)
+#define AUX_N_OUT 2
+#define AUX_OUT_MASK 0b11
 
 #if KEYPAD_ENABLE
 #define KEYPAD_PORT         GPIOB
@@ -166,6 +175,7 @@ void board_init (void);
 #define SD_CS_PORT  GPIOC
 #define SD_CS_PIN   8
 #define SD_CS_BIT   (1<<SD_CS_PIN)
+#define SPI_PORT    1 // GPIOA, SCK_PIN = 5, MISO_PIN = 6, MOSI_PIN = 7
 #endif
 
 // EOF

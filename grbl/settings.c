@@ -257,18 +257,18 @@ const settings_t defaults = {
 static const setting_group_detail_t setting_group_detail [] = {
     { Group_Root, Group_Root, "Root"},
     { Group_Root, Group_General, "General"},
-    { Group_Root, Group_Stepper, "Stepper"},
+    { Group_Root, Group_ControlSignals, "Control signals"},
+    { Group_Root, Group_Limits, "Limits"},
+    { Group_Limits, Group_Limits_DualAxis, "Dual axis"},
+    { Group_Root, Group_Coolant, "Coolant"},
+    { Group_Root, Group_Spindle, "Spindle"},
+    { Group_Spindle, Group_Spindle_Sync, "Spindle sync"},
+    { Group_Root, Group_Toolchange, "Tool change"},
     { Group_Root, Group_Homing, "Homing"},
     { Group_Root, Group_Probing, "Probing"},
     { Group_Root, Group_Parking, "Parking"},
     { Group_Root, Group_Jogging, "Jogging"},
-    { Group_Root, Group_Limits, "Limits"},
-    { Group_Limits, Group_Limits_DualAxis, "Dual axis"},
-    { Group_Root, Group_ControlSignals, "Control signals"},
-    { Group_Root, Group_Spindle, "Spindle"},
-    { Group_Root, Group_Coolant, "Coolant"},
-    { Group_Spindle, Group_Spindle_Sync, "Spindle sync"},
-    { Group_Root, Group_Toolchange, "Tool change"},
+    { Group_Root, Group_Stepper, "Stepper"},
     { Group_Root, Group_MotorDriver, "Motor driver"},
     { Group_Root, Group_Axis, "Axis"},
     { Group_Axis, Group_XAxis, "X-axis"},
@@ -615,10 +615,6 @@ bool settings_is_group_available (setting_group_t group)
 
     switch(group) {
 
-        case Group_Toolchange:
-            available = !hal.driver_cap.atc && hal.stream.suspend_read;
-            break;
-
         case Group_Bluetooth:
             available = hal.driver_cap.bluetooth;
             break;
@@ -701,11 +697,8 @@ bool settings_is_setting_available (setting_type_t setting, setting_group_t grou
     if(available) switch(setting) {
 
         case Setting_SpindlePPR:
-            available = hal.driver_cap.spindle_sync || hal.driver_cap.spindle_pid;
-            break;
-
         case Setting_SpindleAtSpeedTolerance:
-            available = hal.driver_cap.spindle_at_speed;
+            available = hal.spindle.get_data != NULL;
             break;
 
         case Setting_RpmMax:

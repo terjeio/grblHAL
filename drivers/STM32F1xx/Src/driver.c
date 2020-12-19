@@ -72,14 +72,14 @@ typedef union {
 extern __IO uint32_t uwTick;
 static uint32_t pulse_length, pulse_delay;
 static bool pwmEnabled = false, IOInitDone = false;
-// Inverts the probe pin state depending on user settings and probing cycle mode.
-static bool probe_invert;
-
 static axes_signals_t next_step_outbits;
 static spindle_pwm_t spindle_pwm;
 static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
 static status_code_t (*on_unknown_sys_command)(uint_fast16_t state, char *line, char *lcline);
 static debounce_t debounce;
+static probe_state_t probe = {
+    .connected = On
+};
 
 #if STEP_OUTMODE == GPIO_MAP
 
@@ -373,28 +373,30 @@ static control_signals_t systemGetState (void)
     return signals;
 }
 
+#ifdef PROBE_PIN
+
 // Sets up the probe pin invert mask to
 // appropriately set the pin logic according to setting for normal-high/normal-low operation
 // and the probing cycle modes for toward-workpiece/away-from-workpiece.
-static void probeConfigure(bool is_probe_away, bool probing)
+static void probeConfigure (bool is_probe_away, bool probing)
 {
-    probe_invert = settings.probe.invert_probe_pin;
-
-    if (is_probe_away)
-        probe_invert ^= PROBE_BIT;
+    probe.triggered = Off;
+    probe.is_probing = probing;
+    probe.inverted = is_probe_away ? !settings.probe.invert_probe_pin : settings.probe.invert_probe_pin;
 }
 
 // Returns the probe connected and triggered pin states.
 probe_state_t probeGetState (void)
 {
-    probe_state_t state = {
-        .connected = On
-    };
+    probe_state_t state = {0};
 
-    state.triggered = ((PROBE_PORT->IDR & PROBE_BIT) != 0)  ^ probe_invert;
+    state.connected = probe.connected;
+    state.triggered = !!(PROBE_PORT->IDR & PROBE_BIT) ^ probe.inverted;
 
     return state;
 }
+
+#endif
 
 // Static spindle (off, on cw & on ccw)
 
@@ -949,7 +951,7 @@ bool driver_init (void)
     __HAL_AFIO_REMAP_SWJ_NOJTAG();
 
     hal.info = "STM32F103C8";
-    hal.driver_version = "201115";
+    hal.driver_version = "201118";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -971,8 +973,10 @@ bool driver_init (void)
     hal.coolant.set_state = coolantSetState;
     hal.coolant.get_state = coolantGetState;
 
+#ifdef PROBE_PIN
     hal.probe.get_state = probeGetState;
     hal.probe.configure = probeConfigure;
+#endif
 
     hal.spindle.set_state = spindleSetState;
     hal.spindle.get_state = spindleGetState;
@@ -1061,7 +1065,6 @@ void TIM2_IRQHandler(void)
     if ((STEPPER_TIMER->SR & TIM_SR_UIF) != 0)                  // check interrupt source
     {
         STEPPER_TIMER->SR = ~TIM_SR_UIF; // clear UIF flag
-        STEPPER_TIMER->CNT = 0;
         hal.stepper.interrupt_callback();
     }
 }

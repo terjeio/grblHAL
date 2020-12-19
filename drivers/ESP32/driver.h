@@ -3,7 +3,7 @@
 
   Driver code for ESP32
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2018-2020 Terje Io
   Copyright (c) 2011-2015 Sungeun K. Jeon
@@ -245,7 +245,6 @@ typedef struct {
 // End configuration
 
 #ifdef BOARD_CNC_BOOSTERPACK
-cccc
   #include "cnc_boosterpack_map.h"
 #elif defined(BOARD_BDRING_V4)
   #include "bdring_v4_map.h"

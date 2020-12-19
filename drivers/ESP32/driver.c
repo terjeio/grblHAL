@@ -256,7 +256,9 @@ state_signal_t inputpin[] = {
 #ifdef SAFETY_DOOR_PIN
     { .id = Input_SafetyDoor,   .pin = SAFETY_DOOR_PIN, .group = INPUT_GROUP_CONTROL },
 #endif
+#ifdef PROBE_PIN
     { .id = Input_Probe,        .pin = PROBE_PIN,       .group = INPUT_GROUP_PROBE },
+#endif
     { .id = Input_LimitX,       .pin = X_LIMIT_PIN,     .group = INPUT_GROUP_LIMIT },
     { .id = Input_LimitY,       .pin = Y_LIMIT_PIN,     .group = INPUT_GROUP_LIMIT },
     { .id = Input_LimitZ,       .pin = Z_LIMIT_PIN,     .group = INPUT_GROUP_LIMIT }
@@ -280,8 +282,9 @@ state_signal_t inputpin[] = {
 static volatile uint32_t ms_count = 1; // NOTE: initial value 1 is for "resetting" systick timer
 static bool IOInitDone = false;
 static portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
-// Inverts the probe pin state depending on user settings and probing cycle mode.
-static uint8_t probe_invert;
+static probe_state_t probe = {
+    .connected = On
+};
 
 #ifdef USE_I2S_OUT
 #define DIGITAL_IN(pin) i2s_out_state(pin)
@@ -768,6 +771,8 @@ inline IRAM_ATTR static control_signals_t systemGetState (void)
     return signals;
 }
 
+#ifdef PROBE_PIN
+
 // Sets up the probe pin invert mask to
 // appropriately set the pin logic according to setting for normal-high/normal-low operation
 // and the probing cycle modes for toward-workpiece/away-from-workpiece.
@@ -777,10 +782,10 @@ static void probeConfigure(bool is_probe_away, bool probing)
     i2s_set_streaming_mode(!probing);
 #endif
 
-    probe_invert = settings.probe.invert_probe_pin ? 0 : 1;
+    probe.triggered = Off;
+    probe.is_probing = probing;
+    probe.inverted = is_probe_away ? !settings.probe.invert_probe_pin : settings.probe.invert_probe_pin;
 
-    if(is_probe_away)
-        probe_invert ^= 1;
 #if PROBE_ISR
     gpio_set_intr_type(inputpin[INPUT_PROBE].pin, probe_invert ? GPIO_INTR_NEGEDGE : GPIO_INTR_POSEDGE);
     inputpin[INPUT_PROBE].active = false;
@@ -790,20 +795,22 @@ static void probeConfigure(bool is_probe_away, bool probing)
 // Returns the probe connected and triggered pin states.
 probe_state_t probeGetState (void)
 {
-    probe_state_t state = {
-        .connected = On
-    };
+    probe_state_t state = {0};
+
+    state.connected = probe.connected;
 
 #if PROBE_ISR
     // TODO: verify!
-    inputpin[INPUT_PROBE].active = inputpin[INPUT_PROBE].active || ((uint8_t)gpio_get_level(PROBE_PIN) ^ probe_invert);
+    inputpin[INPUT_PROBE].active = inputpin[INPUT_PROBE].active || ((uint8_t)gpio_get_level(PROBE_PIN) ^ probe.inverted);
     state.triggered = inputpin[INPUT_PROBE].active;
 #else
-    state.triggered = (uint8_t)gpio_get_level(PROBE_PIN) ^ probe_invert;
+    state.triggered = (uint8_t)gpio_get_level(PROBE_PIN) ^ probe.inverted;
 #endif
 
     return state;
 }
+
+#endif
 
 #ifndef VFD_SPINDLE
 
@@ -1208,12 +1215,12 @@ static void settings_changed (settings_t *settings)
                     inputpin[i].invert = control_fei.safety_door_ajar;
                     config.intr_type = inputpin[i].invert ? GPIO_INTR_NEGEDGE : GPIO_INTR_POSEDGE;
                     break;
-
+#ifdef PROBE_PIN
                 case Input_Probe:
                     pullup = hal.driver_cap.probe_pull_up;
                     inputpin[i].invert = false;
                     break;
-
+#endif
                 case Input_LimitX:
                     pullup = !settings->limits.disable_pullup.x;
                     inputpin[i].invert = limit_fei.x;
@@ -1463,7 +1470,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "ESP32";
-    hal.driver_version = "201125";
+    hal.driver_version = "201218";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif

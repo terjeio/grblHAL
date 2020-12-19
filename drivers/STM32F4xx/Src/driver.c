@@ -74,13 +74,14 @@ typedef union {
 extern __IO uint32_t uwTick;
 static uint32_t pulse_length, pulse_delay;
 static bool pwmEnabled = false, IOInitDone = false;
-// Inverts the probe pin state depending on user settings and probing cycle mode.
-static bool probe_invert;
 static axes_signals_t next_step_outbits;
 static spindle_pwm_t spindle_pwm;
 static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
 static status_code_t (*on_unknown_sys_command)(uint_fast16_t state, char *line, char *lcline);
 static debounce_t debounce;
+static probe_state_t probe = {
+    .connected = On
+};
 
 #ifdef SPINDLE_SYNC_ENABLE
 
@@ -264,8 +265,6 @@ static void stepperWakeUp (void)
     STEPPER_TIMER->ARR = 5000; // delay to allow drivers time to wake up
     STEPPER_TIMER->EGR = TIM_EGR_UG;
     STEPPER_TIMER->CR1 |= TIM_CR1_CEN;
-
-//    hal.stepper.interrupt_callback();   // and start the show
 }
 
 // Disables stepper driver interrupts
@@ -280,22 +279,6 @@ static void stepperGoIdle (bool clear_signals)
 static void stepperCyclesPerTick (uint32_t cycles_per_tick)
 {
     STEPPER_TIMER->ARR = cycles_per_tick < (1UL << 20) ? cycles_per_tick : 0x000FFFFFUL;
-    STEPPER_TIMER->EGR = TIM_EGR_UG;
-/*
-    STEPPER_TIMER->ARR = (uint16_t)(cycles_per_tick - 1);
-    // Set timer prescaling for normal step generation
-    if (cycles_per_tick < (1UL << 16)) { // < 65536  (1.1ms @ 72MHz)
-        STEPPER_TIMER->PSC = 0; // DIV 1
-    } else if (cycles_per_tick < (1UL << 19)) { // < 524288 (8.8ms @ 72MHz)
-        STEPPER_TIMER->PSC = 7; // DIV 8
-        cycles_per_tick = cycles_per_tick >> 3;
-    } else {
-        STEPPER_TIMER->PSC = 63; // DIV64
-        cycles_per_tick = cycles_per_tick >> 6;
-    }
-    STEPPER_TIMER->ARR = (uint16_t)(cycles_per_tick - 1);
-    STEPPER_TIMER->EGR = TIM_EGR_UG;
-    */
 }
 
 // Set stepper pulse output pins
@@ -559,31 +542,30 @@ static control_signals_t systemGetState (void)
     return signals;
 }
 
+#ifdef PROBE_PIN
+
 // Sets up the probe pin invert mask to
 // appropriately set the pin logic according to setting for normal-high/normal-low operation
 // and the probing cycle modes for toward-workpiece/away-from-workpiece.
-static void probeConfigure(bool is_probe_away, bool probing)
+static void probeConfigure (bool is_probe_away, bool probing)
 {
-    probe_invert = settings.probe.invert_probe_pin;
-#ifdef PROBE_PIN
-    if (is_probe_away)
-        probe_invert ^= PROBE_BIT;
-#endif
+    probe.triggered = Off;
+    probe.is_probing = probing;
+    probe.inverted = is_probe_away ? !settings.probe.invert_probe_pin : settings.probe.invert_probe_pin;
 }
 
 // Returns the probe connected and triggered pin states.
 probe_state_t probeGetState (void)
 {
-    probe_state_t state = {
-        .connected = On
-    };
+    probe_state_t state = {0};
 
-#ifdef PROBE_PIN
-    state.triggered = ((PROBE_PORT->IDR & PROBE_BIT) != 0)  ^ probe_invert;
-#endif
+    state.connected = probe.connected;
+    state.triggered = !!(PROBE_PORT->IDR & PROBE_BIT) ^ probe.inverted;
 
     return state;
 }
+
+#endif
 
 // Static spindle (off, on cw & on ccw)
 
@@ -886,10 +868,12 @@ void settings_changed (settings_t *settings)
 
             SPINDLE_PWM_TIMER->CR1 &= ~TIM_CR1_CEN;
 
-        	spindle_precompute_pwm_values(&spindle_pwm, SystemCoreClock / (settings->spindle.pwm_freq > 200.0f ? 1 : 25));
+            uint32_t prescaler = settings->spindle.pwm_freq > 4000.0f ? 1 : (settings->spindle.pwm_freq > 200.0f ? 12 : 25);
+
+        	spindle_precompute_pwm_values(&spindle_pwm, SystemCoreClock / prescaler);
 
             TIM_Base_InitTypeDef timerInitStructure = {
-                .Prescaler = (settings->spindle.pwm_freq > 200.0f ? 1 : 25) - 1,
+                .Prescaler = prescaler - 1,
                 .CounterMode = TIM_COUNTERMODE_UP,
                 .Period = spindle_pwm.period - 1,
                 .ClockDivision = TIM_CLOCKDIVISION_DIV1,
@@ -1390,7 +1374,7 @@ bool driver_init (void)
 #else
     hal.info = "STM32F401CC";
 #endif
-    hal.driver_version = "201115";
+    hal.driver_version = "201218";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1412,8 +1396,10 @@ bool driver_init (void)
     hal.coolant.set_state = coolantSetState;
     hal.coolant.get_state = coolantGetState;
 
+#ifdef PROBE_PIN
     hal.probe.get_state = probeGetState;
     hal.probe.configure = probeConfigure;
+#endif
 
     hal.spindle.set_state = spindleSetState;
     hal.spindle.get_state = spindleGetState;
@@ -1519,7 +1505,6 @@ void STEPPER_TIMER_IRQHandler (void)
     if ((STEPPER_TIMER->SR & TIM_SR_UIF) != 0)                  // check interrupt source
     {
         STEPPER_TIMER->SR = ~TIM_SR_UIF; // clear UIF flag
-        STEPPER_TIMER->CNT = 0;
         hal.stepper.interrupt_callback();
     }
 }
@@ -1624,6 +1609,8 @@ void EXTI0_IRQHandler(void)
             DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
         } else
   #endif
+#elif KEYPAD_STROBE_BIT & (1<<0)
+        keypad_keyclick_handler(BITBAND_PERI(KEYPAD_PORT->IDR, KEYPAD_STROBE_PIN) == 0);
 #else
         if(hal.driver_cap.software_debounce) {
             debounce.limits = On;
@@ -1837,7 +1824,7 @@ void EXTI15_10_IRQHandler(void)
 #endif
 #if KEYPAD_ENABLE
         if(ifg & KEYPAD_STROBE_BIT)
-            keypad_keyclick_handler(BITBAND_PERI(KEYPAD_PORT->IDR, KEYPAD_STROBE_PIN));
+            keypad_keyclick_handler(BITBAND_PERI(KEYPAD_PORT->IDR, KEYPAD_STROBE_PIN) == 0);
 #endif
     }
 }

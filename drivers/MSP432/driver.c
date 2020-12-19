@@ -544,10 +544,7 @@ static void probeConfigure (bool is_probe_away, bool probing)
 {
     probe.triggered = Off;
     probe.is_probing = probing;
-    probe.inverted = settings.probe.invert_probe_pin;
-
-    if (is_probe_away)
-        probe.inverted ^= PROBE_BIT;
+    probe.inverted = is_probe_away ? !settings.probe.invert_probe_pin : settings.probe.invert_probe_pin;
 
     if(psettings.enable_protection) {
         BITBAND_PERI(PROBE_PORT->IE, PROBE_PIN) = 0;
@@ -1414,7 +1411,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "MSP432";
-    hal.driver_version = "201212";
+    hal.driver_version = "201218";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif

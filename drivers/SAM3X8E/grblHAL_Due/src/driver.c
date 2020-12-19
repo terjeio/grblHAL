@@ -110,12 +110,13 @@ typedef struct {
 
 static bool IOInitDone = false;
 static uint32_t pulse_length, pulse_delay;
-// Inverts the probe pin state depending on user settings and probing cycle mode.
-static bool probe_invert;
 static axes_signals_t next_step_outbits;
 static delay_t delay_ms = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
 static debounce_queue_t debounce_queue = {0};
 static input_signal_t a_signals[10] = {0}, b_signals[10] = {0}, c_signals[10] = {0}, d_signals[10] = {0};
+static probe_state_t probe = {
+    .connected = On
+};
 #ifdef SQUARING_ENABLED
 static axes_signals_t motors_1 = {AXES_BITMASK}, motors_2 = {AXES_BITMASK};
 #endif
@@ -637,31 +638,31 @@ static control_signals_t systemGetState (void)
     return signals;
 }
 
+#ifdef PROBE_PIN
+
 // Sets up the probe pin invert mask to
 // appropriately set the pin logic according to setting for normal-high/normal-low operation
 // and the probing cycle modes for toward-workpiece/away-from-workpiece.
 static void probeConfigure (bool is_probe_away, bool probing)
 {
-  probe_invert = settings.probe.invert_probe_pin;
-
-  if (is_probe_away)
-      probe_invert = !probe_invert;
+    probe.triggered = Off;
+    probe.is_probing = probing;
+    probe.inverted = is_probe_away ? !settings.probe.invert_probe_pin : settings.probe.invert_probe_pin;
 }
+
 
 // Returns the probe connected and triggered pin states.
 probe_state_t probeGetState (void)
 {
-    probe_state_t state = {
-        .connected = On
-    };
+    probe_state_t state = {0};
 
-#ifdef PROBE_PIN
-    state.triggered = BITBAND_PERI(PROBE_PORT->PIO_PDSR, PROBE_PIN) ^ probe_invert;
-#else
-    state.triggered = false;
-#endif
+    state.connected = probe.connected;
+    state.triggered = BITBAND_PERI(PROBE_PORT->PIO_PDSR, PROBE_PIN) ^ probe.inverted;
+
     return state;
 }
+
+#endif
 
 #ifndef VFD_SPINDLE
 
@@ -1466,7 +1467,7 @@ bool driver_init (void)
     NVIC_EnableIRQ(SysTick_IRQn);
 
     hal.info = "SAM3X8E";
-	hal.driver_version = "201115";
+	hal.driver_version = "201218";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1492,10 +1493,11 @@ bool driver_init (void)
 
     hal.coolant.set_state = coolantSetState;
     hal.coolant.get_state = coolantGetState;
-//#ifdef PROBE_PIN
+
+#ifdef PROBE_PIN
     hal.probe.configure = probeConfigure;
     hal.probe.get_state = probeGetState;
-//#endif
+#endif
 
 #ifndef VFD_SPINDLE
     hal.spindle.set_state = spindleSetState;

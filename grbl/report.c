@@ -1102,16 +1102,22 @@ void report_build_info (char *line, bool extended)
 
         nvs_io_t *nvs = nvs_buffer_get_physical();
 
-        strcpy(buf, "[NEWOPT:ENUMS,");
-
-        if(!settings.flags.legacy_rt_commands)
-            strcat(buf, "RT-,");
+        strcpy(buf, "[NEWOPT:ENUMS,RT");
+        strcat(buf, settings.flags.legacy_rt_commands ? "+," : "-,");
 
         if(!(nvs->type == NVS_None || nvs->type == NVS_Emulated)) {
             if(hal.nvs.type == NVS_Emulated)
                 strcat(buf, "*");
             strcat(buf, nvs->type == NVS_Flash ? "FLASH," : (nvs->type == NVS_FRAM ? "FRAM," : "EEPROM,"));
         }
+
+        if(settings.homing.flags.enabled)
+            strcat(buf, "HOME,");
+
+        if(!hal.probe.get_state)
+            strcat(buf, "NOPROBE,");
+        else if(hal.driver_cap.probe_connected)
+            strcat(buf, "PC,");
 
         if(hal.driver_cap.program_stop)
             strcat(buf, "OS,");
@@ -1121,9 +1127,6 @@ void report_build_info (char *line, bool extended)
 
         if(hal.driver_cap.e_stop)
             strcat(buf, "ES,");
-
-        if(hal.driver_cap.probe_connected)
-            strcat(buf, "PC,");
 
         if(hal.driver_cap.sd_card)
             strcat(buf, "SD,");

@@ -359,6 +359,7 @@ typedef void (*on_execute_realtime_ptr)(uint_fast16_t state);
 typedef void (*on_unknown_accessory_override_ptr)(uint8_t cmd);
 typedef void (*on_report_options_ptr)(void);
 typedef void (*on_report_command_help_ptr)(void);
+typedef void (*on_global_settings_restore_ptr)(void);
 typedef setting_details_t *(*on_report_settings_ptr)(void); // NOTE: this must match the signature of the same definition in
                                                             // the setting_details_t structure in settings.h!
 typedef void (*on_realtime_report_ptr)(stream_write_ptr stream_write, report_tracking_flags_t report);
@@ -378,6 +379,7 @@ typedef struct {
     on_unknown_accessory_override_ptr on_unknown_accessory_override;
     on_report_options_ptr on_report_options;
     on_report_command_help_ptr on_report_command_help;
+    on_global_settings_restore_ptr on_global_settings_restore;
     on_report_settings_ptr on_report_settings;
     on_realtime_report_ptr on_realtime_report;
     on_unknown_feedback_message_ptr on_unknown_feedback_message;

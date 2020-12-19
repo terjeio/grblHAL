@@ -2,12 +2,16 @@
 
 grblHAL has [many extensions](https://github.com/terjeio/grblHAL/wiki) that may cause issues with some senders. As a workaround for these a [compile time option](https://github.com/terjeio/grblHAL/wiki/Changes-from-grbl-1.1#workaround) has been added that disables extensions selectively. 
 
+__IMPORTANT!__ grblHAL defaults to normally closed \(NC\) switches for inputs, if none are connected when testing it is likely that the controller will start in alarm mode.  
+Temporarily short the Reset, E-Stop and Safety Door<sup>4</sup> inputs to ground or invert the corresponding inputs by setting `$14=73` to avoid that.  
+Please check out [this Wiki page](https://github.com/terjeio/grblHAL/wiki/Changes-from-grbl-1.1) for additional important information.
+
 Windows users may try [ioSender](https://github.com/terjeio/Grbl-GCode-Sender), binary releases can be found [here](https://github.com/terjeio/Grbl-GCode-Sender/releases).
 It has been written to complement grblHAL and has features such as proper keyboard jogging, advanced probing, automatic reconfiguration of DRO display for up to 6 axes, lathe mode including conversational G-Code generation, 3D rendering, macro support etc. etc.
 
 ---
 
-Latest build date is 20201212, see the [changelog](changelog.md) for details.
+Latest build date is 20201219, see the [changelog](changelog.md) for details.
 
 ---
 
@@ -36,7 +40,8 @@ This is a port/rewrite of [grbl 1.1f](https://github.com/gnea/grbl) and should b
 
 <sup>1</sup> This feature is only to be used for private plugins, if shared then a single call must be added to the driver code of the target processors.   
 <sup>2</sup> I do not usually recommend doing this, and I will not accept pull requests for any. However I may add a link to the github repository for any that might be made.  
-<sup>3</sup> Driver/processor dependent.
+<sup>3</sup> Driver/processor dependent.  
+<sup>4</sup> Not enabled by default if building from source, but may be enabled in prebuilt firmware.
 
 ***
 
@@ -72,4 +77,4 @@ List of Supported G-Codes:
 ```
 
 ---
-2020-12-08
+2020-12-19

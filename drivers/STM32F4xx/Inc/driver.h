@@ -155,6 +155,8 @@
   #include "uno_map.h"
 #elif defined(BOARD_MORPHO_CNC)
   #include "st_morpho_map.h"
+#elif defined(BOARD_MORPHO_DAC_CNC)
+  #include "st_morpho_dac_map.h"
 #else // default board
   #include "generic_map.h"
 #endif
@@ -184,13 +186,6 @@
 
 #if TRINAMIC_ENABLE
 #include "tmc2130/trinamic.h"
-#endif
-
-#if SDCARD_ENABLE
-#define SD_CS_PORT  GPIOC
-#define SD_CS_PIN   8
-#define SD_CS_BIT   (1<<SD_CS_PIN)
-#define SPI_PORT 1 // GPIOA, SCK_PIN = 5, MISO_PIN = 6, MOSI_PIN = 7
 #endif
 
 // End configuration

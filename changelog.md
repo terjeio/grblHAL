@@ -1,8 +1,16 @@
 ## grblHAL changelog
 
+Build 20201219 (test only):
+* Renumbered setting groups for more logical sorting (by id).
+* Harmonized probing code across drivers for planned future extensions.
+* Added additional I/O support for the [Teensy 4.1 T41U5XBB board](https://github.com/phil-barrett/grbl-teensy-4) \(iMXRT1062 driver\), 3 outputs and 4 inputs available via `M62` - `M66`.  
+Not that the result from reading inputs with `M66` cannot be used in a gcode program in any meaningful way.
+* Fixed excessive step pulse jitter in STM32F4xx driver.
+* Added [more options](https://github.com/terjeio/grblHAL/wiki/Report-extensions#controller-information-extensions) to the `NEWOPT` tag in the extended `$I` report.
+
 Build 20201212 (test only):
 * Error 7 is no longer issued on startup if non-volatile storage \(Flash/EEPROM/FRAM\) for settings is not available.
-* [Alarm substate](https://github.com/terjeio/grblHAL/wiki/Report-extensions#realtime-report) \(if available\) is always added to the real-time report if a complete report is requested by sending `0x87`.
+* [Alarm substate](https://github.com/terjeio/grblHAL/wiki/Report-extensions#realtime-report) \(if available\) is always added to the real-time report if a [complete report](https://github.com/terjeio/grblHAL/wiki/For-sender-developers#single-character-real-time-commands) is requested by sending `0x87`.
 * Added input signal and handling for limit switches override.  
 The pin is pulled high and requires a normally open \(NO\) push switch for operation. When closed limit pins are excluded from the status report and alarm 12 will not be raised if a limit switch is asserted _on a soft reset_ when "Hard limits" and "Strict mode" is enabled with `$21`.
 This allows normal operation so that a manual pull-off can be done before e.g. homing the machine.  
