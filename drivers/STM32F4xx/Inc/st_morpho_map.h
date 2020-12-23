@@ -19,6 +19,17 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+
+#if TRINAMIC_ENABLE == 2130
+#include "trinamic\trinamic2130.h"
+void SPI_DriverInit (TMC_io_driver_t *drv, axes_signals_t axisflags);
+#endif
+
+#if TRINAMIC_ENABLE == 2209
+#include "trinamic\trinamic2209.h"
+void UART_DriverInit (TMC_io_driver_t *driver);
+#endif
+
 #define BOARD_NAME "ST Nucleo-64"
 
 #define HAS_BOARD_INIT
@@ -176,6 +187,13 @@ void board_init (void);
 #define SD_CS_PIN   8
 #define SD_CS_BIT   (1<<SD_CS_PIN)
 #define SPI_PORT    1 // GPIOA, SCK_PIN = 5, MISO_PIN = 6, MOSI_PIN = 7
+#endif
+
+#if TRINAMIC_ENABLE
+#define TRINAMIC_CS_PORT GPIOB
+#define TRINAMIC_CS_PIN  7
+#define TRINAMIC_CS_BIT  (1<<TRINAMIC_CS_PIN)
+#define SPI_PORT         1 // GPIOA, SCK_PIN = 5, MISO_PIN = 6, MOSI_PIN = 7
 #endif
 
 // EOF

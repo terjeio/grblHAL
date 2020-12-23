@@ -184,8 +184,12 @@
   #endif
 #endif
 
-#if TRINAMIC_ENABLE
+#if TRINAMIC_ENABLE == 2130
 #include "tmc2130/trinamic.h"
+#endif
+
+#if TRINAMIC_ENABLE == 2209
+#include "tmc2209/trinamic.h"
 #endif
 
 // End configuration
@@ -196,10 +200,6 @@
 
 #if SDCARD_ENABLE && !defined(SD_CS_PORT)
 #error SD card plugin not supported!
-#endif
-
-#if TRINAMIC_ENABLE && CNC_BOOSTERPACK == 0
-#error Trinamic plugin not supported!
 #endif
 
 bool driver_init (void);

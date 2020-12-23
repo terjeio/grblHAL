@@ -203,20 +203,22 @@ char *bluetooth_get_client_mac (void)
     return client_mac[0] == '\0' ? NULL : client_mac;
 }
 
-static void report_bt_MAC (void)
+static void report_bt_MAC (bool newopt)
 {
     char *client_mac;
 
-    on_report_options();
+    on_report_options(newopt);
 
-    hal.stream.write("[BT DEVICE MAC:");
-    hal.stream.write(bluetooth_get_device_mac());
-    hal.stream.write("]" ASCII_EOL);
-
-    if((client_mac = bluetooth_get_client_mac())) {
-        hal.stream.write("[BT CLIENT MAC:");
-        hal.stream.write(client_mac);
+    if(!newopt) {
+        hal.stream.write("[BT DEVICE MAC:");
+        hal.stream.write(bluetooth_get_device_mac());
         hal.stream.write("]" ASCII_EOL);
+
+        if((client_mac = bluetooth_get_client_mac())) {
+            hal.stream.write("[BT CLIENT MAC:");
+            hal.stream.write(client_mac);
+            hal.stream.write("]" ASCII_EOL);
+        }
     }
 }
 

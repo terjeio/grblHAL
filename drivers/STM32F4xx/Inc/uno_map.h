@@ -19,6 +19,10 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#if TRINAMIC_ENABLE
+#error Trinamic plugin not supported!
+#endif
+
 #define BOARD_NAME "Generic Uno"
 
 #define VARIABLE_SPINDLE // Comment out to disable variable spindle

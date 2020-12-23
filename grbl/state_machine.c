@@ -134,6 +134,11 @@ void update_state (uint_fast16_t rt_exec)
         stateHandler(rt_exec);
 }
 
+uint_fast16_t state_get (void)
+{
+    return (sys_state_t)sys.state;
+}
+
 void set_state (uint_fast16_t new_state)
 {
     if(new_state != sys.state) {
@@ -491,7 +496,7 @@ static void state_await_resume (uint_fast16_t rt_exec)
                     }
                     sys.override.spindle_stop.value = 0; // Clear spindle stop override states
                 } else {
-                	handler_changed = true;
+                    handler_changed = true;
                     stateHandler = state_await_restore;
                     stateHandler(0);
                 }
@@ -539,8 +544,8 @@ static void state_await_restore (uint_fast16_t rt_exec)
     }
 
     if(rt_exec & EXEC_FEED_HOLD) {
-    	restart = false;
-    	stateHandler = state_await_resume;
+        restart = false;
+        stateHandler = state_await_resume;
     }
 
 }

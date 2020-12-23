@@ -98,6 +98,11 @@ static void debug_out (bool on)
 }
 #endif
 
+void dummy_bool_handler (bool arg)
+{
+    // NOOP
+}
+
 // main entry point
 
 int grbl_enter (void)
@@ -116,7 +121,7 @@ int grbl_enter (void)
     memset(&grbl, 0, sizeof(grbl_t));
     grbl.on_execute_realtime = protocol_execute_noop;
     grbl.protocol_enqueue_gcode = protocol_enqueue_gcode;
-    grbl.on_report_options = dummy_handler;
+    grbl.on_report_options = dummy_bool_handler;
 
     // Clear all and set some HAL function pointers
     memset(&hal, 0, sizeof(grbl_hal_t));

@@ -83,6 +83,10 @@ static probe_state_t probe = {
     .connected = On
 };
 
+#if MODBUS_ENABLE
+static modbus_stream_t modbus_stream = {0};
+#endif
+
 #ifdef SPINDLE_SYNC_ENABLE
 
 #include "grbl/spindle_sync.h"
@@ -856,10 +860,6 @@ void settings_changed (settings_t *settings)
 
         GPIO_Init.Speed = GPIO_SPEED_FREQ_HIGH;
 
-      #if TRINAMIC_ENABLE
-        trinamic_configure();
-      #endif
-
         stepperEnable(settings->steppers.deenergize);
 
         if(hal.driver_cap.variable_spindle) {
@@ -1374,7 +1374,7 @@ bool driver_init (void)
 #else
     hal.info = "STM32F401CC";
 #endif
-    hal.driver_version = "201218";
+    hal.driver_version = "201223";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1484,6 +1484,25 @@ bool driver_init (void)
 
 #if KEYPAD_ENABLE
     keypad_init();
+#endif
+
+#if MODBUS_ENABLE
+
+    modbus_stream.write = serial2Write;
+    modbus_stream.read = serial2GetC;
+    modbus_stream.flush_rx_buffer = serial2RxFlush;
+    modbus_stream.flush_tx_buffer = serial2TxFlush;
+    modbus_stream.get_rx_buffer_count = serial2RxCount;
+    modbus_stream.get_tx_buffer_count = serial2TxCount;
+    modbus_stream.set_baud_rate = serial2SetBaudRate;
+
+    bool modbus = modbus_init(&modbus_stream);
+
+#if SPINDLE_HUANYANG > 0
+    if(modbus)
+        huanyang_init(&modbus_stream);
+#endif
+
 #endif
 
     my_plugin_init();

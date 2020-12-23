@@ -46,13 +46,15 @@ static driver_setting_ptrs_t driver_settings;
 static network_settings_t ethernet, network;
 static on_report_options_ptr on_report_options;
 
-static void reportIP (void)
+static void reportIP (bool newopt)
 {
-    on_report_options();
+    on_report_options(newopt);
 
-    hal.stream.write("[IP:");
-    hal.stream.write(IPAddress);
-    hal.stream.write("]" ASCII_EOL);
+    if(!newopt) {
+        hal.stream.write("[IP:");
+        hal.stream.write(IPAddress);
+        hal.stream.write("]" ASCII_EOL);
+    }
 }
 
 static void link_status_callback (struct netif *netif)

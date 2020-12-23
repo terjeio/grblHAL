@@ -206,10 +206,12 @@ static void userMCodeExecute (uint_fast16_t state, parser_block_t *gc_block)
         user_mcode.execute(state, gc_block);
 }
 
-static void onReportOptions (void)
+static void onReportOptions (bool newopt)
 {
-    on_report_options();
-    hal.stream.write("[PLUGIN:LASER PPI v0.01]" ASCII_EOL);
+    on_report_options(newopt);
+
+    if(!newopt)
+        hal.stream.write("[PLUGIN:LASER PPI v0.01]" ASCII_EOL);
 }
 
 void ppi_init (void)

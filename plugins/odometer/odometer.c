@@ -225,10 +225,14 @@ static void onReportCommandHelp (void)
         on_report_command_help();
 }
 
-static void onReportOptions (void)
+static void onReportOptions (bool newopt)
 {
-    on_report_options();
-    hal.stream.write("[PLUGIN:ODOMETERS v0.02]"  ASCII_EOL);
+    on_report_options(newopt);
+
+    if(newopt)
+        hal.stream.write(",ODO");
+    else
+        hal.stream.write("[PLUGIN:ODOMETERS v0.02]" ASCII_EOL);
 }
 
 static void odometer_warning1 (uint_fast16_t state)

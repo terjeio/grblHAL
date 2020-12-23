@@ -802,17 +802,23 @@ void report_ngc_parameters (void)
                 hal.stream.write("30");
                 break;
 
+            case CoordinateSystem_G92:
+                break;
+
             default: // G54-G59
                 hal.stream.write(map_coord_system((coord_system_id_t)idx));
                 break;
         }
-        hal.stream.write(":");
-        hal.stream.write(get_axis_values(coord_data));
-        hal.stream.write("]" ASCII_EOL);
+
+        if(idx != CoordinateSystem_G92) {
+            hal.stream.write(":");
+            hal.stream.write(get_axis_values(coord_data));
+            hal.stream.write("]" ASCII_EOL);
+        }
     }
 
     // Print G92, G92.1 which are not persistent in memory
-    hal.stream.write("[G92:");
+    hal.stream.write("92:");
     hal.stream.write(get_axis_values(gc_state.g92_coord_offset));
     hal.stream.write("]" ASCII_EOL);
 
@@ -1105,12 +1111,6 @@ void report_build_info (char *line, bool extended)
         strcpy(buf, "[NEWOPT:ENUMS,RT");
         strcat(buf, settings.flags.legacy_rt_commands ? "+," : "-,");
 
-        if(!(nvs->type == NVS_None || nvs->type == NVS_Emulated)) {
-            if(hal.nvs.type == NVS_Emulated)
-                strcat(buf, "*");
-            strcat(buf, nvs->type == NVS_Flash ? "FLASH," : (nvs->type == NVS_FRAM ? "FRAM," : "EEPROM,"));
-        }
-
         if(settings.homing.flags.enabled)
             strcat(buf, "HOME,");
 
@@ -1157,9 +1157,6 @@ void report_build_info (char *line, bool extended)
         if(hal.driver_cap.spindle_sync)
             strcat(buf, "SS,");
 
-        if(hal.driver_cap.odometers)
-            strcat(buf, "ODO,");
-
     #ifdef PID_LOG
         strcat(buf, "PID,");
     #endif
@@ -1168,12 +1165,21 @@ void report_build_info (char *line, bool extended)
         if(*append == ',')
             *append = '\0';
 
-        if(*append != ':') {
+        hal.stream.write(buf);
+        grbl.on_report_options(true);
+        hal.stream.write("]" ASCII_EOL);
+
+        hal.stream.write("[FIRMWARE:grblHAL]" ASCII_EOL);
+
+        if(!(nvs->type == NVS_None || nvs->type == NVS_Emulated)) {
+            hal.stream.write("[NVS STORAGE:");
+            *buf = '\0';
+            if(hal.nvs.type == NVS_Emulated)
+                strcat(buf, "*");
+            strcat(buf, nvs->type == NVS_Flash ? "FLASH" : (nvs->type == NVS_FRAM ? "FRAM" : "EEPROM"));
             hal.stream.write(buf);
             hal.stream.write("]" ASCII_EOL);
         }
-
-        hal.stream.write("[FIRMWARE:grblHAL]" ASCII_EOL);
 
         if(hal.info) {
             hal.stream.write("[DRIVER:");
@@ -1205,7 +1211,7 @@ void report_build_info (char *line, bool extended)
         hal.stream.write("]" ASCII_EOL);
 #endif
 
-        grbl.on_report_options();
+        grbl.on_report_options(false);
     }
 }
 
@@ -1563,7 +1569,7 @@ void report_settings_detail (bool human_readable, setting_type_t id, const setti
 
     if(human_readable) {
         hal.stream.write(": ");
-        if(setting_detail->group == Group_Axis)
+        if(setting_detail->group == Group_Axis0)
             hal.stream.write(axis_letter[group_offset]);
         hal.stream.write(setting_detail->name[0] == '?' ? &setting_detail->name[1] : setting_detail->name); // temporary hack for ? prefix...
 

@@ -23,7 +23,6 @@
 
 #include <string.h>
 
-#include "driver.h"
 #include "serial.h"
 #include "grbl.h"
 
@@ -31,6 +30,11 @@
 
 static stream_rx_buffer_t rxbuf = {0};
 static stream_tx_buffer_t txbuf = {0}, rxbackup;
+
+#ifdef SERIAL2_MOD
+static stream_rx_buffer_t rxbuf2 = {0};
+static stream_tx_buffer_t txbuf2 = {0};
+#endif
 
 void serialInit (void)
 {
@@ -237,3 +241,248 @@ void USART_IRQHandler (void)
             USART->CR1 &= ~USART_CR1_TXEIE;     // disable UART TX interrupt
    }
 }
+
+#ifdef SERIAL2_MOD
+
+void serial2Init (uint32_t baud_rate)
+{
+    GPIO_InitTypeDef GPIO_InitStructure = {0};
+
+    GPIO_InitStructure.Mode = GPIO_MODE_AF_PP;
+    GPIO_InitStructure.Pull = GPIO_NOPULL;
+    GPIO_InitStructure.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+
+    __HAL_RCC_GPIOA_CLK_ENABLE();
+
+#if defined(NUCLEO_F411) || defined(NUCLEO_F446)
+
+#define UART2 USART1
+#define UART2_IRQHandler USART1_IRQHandler
+
+  __HAL_RCC_USART1_CLK_ENABLE();
+
+  GPIO_InitStructure.Pin = GPIO_PIN_9|GPIO_PIN_10;
+  GPIO_InitStructure.Alternate = GPIO_AF7_USART1;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStructure);
+
+  UART2->CR1 = USART_CR1_RE|USART_CR1_TE;
+  UART2->BRR = UART_BRR_SAMPLING16(HAL_RCC_GetPCLK2Freq(), baud_rate);
+  UART2->CR1 |= (USART_CR1_UE|USART_CR1_RXNEIE);
+
+  HAL_NVIC_SetPriority(USART1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(USART1_IRQn);
+
+#else
+
+#define UART2 USART2
+#define UART2_IRQHandler USART2_IRQHandler
+
+  __HAL_RCC_USART2_CLK_ENABLE();
+
+  GPIO_InitStructure.Pin = GPIO_PIN_2|GPIO_PIN_3;
+  GPIO_InitStructure.Alternate = GPIO_AF7_USART2;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStructure);
+
+  UART2->CR1 = USART_CR1_RE|USART_CR1_TE;
+  UART2->BRR = UART_BRR_SAMPLING16(HAL_RCC_GetPCLK1Freq(), baud_rate);
+  UART2->CR1 |= (USART_CR1_UE|USART_CR1_RXNEIE);
+
+  HAL_NVIC_SetPriority(USART2_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(USART2_IRQn);
+
+#endif
+
+#if MODBUS_ENABLE
+    SERIAL2_MODULE->IE = EUSCI_A_IE_RXIE;
+#endif
+}
+
+bool serial2SetBaudRate (uint32_t baud_rate)
+{
+    static bool init_ok = false;
+
+    if(!init_ok) {
+        serial2Init(baud_rate);
+        init_ok = true;
+    }
+
+    UART2->BRR = UART_BRR_SAMPLING16(HAL_RCC_GetPCLK1Freq(), baud_rate);
+
+    return true;
+}
+
+#if !(MODBUS_ENABLE || TRINAMIC_ENABLE == 2209)
+
+void serialSelect (bool mpg)
+{
+    if(mpg) {
+        SERIAL_MODULE->IE = 0;
+        SERIAL2_MODULE->IE = EUSCI_A_IE_RXIE;
+    } else {
+        SERIAL_MODULE->IE = EUSCI_A_IE_RXIE;
+        SERIAL2_MODULE->IE = 0;
+    }
+}
+
+#endif
+
+//
+// Returns number of free characters in serial input buffer
+//
+uint16_t serial2RxFree (void)
+{
+    uint32_t tail = rxbuf2.tail, head = rxbuf2.head;
+
+    return (RX_BUFFER_SIZE - 1) - BUFCOUNT(head, tail, RX_BUFFER_SIZE);
+}
+
+//
+// Returns number of characters in serial input buffer
+//
+uint16_t serial2RxCount (void)
+{
+    uint32_t tail = rxbuf2.tail, head = rxbuf2.head;
+
+    return BUFCOUNT(head, tail, RX_BUFFER_SIZE);
+}
+
+//
+// Flushes the serial input buffer
+//
+void serial2RxFlush (void)
+{
+    rxbuf2.tail = rxbuf2.head;
+}
+
+//
+// Flushes and adds a CAN character to the serial input buffer
+//
+void serial2RxCancel (void)
+{
+    rxbuf2.data[rxbuf2.head] = ASCII_CAN;
+    rxbuf2.tail = rxbuf2.head;
+    rxbuf2.head = (rxbuf2.tail + 1) & (RX_BUFFER_SIZE - 1);
+}
+
+//
+// Attempt to send a character bypassing buffering
+//
+static inline bool serial2PutCNonBlocking (const char c)
+{
+    bool ok;
+
+    if((ok = !(UART2->CR1 & USART_CR1_TXEIE) && !(UART2->SR & USART_SR_TXE)))
+        UART2->DR = c;
+
+    return ok;
+}
+
+//
+// Writes a character to the serial output stream
+//
+bool serial2PutC (const char c)
+{
+    uint32_t next_head;
+
+//    if(txbuf2.head != txbuf2.tail || !serial2PutCNonBlocking(c)) {  // Try to send character without buffering...
+
+        next_head = (txbuf2.head + 1) & (TX_BUFFER_SIZE - 1);       // .. if not, set and update head pointer
+
+        while(txbuf2.tail == next_head) {                           // While TX buffer full
+            if(!hal.stream_blocking_callback())                     // check if blocking for space,
+                return false;                                       // exit if not (leaves TX buffer in an inconsistent state)
+            UART2->CR1 |= USART_CR1_TXEIE;                          // Enable TX interrupts???
+        }
+
+        txbuf2.data[txbuf2.head] = c;                               // Add data to buffer
+        txbuf2.head = next_head;                                    // and update head pointer
+
+        UART2->CR1 |= USART_CR1_TXEIE;                              // Enable TX interrupts
+//    }
+
+    return true;
+}
+
+// Writes a number of characters from a buffer to the serial output stream, blocks if buffer full
+//
+void serial2Write(const char *s, uint16_t length)
+{
+    char *ptr = (char *)s;
+
+    while(length--)
+        serial2PutC(*ptr++);
+}
+
+//
+// Flushes the serial output buffer
+//
+void serial2TxFlush (void)
+{
+    UART2->CR1 &= ~USART_CR1_TXEIE;     // Disable TX interrupts
+    txbuf2.tail = txbuf2.head;
+}
+
+//
+// Returns number of characters pending transmission
+//
+uint16_t serial2TxCount (void)
+{
+    uint32_t tail = txbuf2.tail, head = txbuf2.head;
+
+    return BUFCOUNT(head, tail, TX_BUFFER_SIZE) + (UART2->SR & USART_SR_TC ? 0 : 1);
+}
+
+//
+// serialGetC - returns -1 if no data available
+//
+int16_t serial2GetC (void)
+{
+    uint16_t bptr = rxbuf2.tail;
+
+    if(bptr == rxbuf2.head)
+        return -1; // no data available else EOF
+
+    char data = rxbuf2.data[bptr++];             // Get next character, increment tmp pointer
+    rxbuf2.tail = bptr & (RX_BUFFER_SIZE - 1);   // and update pointer
+
+    return (int16_t)data;
+}
+
+void UART2_IRQHandler (void)
+{
+    if(UART2->SR & USART_SR_RXNE) {
+
+        uint16_t next_head = (rxbuf2.head + 1) & (RX_BUFFER_SIZE - 1);   // Get and increment buffer pointer
+
+        if(rxbuf2.tail == next_head) {                                  // If buffer full
+            rxbuf.overflow = 1;                                         // flag overflow
+            next_head = UART2->DR;                                      // and do dummy read to clear interrupt
+        } else {
+#if MODBUS_ENABLE || TRINAMIC_ENABLE == 2209
+            rxbuf2.data[rxbuf2.head] = UART2->DR;                       // if not add data to buffer
+            rxbuf2.head = next_head;                                    // and update pointer
+#else
+            if(!hal.stream.enqueue_realtime_command(data)) {            // Check and strip realtime commands,
+                rxbuf2.data[rxbuf2.head] = UART2->DR;                   // if not add data to buffer
+                rxbuf2.head = next_head;                                // and update pointer
+            }
+#endif
+        }
+    }
+
+    if((UART2->SR & USART_SR_TXE) && (UART2->CR1 & USART_CR1_TXEIE)) {
+
+        uint16_t tail = txbuf2.tail;            // Get buffer pointer
+
+        UART2->DR = txbuf2.data[tail++];        // Send next character and increment pointer
+
+        if(tail == TX_BUFFER_SIZE)              // If at end
+            tail = 0;                           // wrap pointer around
+
+        txbuf2.tail = tail;                     // Update global pointer
+
+        if(tail == txbuf2.head)                 // If buffer empty then
+            UART2->CR1 &= ~USART_CR1_TXEIE;     // disable UART TX interrupt
+   }
+}
+#endif

@@ -174,10 +174,12 @@ static void onRealtimeReport (stream_write_ptr stream_write, report_tracking_fla
         on_realtime_report(stream_write, report);
 }
 
-static void onReportOptions (void)
+static void onReportOptions (bool newopt)
 {
-    on_report_options();
-    hal.stream.write("[PLUGIN:LASER COOLANT v0.01]" ASCII_EOL);
+    on_report_options(newopt);
+
+    if(!newopt)
+        hal.stream.write("[PLUGIN:LASER COOLANT v0.01]" ASCII_EOL);
 }
 
 static void warning_msg (uint_fast16_t state)

@@ -3,7 +3,7 @@
 
   Main state machine
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2018 Terje Io
 
@@ -24,6 +24,7 @@
 #ifndef _STATE_MACHINE_H_
 #define _STATE_MACHINE_H_
 
+sys_state_t state_get (void);
 void set_state (uint_fast16_t state);
 void update_state (uint_fast16_t rt_exec);
 bool state_door_reopened (void);

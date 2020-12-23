@@ -357,7 +357,7 @@ typedef void (*on_probe_completed_ptr)(void);
 typedef void (*on_program_completed_ptr)(program_flow_t program_flow);
 typedef void (*on_execute_realtime_ptr)(uint_fast16_t state);
 typedef void (*on_unknown_accessory_override_ptr)(uint8_t cmd);
-typedef void (*on_report_options_ptr)(void);
+typedef void (*on_report_options_ptr)(bool newopt);
 typedef void (*on_report_command_help_ptr)(void);
 typedef void (*on_global_settings_restore_ptr)(void);
 typedef setting_details_t *(*on_report_settings_ptr)(void); // NOTE: this must match the signature of the same definition in

@@ -17,6 +17,10 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#if TRINAMIC_ENABLE
+#error Trinamic plugin not supported!
+#endif
+
 #if N_AXIS == 5
 #define BOARD_NAME "CNC 3040 5-axis"
 #elif N_AXIS == 4

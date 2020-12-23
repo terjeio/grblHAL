@@ -98,6 +98,8 @@ typedef enum {
     Hold_Pending = 2
 } hold_state_t;
 
+typedef uint_fast16_t sys_state_t;
+
 // Define step segment generator state flags.
 typedef union {
     uint8_t flags;

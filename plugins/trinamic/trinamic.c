@@ -21,19 +21,24 @@
 
 #ifdef ARDUINO
 #include "../driver.h"
-#include "../grbl/nvs_buffer.h"
 #else
 #include "driver.h"
-#include "grbl/nvs_buffer.h"
 #endif
 
-#if TRINAMIC_ENABLE
+#if TRINAMIC_ENABLE == 2130
 
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
 
 #include "trinamic.h"
+
+#ifdef ARDUINO
+#include "../grbl/nvs_buffer.h"
+#else
+#include "grbl/nvs_buffer.h"
+#include "grbl/protocol.h"
+#endif
 
 #include "grbl/report.h"
 #ifdef ARDUINO
@@ -57,7 +62,6 @@ static TMC2130_t stepper[N_AXIS];
 static axes_signals_t homing = {0}, otpw_triggered = {0};
 static limits_get_state_ptr limits_get_state = NULL;
 static stepper_pulse_start_ptr hal_stepper_pulse_start = NULL;
-static on_execute_realtime_ptr on_execute_realtime = NULL;
 static driver_setting_ptrs_t driver_settings;
 static on_realtime_report_ptr on_realtime_report;
 static on_report_options_ptr on_report_options;
@@ -95,12 +99,12 @@ void TMC_DriverInit (TMC_io_driver_t *driver)
 #if TRINAMIC_I2C
     I2C_DriverInit(driver);
 #else
-    SPI_DriverInit(driver);
+    SPI_DriverInit(driver, trinamic.driver_enable);
 #endif
 }
 
 // Update driver settings on changes
-void trinamic_configure (void)
+static void trinamic_configure (void)
 {
     uint_fast8_t idx = N_AXIS;
 
@@ -144,11 +148,14 @@ status_code_t trinamic_setting (setting_type_t setting, float value, char *svalu
 
             case AxisSetting_StepperCurrent:
                 trinamic.driver[idx].current = (uint16_t)value;
+                TMC2130_SetCurrent(&stepper[idx], trinamic.driver[idx].current, stepper[idx].hold_current_pct);
                 break;
 
             case AxisSetting_MicroSteps:
-                if(TMC2130_MicrostepsIsValid((uint16_t)value))
+                if(TMC2130_MicrostepsIsValid((uint16_t)value)) {
                     trinamic.driver[idx].microsteps = (tmc2130_microsteps_t)value;
+                    TMC2130_SetMicrosteps(&stepper[idx], trinamic.driver[idx].microsteps);
+                }
                 else
                     status = Status_InvalidStatement;
                 break;
@@ -283,10 +290,12 @@ static void trinamic_realtime_report (stream_write_ptr stream_write, report_trac
 {
     if(warning) {
         warning = false;
+#if TRINAMIC_I2C
         TMCI2C_status_t status = (TMCI2C_status_t)TMC2130_ReadRegister(NULL, (TMC2130_datagram_t *)&dgr_monitor).value;
         otpw_triggered.mask |= dgr_monitor.reg.otpw.mask;
         sprintf(sbuf, "|TMCMON:%d:%d:%d:%d:%d", status.value, dgr_monitor.reg.ot.mask, dgr_monitor.reg.otpw.mask, dgr_monitor.reg.otpw_cnt.mask, dgr_monitor.reg.error.mask);
         stream_write(sbuf);
+#endif
     }
 
     if(on_realtime_report)
@@ -304,49 +313,45 @@ static char *append (char *s)
 // Write CRLF terminated string to current stream
 static void write_line (char *s)
 {
-    strcat(s, ""  ASCII_EOL);
+    strcat(s, ASCII_EOL);
     hal.stream.write(s);
 }
 
 //
 static void report_sg_status (uint_fast16_t state)
 {
-    if(report.sg_status) {
-        report.sg_status = false;
-        TMC2130_ReadRegister(&stepper[report.sg_status_axis], (TMC2130_datagram_t *)&stepper[report.sg_status_axis].drv_status);
-        hal.stream.write("[SG:");
-        hal.stream.write(uitoa((uint32_t)stepper[report.sg_status_axis].drv_status.reg.sg_result));
-        hal.stream.write("]"  ASCII_EOL);
-    }
-
-    if(on_execute_realtime)
-        on_execute_realtime(state);
+    TMC2130_ReadRegister(&stepper[report.sg_status_axis], (TMC2130_datagram_t *)&stepper[report.sg_status_axis].drv_status);
+    hal.stream.write("[SG:");
+    hal.stream.write(uitoa((uint32_t)stepper[report.sg_status_axis].drv_status.reg.sg_result));
+    hal.stream.write("]" ASCII_EOL);
 }
-
-#if TRINAMIC_DEV
-
-static void report_sg_params (void)
-{
-    sprintf(sbuf, "[SGPARAMS:%ld:%d:%d:%d]"  ASCII_EOL, report.sg_status_axis, stepper[report.sg_status_axis].coolconf.reg.sfilt, stepper[report.sg_status_axis].coolconf.reg.semin, stepper[report.sg_status_axis].coolconf.reg.semax);
-    hal.stream.write(sbuf);
-}
-
-#endif
 
 static void stepper_pulse_start (stepper_t *motors)
 {
     static uint32_t step_count = 0;
+
     hal_stepper_pulse_start(motors);
+
     report.sg_status_axis = 0;
 
     if(motors->step_outbits.x) {
         step_count++;
         if(step_count == report.msteps) {
             step_count = 0;
-            report.sg_status = true;
+            protocol_enqueue_rt_command(report_sg_status);
         }
     }
 }
+
+#if TRINAMIC_DEV
+
+static void report_sg_params (void)
+{
+    sprintf(sbuf, "[SGPARAMS:%ld:%d:%d:%d]" ASCII_EOL, report.sg_status_axis, stepper[report.sg_status_axis].coolconf.reg.sfilt, stepper[report.sg_status_axis].coolconf.reg.semin, stepper[report.sg_status_axis].coolconf.reg.semax);
+    hal.stream.write(sbuf);
+}
+
+#endif
 
 // Enable/disable stallGuard
 static void stallGuard_enable (uint32_t axis, bool enable)
@@ -536,18 +541,15 @@ static void trinamic_MCodeExecute (uint_fast16_t state, parser_block_t *gc_block
 
         case Trinamic_DebugReport:
             if(report.sg_status_enable) {
-                if(grbl.on_execute_realtime != report_sg_status) {
-                    on_execute_realtime = grbl.on_execute_realtime;
-                    grbl.on_execute_realtime = report_sg_status;
+                if(hal_stepper_pulse_start == NULL) {
                     hal_stepper_pulse_start = hal.stepper.pulse_start;
                     hal.stepper.pulse_start = stepper_pulse_start;
                 }
                 stepper[report.sg_status_axis].coolconf.reg.sfilt = report.sfilt;
                 TMC2130_WriteRegister(&stepper[report.sg_status_axis], (TMC2130_datagram_t *)&stepper[report.sg_status_axis].coolconf);
-            } else if(grbl.on_execute_realtime == report_sg_status) {
-                grbl.on_execute_realtime = on_execute_realtime;
-                on_execute_realtime = NULL;
+            } else if(hal_stepper_pulse_start != NULL) {
                 hal.stepper.pulse_start = hal_stepper_pulse_start;
+                hal_stepper_pulse_start = NULL;
             }
             write_debug_report();
             break;
@@ -682,7 +684,7 @@ static void write_debug_report (void)
 {
     uint_fast8_t idx = N_AXIS;
 
-    hal.stream.write("[TRINAMIC]"  ASCII_EOL);
+    hal.stream.write("[TRINAMIC]" ASCII_EOL);
 
     do {
         if(bit_istrue(report.axes.mask, bit(--idx))) {
@@ -783,7 +785,7 @@ static void write_debug_report (void)
         }
         write_line(sbuf);
 
-        hal.stream.write("pwm"  ASCII_EOL);
+        hal.stream.write("pwm" ASCII_EOL);
 
         sprintf(sbuf, "%-15s", "threshold");
         for(idx = 0; idx < N_AXIS; idx++) {
@@ -810,7 +812,7 @@ static void write_debug_report (void)
         }
         write_line(sbuf);
 
-        hal.stream.write("OT prewarn has"  ASCII_EOL);
+        hal.stream.write("OT prewarn has" ASCII_EOL);
         sprintf(sbuf, "%-15s", "been triggered");
         for(idx = 0; idx < N_AXIS; idx++) {
             if(bit_istrue(report.axes.mask, bit(idx)))
@@ -856,7 +858,7 @@ static void write_debug_report (void)
         }
         write_line(sbuf);
 
-        hal.stream.write("hysteresis"  ASCII_EOL);
+        hal.stream.write("hysteresis" ASCII_EOL);
 
         sprintf(sbuf, "%-15s", "-end");
         for(idx = 0; idx < N_AXIS; idx++) {
@@ -882,7 +884,7 @@ static void write_debug_report (void)
         }
         write_line(sbuf);
 
-        hal.stream.write("DRIVER STATUS:"  ASCII_EOL);
+        hal.stream.write("DRIVER STATUS:" ASCII_EOL);
 
         sprintf(sbuf, "%-15s", "stallguard");
         write_line(sbuf);
@@ -949,7 +951,7 @@ static void write_debug_report (void)
         }
         write_line(sbuf);
 
-        hal.stream.write("STATUS REGISTERS:"  ASCII_EOL);
+        hal.stream.write("STATUS REGISTERS:" ASCII_EOL);
         for(idx = 0; idx < N_AXIS; idx++) {
             if(bit_istrue(report.axes.mask, bit(idx))) {
                 uint32_t reg = stepper[idx].drv_status.reg.value;
@@ -960,10 +962,16 @@ static void write_debug_report (void)
     }
 }
 
-static void onReportOptions (void)
+static void onReportOptions (bool newopt)
 {
-    on_report_options();
-    hal.stream.write("[PLUGIN:TMC2130 v0.01]"  ASCII_EOL);
+    on_report_options(newopt);
+
+    if(!newopt)
+        hal.stream.write("[PLUGIN:TMC2130 v0.01]" ASCII_EOL);
+    else if(trinamic.driver_enable.mask) {
+        hal.stream.write(",TMC=");
+        hal.stream.write(uitoa(trinamic.driver_enable.mask));
+    }
 }
 
 bool trinamic_init (void)
@@ -1001,19 +1009,6 @@ void trinamic_start (bool allow_mixed)
 {
     uint_fast8_t idx = N_AXIS;
 
-#if !TRINAMIC_I2C
-    static chip_select_t cs[N_AXIS];
-
-    cs[X_AXIS].port = SPI_CS_PORT_X;
-    cs[X_AXIS].pin = SPI_CS_PIN_X;
-    cs[Y_AXIS].port = SPI_CS_PORT_Y;
-    cs[Y_AXIS].pin = SPI_CS_PIN_Y;
-    cs[Z_AXIS].port = SPI_CS_PORT_Z;
-    cs[Z_AXIS].pin = SPI_CS_PIN_Z;
-
-    // TODO: add definitions for other axes if more than three!
-#endif
-
     TMC_IOInit();
 
     do {
@@ -1022,13 +1017,7 @@ void trinamic_start (bool allow_mixed)
 
             TMC2130_SetDefaults(&stepper[idx]); // Init shadow registers to default values
 
-#if !TRINAMIC_I2C
-            stepper[idx].cs_pin = &cs[idx];
-            GPIOPinTypeGPIOOutput(cs[idx].port, cs[idx].pin);
-            GPIOPinWrite(cs[idx].port, cs[idx].pin, cs[idx].pin);
-#else
-            stepper[idx].cs_pin = (void *)idx;
-#endif
+            stepper[idx].axis = idx;
             stepper[idx].current = trinamic.driver[idx].current;
             stepper[idx].microsteps = trinamic.driver[idx].microsteps;
             stepper[idx].r_sense = trinamic.driver[idx].r_sense;
@@ -1069,6 +1058,8 @@ void trinamic_start (bool allow_mixed)
           #endif
         }
     } while(idx);
+
+    trinamic_configure();
 }
 
 // Interrupt handler for DIAG1 signal(s)

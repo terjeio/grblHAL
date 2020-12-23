@@ -269,7 +269,7 @@ static const setting_group_detail_t setting_group_detail [] = {
     { Group_Root, Group_Parking, "Parking"},
     { Group_Root, Group_Jogging, "Jogging"},
     { Group_Root, Group_Stepper, "Stepper"},
-    { Group_Root, Group_MotorDriver, "Motor driver"},
+    { Group_Root, Group_MotorDriver, "Stepper driver"},
     { Group_Root, Group_Axis, "Axis"},
     { Group_Axis, Group_XAxis, "X-axis"},
     { Group_Axis, Group_YAxis, "Y-axis"},

@@ -111,17 +111,19 @@ char *wifi_get_mac (void)
     return mac;
 }
 
-static void reportIP (void)
+static void reportIP (bool newopt)
 {
-    on_report_options();
+    on_report_options(newopt);
 
-    hal.stream.write("[WIFI MAC:");
-    hal.stream.write(wifi_get_mac());
-    hal.stream.write("]"  ASCII_EOL);
+    if(!newopt) {
+        hal.stream.write("[WIFI MAC:");
+        hal.stream.write(wifi_get_mac());
+        hal.stream.write("]" ASCII_EOL);
 
-    hal.stream.write("[IP:");
-    hal.stream.write(wifi_get_ip());
-    hal.stream.write("]"  ASCII_EOL);
+        hal.stream.write("[IP:");
+        hal.stream.write(wifi_get_ip());
+        hal.stream.write("]" ASCII_EOL);
+    }
 }
 
 bool wifi_dns_running (void)

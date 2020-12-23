@@ -1,7 +1,7 @@
 /*
   st_morpho.c - driver code for STM32F4xx ARM processors
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 
@@ -27,6 +27,7 @@
 #include <string.h>
 
 #include "main.h"
+#include "spi.h"
 #include "grbl/protocol.h"
 #include "grbl/settings.h"
 
@@ -222,6 +223,193 @@ static int32_t wait_on_input (bool digital, uint8_t port, wait_mode_t wait_mode,
     return value;
 }
 
+#if TRINAMIC_ENABLE == 2130
+
+static axes_signals_t tmc;
+static uint32_t n_axis;
+static TMC2130_datagram_t datagram[N_AXIS];
+static uint8_t br[N_AXIS];
+
+static TMC2130_status_t TMC_SPI_ReadRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
+{
+    static TMC2130_status_t status = {0};
+
+    uint8_t res;
+    uint_fast8_t idx = N_AXIS, ridx = 0;
+    uint32_t f_spi = spi_set_speed(SPI_BAUDRATEPRESCALER_32);
+    volatile uint32_t dly = 100;
+
+    datagram[driver->axis].addr.value = reg->addr.value;
+    datagram[driver->axis].addr.write = 0;
+
+    BITBAND_PERI(TRINAMIC_CS_PORT->ODR, TRINAMIC_CS_PIN) = 0;
+
+    do {
+        if(bit_istrue(tmc.mask, bit(--idx))) {
+            spi_put_byte(datagram[idx].addr.value);
+            spi_put_byte(0);
+            spi_put_byte(0);
+            spi_put_byte(0);
+            spi_put_byte(0);
+        }
+    } while(idx);
+
+    while(--dly);
+
+    BITBAND_PERI(TRINAMIC_CS_PORT->ODR, TRINAMIC_CS_PIN) = 1;
+
+    dly = 50;
+    while(--dly);
+
+    BITBAND_PERI(TRINAMIC_CS_PORT->ODR, TRINAMIC_CS_PIN) = 0;
+
+    idx = N_AXIS;
+    do {
+        ridx++;
+        if(bit_istrue(tmc.mask, bit(--idx))) {
+
+            res = spi_put_byte(datagram[idx].addr.value);
+
+            if(N_AXIS - ridx == driver->axis) {
+                status.value = res;
+                reg->payload.data[3] = spi_get_byte();
+                reg->payload.data[2] = spi_get_byte();
+                reg->payload.data[1] = spi_get_byte();
+                reg->payload.data[0] = spi_get_byte();
+            } else {
+                spi_get_byte();
+                spi_get_byte();
+                spi_get_byte();
+                spi_get_byte();
+            }
+        }
+    } while(idx);
+
+    dly = 100;
+    while(--dly);
+
+    BITBAND_PERI(TRINAMIC_CS_PORT->ODR, TRINAMIC_CS_PIN) = 1;
+
+    dly = 50;
+    while(--dly);
+
+    spi_set_speed(f_spi);
+
+    return status;
+}
+
+static TMC2130_status_t TMC_SPI_WriteRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
+{
+    static TMC2130_status_t status = {0};
+
+    uint8_t res;
+    uint_fast8_t idx = N_AXIS, ridx = 0;
+    uint32_t f_spi = spi_set_speed(SPI_BAUDRATEPRESCALER_32);
+    volatile uint32_t dly = 100;
+
+    memcpy(&datagram[driver->axis], reg, sizeof(TMC2130_datagram_t));
+    datagram[driver->axis].addr.write = 1;
+
+    BITBAND_PERI(TRINAMIC_CS_PORT->ODR, TRINAMIC_CS_PIN) = 0;
+
+    do {
+        ridx++;
+        if(bit_istrue(tmc.mask, bit(--idx))) {
+
+            res = spi_put_byte(datagram[idx].addr.value);
+            spi_put_byte(datagram[idx].payload.data[3]);
+            spi_put_byte(datagram[idx].payload.data[2]);
+            spi_put_byte(datagram[idx].payload.data[1]);
+            spi_put_byte(datagram[idx].payload.data[0]);
+
+            if(N_AXIS - ridx == driver->axis)
+                status.value = res;
+
+            if(idx == driver->axis) {
+                datagram[idx].addr.reg = TMC2130Reg_DRV_STATUS;
+                datagram[idx].addr.write = 0;
+            }
+        }
+    } while(idx);
+
+    while(--dly);
+
+    BITBAND_PERI(TRINAMIC_CS_PORT->ODR, TRINAMIC_CS_PIN) = 1;
+
+    dly = 50;
+    while(--dly);
+
+    spi_set_speed(f_spi);
+
+    return status;
+}
+
+void SPI_DriverInit (TMC_io_driver_t *driver, axes_signals_t axisflags)
+{
+    tmc = axisflags;
+    n_axis = 0;
+    while(axisflags.mask) {
+        n_axis += (axisflags.mask & 0x01);
+        axisflags.mask >>= 1;
+    }
+
+    driver->WriteRegister = TMC_SPI_WriteRegister;
+    driver->ReadRegister = TMC_SPI_ReadRegister;
+}
+
+#endif
+
+#if TRINAMIC_ENABLE == 2209
+
+#include "serial.h"
+
+static TMC2209_write_datagram_t *TMC_UART_ReadRegister (TMC2209_t *driver, TMC2209_read_datagram_t *reg)
+{
+    static TMC2209_write_datagram_t status = {0};
+    volatile uint32_t dly = 50;
+
+    serial2Write((char *)reg->data, sizeof(TMC2209_read_datagram_t));
+
+    while(serial2TxCount());
+
+    while(--dly);
+
+    serial2RxFlush();
+
+    hal.delay_ms(2, NULL);
+
+    if(serial2RxCount() >= 8) {
+        status.data[0] = serial2GetC();
+        status.data[1] = serial2GetC();
+        status.data[2] = serial2GetC();
+        status.data[3] = serial2GetC();
+        status.data[4] = serial2GetC();
+        status.data[5] = serial2GetC();
+        status.data[6] = serial2GetC();
+        status.data[7] = serial2GetC();
+    }
+
+    return &status;
+}
+
+static void TMC_UART_WriteRegister (TMC2209_t *driver, TMC2209_write_datagram_t *reg)
+{
+    serial2Write((char *)reg->data, sizeof(TMC2209_write_datagram_t));
+
+//    while(serial2TxCount());
+}
+
+void UART_DriverInit (TMC_io_driver_t *driver)
+{
+    serial2Init(115200);
+
+    driver->WriteRegister = TMC_UART_WriteRegister;
+    driver->ReadRegister = TMC_UART_ReadRegister;
+}
+
+#endif
+
+
 void board_init (void)
 {
     hal.port.wait_on_input = wait_on_input;
@@ -248,6 +436,21 @@ void board_init (void)
 
     GPIO_Init.Pin = AUXOUTPUT1_BIT;
     HAL_GPIO_Init(AUXOUTPUT1_PORT, &GPIO_Init);
+
+#if TRINAMIC_ENABLE == 2130
+
+    spi_init();
+    GPIO_Init.Pin = TRINAMIC_CS_BIT;
+    HAL_GPIO_Init(TRINAMIC_CS_PORT, &GPIO_Init);
+    BITBAND_PERI(TRINAMIC_CS_PORT->ODR, TRINAMIC_CS_PIN) = 1;
+
+    uint_fast8_t idx = N_AXIS;
+    do {
+        datagram[--idx].addr.reg = TMC2130Reg_DRV_STATUS;
+    } while(idx);
+
+#endif
+
 }
 
 #endif

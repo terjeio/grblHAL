@@ -397,10 +397,12 @@ static void modbus_settings_load (void)
         driver_settings.load();
 }
 
-static void onReportOptions (void)
+static void onReportOptions (bool newopt)
 {
-    on_report_options();
-    hal.stream.write("[PLUGIN:MODBUS v0.02]" ASCII_EOL);
+    on_report_options(newopt);
+
+    if(!newopt)
+        hal.stream.write("[PLUGIN:MODBUS v0.02]" ASCII_EOL);
 }
 
 bool modbus_init (modbus_stream_t *mstream)

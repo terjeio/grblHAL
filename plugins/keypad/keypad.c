@@ -354,10 +354,12 @@ static void keypad_process_keypress (uint_fast16_t state)
     }
 }
 
-static void onReportOptions (void)
+static void onReportOptions (bool newopt)
 {
-    on_report_options();
-    hal.stream.write("[PLUGIN:KEYPAD v1.00]"  ASCII_EOL);
+    on_report_options(newopt);
+
+    if(!newopt)
+        hal.stream.write("[PLUGIN:KEYPAD v1.00]"  ASCII_EOL);
 }
 
 bool keypad_init (void)

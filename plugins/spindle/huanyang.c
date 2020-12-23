@@ -227,14 +227,17 @@ static void rx_exception (uint8_t code)
     system_raise_alarm(Alarm_Spindle);
 }
 
-static void onReportOptions (void)
+static void onReportOptions (bool newopt)
 {
-    on_report_options();
+    on_report_options(newopt);
+
+    if(!newopt) {
 #if SPINDLE_HUANYANG == 2
-    hal.stream.write("[PLUGIN:HUANYANG VFD P2A v0.02]" ASCII_EOL);
+        hal.stream.write("[PLUGIN:HUANYANG VFD P2A v0.02]" ASCII_EOL);
 #else
-    hal.stream.write("[PLUGIN:HUANYANG VFD v0.02]" ASCII_EOL);
+        hal.stream.write("[PLUGIN:HUANYANG VFD v0.02]" ASCII_EOL);
 #endif
+    }
 }
 
 static void huanyang_settings_changed (settings_t *settings)
