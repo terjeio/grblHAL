@@ -27,6 +27,7 @@
 //#define BOARD_MEGA256
 //#define BOARD_PROTONEER
 //#define BOARD_CMCGRATH
+//#define BOARD_RADDS_16 // NOTE: untested!!
 
 // Configuration
 // Uncomment to enable.

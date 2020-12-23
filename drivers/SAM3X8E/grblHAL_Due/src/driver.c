@@ -325,7 +325,7 @@ inline static __attribute__((always_inline)) void set_dir_outputs (axes_signals_
 static void stepperEnable (axes_signals_t enable)
 {
     enable.value ^= settings.steppers.enable_invert.mask;
-#if TRINAMIC_ENABLE && TRINAMIC_I2C
+#if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
     trinamic_stepper_enable(enable);
 #else
     BITBAND_PERI(X_DISABLE_PORT->PIO_ODSR, X_DISABLE_PIN) = enable.x;
@@ -606,7 +606,7 @@ static void limitsEnable (bool on, bool homing)
     hal.homing.get_state = homing ? limitsGetHomeState : limitsGetState;
   #endif
 
-  #if TRINAMIC_ENABLE
+  #if TRINAMIC_ENABLE == 2130
     trinamic_homing(homing);
   #endif
 }
@@ -900,10 +900,6 @@ static void PIO_InputMode (Pio *port, uint32_t bit, bool no_pullup, gpio_intr_t 
 void settings_changed (settings_t *settings)
 {
     if(IOInitDone) {
-
-      #if TRINAMIC_ENABLE
-        trinamic_configure();
-      #endif
 
         stepperEnable(settings->steppers.deenergize);
 
@@ -1334,7 +1330,7 @@ static bool driver_setup (settings_t *settings)
     PIO_Mode(PROBE_PORT, PROBE_BIT, INPUT);
   #endif
 
-#if TRINAMIC_ENABLE
+#if TRINAMIC_ENABLE == 2130
     trinamic_start(true);
 #endif
 
@@ -1467,7 +1463,7 @@ bool driver_init (void)
     NVIC_EnableIRQ(SysTick_IRQn);
 
     hal.info = "SAM3X8E";
-	hal.driver_version = "201218";
+	hal.driver_version = "201223";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1532,7 +1528,7 @@ bool driver_init (void)
     hal.stream.suspend_read = serialSuspendInput;
 #endif
 
-#if EEPROM_ENABLE || KEYPAD_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
+#if EEPROM_ENABLE || KEYPAD_ENABLE || (TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C)
     i2c_init();
 #endif
 
@@ -1580,7 +1576,7 @@ bool driver_init (void)
     hal.driver_cap.limits_pull_up = On;
     hal.driver_cap.probe_pull_up = On;
 
-#if TRINAMIC_ENABLE
+#if TRINAMIC_ENABLE == 2130
     trinamic_init();
 #endif
 

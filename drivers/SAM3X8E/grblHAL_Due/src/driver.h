@@ -105,6 +105,8 @@ void IRQUnRegister(int32_t IRQnum);
     #include "mega_2560_map.h"
 #elif defined(BOARD_PROTONEER)
     #include "protoneer_3.xx_map.h"
+#elif defined(BOARD_RADDS_16)
+    #include "radds_1.6_map.h"
 #else
     #include "generic_map.h"
 #endif
@@ -118,7 +120,7 @@ void IRQUnRegister(int32_t IRQnum);
 
 // End configuration
 
-#if TRINAMIC_ENABLE
+#if TRINAMIC_ENABLE == 2130
 #include "tmc2130/trinamic.h"
 #endif
 
@@ -126,7 +128,7 @@ void IRQUnRegister(int32_t IRQnum);
 #include "spindle/huanyang.h"
 #endif
 
-#if EEPROM_ENABLE || KEYPAD_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
+#if EEPROM_ENABLE || KEYPAD_ENABLE || (TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C)
 
 // Define I2C port/pins
 #define I2C_PERIPH  TWI0
