@@ -162,9 +162,24 @@ static gpio_t LimitsOverride;
 #endif
 #ifdef A_AXIS
 static gpio_t stepA, dirA, LimitA;
+#ifdef A_ENABLE_PIN
+static gpio_t enableA;
+#endif
 #endif
 #ifdef B_AXIS
 static gpio_t stepB, dirB, LimitB;
+#ifdef B_ENABLE_PIN
+static gpio_t enableB;
+#endif
+#endif
+#ifdef C_AXIS
+static gpio_t stepC, dirC;
+#ifdef C_ENABLE_PIN
+static gpio_t enableC;
+#endif
+#ifdef C_LIMIT_PIN
+static gpio_t LimitC;
+#endif
 #endif
 #ifdef STEPPERS_ENABLE_PIN
 static gpio_t steppersEnable;
@@ -177,12 +192,6 @@ static gpio_t enableY;
 #endif
 #ifdef Z_ENABLE_PIN
 static gpio_t enableZ;
-#endif
-#ifdef A_ENABLE_PIN
-static gpio_t enableA;
-#endif
-#ifdef B_ENABLE_PIN
-static gpio_t enableB;
 #endif
 #if KEYPAD_ENABLE
 static gpio_t KeypadStrobe;
@@ -277,6 +286,9 @@ static input_signal_t inputpin[] = {
 #endif
 #ifdef B_LIMIT_PIN
   , { .id = Input_LimitB,         .port = &LimitB,         .pin = B_LIMIT_PIN,         .group = INPUT_GROUP_LIMIT }
+#endif
+#ifdef C_LIMIT_PIN
+  , { .id = Input_LimitC,         .port = &LimitC,         .pin = C_LIMIT_PIN,         .group = INPUT_GROUP_LIMIT }
 #endif
 #if MPG_MODE_ENABLE
   ,  { .id = Input_ModeSelect,    .port = &ModeSelect,     .pin = MODE_PIN,            .group = INPUT_GROUP_MPG }
@@ -566,6 +578,9 @@ inline static __attribute__((always_inline)) void set_step_outputs (axes_signals
 #ifdef B_AXIS
     DIGITAL_OUT(stepB, step_outbits.b);
 #endif
+#ifdef C_AXIS
+    DIGITAL_OUT(stepC, step_outbits.c);
+#endif
 }
 #endif
 
@@ -596,6 +611,9 @@ inline static __attribute__((always_inline)) void set_dir_outputs (axes_signals_
 #endif
 #ifdef B_AXIS
     DIGITAL_OUT(dirB, dir_outbits.b);
+#endif
+#ifdef C_AXIS
+    DIGITAL_OUT(dirC, dir_outbits.c);
 #endif
 }
 
@@ -637,6 +655,9 @@ static void stepperEnable (axes_signals_t enable)
 #endif
 #ifdef B_ENABLE_PIN
     DIGITAL_OUT(enableB, enable.b)
+#endif
+#ifdef C_ENABLE_PIN
+    DIGITAL_OUT(enableC, enable.c)
 #endif
 }
 
@@ -877,7 +898,9 @@ inline static axes_signals_t limitsGetState()
 #ifdef B_LIMIT_PIN
     signals_min.b = (LimitB.reg->DR & LimitB.bit) != 0;
 #endif
-
+#ifdef C_LIMIT_PIN
+    signals_min.c = (LimitC.reg->DR & LimitC.bit) != 0;
+#endif
 
     if (settings.limits.invert.mask) {
         signals_min.value ^= settings.limits.invert.mask;
@@ -907,7 +930,9 @@ inline static axes_signals_t limitsGetState()
     #ifdef B_LIMIT_PIN
         signals.b = (LimitB.reg->DR & LimitB.bit) != 0;
     #endif
-
+    #ifdef C_LIMIT_PIN
+        signals.c = (LimitC.reg->DR & LimitC.bit) != 0;
+    #endif
         if (settings.limits.invert.mask)
             signals.value ^= settings.limits.invert.mask;
 
@@ -1334,9 +1359,9 @@ static coolant_state_t coolantGetState (void)
 }
 
 #if ETHERNET_ENABLE
-static void reportIP (void)
+static void reportIP (bool newopt)
 {
-    if(services.telnet || services.websocket) {
+    if(!newopt && (services.telnet || services.websocket)) {
         hal.stream.write("[NETCON:");
         hal.stream.write(services.telnet ? "Telnet" : "Websocket");
         hal.stream.write("]" ASCII_EOL);
@@ -1542,6 +1567,13 @@ static void settings_changed (settings_t *settings)
 #ifdef B_LIMIT_PIN
                 case Input_LimitB:
                 case Input_LimitB_Max:
+                    pullup = !settings->limits.disable_pullup.b;
+                    signal->irq_mode = limit_fei.b ? IRQ_Mode_Falling : IRQ_Mode_Rising;
+                    break;
+#endif
+#ifdef C_LIMIT_PIN
+                case Input_LimitC:
+                case Input_LimitC_Max:
                     pullup = !settings->limits.disable_pullup.b;
                     signal->irq_mode = limit_fei.b ? IRQ_Mode_Falling : IRQ_Mode_Rising;
                     break;
@@ -2067,7 +2099,7 @@ bool driver_init (void)
         options[strlen(options) - 1] = '\0';
 
     hal.info = "iMXRT1062";
-    hal.driver_version = "201218";
+    hal.driver_version = "201224";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif

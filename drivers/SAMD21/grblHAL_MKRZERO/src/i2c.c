@@ -205,14 +205,14 @@ void I2C_GetKeycode (uint32_t i2cAddr, keycode_callback_ptr callback)
 
 #endif
 
-#if TRINAMIC_ENABLE && TRINAMIC_I2C
+#if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
 
 static TMC2130_status_t I2C_TMC_ReadRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
 {
     uint8_t *res, i2creg;
     TMC2130_status_t status = {0};
 
-    if((i2creg = TMCI2C_GetMapAddress((uint8_t)(driver ? (uint32_t)driver->cs_pin : 0), reg->addr).value) == 0xFF)
+    if((i2creg = TMCI2C_GetMapAddress((uint8_t)(driver ? (uint32_t)driver->axis : 0), reg->addr).value) == 0xFF)
         return status; // unsupported register
 
     while(i2cIsBusy);
@@ -241,7 +241,7 @@ static TMC2130_status_t I2C_TMC_WriteRegister (TMC2130_t *driver, TMC2130_datagr
     while(i2cIsBusy);
 
     reg->addr.write = 1;
-    i2c.buffer[0] = TMCI2C_GetMapAddress((uint8_t)(driver ? (uint32_t)driver->cs_pin : 0), reg->addr).value;
+    i2c.buffer[0] = TMCI2C_GetMapAddress((uint8_t)(driver ? (uint32_t)driver->axis : 0), reg->addr).value;
     reg->addr.write = 0;
 
     if(i2c.buffer[0] == 0xFF)

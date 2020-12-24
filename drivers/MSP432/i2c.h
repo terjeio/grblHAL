@@ -1,7 +1,7 @@
 /*
   i2c.h - I2C support for EEPROM, keypad and Trinamic plugins
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2018-2019 Terje Io
 
@@ -28,7 +28,7 @@
 void i2c_init (void);
 bool I2CPOS (void);
 
-#if TRINAMIC_ENABLE && TRINAMIC_I2C
+#if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
 
 #include "trinamic\trinamic2130.h"
 #include "trinamic\TMC2130_I2C_map.h"

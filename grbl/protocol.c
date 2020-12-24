@@ -96,7 +96,9 @@ bool protocol_enqueue_gcode (char *gcode)
 */
 bool protocol_main_loop (void)
 {
-    if (hal.control.get_state().e_stop) {
+    if(sys.alarm == Alarm_SelftestFailed) {
+        system_raise_alarm(Alarm_SelftestFailed);
+    } else if (hal.control.get_state().e_stop) {
         // Check for e-stop active. Blocks everything until cleared.
         system_raise_alarm(Alarm_EStop);
         grbl.report.feedback_message(Message_EStop);

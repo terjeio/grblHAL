@@ -240,8 +240,11 @@ status_code_t system_execute_line (char *line)
 
                 control_signals_t control_signals = hal.control.get_state();
 
+                // Block if self-test failed
+                if(sys.alarm == Alarm_SelftestFailed)
+                    retval = Status_SelfTestFailed;
                 // Block if e-stop is active.
-                if (control_signals.e_stop)
+                else if (control_signals.e_stop)
                     retval = Status_EStop;
                 // Block if safety door is ajar.
                 else if (control_signals.safety_door_ajar)
@@ -273,8 +276,11 @@ status_code_t system_execute_line (char *line)
             else {
                 control_signals_t control_signals = hal.control.get_state();
 
+                // Block if self-test failed
+                if(sys.alarm == Alarm_SelftestFailed)
+                    retval = Status_SelfTestFailed;
                 // Block if e-stop is active.
-                if (control_signals.e_stop)
+                else if (control_signals.e_stop)
                     retval = Status_EStop;
                 else if (!(settings.homing.flags.enabled && (sys.homing.mask || settings.homing.flags.single_axis_commands || settings.homing.flags.manual)))
                     retval = Status_SettingDisabled;
@@ -598,5 +604,6 @@ void system_raise_alarm (alarm_code_t alarm)
 {
     sys.alarm = alarm;
     set_state(alarm == Alarm_EStop ? STATE_ESTOP : STATE_ALARM);
-    report_alarm_message(alarm);
+    if(sys.driver_started)
+        report_alarm_message(alarm);
 }

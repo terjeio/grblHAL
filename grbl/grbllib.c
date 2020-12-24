@@ -217,6 +217,8 @@ int grbl_enter (void)
     wall_plotter_init();
 #endif
 
+    sys.driver_started = true;
+
     // "Wire" homing switches to limit switches if not provided by the driver.
     if(hal.homing.get_state == NULL)
         hal.homing.get_state = hal.limits.get_state;

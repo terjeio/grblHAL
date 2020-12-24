@@ -37,6 +37,10 @@
 #include "grbl/hal.h"
 #include "grbl/nuts_bolts.h"
 
+
+#define DIGITAL_IN(gpio) (!!(gpio.reg->DR & gpio.bit))
+#define DIGITAL_OUT(gpio, on) { if(on) gpio.reg->DR_SET = gpio.bit; else gpio.reg->DR_CLEAR = gpio.bit; }
+
 #if USB_SERIAL_CDC > 0
 //#define UART_DEBUG // For development only - enable only with USB_SERIAL_CDC enabled and SPINDLE_HUANYANG disabled
 #endif

@@ -1,7 +1,7 @@
 /*
   i2c.c - I2C support for keypad and Trinamic plugins
 
-  Part of GrblHAL driver for ESP32
+  Part of grblHAL driver for ESP32
 
   Copyright (c) 2018-2020 Terje Io
 
@@ -172,7 +172,7 @@ void I2C_GetKeycode (uint32_t i2cAddr, keycode_callback_ptr callback)
 
 #endif
 
-#if TRINAMIC_ENABLE && TRINAMIC_I2C
+#if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
 
 static const uint8_t tmc_addr = I2C_ADR_I2CBRIDGE << 1;
 
@@ -181,7 +181,7 @@ static TMC2130_status_t TMC_I2C_ReadRegister (TMC2130_t *driver, TMC2130_datagra
     uint8_t buffer[8];
     TMC2130_status_t status = {0};
 
-    if((buffer[0] = TMCI2C_GetMapAddress((uint8_t)(driver ? (uint32_t)driver->cs_pin : 0), reg->addr).value) == 0xFF)
+    if((buffer[0] = TMCI2C_GetMapAddress((uint8_t)(driver ? (uint32_t)driver->axis : 0), reg->addr).value) == 0xFF)
         return status; // unsupported register
 
     buffer[1] = 0;
@@ -221,7 +221,7 @@ static TMC2130_status_t TMC_I2C_WriteRegister (TMC2130_t *driver, TMC2130_datagr
     TMC2130_status_t status = {0};
 
     reg->addr.write = 1;
-    buffer[0] = TMCI2C_GetMapAddress((uint8_t)(driver ? (uint32_t)driver->cs_pin : 0), reg->addr).value;
+    buffer[0] = TMCI2C_GetMapAddress((uint8_t)(driver ? (uint32_t)driver->axis : 0), reg->addr).value;
     reg->addr.write = 0;
 
     if(buffer[0] == 0xFF)

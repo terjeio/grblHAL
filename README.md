@@ -11,7 +11,7 @@ It has been written to complement grblHAL and has features such as proper keyboa
 
 ---
 
-Latest build date is 20201219, see the [changelog](changelog.md) for details.
+Latest build date is 20201224, see the [changelog](changelog.md) for details.
 
 ---
 

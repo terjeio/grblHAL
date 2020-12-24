@@ -230,8 +230,9 @@ typedef struct {
     // The following variables are not cleared upon soft reset, do NOT move. state must be first!
     uint_fast16_t state;                // Tracks the current system state of Grbl.
                                         // NOTE: Setting the state variable directly is NOT allowed! Use the set_state() function!
-    alarm_code_t alarm;                 // Current alarm, only valid if sys.state STATE_ALARM flag set
-    bool cold_start;                    // Set to true on boot, is false on subsequent soft resets
+    alarm_code_t alarm;                 // Current alarm, only valid if sys.state STATE_ALARM flag set.
+    bool cold_start;                    // Set to true on boot, is false on subsequent soft resets.
+    bool driver_started;                // Set to true when driver initialization is completed.
 } system_t;
 
 extern system_t sys;

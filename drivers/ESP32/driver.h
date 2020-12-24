@@ -76,7 +76,7 @@
 
 #ifdef TRINAMIC_ENABLE
 #undef TRINAMIC_ENABLE
-#define TRINAMIC_ENABLE 1
+#define TRINAMIC_ENABLE 2130
 #define TRINAMIC_I2C    1
 #endif
 
@@ -219,7 +219,7 @@ static const DRAM_ATTR float FZERO = 0.0f;
 
 // End configuration
 
-#if TRINAMIC_ENABLE
+#if TRINAMIC_ENABLE == 2130
 #include "tmc2130/trinamic.h"
 #endif
 
@@ -264,7 +264,7 @@ typedef struct {
 #ifdef I2C_PORT
 extern QueueHandle_t i2cQueue;
 extern SemaphoreHandle_t i2cBusy;
-#elif IOEXPAND_ENABLE || KEYPAD_ENABLE || EEPROM_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
+#elif IOEXPAND_ENABLE || KEYPAD_ENABLE || EEPROM_ENABLE || (TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C)
 #error "I2C port not available!"
 #endif
 

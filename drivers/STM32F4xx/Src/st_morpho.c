@@ -363,12 +363,12 @@ void SPI_DriverInit (TMC_io_driver_t *driver, axes_signals_t axisflags)
 
 #include "serial.h"
 
-static TMC2209_write_datagram_t *TMC_UART_ReadRegister (TMC2209_t *driver, TMC2209_read_datagram_t *reg)
+static TMC2209_write_datagram_t *TMC_UART_ReadRegister (TMC2209_t *driver, TMC2209_read_datagram_t *dgr)
 {
-    static TMC2209_write_datagram_t status = {0};
-    volatile uint32_t dly = 50;
+    static TMC2209_write_datagram_t wdgr = {0};
+    volatile uint32_t dly = 50, ms = hal.get_elapsed_ticks();
 
-    serial2Write((char *)reg->data, sizeof(TMC2209_read_datagram_t));
+    serial2Write((char *)dgr->data, sizeof(TMC2209_read_datagram_t));
 
     while(serial2TxCount());
 
@@ -376,39 +376,44 @@ static TMC2209_write_datagram_t *TMC_UART_ReadRegister (TMC2209_t *driver, TMC22
 
     serial2RxFlush();
 
-    hal.delay_ms(2, NULL);
-
-    if(serial2RxCount() >= 8) {
-        status.data[0] = serial2GetC();
-        status.data[1] = serial2GetC();
-        status.data[2] = serial2GetC();
-        status.data[3] = serial2GetC();
-        status.data[4] = serial2GetC();
-        status.data[5] = serial2GetC();
-        status.data[6] = serial2GetC();
-        status.data[7] = serial2GetC();
+    // Wait for response with 2ms timeout
+    while(serial2RxCount() < 8) {
+        if(hal.get_elapsed_ticks() - ms >= 2)
+            break;
     }
 
-    return &status;
+    if(serial2RxCount() >= 8) {
+        wdgr.data[0] = serial2GetC();
+        wdgr.data[1] = serial2GetC();
+        wdgr.data[2] = serial2GetC();
+        wdgr.data[3] = serial2GetC();
+        wdgr.data[4] = serial2GetC();
+        wdgr.data[5] = serial2GetC();
+        wdgr.data[6] = serial2GetC();
+        wdgr.data[7] = serial2GetC();
+    } else
+        wdgr.msg.addr.value = 0xFF;
+
+    dly = 150;
+    while(--dly);
+
+    return &wdgr;
 }
 
-static void TMC_UART_WriteRegister (TMC2209_t *driver, TMC2209_write_datagram_t *reg)
+static void TMC_UART_WriteRegister (TMC2209_t *driver, TMC2209_write_datagram_t *dgr)
 {
-    serial2Write((char *)reg->data, sizeof(TMC2209_write_datagram_t));
-
-//    while(serial2TxCount());
+    serial2Write((char *)dgr->data, sizeof(TMC2209_write_datagram_t));
 }
 
 void UART_DriverInit (TMC_io_driver_t *driver)
 {
-    serial2Init(115200);
+    serial2Init(230400);
 
     driver->WriteRegister = TMC_UART_WriteRegister;
     driver->ReadRegister = TMC_UART_ReadRegister;
 }
 
 #endif
-
 
 void board_init (void)
 {

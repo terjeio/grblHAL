@@ -501,7 +501,7 @@ static void stepperEnable (axes_signals_t enable)
 {
     enable.mask ^= settings.steppers.enable_invert.mask;
 
-#if TRINAMIC_ENABLE && TRINAMIC_I2C
+#if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
     axes_signals_t tmc_enable = trinamic_stepper_enable(enable);
  #if !CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
   #if IOEXPAND_ENABLE
@@ -714,7 +714,7 @@ static void limitsEnable (bool on, bool homing)
             gpio_set_intr_type(inputpin[i].pin, on ? (inputpin[i].invert ? GPIO_INTR_NEGEDGE : GPIO_INTR_POSEDGE) : GPIO_INTR_DISABLE);
     } while(i);
 
-#if TRINAMIC_ENABLE
+#if TRINAMIC_ENABLE == 2130
     trinamic_homing(homing);
 #endif
 }
@@ -1131,10 +1131,6 @@ static void settings_changed (settings_t *settings)
 
     if(IOInitDone) {
 
-      #if TRINAMIC_ENABLE
-        trinamic_configure();
-      #endif
-
       #ifndef VFD_SPINDLE
         hal.spindle.set_state = hal.driver_cap.variable_spindle ? spindleSetStateVariable : spindleSetState;
       #endif
@@ -1316,7 +1312,7 @@ static void reportConnection (void)
 // Initializes MCU peripherals for Grbl use
 static bool driver_setup (settings_t *settings)
 {
-#if TRINAMIC_ENABLE && BOARD_BDRING_V3P5 // Trinamic BoosterPack does not support mixed drivers
+#if TRINAMIC_ENABLE == 2130 && BOARD_BDRING_V3P5 // Trinamic BoosterPack does not support mixed drivers
     driver_settings.trinamic.driver_enable.mask = AXES_BITMASK;
 #endif
 
@@ -1435,7 +1431,7 @@ static bool driver_setup (settings_t *settings)
     ioexpand_init();
 #endif
 
-#if TRINAMIC_ENABLE
+#if TRINAMIC_ENABLE == 2130
   #if CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
     trinamic_start(false);
   #else
@@ -1602,7 +1598,7 @@ bool driver_init (void)
     bluetooth_init();
 #endif
 
-#if TRINAMIC_ENABLE
+#if TRINAMIC_ENABLE == 2130
     trinamic_init();
 #endif
 

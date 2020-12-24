@@ -4,7 +4,7 @@
 
   - on Texas Instruments MSP432P401R LaunchPad
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017-2020 Terje Io
 
@@ -23,7 +23,7 @@
 
 */
 
-#if TRINAMIC_ENABLE
+#if TRINAMIC_ENABLE == 2130
 #define BOARD_NAME "CNC BoosterPack (Trinamic)";
 #else
 #define BOARD_NAME "CNC BoosterPack"
@@ -82,7 +82,7 @@
 #define STEPPERS_DISABLE_Y_BIT   (1<<STEPPERS_DISABLE_Y_PIN)
 
 // Trinamic drivers in I2C mode uses STEPPERS_DISABLE_XY_PIN as interrupt input for DIAG1 signal
-#if TRINAMIC_ENABLE && TRINAMIC_I2C
+#if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
 #define TRINAMIC_DIAG_IRQ_PN     4
 #define TRINAMIC_DIAG_IRQ_PORT   port(TRINAMIC_DIAG_IRQ_PN)
 #define TRINAMIC_DIAG_IRQ_PIN    5

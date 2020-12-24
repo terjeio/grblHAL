@@ -1,7 +1,7 @@
 /*
   i2c.c - I2C support for keypad and Trinamic plugins
 
-  Part of GrblHAL driver for MSP432P401R
+  Part of grblHAL driver for MSP432P401R
 
   Copyright (c) 2018-2020 Terje Io
 
@@ -138,7 +138,7 @@ static uint8_t *I2C_Receive (uint32_t i2cAddr, uint32_t bytes, bool block)
 
 #endif
 
-#if (TRINAMIC_ENABLE && TRINAMIC_I2C) || ATC_ENABLE
+#if (TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C) || ATC_ENABLE
 
 static void I2C_Send (uint32_t i2cAddr, uint8_t bytes, bool block)
 {
@@ -260,7 +260,7 @@ void I2C_GetKeycode (uint32_t i2cAddr, keycode_callback_ptr callback)
 
 #endif
 
-#if TRINAMIC_ENABLE && TRINAMIC_I2C
+#if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
 
 TMC2130_status_t TMC_I2C_ReadRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
 {
@@ -269,7 +269,7 @@ TMC2130_status_t TMC_I2C_ReadRegister (TMC2130_t *driver, TMC2130_datagram_t *re
 
     memset(i2c.buffer, 0, sizeof(i2c.buffer));
 
-    if((i2c.buffer[0] = TMCI2C_GetMapAddress((uint8_t)(driver ? (uint32_t)driver->cs_pin : 0), reg->addr).value) == 0xFF)
+    if((i2c.buffer[0] = TMCI2C_GetMapAddress((uint8_t)(driver ? (uint32_t)driver->axis : 0), reg->addr).value) == 0xFF)
         return status; // unsupported register
 
     res = I2C_ReadRegister(I2C_ADR_I2CBRIDGE, 5, true);
@@ -290,7 +290,7 @@ TMC2130_status_t TMC_I2C_WriteRegister (TMC2130_t *driver, TMC2130_datagram_t *r
     while(i2cIsBusy);
 
     reg->addr.write = 1;
-    i2c.buffer[0] = TMCI2C_GetMapAddress((uint8_t)(driver ? (uint32_t)driver->cs_pin : 0), reg->addr).value;
+    i2c.buffer[0] = TMCI2C_GetMapAddress((uint8_t)(driver ? (uint32_t)driver->axis : 0), reg->addr).value;
     reg->addr.write = 0;
 
     if(i2c.buffer[0] == 0xFF)

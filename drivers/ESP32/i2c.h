@@ -1,7 +1,7 @@
 /*
   i2c.h - I2C support for keypad and Trinamic plugins
 
-  Part of GrblHAL driver for ESP32
+  Part of grblHAL driver for ESP32
 
   Copyright (c) 2018-2019 Terje Io
 
@@ -26,7 +26,7 @@
 
 void I2CInit (void);
 
-#if TRINAMIC_ENABLE && TRINAMIC_I2C
+#if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
 
 #include "trinamic\trinamic2130.h"
 #include "trinamic\TMC2130_I2C_map.h"

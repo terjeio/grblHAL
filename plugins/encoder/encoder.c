@@ -768,10 +768,12 @@ bool encoder_start (encoder_t *encoder)
     return true;
 }
 
-static void onReportOptions (void)
+static void onReportOptions (bool newopt)
 {
-    on_report_options();
-    hal.stream.write("[PLUGIN:ENCODER v0.01]" ASCII_EOL);
+    on_report_options(newopt);
+
+    if(!newopt)
+        hal.stream.write("[PLUGIN:ENCODER v0.01]" ASCII_EOL);
 }
 
 static uint8_t get_n_encoders (void)

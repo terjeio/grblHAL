@@ -93,7 +93,7 @@
 
 // End configuration
 
-#if TRINAMIC_ENABLE
+#if TRINAMIC_ENABLE == 2130
 #include "tmc2130/trinamic.h"
 #endif
 
@@ -107,7 +107,7 @@
 void IRQRegister(int32_t IRQnum, void (*IRQhandler)(void));
 void IRQUnRegister(int32_t IRQnum);
 
-#if KEYPAD_ENABLE || IOEXPAND_ENABLE || EEPROM_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
+#if KEYPAD_ENABLE || IOEXPAND_ENABLE || EEPROM_ENABLE || (TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C)
 
 #define I2C_ENABLE 1
 

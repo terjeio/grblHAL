@@ -2,7 +2,7 @@
 
   driver.c - driver code for Texas Instruments MSP432P401R ARM processor
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017-2020 Terje Io
 
@@ -205,7 +205,7 @@ inline __attribute__((always_inline)) static void set_dir_outputs (axes_signals_
 static void stepperEnable (axes_signals_t enable)
 {
     enable.value ^= settings.steppers.enable_invert.mask;
-#if TRINAMIC_ENABLE && TRINAMIC_I2C
+#if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
     axes_signals_t tmc_enable = trinamic_stepper_enable(enable);
   #if !CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
     if(!tmc_enable.z)
@@ -418,7 +418,7 @@ static void limitsEnable (bool on, bool homing)
     BITBAND_PERI(LIMIT_PORT_Z->IE, Z_LIMIT_PIN) = on;
 #endif
 
-#if TRINAMIC_ENABLE
+#if TRINAMIC_ENABLE == 2130
     trinamic_homing(homing);
 #endif
 }
@@ -1010,10 +1010,6 @@ void settings_changed (settings_t *settings)
 
     if(IOInitDone) {
 
-      #if TRINAMIC_ENABLE
-        trinamic_configure();
-      #endif
-
         stepperEnable(settings->steppers.deenergize);
 
 #ifndef VFD_SPINDLE
@@ -1188,7 +1184,7 @@ static bool driver_setup (settings_t *settings)
 
     STEP_PORT->DIR |= STEP_MASK;
     DIRECTION_PORT->DIR |= DIRECTION_MASK;
-#if !(TRINAMIC_ENABLE && TRINAMIC_I2C)
+#if !(TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C)
     STEPPERS_DISABLE_Z_PORT->DIR |= STEPPERS_DISABLE_Z_BIT;
     STEPPERS_DISABLE_XY_PORT->DIR |= STEPPERS_DISABLE_X_BIT;
 #endif
@@ -1295,7 +1291,7 @@ static bool driver_setup (settings_t *settings)
     NVIC_EnableIRQ(KEYPAD_INT);  // Enable keypad  port interrupt
 #endif
 
-#if TRINAMIC_ENABLE
+#if TRINAMIC_ENABLE == 2130
 
 #if CNC_BOOSTERPACK // Does not allow mixed drivers
     trinamic_start(false);
@@ -1411,7 +1407,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "MSP432";
-    hal.driver_version = "201218";
+    hal.driver_version = "201223";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1505,7 +1501,7 @@ bool driver_init (void)
     serial2Init(19200);
 #endif
 
-#if TRINAMIC_ENABLE
+#if TRINAMIC_ENABLE == 2130
     trinamic_init();
 #endif
 
@@ -1763,7 +1759,7 @@ void KEYPAD_IRQHandler (void)
 
     KEYPAD_PORT->IFG &= ~iflags;
 
-#elif TRINAMIC_ENABLE && TRINAMIC_I2C
+#elif TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
 
 void TRINAMIC_DIAG_IRQHandler (void)
 {
@@ -1772,7 +1768,7 @@ void TRINAMIC_DIAG_IRQHandler (void)
     TRINAMIC_DIAG_IRQ_PORT->IFG &= ~iflags;
 #endif
 
-#if TRINAMIC_ENABLE && TRINAMIC_I2C
+#if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
     if(iflags & TRINAMIC_DIAG_IRQ_BIT)
         trinamic_fault_handler();
 #endif
@@ -1785,7 +1781,7 @@ void TRINAMIC_DIAG_IRQHandler (void)
     }
 #endif
 
-#if KEYPAD_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
+#if KEYPAD_ENABLE || (TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C)
 }
 #endif
 

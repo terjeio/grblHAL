@@ -1,7 +1,7 @@
 /*
   generic_map.h - driver code for ESP32
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 
@@ -93,7 +93,7 @@
 #error No free pins for keypad!
 #endif
 
-#if IOEXPAND_ENABLE || KEYPAD_ENABLE || EEPROM_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
+#if IOEXPAND_ENABLE || KEYPAD_ENABLE || EEPROM_ENABLE || (TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C)
 // Define I2C port/pins
 #define I2C_PORT  I2C_NUM_1
 #define I2C_SDA   GPIO_NUM_21

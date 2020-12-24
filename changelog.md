@@ -1,5 +1,15 @@
 ## grblHAL changelog
 
+Build 20201224 (test only):
+* Added initial support for RADDS 1.6 board to SAM3X8E driver \(Arduino Due\). Untested!
+* Added C-axis support to iMXRT1962 driver \(Teensy 4.x\).  
+Untested and none of the current board maps has the needed pins defined.
+* Added alarm and error message for power on self-test \(POS\) failure.  
+If POS fails only $-commands are available.
+* Work in good progress for Trinamic TMC2209 driver support \(UART mode\).  
+Processor/board specific driver code has to be added for this, currently testing with STM32F446 and Nucleo-64 breakout board.
+* Some bug fixes.
+
 Build 20201219 (test only):
 * Renumbered setting groups for more logical sorting (by id).
 * Harmonized probing code across drivers for planned future extensions.

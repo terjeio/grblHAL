@@ -140,7 +140,7 @@ static inline __attribute__((always_inline)) void set_dir_outputs (axes_signals_
 static void stepperEnable (axes_signals_t enable)
 {
     enable.value ^= settings.steppers.enable_invert.mask;
-#if TRINAMIC_ENABLE && TRINAMIC_I2C
+#if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
     trinamic_stepper_enable(enable);
 #elif IOEXPAND_ENABLE // TODO: read from expander?
     iopins.stepper_enable_xy = enable.x;
@@ -254,7 +254,7 @@ static void limitsEnable (bool on, bool homing)
     else?
         EIC->INTENCLR.reg = lim_IRQMask;
 */
-#if TRINAMIC_ENABLE
+#if TRINAMIC_ENABLE == 2130
     trinamic_homing(homing);
 #endif
 }
@@ -561,10 +561,6 @@ void settings_changed (settings_t *settings)
 
     if(IOInitDone) {
 
-      #if TRINAMIC_ENABLE
-        trinamic_configure();
-      #endif
-
         stepperEnable(settings->steppers.deenergize);
 
         if(variable_spindle) {
@@ -824,7 +820,7 @@ static bool driver_setup (settings_t *settings)
     ioexpand_init();
 #endif
 
-#if TRINAMIC_ENABLE
+#if TRINAMIC_ENABLE == 2130
   #if CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
     trinamic_start(false);
   #else
@@ -970,7 +966,7 @@ bool driver_init (void) {
     IRQRegister(SysTick_IRQn, SysTick_IRQHandler);
 
     hal.info = "SAMD21";
-    hal.driver_version = "201218";
+    hal.driver_version = "201223";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1072,7 +1068,7 @@ bool driver_init (void) {
     hal.driver_cap.limits_pull_up = On;
     hal.driver_cap.probe_pull_up = On;
 
-#if TRINAMIC_ENABLE
+#if TRINAMIC_ENABLE == 2130
     trinamic_init();
 #endif
 

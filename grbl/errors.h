@@ -78,6 +78,7 @@ typedef enum {
     Status_HomingRequired = 46,
     Status_GCodeToolError = 47,
     Status_ValueWordConflict = 48,
+    Status_SelfTestFailed = 49,
 
     Status_EStop = 50,
     Status_Unhandled = 59, // For internal use only
@@ -148,6 +149,7 @@ static const status_detail_t status_detail[] = {
     { Status_HomingRequired, "Homing required", "Home machine to continue." },
     { Status_GCodeToolError, "Invalid gcode ID:47", "ATC: current tool is not set. Set current tool with M61." },
     { Status_ValueWordConflict, "Invalid gcode ID:48", "Value word conflict." },
+    { Status_SelfTestFailed, "Self test failed", "Power on self test failed. A hard reset is required." },
     { Status_EStop, "E-stop", "Emergency stop active." },
     { Status_SDMountError, "SD Card", "SD Card mount failed." },
     { Status_SDReadError, "SD Card", "SD Card file open/read failed." },

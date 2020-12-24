@@ -27,7 +27,7 @@
 
 void i2c_write (uint8_t addr, uint8_t *data, uint8_t len);
 
-#if TRINAMIC_ENABLE && TRINAMIC_I2C
+#if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
 
 #include "trinamic\trinamic2130.h"
 #include "trinamic\TMC2130_I2C_map.h"

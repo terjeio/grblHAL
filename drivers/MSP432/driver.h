@@ -124,7 +124,7 @@
 #include "spindle/huanyang.h"
 #endif
 
-#if TRINAMIC_ENABLE
+#if TRINAMIC_ENABLE == 2130
 #include "tmc2130/trinamic.h"
 #endif
 
@@ -132,7 +132,7 @@
 #include "plasma/thc.h"
 #endif
 
-#if (TRINAMIC_ENABLE && TRINAMIC_I2C) || ATC_ENABLE || EEPROM_ENABLE
+#if (TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C) || ATC_ENABLE || EEPROM_ENABLE
 #define USE_I2C
 #endif
 
