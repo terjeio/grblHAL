@@ -1835,6 +1835,14 @@ static bool driver_setup (settings_t *settings)
   #endif
 #endif
 
+#ifdef C_AXIS
+    pinModeOutput(&stepC, C_STEP_PIN);
+    pinModeOutput(&dirC, C_DIRECTION_PIN);
+  #ifdef C_ENABLE_PIN
+    pinModeOutput(&enableC, C_ENABLE_PIN);
+  #endif
+#endif
+
 #ifdef STEPPERS_ENABLE_PIN
     pinModeOutput(&steppersEnable, STEPPERS_ENABLE_PIN);
 #endif
@@ -2099,7 +2107,7 @@ bool driver_init (void)
         options[strlen(options) - 1] = '\0';
 
     hal.info = "iMXRT1062";
-    hal.driver_version = "201224";
+    hal.driver_version = "201225";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
