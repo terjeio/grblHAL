@@ -34,7 +34,7 @@
 #else
 #define GRBL_VERSION "1.1f"
 #endif
-#define GRBL_VERSION_BUILD "20201224"
+#define GRBL_VERSION_BUILD "20201225"
 
 // The following symbols are set here if not already set by the compiler or in config.h
 // Do NOT change here!
@@ -258,7 +258,11 @@
 #define TOOL_LENGTH_OFFSET_AXIS Z_AXIS // Default z-axis. Valid values are X_AXIS, Y_AXIS, or Z_AXIS.
 #endif
 
-// Max length of gcode lines (blocks) stored in non-volatile storage, do not set > 70 unless less than 6 axes are enabled
-#define MAX_STORED_LINE_LENGTH 70
+// Max length of gcode lines (blocks) stored in non-volatile storage
+#if N_AXIS == 6 && COMPATIBILITY_LEVEL <= 1
+#define MAX_STORED_LINE_LENGTH 60 // do not change!
+#else
+#define MAX_STORED_LINE_LENGTH 70 // do not set > 70 unless less than 5 axes are enabled or COMPATIBILITY_LEVEL > 1
+#endif
 
 #endif
