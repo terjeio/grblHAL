@@ -691,10 +691,6 @@ static void settings_changed (settings_t *settings)
 
     if(IOInitDone) {
 
-      #if TRINAMIC_ENABLE
-        trinamic_configure();
-      #endif
-
         stepperEnable(settings->steppers.deenergize);
 
         if(hal.driver_cap.variable_spindle) {
@@ -970,12 +966,6 @@ static bool driver_setup (settings_t *settings)
 
 #if TRINAMIC_ENABLE
 
-    #if CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
-    trinamic_start(false);
-  #else
-    trinamic_start(true);
-  #endif
-
     // Configure input pin for DIAG1 signal (with pullup) and enable interrupt
     GPIOPinTypeGPIOInput(TRINAMIC_DIAG_IRQ_PORT, TRINAMIC_DIAG_IRQ_PIN);
   #if !KEYPAD_ENABLE
@@ -1040,7 +1030,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "TM4C123HP6PM";
-    hal.driver_version = "201218";
+    hal.driver_version = "201226";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif

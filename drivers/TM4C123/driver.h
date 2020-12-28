@@ -3,7 +3,7 @@
 
   Grbl driver code for Texas Instruments Tiva C (TM4C123GH6PM) ARM processor
 
-  Part of Grbl
+  Part of grblHAL
 
   Copyright (c) 2016-2020 Terje Io
   Copyright (c) 2011-2015 Sungeun K. Jeon
@@ -123,6 +123,9 @@
 // End configuration
 
 #if TRINAMIC_ENABLE
+#ifndef TRINAMIC_MIXED_DRIVERS
+#define TRINAMIC_MIXED_DRIVERS 1
+#endif
 #include "tmc2130/trinamic.h"
 #endif
 

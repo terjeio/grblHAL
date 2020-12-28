@@ -3,9 +3,9 @@
 
   For Texas Instruments SimpleLink ARM processors/LaunchPads
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2018 Terje Io
+  Copyright (c) 2018-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -26,6 +26,10 @@
 #ifdef USE_I2C
 
 #include "i2c.h"
+
+#if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
+#define I2C_ADR_I2CBRIDGE 0x47
+#endif
 
 typedef enum {
     I2CState_Idle = 0,
@@ -55,32 +59,6 @@ static i2c_trans_t i2c;
 #define i2cIsBusy ((i2c.state != I2CState_Idle) || I2CMasterBusy(I2C0_BASE))
 
 static void I2C_interrupt_handler (void);
-
-void I2CInit (void)
-{
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_I2C0);
-    SysCtlPeripheralReset(SYSCTL_PERIPH_I2C0);
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB);
-
-    GPIOPinConfigure(GPIO_PB2_I2C0SCL);
-    GPIOPinConfigure(GPIO_PB3_I2C0SDA);
-    GPIOPadConfigSet(GPIO_PORTB_BASE, GPIO_PIN_3, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_OD);
-
-    GPIOPinTypeI2CSCL(GPIO_PORTB_BASE, GPIO_PIN_2);
-    GPIOPinTypeI2C(GPIO_PORTB_BASE, GPIO_PIN_3);
-#ifdef __MSP432E401Y__
-    I2CMasterInitExpClk(I2C0_BASE, 120000000, false);
-#else // TM4C1294
-    I2CMasterInitExpClk(I2C0_BASE, 120000000, false);
-#endif
-    I2CIntRegister(I2C0_BASE, I2C_interrupt_handler);
-
-    i2c.count = 0;
-    i2c.state = I2CState_Idle;
-
-    I2CMasterIntClear(I2C0_BASE);
-    I2CMasterIntEnable(I2C0_BASE);
-}
 
 // get bytes (max 8), waits for result
 static uint8_t* I2C_Receive(uint32_t i2cAddr, uint32_t bytes, bool block)
@@ -144,9 +122,9 @@ void I2C_GetKeycode (uint32_t i2cAddr, keycode_callback_ptr callback)
 
 #endif
 
-#if TRINAMIC_ENABLE && TRINAMIC_I2C
+#if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
 
-static TMC2130_status_t I2C_TMC_ReadRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
+static TMC2130_status_t TMC_I2C_ReadRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
 {
     uint8_t *res, i2creg;
     TMC2130_status_t status = {0};
@@ -173,8 +151,7 @@ static TMC2130_status_t I2C_TMC_ReadRegister (TMC2130_t *driver, TMC2130_datagra
     return status;
 }
 
-
-static TMC2130_status_t I2C_TMC_WriteRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
+static TMC2130_status_t TMC_I2C_WriteRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
 {
     TMC2130_status_t status = {0};
 
@@ -197,13 +174,44 @@ static TMC2130_status_t I2C_TMC_WriteRegister (TMC2130_t *driver, TMC2130_datagr
     return status;
 }
 
-void I2C_DriverInit (TMC_io_driver_t *driver)
+#endif
+
+void I2CInit (void)
 {
-    driver->WriteRegister = I2C_TMC_WriteRegister;
-    driver->ReadRegister = I2C_TMC_ReadRegister;
-}
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_I2C0);
+    SysCtlPeripheralReset(SYSCTL_PERIPH_I2C0);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB);
+
+    GPIOPinConfigure(GPIO_PB2_I2C0SCL);
+    GPIOPinConfigure(GPIO_PB3_I2C0SDA);
+    GPIOPadConfigSet(GPIO_PORTB_BASE, GPIO_PIN_3, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_OD);
+
+    GPIOPinTypeI2CSCL(GPIO_PORTB_BASE, GPIO_PIN_2);
+    GPIOPinTypeI2C(GPIO_PORTB_BASE, GPIO_PIN_3);
+#ifdef __MSP432E401Y__
+    I2CMasterInitExpClk(I2C0_BASE, 120000000, false);
+#else // TM4C1294
+    I2CMasterInitExpClk(I2C0_BASE, 120000000, false);
+#endif
+    I2CIntRegister(I2C0_BASE, I2C_interrupt_handler);
+
+    i2c.count = 0;
+    i2c.state = I2CState_Idle;
+
+    I2CMasterIntClear(I2C0_BASE);
+    I2CMasterIntEnable(I2C0_BASE);
+
+#if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
+
+    trinamic_driver_if_t driver = {
+        .interface.WriteRegister = TMC_I2C_WriteRegister,
+        .interface.ReadRegister = TMC_I2C_ReadRegister
+    };
+
+    trinamic_if_init(&driver);
 
 #endif
+}
 
 static void I2C_interrupt_handler (void)
 {

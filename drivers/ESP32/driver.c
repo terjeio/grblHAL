@@ -1431,14 +1431,6 @@ static bool driver_setup (settings_t *settings)
     ioexpand_init();
 #endif
 
-#if TRINAMIC_ENABLE == 2130
-  #if CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
-    trinamic_start(false);
-  #else
-    trinamic_start(true);
-  #endif
-#endif
-
 #if WEBUI_ENABLE
     webui_init();
 #endif
@@ -1466,7 +1458,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "ESP32";
-    hal.driver_version = "201218";
+    hal.driver_version = "201226";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif

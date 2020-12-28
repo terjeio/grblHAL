@@ -3,9 +3,9 @@
 
   For Texas Instruments SimpleLink ARM processors/LaunchPads
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2018 Terje Io
+  Copyright (c) 2018-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,13 +23,6 @@
 
 #ifndef __SPI_DRIVER_H__
 #define __SPI_DRIVER_H__
-
-#include "trinamic/trinamic2130.h"
-
-typedef struct {
-    uint32_t port;
-    uint32_t pin;
-} chip_select_t;
 
 #define SPI_SCLK_PIN GPIO_PIN_0
 #define SPI_MOSI_PIN GPIO_PIN_2
@@ -50,7 +43,7 @@ typedef struct {
 #define SPI_TX GPIO_PQ2_SSI3XDAT0
 #define SPI_RX GPIO_PQ3_SSI3XDAT1
 
-void SPI__DriverInit (SPI_driver_t *drv);
+void SPI_Init (void);
 
 #endif
 

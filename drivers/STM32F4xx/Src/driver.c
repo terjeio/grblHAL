@@ -1288,14 +1288,6 @@ static bool driver_setup (settings_t *settings)
     on_unknown_sys_command = grbl.on_unknown_sys_command;
     grbl.on_unknown_sys_command = jtag_enable;
 
-#if TRINAMIC_ENABLE
-  #if CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
-    trinamic_start(false);
-  #else
-    trinamic_start(true);
-  #endif
-#endif
-
 #if PPI_ENABLE
 
     // Single-shot 1 us per tick
@@ -1374,7 +1366,7 @@ bool driver_init (void)
 #else
     hal.info = "STM32F401CC";
 #endif
-    hal.driver_version = "201223";
+    hal.driver_version = "201225";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif

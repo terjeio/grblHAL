@@ -3,9 +3,9 @@
 
   For Texas Instruments SimpleLink ARM processors/LaunchPads
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2018 Terje Io
+  Copyright (c) 2018-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,9 +23,14 @@
 
 #include "driver.h"
 
-#if TRINAMIC_ENABLE && !TRINAMIC_I2C
+#if TRINAMIC_ENABLE == 2130 && !TRINAMIC_I2C
 
 #include "spi.h"
+
+typedef struct {
+    uint32_t port;
+    uint32_t pin;
+} chip_select_t;
 
 #define F_SPI 4000000
 #define SPI_DELAY _delay_cycles(5)
@@ -109,11 +114,8 @@ static TMC2130_status_t SPI_WriteRegister (TMC2130_t *driver, TMC2130_datagram_t
     return status;
 }
 
-void SPI__DriverInit (SPI_driver_t *driver)
+void SPI_Init (void)
 {
-    driver->WriteRegister = SPI_WriteRegister;
-    driver->ReadRegister = SPI_ReadRegister;
-
     // NOTE: GPIO port(s) used for chip select must be enabled/set up earlier!
 
     PREF(SysCtlPeripheralEnable(SPI_PORT_PERIPH));
@@ -131,6 +133,13 @@ void SPI__DriverInit (SPI_driver_t *driver)
     SSIClockSourceSet(SPI_BASE, SSI_CLOCK_SYSTEM);
     PREF(SSIConfigSetExpClk(SPI_BASE, 120000000, SSI_FRF_MOTO_MODE_0, SSI_MODE_MASTER, F_SPI, 8));
     PREF(SSIEnable(SPI_BASE));
+
+    trinamic_driver_if_t driver = {
+        .interface.WriteRegister = SPI_WriteRegister,
+        .interface.ReadRegister = SPI_ReadRegister
+    };
+
+    trinamic_if_init(&driver);
 }
 
 #endif

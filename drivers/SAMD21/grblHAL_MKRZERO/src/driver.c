@@ -820,14 +820,6 @@ static bool driver_setup (settings_t *settings)
     ioexpand_init();
 #endif
 
-#if TRINAMIC_ENABLE == 2130
-  #if CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
-    trinamic_start(false);
-  #else
-    trinamic_start(true);
-  #endif
-#endif
-
 #ifdef DEBUGOUT
     pinModeOutput(&Led, LED_BUILTIN);
 #endif
@@ -966,7 +958,7 @@ bool driver_init (void) {
     IRQRegister(SysTick_IRQn, SysTick_IRQHandler);
 
     hal.info = "SAMD21";
-    hal.driver_version = "201223";
+    hal.driver_version = "201226";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif

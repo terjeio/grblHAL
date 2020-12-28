@@ -185,10 +185,17 @@
 #endif
 
 #if TRINAMIC_ENABLE == 2130
+#ifndef TRINAMIC_MIXED_DRIVERS
+#define TRINAMIC_MIXED_DRIVERS 1
+#endif
 #include "tmc2130/trinamic.h"
 #endif
 
 #if TRINAMIC_ENABLE == 2209
+#define SERIAL2_MOD
+#ifndef TRINAMIC_MIXED_DRIVERS
+#define TRINAMIC_MIXED_DRIVERS 1
+#endif
 #include "tmc2209/trinamic.h"
 #endif
 

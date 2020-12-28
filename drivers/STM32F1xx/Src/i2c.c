@@ -1,7 +1,7 @@
 /*
   i2c.c - I2C support for EEPROM, keypad and Trinamic plugins
 
-  Part of GrblHAL driver for STM32F103C8
+  Part of grblHAL driver for STM32F103C8
 
   Copyright (c) 2018-2020 Terje Io
 
@@ -22,13 +22,22 @@
 #include <main.h>
 
 #include "i2c.h"
+
+#ifdef I2C_PORT
+
 #include "grbl.h"
 
 #if KEYPAD_ENABLE
 #include "keypad/keypad.h"
 #endif
 
-#ifdef I2C_PORT
+#if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
+
+#include "tmc2130\trinamic.h"
+
+#define I2C_ADR_I2CBRIDGE 0x47
+
+#endif
 
 static I2C_HandleTypeDef i2c_port = {
     .Instance = I2C2,
@@ -41,25 +50,6 @@ static I2C_HandleTypeDef i2c_port = {
     .Init.GeneralCallMode = I2C_GENERALCALL_DISABLE,
     .Init.NoStretchMode = I2C_NOSTRETCH_DISABLE
 };
-
-void i2c_init (void)
-{
-    GPIO_InitTypeDef GPIO_InitStruct = {0};
-
-    __HAL_RCC_I2C2_CLK_ENABLE();
-
-    GPIO_InitStruct.Pin = GPIO_PIN_10|GPIO_PIN_11;
-    GPIO_InitStruct.Mode = GPIO_MODE_AF_OD;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-    __HAL_AFIO_REMAP_I2C1_ENABLE();
-
-    HAL_I2C_Init(&i2c_port);
-
-    HAL_NVIC_EnableIRQ(I2C2_EV_IRQn);
-    HAL_NVIC_EnableIRQ(I2C2_ER_IRQn);
-}
 
 /**
   * @brief This function handles I2C2 event interrupt.
@@ -88,8 +78,6 @@ void I2C2_ER_IRQHandler(void)
 
   /* USER CODE END I2C2_ER_IRQn 1 */
 }
-
-#endif
 
 #if EEPROM_ENABLE
 
@@ -186,10 +174,36 @@ static TMC2130_status_t TMC_I2C_WriteRegister (TMC2130_t *driver, TMC2130_datagr
     return status;
 }
 
-void I2C_DriverInit (TMC_io_driver_t *driver)
+#endif
+
+void i2c_init (void)
 {
-    driver->WriteRegister = TMC_I2C_WriteRegister;
-    driver->ReadRegister = TMC_I2C_ReadRegister;
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+
+    __HAL_RCC_I2C2_CLK_ENABLE();
+
+    GPIO_InitStruct.Pin = GPIO_PIN_10|GPIO_PIN_11;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_OD;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+    __HAL_AFIO_REMAP_I2C1_ENABLE();
+
+    HAL_I2C_Init(&i2c_port);
+
+    HAL_NVIC_EnableIRQ(I2C2_EV_IRQn);
+    HAL_NVIC_EnableIRQ(I2C2_ER_IRQn);
+
+#if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
+
+    trinamic_driver_if_t driver = {
+        .interface.WriteRegister = TMC_I2C_WriteRegister,
+        .interface.ReadRegister = TMC_I2C_ReadRegister
+    };
+
+    trinamic_if_init(&driver);
+
+#endif
 }
 
 #endif

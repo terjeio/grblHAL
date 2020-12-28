@@ -21,13 +21,11 @@
 
 
 #if TRINAMIC_ENABLE == 2130
-#include "trinamic\trinamic2130.h"
-void SPI_DriverInit (TMC_io_driver_t *drv, axes_signals_t axisflags);
+#include "trinamic\tmc2130.h"
 #endif
 
 #if TRINAMIC_ENABLE == 2209
-#include "trinamic\trinamic2209.h"
-void UART_DriverInit (TMC_io_driver_t *driver);
+#include "trinamic\tmc2209.h"
 #endif
 
 #define BOARD_NAME "ST Nucleo-64"

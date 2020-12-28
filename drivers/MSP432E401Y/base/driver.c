@@ -3,7 +3,7 @@
 
   For Texas Instruments SimpleLink ARM processors/LaunchPads
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2018-2020 Terje Io
 
@@ -47,7 +47,7 @@ static void keyclick_int_handler (void);
 static void trinamic_diag1_isr (void);
 #endif
 
-#if USE_I2C
+#ifdef USE_I2C
 #include "i2c.h"
 #endif
 
@@ -241,9 +241,9 @@ static uint32_t pulse_length, pulse_delay;
 static axes_signals_t next_step_outbits;
 static spindle_pwm_t spindle_pwm;
 static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
-
-// Inverts the probe pin state depending on user settings and probing cycle mode.
-static uint8_t probe_invert;
+static probe_state_t probe = {
+    .connected = On
+};
 
 #if STEP_OUTMODE == GPIO_MAP
 
@@ -857,24 +857,25 @@ inline static control_signals_t systemGetState (void)
 // and the probing cycle modes for toward-workpiece/away-from-workpiece.
 static void probeConfigure (bool is_probe_away, bool probing)
 {
-  probe_invert = settings.probe.invert_probe_pin ? 0 : PROBE_PIN;
-
-  if (is_probe_away)
-      probe_invert ^= PROBE_PIN;
-
-  GPIOIntTypeSet(PROBE_PORT, PROBE_PIN, probe_invert ? GPIO_FALLING_EDGE : GPIO_RISING_EDGE);
-  GPIOIntEnable(PROBE_PORT, PROBE_PIN);
+    probe.triggered = Off;
+    probe.is_probing = probing;
+    probe.inverted = is_probe_away ? !settings.probe.invert_probe_pin : settings.probe.invert_probe_pin;
+/*
+    GPIOIntDisable(PROBE_PORT, PROBE_PIN);
+    GPIOIntTypeSet(PROBE_PORT, PROBE_PIN, probe.inverted ? GPIO_FALLING_EDGE : GPIO_RISING_EDGE);
+    if(probing)
+        GPIOIntEnable(PROBE_PORT, PROBE_PIN);
+        */
 }
 
 // Returns the probe connected and pin states.
 probe_state_t probeGetState (void)
 {
-    probe_state_t state = {
-        .connected = On
-    };
+    probe_state_t state = {0};
 
+    state.connected = probe.connected;
     //state.triggered = probeState; // TODO: check out using interrupt instead (we want to trap trigger and not risk losing it due to bouncing)
-    state.triggered = (((uint8_t)GPIOPinRead(PROBE_PORT, PROBE_PIN)) ^ probe_invert) != 0;
+    state.triggered = !!GPIOPinRead(PROBE_PORT, PROBE_PIN) ^ probe.inverted;
 
     return state;
 }
@@ -1156,10 +1157,6 @@ static void settings_changed (settings_t *settings)
 #endif
 
     if(IOInitDone) {
-
-      #if TRINAMIC_ENABLE
-        trinamic_configure();
-      #endif
 
 #if ETHERNET_ENABLE
 
@@ -1542,20 +1539,14 @@ static bool driver_setup (settings_t *settings)
 #endif
 
 #if TRINAMIC_ENABLE
-
-  #if CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
-    trinamic_start(false);
-  #else
-    trinamic_start(true);
-  #endif
-
+/*
     // Configure input pin for DIAG1 signal (with pullup) and enable interrupt
     GPIOPinTypeGPIOInput(TRINAMIC_DIAG_IRQ_PORT, TRINAMIC_DIAG_IRQ_PIN);
     GPIOIntRegister(TRINAMIC_DIAG_IRQ_PORT, trinamic_diag1_isr); // Register a call-back function for interrupt
     GPIOPadConfigSet(TRINAMIC_DIAG_IRQ_PORT, TRINAMIC_DIAG_IRQ_PIN, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
     GPIOIntTypeSet(TRINAMIC_DIAG_IRQ_PORT, TRINAMIC_DIAG_IRQ_PIN, GPIO_FALLING_EDGE);
     GPIOIntEnable(TRINAMIC_DIAG_IRQ_PORT, TRINAMIC_DIAG_IRQ_PIN);
-
+*/
   #if TRINAMIC_I2C
   // Configure input pin for WARN signal (with pullup) and enable interrupt
     GPIOPinTypeGPIOInput(TRINAMIC_WARN_IRQ_PORT, TRINAMIC_WARN_IRQ_PIN);
@@ -1578,10 +1569,9 @@ static bool driver_setup (settings_t *settings)
 
   // Set defaults
 
-    IOInitDone = settings->version == 18;
+    IOInitDone = settings->version == 19;
 
-    settings_changed(settings);
-
+    hal.settings_changed(settings);
     hal.stepper.go_idle(true);
     hal.spindle.set_state((spindle_state_t){0}, 0.0f);
     hal.coolant.set_state((coolant_state_t){0});
@@ -1634,7 +1624,7 @@ bool driver_init (void)
 
     serialInit();
 
-#if USE_I2C
+#ifdef USE_I2C
     I2CInit();
 #endif
 
@@ -1654,7 +1644,7 @@ bool driver_init (void)
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
-    hal.driver_version = "2001014";
+    hal.driver_version = "2001226";
     hal.driver_setup = driver_setup;
 #if !USE_32BIT_TIMER
     hal.f_step_timer = hal.f_step_timer / (STEPPER_DRIVER_PRESCALER + 1);
@@ -1916,7 +1906,8 @@ static void keyclick_int_handler (void)
 
 #endif
 
-#if TRINAMIC_ENABLE
+/*
+#if TRINAMIC_ENABLE && TRINAMIC_ENABLE != 2130
 
 static void trinamic_diag1_isr (void)
 {
@@ -1929,8 +1920,8 @@ static void trinamic_diag1_isr (void)
 }
 
 #endif
-
-  #if CNC_BOOSTERPACK2
+*/
+#if CNC_BOOSTERPACK2
 
     static void limit_a_isr (void)
     {

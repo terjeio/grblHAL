@@ -3,7 +3,7 @@
 
   - on Texas Instruments MSP432P401R LaunchPad
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 
@@ -22,6 +22,10 @@
 */
 
 #define BOARD_NAME "CNC BoosterPack"
+
+#if TRINAMIC_ENABLE == 2130
+#define TRINAMIC_MIXED_DRIVERS 0
+#endif
 
 #ifdef CNC_BOOSTERPACK
 #undef CNC_BOOSTERPACK

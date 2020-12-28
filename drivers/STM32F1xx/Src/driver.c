@@ -196,7 +196,7 @@ static void stepperEnable (axes_signals_t enable)
 {
     enable.mask ^= settings.steppers.enable_invert.mask;
 #if TRINAMIC_ENABLE && TRINAMIC_I2C
-    axes_signals_t tmc_enable = trinamic_stepper_enable(enable);
+    trinamic_stepper_enable(enable);
 #else
     BITBAND_PERI(STEPPERS_DISABLE_PORT->ODR, STEPPERS_DISABLE_PIN) = enable.x;
 #endif
@@ -579,10 +579,6 @@ void settings_changed (settings_t *settings)
 
         GPIO_Init.Speed = GPIO_SPEED_FREQ_HIGH;
 
-      #if TRINAMIC_ENABLE
-        trinamic_configure();
-      #endif
-
         stepperEnable(settings->steppers.deenergize);
 
         if(hal.driver_cap.variable_spindle) {
@@ -911,14 +907,6 @@ static bool driver_setup (settings_t *settings)
     on_unknown_sys_command = grbl.on_unknown_sys_command;
     grbl.on_unknown_sys_command = jtag_enable;
 
-#if TRINAMIC_ENABLE
-  #if CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
-    trinamic_start(false);
-  #else
-    trinamic_start(true);
-  #endif
-#endif
-
     IOInitDone = settings->version == 19;
 
     hal.settings_changed(settings);
@@ -951,7 +939,7 @@ bool driver_init (void)
     __HAL_AFIO_REMAP_SWJ_NOJTAG();
 
     hal.info = "STM32F103C8";
-    hal.driver_version = "201118";
+    hal.driver_version = "201226";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif

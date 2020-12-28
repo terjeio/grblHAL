@@ -2,7 +2,7 @@
 
   flash.h - driver code for NXP LPC176x ARM processors
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2018-2020 Terje Io
 
@@ -54,7 +54,7 @@ bool memcpy_to_flash (uint8_t *source)
     ret = Chip_IAP_PreSectorForReadWrite(flash_sector, flash_sector);
     ret = Chip_IAP_EraseSector(flash_sector, flash_sector);
     ret = Chip_IAP_PreSectorForReadWrite(flash_sector, flash_sector);
-    ret = Chip_IAP_CopyRamToFlash(flash_target, (uint32_t *)source, (uint32_t)hal.nvs.size);
+    ret = Chip_IAP_CopyRamToFlash(flash_target, (uint32_t *)source, hal.nvs.size != 1024 ? 4096 : hal.nvs.size);
 
     __enable_irq();
 

@@ -93,13 +93,15 @@ static char *enet_ip_address (void)
     return ip;
 }
 
-static void reportIP (void)
+static void reportIP (bool newopt)
 {
-    on_report_options();
+    on_report_options(newopt);
 
-    hal.stream.write("[IP:");
-    hal.stream.write(enet_ip_address());
-    hal.stream.write("]\r\n");
+    if(!newopt) {
+        hal.stream.write("[IP:");
+        hal.stream.write(enet_ip_address());
+        hal.stream.write("]\r\n");
+    }
 }
 
 void lwIPHostTimerHandler (void)
@@ -242,6 +244,36 @@ void vApplicationMallocFailedHook()
 void vApplicationStackOverflowHook(xTaskHandle *pxTask, signed char *pcTaskName)
 {
     while(true);
+}
+
+static const setting_group_detail_t ethernet_groups [] = {
+    { Group_Root, Group_Networking, "Networking" }
+};
+
+static const setting_detail_t ethernet_settings[] = {
+    { Setting_NetworkServices, Group_Networking, "Network Services", NULL, Format_Bitfield, "Telnet,Websocket", NULL, NULL },
+    { Setting_Hostname, Group_Networking, "Hostname", NULL, Format_String, "x(64)", NULL, "64" },
+    { Setting_IpMode, Group_Networking, "IP Mode", NULL, Format_RadioButtons, "Static,DHCP,AutoIP", NULL, NULL },
+    { Setting_IpAddress, Group_Networking, "IP Address", NULL, Format_IPv4, NULL, NULL, NULL },
+    { Setting_Gateway, Group_Networking, "Gateway", NULL, Format_IPv4, NULL, NULL, NULL },
+    { Setting_NetMask, Group_Networking, "Netmask", NULL, Format_IPv4, NULL, NULL, NULL },
+    { Setting_TelnetPort, Group_Networking, "Telnet port", NULL, Format_Integer, "####0", "1", "65535" },
+#if HTTP_ENABLE
+    { Setting_HttpPort, Group_Networking, "HTTP port", NULL, Format_Integer, "####0", "1", "65535" },
+#endif
+    { Setting_WebSocketPort, Group_Networking, "Websocket port", NULL, Format_Integer, "####0", "1", "65535" }
+};
+
+static setting_details_t details = {
+    .groups = ethernet_groups,
+    .n_groups = sizeof(ethernet_groups) / sizeof(setting_group_detail_t),
+    .settings = ethernet_settings,
+    .n_settings = sizeof(ethernet_settings) / sizeof(setting_detail_t)
+};
+
+static setting_details_t *on_report_settings (void)
+{
+    return &details;
 }
 
 static status_code_t ethernet_setting (setting_type_t setting, float value, char *svalue)
@@ -478,6 +510,9 @@ bool enet_init (void)
 
         on_report_options = grbl.on_report_options;
         grbl.on_report_options = reportIP;
+
+        details.on_report_settings = grbl.on_report_settings;
+        grbl.on_report_settings = on_report_settings;
     }
 
     return driver_settings.nvs_address != 0;

@@ -29,7 +29,7 @@ OPTION(I2SStepping "Use I2S Stepping" OFF)
 OPTION(HUANYANG "Compile with Huanyang RS485 Spindle support" OFF)
 
 # ModBus options
-OPTION(RS485_DIR_OUT "Compile with RS485 direction pin enabled" ON)
+OPTION(RS485_DIR_OUT "Compile with RS485 direction pin enabled" OFF)
 
 # For EEPROM/FRAM support copy the EEPROM plugin code to the project.
 OPTION(EEPROM "Compile with I2C EEPROM support" OFF)
@@ -37,7 +37,7 @@ OPTION(FRAM "Compile with I2C FRAM support" OFF)
 
 set(SDCARD_SOURCE sdcard/sdcard.c)
 set(KEYPAD_SOURCE keypad/keypad.c)
-set(TRINAMIC_SOURCE trinamic/trinamic2130.c trinamic/TMC2130_I2C_map.c tmc2130/trinamic.c)
+set(TRINAMIC_SOURCE trinamic/tmc2130.c trinamic/tmc2130_i2c_map.c tmc2130/trinamic.c)
 set(NETWORKING_SOURCE wifi.c dns_server.c web/backend.c web/upload.c networking/TCPStream.c networking/WsStream.c networking/base64.c networking/sha1.c networking/urldecode.c networking/strutils.c networking/utils.c networking/multipartparser.c )
 set(WEBUI_SOURCE webui/server.c webui/response.c webui/commands.c webui/flashfs.c )
 set(BLUETOOTH_SOURCE bluetooth.c )

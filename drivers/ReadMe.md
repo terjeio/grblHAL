@@ -2,7 +2,7 @@
 
 | Processor ->                         | iMXRT1062       | STM32F4xx       |STM32F1xx<sup>11</sup>| SAM3X8E         | SAMD21          | ESP32           |MSP432           |LPC1768/1769       | TMC123        | TMC129x       | MSP432E401Y   | PSoC&nbsp;5 |MSP430F5529   |
 |--------------------------------------|-----------------|-----------------|----------------------|-----------------|-----------------|-----------------|-----------------|-------------------|---------------|---------------|---------------|-------------|--------------|
-| Board                                |Teensy 4.x       |Blackpill / Nucleo-F411RE / Nucleo-F446RE| Bluepill   | Due             | MKRZERO         |                 | LaunchPad       | Re-Arm / BTT SKR 1.4| LaunchPad     | LaunchPad     | LaunchPad     | CY8CKIT-059 | LaunchPad    |
+| Board                                |Teensy 4.x       |Blackpill / Nucleo-F411RE / Nucleo-F446RE| Bluepill   | Due             | MKRZERO         |                 | LaunchPad       | Re-Arm / Bigtreetech SKR 1.3 / BTT SKR 1.4| LaunchPad     | LaunchPad     | LaunchPad     | CY8CKIT-059 | LaunchPad    |
 | MCU speed \(MHz\)                    | 600             | 84/100/180      | 72                   | 84              | 48              | 2x240           | 48              | 100/120           | 80            | 120           | 120           | 80          | 25 \(16 bit\)|
 | Floating point unit                  | yes             | yes             | no                   | no              | no              | yes             | yes             | no                | yes           | yes           | yes           | no          | no           |
 | Non-volatile storage                 |Flash<sup>1</sup>|Flash<sup>1</sup>| Flash<sup>1</sup>    |Flash<sup>1</sup>|Flash<sup>1</sup>|Flash<sup>1</sup>|Flash<sup>1</sup>| Flash<sup>1</sup> | EEPROM        | EEPROM        | EEPROM        | EEPROM      |no<sup>1</sup>|
@@ -11,11 +11,11 @@
 | Ramped spindle                       | no              | no              | no                   | no              | no              | yes             | no              | no                | yes           | yes           | yes           | no          | no           |
 | Inverted spindle PWM                 | no              | no              | yes                  | no              | no              | yes             | yes             | no                | yes           | yes           | yes           | no          | yes          |
 | RC Servo/ESC for spindle<sup>13</sup>|                 | yes             | yes                  | yes             | yes             | yes             | yes             | yes               | yes           | yes           | yes           | no          | yes          |
-| ModBus spindle<sup>14</sup>          | yes             | no              | no                   | no              | no              | no              | yes             | no                | no            | no            | no            | no          | no           |
+| ModBus spindle<sup>14</sup>          | yes<sup>15</sup>| no              | no                   | no              | no              | yes             | yes<sup>15</sup>| no                | no            | no            | no            | no          | no           |
 | Spindle at speed                     | yes             | no              | no                   | no              | no              | no              | yes<sup>3</sup> | no                | no            | no            | no            | no          | no           |
 | Spindle sync                         | no              | no              | no                   | no              | no              | no              | no              | no                | no            | no            | no            | no          | no           |
 | Closed loop spindle RPM              | no              | no              | no                   | no              | no              | no              | no              | no                | no            | no            | no            | no          | no           |
-| Native USB streaming                 | yes             | yes             | yes                  | yes             | yes             | no              | no              | yes?              | no            | no            | no            | no          | no           |
+| Native USB streaming                 | yes             | yes             | yes                  | yes             | yes             | no              | no              | yes               | no            | no            | no            | no          | no           |
 | Bluetooth streaming                  | no              | no              | no                   | no              | no              | yes             | no              | no                | no            | no            | no            | no          | no           |
 | Telnet streaming \(raw\)             | ethernet        | no              | no                   | no              | no              | wifi            | no              | no                | no            | ethernet      | ethernet      | no          | no           |
 | Websocket streaming                  | ethernet        | no              | no                   | no              | no              | wifi            | no              | no                | no            | ethernet      | ethernet      | no          | no           |
@@ -46,10 +46,11 @@
 <br><sup>12</sup> Luc's [ESP3D-WEBUI](https://github.com/luc-github/ESP3D-webui), backend partially implemented. Work in progress. 
 <br><sup>13</sup> Set `$33=50` (PWM frequency), `$34=5`, `$35=5` and `$36=10` to generate a "standard" PWM signal: 20ms repetition rate, 1 - 2ms pulse length range. 
 <br><sup>14</sup> Currently only for Huanyang VFDs. Defaults to 19200 baud, implicit spindle at speed. Not supported for all alternative board map files. 
+<br><sup>15</sup> Auto direction detect only. 
 
 Please note that some of the capabilities should be fairly easy to port from one driver to another, but be aware some are dependent on MCU peripheral availability and thus not possible, or hard, to port.
 
 The fastest and most deterministic MCUs seems to be iMRXT1062, MSP432E401Y and TMC129x, ESP32 is not bad but it is a bit unstable - maybe due to outstanding [bugs](https://github.com/espressif/esp-idf/issues) in the [ESP-IDF](https://github.com/espressif/esp-idf) and the system architecture - program code is stored off chip in external serial flash.
 
 ---
-2020-11-21
+2020-12-11

@@ -1,6 +1,6 @@
-## ESP32GrblDriver
+## ESP32 grblHAL driver
 
-A GrblHAL driver for the ESP32 processor.
+A grblHAL driver for the ESP32 processor.
 
 *** Preview version ***
 
@@ -98,4 +98,4 @@ dns_server.c is Copyright (c) 2019 Tony Pottier - from his [ESP32 WiFi Manager](
 Snippets of code is extracted from Espressif ESP-IDF examples which are public domain.
 
 ---
-2020-02-10
+2020-11-22

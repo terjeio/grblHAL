@@ -25,6 +25,12 @@
 
 #define BOARD_NAME "BTT SKR V1.3"
 
+#if TRINAMIC_ENABLE == 2130
+#define HAS_BOARD_INIT
+void board_init (void);
+#include "trinamic/tmc2130.h"
+#endif
+
 #if EEPROM_ENABLE
 #error "This board cannot be used with current EEPROM code!"
 #endif
@@ -209,10 +215,20 @@
 #define SD_CS_PIN   6
 #endif
 
-#ifdef TRINAMIC_SPI
-//#define TRINAMIC_SPI_PORT 0
+#if TRINAMIC_ENABLE == 2130
+
+#define TRINAMIC_MOSI_PN    4
+#define TRINAMIC_MOSI_PORT  port(TRINAMIC_MOSI_PN)
+#define TRINAMIC_MOSI_PIN   28
+#define TRINAMIC_MISO_PN    0
+#define TRINAMIC_MISO_PORT  port(TRINAMIC_MISO_PN)
+#define TRINAMIC_MISO_PIN   5
+#define TRINAMIC_SCK_PN     0
+#define TRINAMIC_SCK_PORT   port(TRINAMIC_SCK_PN)
+#define TRINAMIC_SCK_PIN    4
+
 #define TRINAMIC_CS_PN 1
-#define TRINAMIC_CS_PORT  port(TRINAMIC_CS_PORT)
+#define TRINAMIC_CS_PORT   port(TRINAMIC_CS_PN)
 #define TRINAMIC_CSX_PIN   17
 #define TRINAMIC_CSY_PIN   15
 #define TRINAMIC_CSZ_PIN   10
@@ -222,6 +238,7 @@
 #ifdef B_AXIS
 #define TRINAMIC_CSB_PIN   1
 #endif
+
 #endif
 
 /**/

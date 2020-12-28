@@ -26,30 +26,10 @@
 
 #include "driverlib/sysctl.h"
 
-#include "base/driver.h"
+#include "core/driver.h"
 #include "GRBL/grbllib.h"
-
-#include "FreeRTOS.h"
-#include "task.h"
-
-#ifndef FreeRTOS
-#error This configuration requires at least one FreeRTOS dependent option enabled in base/driver.h!
-#endif
-
-uint32_t g_ui32SysClock;
-
-static void vGrblTask (void * pvParameters)
-{
-    grbl_enter();
-}
 
 int main(void)
 {
-    g_ui32SysClock = SysCtlClockFreqSet(SYSCTL_XTAL_25MHZ|SYSCTL_OSC_MAIN|SYSCTL_USE_PLL|SYSCTL_CFG_VCO_480, configCPU_CLOCK_HZ);
-
-    xTaskCreate (vGrblTask, "Grbl", 2048, NULL, 0, NULL);
-
-    vTaskStartScheduler();
-
-    while(true);
+    grbl_enter();
 }

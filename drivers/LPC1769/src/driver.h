@@ -109,6 +109,13 @@
 #define I2C_ENABLE 0
 #endif
 
+#if TRINAMIC_ENABLE == 2130
+#ifndef TRINAMIC_MIXED_DRIVERS
+#define TRINAMIC_MIXED_DRIVERS 1
+#endif
+#include "tmc2130/trinamic.h"
+#endif
+
 #ifndef X_STEP_PORT
 #define X_STEP_PORT STEP_PORT
 #endif
@@ -198,6 +205,8 @@
 #define CYCLE_START_INTENF CONTROL_INTENF
 #define CYCLE_START_INTCLR CONTROL_INTCLR
 #endif
+
+void gpio_pinmode (LPC_GPIO_T *port, uint8_t pin, bool pullup);
 
 // Driver initialization entry point
 

@@ -228,7 +228,6 @@ static int32_t wait_on_input (bool digital, uint8_t port, wait_mode_t wait_mode,
 static axes_signals_t tmc;
 static uint32_t n_axis;
 static TMC2130_datagram_t datagram[N_AXIS];
-static uint8_t br[N_AXIS];
 
 static TMC2130_status_t TMC_SPI_ReadRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
 {
@@ -344,7 +343,7 @@ static TMC2130_status_t TMC_SPI_WriteRegister (TMC2130_t *driver, TMC2130_datagr
     return status;
 }
 
-void SPI_DriverInit (TMC_io_driver_t *driver, axes_signals_t axisflags)
+void TMC_SPI_DriverInit (axes_signals_t axisflags)
 {
     tmc = axisflags;
     n_axis = 0;
@@ -352,9 +351,6 @@ void SPI_DriverInit (TMC_io_driver_t *driver, axes_signals_t axisflags)
         n_axis += (axisflags.mask & 0x01);
         axisflags.mask >>= 1;
     }
-
-    driver->WriteRegister = TMC_SPI_WriteRegister;
-    driver->ReadRegister = TMC_SPI_ReadRegister;
 }
 
 #endif
@@ -405,14 +401,6 @@ static void TMC_UART_WriteRegister (TMC2209_t *driver, TMC2209_write_datagram_t 
     serial2Write((char *)dgr->data, sizeof(TMC2209_write_datagram_t));
 }
 
-void UART_DriverInit (TMC_io_driver_t *driver)
-{
-    serial2Init(230400);
-
-    driver->WriteRegister = TMC_UART_WriteRegister;
-    driver->ReadRegister = TMC_UART_ReadRegister;
-}
-
 #endif
 
 void board_init (void)
@@ -444,6 +432,13 @@ void board_init (void)
 
 #if TRINAMIC_ENABLE == 2130
 
+    trinamic_driver_if_t driver = {
+        .on_drivers_init = TMC_SPI_DriverInit,
+        .interface.WriteRegister = TMC_SPI_WriteRegister,
+        .interface.ReadRegister = TMC_SPI_ReadRegister
+    };
+
+
     spi_init();
     GPIO_Init.Pin = TRINAMIC_CS_BIT;
     HAL_GPIO_Init(TRINAMIC_CS_PORT, &GPIO_Init);
@@ -453,6 +448,21 @@ void board_init (void)
     do {
         datagram[--idx].addr.reg = TMC2130Reg_DRV_STATUS;
     } while(idx);
+
+    trinamic_if_init(&driver);
+
+#endif
+
+#if TRINAMIC_ENABLE == 2209
+
+    TMC2209_interface_t interface = {
+        .WriteRegister = TMC_UART_WriteRegister,
+        .ReadRegister = TMC_UART_ReadRegister
+    };
+
+    serial2Init(230400);
+
+    trinamic_if_init(&interface);
 
 #endif
 

@@ -21,6 +21,8 @@
 
 #include "i2c.h"
 
+#ifdef I2C_PORT
+
 #if IOEXPAND_ENABLE
 #include "ioexpand.h"
 #endif
@@ -29,7 +31,13 @@
 #include "keypad/keypad.h"
 #endif
 
-#ifdef I2C_PORT
+#if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
+
+#include "tmc2130\trinamic.h"
+
+#define I2C_ADR_I2CBRIDGE 0x47
+
+#endif
 
 QueueHandle_t i2cQueue = NULL;
 SemaphoreHandle_t i2cBusy = NULL;
@@ -73,37 +81,6 @@ void I2CTask (void *queue)
             }
         }
 #endif
-    }
-}
-
-void I2CInit (void)
-{
-    static bool init_ok = false;
-
-    if(!init_ok) {
-
-        init_ok = true;
-
-        i2c_config_t i2c_config = {
-            .mode = I2C_MODE_MASTER,
-            .sda_io_num = I2C_SDA,
-            .scl_io_num = I2C_SCL,
-            .sda_pullup_en = GPIO_PULLUP_DISABLE,
-            .scl_pullup_en = GPIO_PULLUP_DISABLE,
-            .master.clk_speed = I2C_CLOCK
-        };
-
-        i2c_param_config(I2C_PORT, &i2c_config);
-        i2c_driver_install(I2C_PORT, i2c_config.mode, 0, 0, 0);
-
-        i2cQueue = xQueueCreate(5, sizeof(i2c_task_t));
-        i2cBusy = xSemaphoreCreateBinary();
-
-        TaskHandle_t I2CTaskHandle;
-
-        xTaskCreatePinnedToCore(I2CTask, "I2C", 2048, (void *)i2cQueue, configMAX_PRIORITIES, &I2CTaskHandle, 1);
-
-        xSemaphoreGive(i2cBusy);
     }
 }
 
@@ -250,10 +227,50 @@ static TMC2130_status_t TMC_I2C_WriteRegister (TMC2130_t *driver, TMC2130_datagr
     return status;
 }
 
-void I2C_DriverInit (TMC_io_driver_t *driver)
+#endif
+
+#ifdef I2C_PORT
+
+void I2CInit (void)
 {
-    driver->WriteRegister = TMC_I2C_WriteRegister;
-    driver->ReadRegister = TMC_I2C_ReadRegister;
+    static bool init_ok = false;
+
+    if(!init_ok) {
+
+        init_ok = true;
+
+        i2c_config_t i2c_config = {
+            .mode = I2C_MODE_MASTER,
+            .sda_io_num = I2C_SDA,
+            .scl_io_num = I2C_SCL,
+            .sda_pullup_en = GPIO_PULLUP_DISABLE,
+            .scl_pullup_en = GPIO_PULLUP_DISABLE,
+            .master.clk_speed = I2C_CLOCK
+        };
+
+        i2c_param_config(I2C_PORT, &i2c_config);
+        i2c_driver_install(I2C_PORT, i2c_config.mode, 0, 0, 0);
+
+        i2cQueue = xQueueCreate(5, sizeof(i2c_task_t));
+        i2cBusy = xSemaphoreCreateBinary();
+
+        TaskHandle_t I2CTaskHandle;
+
+        xTaskCreatePinnedToCore(I2CTask, "I2C", 2048, (void *)i2cQueue, configMAX_PRIORITIES, &I2CTaskHandle, 1);
+
+        xSemaphoreGive(i2cBusy);
+    }
+
+#if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
+
+    trinamic_driver_if_t driver = {
+        .interface.WriteRegister = TMC_I2C_WriteRegister,
+        .interface.ReadRegister = TMC_I2C_ReadRegister
+    };
+
+    trinamic_if_init(&driver);
+
+#endif
 }
 
 #endif

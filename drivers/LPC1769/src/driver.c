@@ -1138,7 +1138,7 @@ bool driver_init (void) {
 #endif
 
     hal.info = "LCP1769";
-    hal.driver_version = "201215";
+    hal.driver_version = "201216";
     hal.driver_setup = driver_setup;
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
@@ -1234,6 +1234,10 @@ bool driver_init (void) {
 
 #ifdef HAS_BOARD_INIT
     board_init();
+#endif
+
+#if TRINAMIC_ENABLE
+    trinamic_init();
 #endif
 
     my_plugin_init();

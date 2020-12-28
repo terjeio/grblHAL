@@ -160,6 +160,8 @@
   #include "T40X101_map.h"
 #elif defined(BOARD_T41U5XBB)
   #include "T41U5XBB_map.h"
+#elif defined(BOARD_T41PROBB)
+  #include "T41ProBB_map.h"
 #else // default board
 #include "generic_map.h"
 #endif

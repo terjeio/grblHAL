@@ -2,7 +2,7 @@
 
   driver.h - driver code for STM32F103C8 ARM processors
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2019-2020 Terje Io
 
@@ -133,7 +133,7 @@
 #define FLASH_ENABLE 0
 #endif
 
-#if EEPROM_ENABLE|| KEYPAD_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
+#if EEPROM_ENABLE|| KEYPAD_ENABLE || (TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C)
 #define I2C_PORT
 #endif
 

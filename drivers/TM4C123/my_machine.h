@@ -1,7 +1,7 @@
 /*
   my_machine.h - configuration for Texas Instruments Tiva C (TM4C123GH6PM) ARM processor
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 
@@ -26,11 +26,11 @@
 // Uncomment to enable.
 
 //#define KEYPAD_ENABLE           1 // I2C keypad for jogging etc.
-//#define TRINAMIC_ENABLE         1 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
+//#define TRINAMIC_ENABLE      2130 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
 //#define TRINAMIC_I2C            1 // Trinamic I2C - SPI bridge interface.
 //#define TRINAMIC_DEV            1 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
 //#define PWM_RAMPED              1 // Ramped spindle PWM.
-//#define LASER_PPI               1 // Laser PPI (Pulses Per Inch) option.
+//#define PPI_ENABLE              1 // Laser PPI (Pulses Per Inch) option.
 
 #ifdef BOARD_CNC_BOOSTERPACK
 #define CNC_BOOSTERPACK_SHORTS  1 // Shorts added to BoosterPack for some signals (for faster and simpler driver)

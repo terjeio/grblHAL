@@ -314,14 +314,14 @@ bool serial2SetBaudRate (uint32_t baud_rate)
 #if !(MODBUS_ENABLE || TRINAMIC_ENABLE == 2209)
 
 void serialSelect (bool mpg)
-{
+{ /*
     if(mpg) {
         SERIAL_MODULE->IE = 0;
         SERIAL2_MODULE->IE = EUSCI_A_IE_RXIE;
     } else {
         SERIAL_MODULE->IE = EUSCI_A_IE_RXIE;
         SERIAL2_MODULE->IE = 0;
-    }
+    } */
 }
 
 #endif
@@ -452,7 +452,7 @@ void UART2_IRQHandler (void)
 {
     if(UART2->SR & USART_SR_RXNE) {
 
-        uint16_t next_head = (rxbuf2.head + 1) & (RX_BUFFER_SIZE - 1);   // Get and increment buffer pointer
+        uint16_t next_head = (rxbuf2.head + 1) & (RX_BUFFER_SIZE - 1);  // Get and increment buffer pointer
 
         if(rxbuf2.tail == next_head) {                                  // If buffer full
             rxbuf.overflow = 1;                                         // flag overflow
@@ -462,8 +462,9 @@ void UART2_IRQHandler (void)
             rxbuf2.data[rxbuf2.head] = UART2->DR;                       // if not add data to buffer
             rxbuf2.head = next_head;                                    // and update pointer
 #else
+            char data = USART->DR;
             if(!hal.stream.enqueue_realtime_command(data)) {            // Check and strip realtime commands,
-                rxbuf2.data[rxbuf2.head] = UART2->DR;                   // if not add data to buffer
+                rxbuf2.data[rxbuf2.head] = data;                        // if not add data to buffer
                 rxbuf2.head = next_head;                                // and update pointer
             }
 #endif
