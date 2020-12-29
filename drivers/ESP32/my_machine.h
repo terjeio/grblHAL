@@ -23,6 +23,8 @@
 
 // NOTE: Only one board may be enabled!
 // If none is enabled pin mappings from generic_map.h will be used
+//#define BOARD_CNC_BOOSTERPACK
+//#define BOARD_ESPDUINO32
 //#define BOARD_BDRING_V3P5
 //#define BOARD_BDRING_V4
 //#define BOARD_BDRING_I2S6A // NOT production ready!

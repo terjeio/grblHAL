@@ -254,6 +254,8 @@ typedef struct {
   #include "bdring_v3.5_map.h"
 #elif defined(BOARD_BDRING_I2S6A)
   #include "bdring_i2s_6_axis_map.h"
+#elif defined(BOARD_ESPDUINO32)
+  #include "espduino-32_wemos_d1_r32_uno_map.h"
 #else // default board - NOTE: NOT FINAL VERSION!
   #include "generic_map.h"
 #endif
