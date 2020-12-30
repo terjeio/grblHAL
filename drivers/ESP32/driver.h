@@ -252,6 +252,8 @@ typedef struct {
   #include "bdring_v3.5_map.h"
 #elif defined(BOARD_BDRING_I2S6A)
   #include "bdring_i2s_6_axis_map.h"
+#elif defined(BOARD_ESPDUINO32)
+  #include "espduino-32_wemos_d1_r32_uno_map.h"
 #else // default board - NOTE: NOT FINAL VERSION!
   #warning "Compiling for generic board!"
   #include "generic_map.h"
@@ -259,6 +261,10 @@ typedef struct {
 
 #ifndef GRBL_ESP32
 #error "Add #define GRBL_ESP32 in grbl/config.h or update your CMakeLists.txt to the latest version!"
+#endif
+
+#if IOEXPAND_ENABLE == 0 && ((DIRECTION_MASK|STEPPERS_DISABLE_MASK|SPINDLE_MASK|COOLANT_MASK) & 0xC00000000ULL)
+#error "Pins 34 - 39 are input only!"
 #endif
 
 #ifdef I2C_PORT

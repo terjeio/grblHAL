@@ -1,5 +1,5 @@
 # CMake for GrblHAL driver for ESP32
-# 2020-11-22
+# 2020-12-29
 
 cmake_minimum_required(VERSION 3.5)
 
@@ -12,6 +12,7 @@ OPTION(BOARD_BDRING_V3P5 "Compile for v3.5 3-axis board" OFF)
 OPTION(BOARD_BDRING_V4 "Compile for bdring v4 3-axis board" ON)
 OPTION(BOARD_BDRING_I2S6A "Compile for bdring 6-axis I2S board - untested!" OFF)
 OPTION(BOARD_CNC_BOOSTERPACK "Compile for CNC BoosterPack" OFF)
+OPTION(BOARD_ESPDUINO32 "Compile for ESPDUINO-32 Wemos D1 R32" OFF)
 
 # The following plugins/options are supported:
 
@@ -119,6 +120,8 @@ elseif(BOARD_BDRING_V4)
 target_compile_definitions(grbl.elf PUBLIC BOARD_BDRING_V4)
 elseif(BOARD_BDRING_I2S6A)
 target_compile_definitions(grbl.elf PUBLIC BOARD_BDRING_I2S6A)
+elseif(BOARD_ESPDUINO32)
+target_compile_definitions(grbl.elf PUBLIC BOARD_ESPDUINO32)
 elseif(BOARD_CNC_BOOSTERPACK)
 target_compile_definitions(grbl.elf PUBLIC BOARD_CNC_BOOSTERPACK)
 endif()
@@ -180,6 +183,7 @@ unset(BOARD_BDRING_V3P5 CACHE)
 unset(BOARD_BDRING_V4 CACHE)
 unset(BOARD_BDRING_I2S6A CACHE)
 unset(BOARD_CNC_BOOSTERPACK CACHE)
+unset(BOARD_ESPDUINO32 CACHE)
 
 unset(Networking CACHE)
 unset(Bluetooth CACHE)

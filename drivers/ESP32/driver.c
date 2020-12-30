@@ -92,6 +92,10 @@ static spindle_pwm_t spindle_pwm;
 #define SPINDLE_MASK 0
 #endif
 
+#ifndef COOLANT_MASK
+#define COOLANT_MASK 0
+#endif
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/timers.h"
@@ -1346,11 +1350,7 @@ static bool driver_setup (settings_t *settings)
 #if IOEXPAND_ENABLE
         .pin_bit_mask = DIRECTION_MASK,
 #else
-  #ifdef COOLANT_MASK
         .pin_bit_mask = DIRECTION_MASK|STEPPERS_DISABLE_MASK|SPINDLE_MASK|COOLANT_MASK,
-  #else
-        .pin_bit_mask = DIRECTION_MASK|STEPPERS_DISABLE_MASK|SPINDLE_MASK,
-  #endif
 #endif
         .mode = GPIO_MODE_OUTPUT,
         .pull_up_en = GPIO_PULLUP_DISABLE,
@@ -1458,7 +1458,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "ESP32";
-    hal.driver_version = "201226";
+    hal.driver_version = "201229";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif

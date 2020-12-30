@@ -51,7 +51,7 @@
   #if TRINAMIC_I2C
     #include "i2c.h"
   #else
-    #include "spi.h"
+//    #include "spi.h"
   #endif
 #endif
 
@@ -65,6 +65,7 @@ static stepper_pulse_start_ptr hal_stepper_pulse_start = NULL;
 static driver_setting_ptrs_t driver_settings;
 static on_realtime_report_ptr on_realtime_report;
 static on_report_options_ptr on_report_options;
+static trinamic_on_drivers_init_ptr on_drivers_init;
 static user_mcode_ptrs_t user_mcode;
 static trinamic_settings_t trinamic;
 static struct {
@@ -76,6 +77,7 @@ static struct {
     uint32_t sg_status_axis;
     uint32_t msteps;
 } report = {0};
+parameter_words_t word;
 
 #if TRINAMIC_DEV
 static TMC2130_datagram_t *reg_ptr = NULL;
@@ -93,35 +95,21 @@ TMCI2C_monitor_status_dgr_t dgr_monitor = {
 
 static void write_debug_report (void);
 
-// Wrapper for initializing physical interface (since two alternatives are provided)
-void TMC_DriverInit (TMC_io_driver_t *driver)
+// Wrapper for initializing physical interfac
+void trinamic_if_init (trinamic_driver_if_t *driver)
 {
-#if TRINAMIC_I2C
-    I2C_DriverInit(driver);
-#else
-    SPI_DriverInit(driver, trinamic.driver_enable);
-#endif
-}
-
-// Update driver settings on changes
-static void trinamic_configure (void)
-{
-    uint_fast8_t idx = N_AXIS;
-
-    do {
-        if(bit_istrue(trinamic.driver_enable.mask, bit(--idx))) {
-            stepper[idx].r_sense = trinamic.driver[idx].r_sense;
-            TMC2130_SetCurrent(&stepper[idx], trinamic.driver[idx].current, stepper[idx].hold_current_pct);
-            TMC2130_SetMicrosteps(&stepper[idx], trinamic.driver[idx].microsteps);
-        }
-    } while(idx);
+    on_drivers_init = driver->on_drivers_init;
+    TMC2130_InterfaceInit(&driver->interface);
 }
 
 static const setting_detail_t trinamic_settings[] = {
+#if TRINAMIC_MIXED_DRIVERS
     { Setting_TrinamicDriver, Group_MotorDriver, "Trinamic driver", NULL, Format_AxisMask, NULL, NULL, NULL },
+#endif
     { Setting_TrinamicHoming, Group_MotorDriver, "Sensorless homing", NULL, Format_AxisMask, NULL, NULL, NULL },
     { Setting_AxisStepperCurrentBase, Group_Axis0, "?-axis motor current", "mA", Format_Integer, "###0", NULL, NULL },
     { Setting_AxisMicroStepsBase, Group_Axis0, "?-axis microsteps", "steps", Format_Integer, "###0", NULL, NULL }
+/*    { Setting_AxisMicroStepsBase, Group_Axis0, "?-axis microsteps", "steps", Format_RadioButtons, "256,128,64,32,16,8,4,2,1", NULL, NULL }*/
 };
 
 static setting_details_t details = {
@@ -132,6 +120,97 @@ static setting_details_t details = {
 static setting_details_t *on_report_settings (void)
 {
     return &details;
+}
+
+static void pos_failed (uint_fast16_t state)
+{
+    report_message("Could not communicate with stepper driver!", Message_Warning);
+}
+
+static void trinamic_driver_config (uint_fast8_t axis)
+{
+    TMC2130_SetDefaults(&stepper[axis]); // Init shadow registers to default values
+
+    if(!TMC2130_Init(&stepper[axis])) {
+        protocol_enqueue_rt_command(pos_failed);
+        system_raise_alarm(Alarm_SelftestFailed);
+        return;
+    }
+
+    stepper[axis].axis = axis;
+    stepper[axis].current = trinamic.driver[axis].current;
+    stepper[axis].microsteps = trinamic.driver[axis].microsteps;
+    stepper[axis].r_sense = trinamic.driver[axis].r_sense;
+
+    switch(axis) {
+
+        case X_AXIS:
+          #ifdef TMC_X_ADVANCED
+            TMC_X_ADVANCED
+          #endif
+          #if TRINAMIC_I2C && TMC_X_MONITOR
+            dgr_enable.reg.monitor.x = TMC_X_MONITOR;
+          #endif
+            break;
+
+        case Y_AXIS:
+          #ifdef TMC_Y_ADVANCED
+            TMC_Y_ADVANCED
+          #endif
+          #if TRINAMIC_I2C && TMC_Y_MONITOR
+            dgr_enable.reg.monitor.x = TMC_Y_MONITOR;
+          #endif
+            break;
+
+        case Z_AXIS:
+          #ifdef TMC_Z_ADVANCED
+            TMC_Z_ADVANCED
+          #endif
+          #if TRINAMIC_I2C && TMC_Z_MONITOR
+            dgr_enable.reg.monitor.x = TMC_Z_MONITOR;
+          #endif
+            break;
+
+#ifdef A_AXIS
+        case A_AXIS:
+          #ifdef TMC_A_ADVANCED
+            TMC_A_ADVANCED
+          #endif
+          #if TRINAMIC_I2C && TMC_A_MONITOR
+            dgr_enable.reg.monitor.x = TMC_A_MONITOR;
+          #endif
+            break;
+#endif
+
+#ifdef B_AXIS
+        case B_AXIS:
+          #ifdef TMC_B_ADVANCED
+            TMC_B_ADVANCED
+          #endif
+          #if TRINAMIC_I2C && TMC_B_MONITOR
+            dgr_enable.reg.monitor.x = TMC_B_MONITOR;
+          #endif
+            break;
+#endif
+
+#ifdef C_AXIS
+        case C_AXIS:
+          #ifdef TMC_C_ADVANCED
+            TMC_C_ADVANCED
+          #endif
+          #if TRINAMIC_I2C && TMC_C_MONITOR
+            dgr_enable.reg.monitor.x = TMC_C_MONITOR;
+          #endif
+            break;
+#endif
+    }
+
+    TMC2130_SetCurrent(&stepper[axis], trinamic.driver[axis].current, stepper[axis].hold_current_pct);
+    TMC2130_SetMicrosteps(&stepper[axis], trinamic.driver[axis].microsteps);
+
+  #if TRINAMIC_I2C
+    TMC2130_WriteRegister(NULL, (TMC2130_datagram_t *)&dgr_enable);
+  #endif
 }
 
 // Parse and set driver specific parameters
@@ -152,6 +231,12 @@ status_code_t trinamic_setting (setting_type_t setting, float value, char *svalu
                 break;
 
             case AxisSetting_MicroSteps:
+                /*
+                if(value >= 0 && value <= 8) {
+                    trinamic.driver[idx].microsteps = (tmc2130_microsteps_t)value;
+                    stepper[idx].chopconf.reg.mres = trinamic.driver[idx].microsteps;
+                    TMC2130_WriteRegister(&stepper[idx], (TMC2130_datagram_t *)&stepper[idx].chopconf);
+                } */
                 if(TMC2130_MicrostepsIsValid((uint16_t)value)) {
                     trinamic.driver[idx].microsteps = (tmc2130_microsteps_t)value;
                     TMC2130_SetMicrosteps(&stepper[idx], trinamic.driver[idx].microsteps);
@@ -165,13 +250,13 @@ status_code_t trinamic_setting (setting_type_t setting, float value, char *svalu
                 break;
         }
     } else switch((setting_type_t)setting) {
-
-        case 256: // TODO: remove, for migrating from settings version 18 or earlier
+#if TRINAMIC_MIXED_DRIVERS
         case Setting_TrinamicDriver:
             trinamic.driver_enable.mask = (uint8_t)value & AXES_BITMASK;
+            if(on_drivers_init)
+                on_drivers_init(trinamic.driver_enable);
             break;
-
-        case 257: // TODO: remove, for migrating from settings version 18 or earlier
+#endif
         case Setting_TrinamicHoming:
             trinamic.homing_enable.mask = (uint8_t)value & AXES_BITMASK;
             break;
@@ -207,6 +292,7 @@ static void trinamic_settings_restore (void)
                 break;
 
             case Y_AXIS:
+                trinamic.driver_enable.y = TMC_Y_ENABLE;
                 trinamic.driver[idx].current = TMC_Y_CURRENT;
                 trinamic.driver[idx].microsteps = TMC_Y_MICROSTEPS;
                 trinamic.driver[idx].r_sense = TMC_Y_R_SENSE;
@@ -214,11 +300,42 @@ static void trinamic_settings_restore (void)
                 break;
 
             case Z_AXIS:
+                trinamic.driver_enable.z = TMC_Z_ENABLE;
                 trinamic.driver[idx].current = TMC_Z_CURRENT;
                 trinamic.driver[idx].microsteps = TMC_Z_MICROSTEPS;
                 trinamic.driver[idx].r_sense = TMC_Z_R_SENSE;
                 trinamic.driver[idx].homing_sensitivity = TMC_Z_SGT;
                 break;
+
+#ifdef A_AXIS
+            case A_AXIS:
+                trinamic.driver_enable.z = TMA_A_ENABLE;
+                trinamic.driver[idx].current = TMA_A_CURRENT;
+                trinamic.driver[idx].microsteps = TMA_A_MICROSTEPS;
+                trinamic.driver[idx].r_sense = TMA_A_R_SENSE;
+                trinamic.driver[idx].homing_sensitivity = TMA_A_SGT;
+                break;
+#endif
+
+#ifdef B_AXIS
+            case B_AXIS:
+                trinamic.driver_enable.z = TMB_B_ENABLE;
+                trinamic.driver[idx].current = TMB_B_CURRENT;
+                trinamic.driver[idx].microsteps = TMB_B_MICROSTEPS;
+                trinamic.driver[idx].r_sense = TMB_B_R_SENSE;
+                trinamic.driver[idx].homing_sensitivity = TMB_B_SGT;
+                break;
+#endif
+
+#ifdef C_AXIS
+            case C_AXIS:
+                trinamic.driver_enable.z = TMC_C_ENABLE;
+                trinamic.driver[idx].current = TMC_C_CURRENT;
+                trinamic.driver[idx].microsteps = TMC_C_MICROSTEPS;
+                trinamic.driver[idx].r_sense = TMC_C_R_SENSE;
+                trinamic.driver[idx].homing_sensitivity = TMC_C_SGT;
+                break;
+#endif
         }
     } while(idx);
 
@@ -228,6 +345,15 @@ static void trinamic_settings_restore (void)
         driver_settings.restore();
 }
 
+static void trinamic_drivers_init (void)
+{
+    uint_fast8_t idx = N_AXIS;
+    do {
+        if(bit_istrue(trinamic.driver_enable.mask, bit(--idx)))
+            trinamic_driver_config(idx);
+    } while(idx);
+}
+
 static void trinamic_settings_load (void)
 {
     if(hal.nvs.memcpy_from_nvs((uint8_t *)&trinamic, driver_settings.nvs_address, sizeof(trinamic_settings_t), true) != NVS_TransferResult_OK)
@@ -235,19 +361,29 @@ static void trinamic_settings_load (void)
 
     if(driver_settings.load)
         driver_settings.load();
+
+#if !TRINAMIC_MIXED_DRIVERS
+    trinamic.driver_enable.mask = AXES_BITMASK;
+#endif
+
+    if(on_drivers_init)
+        on_drivers_init(trinamic.driver_enable);
+
+    trinamic_drivers_init();
 }
 
-// Append Trinamic settings to '$$' report
+// Append Trinamic settings to '$$' reports
+
 static void trinamic_settings_report (setting_type_t setting)
 {
     bool reported = true;
 
     switch(setting) {
-
+#if TRINAMIC_MIXED_DRIVERS
         case Setting_TrinamicDriver:
             report_uint_setting(setting, trinamic.driver_enable.mask);
             break;
-
+#endif
         case Setting_TrinamicHoming:
             report_uint_setting(setting, trinamic.homing_enable.mask);
             break;
@@ -368,33 +504,35 @@ static void stallGuard_enable (uint32_t axis, bool enable)
 }
 
 // Validate M-code axis parameters
-// Sets value to NAN (Not A Number) if driver not installed
-static bool check_params (parser_block_t *gc_block, uint32_t *value_words)
+// Sets value to NAN (Not A Number) and returns false if driver not installed
+static bool check_params (parser_block_t *gc_block, parameter_words_t *parameter_words)
 {
-    bool ok = false;
-    uint_fast8_t idx = N_AXIS;
-
-    static const uint8_t wordmap[] = {
-       Word_X,
-       Word_Y,
-       Word_Z
+    static const parameter_words_t wordmap[] = {
+       { .x = On },
+       { .y = On },
+       { .z = On }
 #if N_AXIS > 3
-      ,Word_A,
-       Word_B,
-       Word_C
+     , { .a = On },
+       { .b = On },
+       { .c = On }
 #endif
     };
 
+    uint_fast8_t n_found = 0, n_ok = 0, idx = N_AXIS;
+
     do {
         idx--;
-        if(bit_istrue(*value_words, bit(wordmap[idx])) && bit_istrue(trinamic.driver_enable.mask, bit(idx))) {
-            ok = true;
-            bit_false(*value_words, bit(wordmap[idx]));
+        if((*parameter_words).mask & wordmap[idx].mask) {
+            n_found++;
+            if(bit_istrue(trinamic.driver_enable.mask, bit(idx)) && !isnan(gc_block->values.xyz[idx])) {
+                n_ok++;
+                (*parameter_words).mask &= ~wordmap[idx].mask;
+            }
         } else
             gc_block->values.xyz[idx] = NAN;
     } while(idx);
 
-    return ok;
+    return n_ok > 0 && n_ok == n_found;
 }
 
 #define Trinamic_StallGuardParams 123
@@ -416,7 +554,7 @@ static user_mcode_t trinamic_MCodeCheck (user_mcode_t mcode)
 }
 
 // Validate driver specific M-code parameters
-static status_code_t trinamic_MCodeValidate (parser_block_t *gc_block, uint32_t *value_words)
+static status_code_t trinamic_MCodeValidate (parser_block_t *gc_block, parameter_words_t *parameter_words)
 {
     status_code_t state = Status_GcodeValueWordMissing;
 
@@ -429,11 +567,14 @@ static status_code_t trinamic_MCodeValidate (parser_block_t *gc_block, uint32_t 
             break;
 
         case Trinamic_WriteRegister:
-            if(bit_istrue(*value_words, bit(Word_R)) && bit_istrue(*value_words, bit(Word_Q)) /* && getAdr() != 0xFF)*/) {
-                reg_ptr = TMC2130_GetRegPtr(&stepper[report.sg_status_axis], (tmc2130_regaddr_t)gc_block->values.r);
-                state = reg_ptr == NULL ? Status_GcodeValueOutOfRange : Status_OK;
-                bit_false(*value_words, bit(Word_R|Word_Q));
-                *value_words = 0;
+            if((*parameter_words).r && (*parameter_words).q) {
+                if(isnan(gc_block->values.r) || isnan(gc_block->values.q))
+                    state = Status_BadNumberFormat;
+                else {
+                    reg_ptr = TMC2130_GetRegPtr(&stepper[report.sg_status_axis], (tmc2130_regaddr_t)gc_block->values.r);
+                    state = reg_ptr == NULL ? Status_GcodeValueOutOfRange : Status_OK;
+                    (*parameter_words).r = (*parameter_words).q = Off;
+                }
             }
             break;
 
@@ -441,48 +582,40 @@ static status_code_t trinamic_MCodeValidate (parser_block_t *gc_block, uint32_t 
 
         case Trinamic_DebugReport:
             state = Status_OK;
-            report.axes.x = bit_istrue(*value_words, bit(Word_X)) && gc_block->values.xyz[X_AXIS] != 0.0f;
-            report.axes.y = bit_istrue(*value_words, bit(Word_Y)) && gc_block->values.xyz[Y_AXIS] != 0.0f;
-            report.axes.z = bit_istrue(*value_words, bit(Word_Z)) && gc_block->values.xyz[Z_AXIS] != 0.0f;
+            word = *parameter_words;
 
-            if(bit_istrue(*value_words, bit(Word_Q)))
-                report.raw = bit_istrue(*value_words, bit(Word_Q)) && gc_block->values.q != 0.0f;
+            if(word.h && gc_block->values.h > 1)
+                state = Status_BadNumberFormat;
 
-            if(bit_istrue(*value_words, bit(Word_H)))
-                report.sfilt = gc_block->values.h != 0.0f;
+            if(word.q && isnan(gc_block->values.q))
+                state = Status_BadNumberFormat;
 
-            if(bit_istrue(*value_words, bit(Word_S))) {
-                report.sg_status_enable = gc_block->values.s != 0.0f;
-                report.msteps = trinamic.driver[report.sg_status_axis].microsteps;
-            }
+            if(word.s && isnan(gc_block->values.s))
+                state = Status_BadNumberFormat;
 
-            if(report.axes.mask) {
-                report.axes.mask &= trinamic.driver_enable.mask;
-                uint32_t axis = 0, mask = report.axes.mask;
-                while(mask) {
-                    if(mask & 0x01) {
-                        report.sg_status_axis = axis;
-                        break;
-                    }
-                    axis++;
-                    mask >>= 1;
-                }
-            } else
-                report.axes.mask = trinamic.driver_enable.mask;
+            (*parameter_words).h = (*parameter_words).i = (*parameter_words).q = (*parameter_words).s =
+              (*parameter_words).x = (*parameter_words).y = (*parameter_words).z = Off;
 
-            bit_false(*value_words, bit(Word_Q|Word_S|bit(Word_X)|bit(Word_Y)|bit(Word_Z)|bit(Word_H)));
-
+#ifdef A_AXIS
+            (*parameter_words).a = Off;
+#endif
+#ifdef B_AXIS
+            (*parameter_words).b = Off;
+#endif
+#ifdef C_AXIS
+            (*parameter_words).c = Off;
+#endif
 //            gc_block->user_mcode_sync = true;
             break;
 
         case Trinamic_StepperCurrent:
-            if(check_params(gc_block, value_words)) {
+            if(check_params(gc_block, parameter_words)) {
                 state = Status_OK;
                 gc_block->user_mcode_sync = true;
-                if(bit_isfalse(*value_words, bit(Word_Q)))
+                if(!(*parameter_words).q)
                     gc_block->values.q = NAN;
                 else // TODO: add range check?
-                    bit_false(*value_words, bit(Word_Q));
+                    (*parameter_words).q = Off;
             }
             break;
 
@@ -492,14 +625,14 @@ static status_code_t trinamic_MCodeValidate (parser_block_t *gc_block, uint32_t 
             break;
 
         case Trinamic_HybridThreshold:
-            if(check_params(gc_block, value_words)) {
+            if(check_params(gc_block, parameter_words)) {
                 state = Status_OK;
                 gc_block->user_mcode_sync = true;
             }
             break;
 
         case Trinamic_HomingSensivity:
-            if(check_params(gc_block, value_words)) {
+            if(check_params(gc_block, parameter_words)) {
                 uint_fast8_t idx = N_AXIS;
                 state = Status_OK;
                 do {
@@ -515,7 +648,7 @@ static status_code_t trinamic_MCodeValidate (parser_block_t *gc_block, uint32_t 
             break;
     }
 
-    return state == Status_Unhandled && user_mcode.validate ? user_mcode.validate(gc_block, value_words) : state;
+    return state == Status_Unhandled && user_mcode.validate ? user_mcode.validate(gc_block, parameter_words) : state;
 }
 
 // Execute driver specific M-code
@@ -540,6 +673,20 @@ static void trinamic_MCodeExecute (uint_fast16_t state, parser_block_t *gc_block
 #endif
 
         case Trinamic_DebugReport:
+            if(word.i)
+                trinamic_drivers_init();
+
+            if(word.h)
+                report.sfilt = gc_block->values.h != 0.0f;
+
+            if(word.q)
+                report.raw = gc_block->values.q != 0.0f;
+
+            if(word.s) {
+                report.sg_status_enable = gc_block->values.s != 0.0f;
+                report.msteps = trinamic.driver[report.sg_status_axis].microsteps;
+            }
+
             if(report.sg_status_enable) {
                 if(hal_stepper_pulse_start == NULL) {
                     hal_stepper_pulse_start = hal.stepper.pulse_start;
@@ -551,7 +698,38 @@ static void trinamic_MCodeExecute (uint_fast16_t state, parser_block_t *gc_block
                 hal.stepper.pulse_start = hal_stepper_pulse_start;
                 hal_stepper_pulse_start = NULL;
             }
-            write_debug_report();
+
+            report.axes.x = word.x;
+            report.axes.y = word.y;
+            report.axes.z = word.z;
+#ifdef A_AXIS
+            report.axes.a = word.a;
+#endif
+#ifdef B_AXIS
+            report.axes.b = word.b;
+#endif
+#ifdef C_AXIS
+            report.axes.c = word.c;
+#endif
+
+            if(report.axes.mask) {
+                report.axes.mask &= trinamic.driver_enable.mask;
+                uint32_t axis = 0, mask = report.axes.mask;
+                while(mask) {
+                    if(mask & 0x01) {
+                        report.sg_status_axis = axis;
+                        break;
+                    }
+                    axis++;
+                    mask >>= 1;
+                }
+            } else
+                report.axes.mask = trinamic.driver_enable.mask;
+
+            if(!(word.i || word.s || word.h || word.q))
+                write_debug_report();
+
+            word.value = 0;
             break;
 
         case Trinamic_StepperCurrent:
@@ -1003,63 +1181,6 @@ bool trinamic_init (void)
     }
 
     return driver_settings.nvs_address != 0;
-}
-
-void trinamic_start (bool allow_mixed)
-{
-    uint_fast8_t idx = N_AXIS;
-
-    TMC_IOInit();
-
-    do {
-
-        if(bit_istrue(trinamic.driver_enable.mask, bit(--idx))) {
-
-            TMC2130_SetDefaults(&stepper[idx]); // Init shadow registers to default values
-
-            stepper[idx].axis = idx;
-            stepper[idx].current = trinamic.driver[idx].current;
-            stepper[idx].microsteps = trinamic.driver[idx].microsteps;
-            stepper[idx].r_sense = trinamic.driver[idx].r_sense;
-
-            switch(idx) {
-
-                case X_AXIS:
-                  #ifdef TMC_X_ADVANCED
-                    TMC_X_ADVANCED
-                  #endif
-                  #if TRINAMIC_I2C && TMC_X_MONITOR
-                    dgr_enable.reg.monitor.x = TMC_X_MONITOR;
-                  #endif
-                    break;
-
-                case Y_AXIS:
-                  #ifdef TMC_Y_ADVANCED
-                    TMC_Y_ADVANCED
-                  #endif
-                  #if TRINAMIC_I2C && TMC_Y_MONITOR
-                    dgr_enable.reg.monitor.x = TMC_Y_MONITOR;
-                  #endif
-                    break;
-
-                case Z_AXIS:
-                  #ifdef TMC_Z_ADVANCED
-                    TMC_Z_ADVANCED
-                  #endif
-                  #if TRINAMIC_I2C && TMC_Z_MONITOR
-                    dgr_enable.reg.monitor.x = TMC_Z_MONITOR;
-                  #endif
-                    break;
-            }
-
-            TMC2130_Init(&stepper[idx]);
-          #if TRINAMIC_I2C
-            TMC2130_WriteRegister(NULL, (TMC2130_datagram_t *)&dgr_enable);
-          #endif
-        }
-    } while(idx);
-
-    trinamic_configure();
 }
 
 // Interrupt handler for DIAG1 signal(s)

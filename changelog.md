@@ -1,11 +1,21 @@
 ## grblHAL changelog
 
+Build 20201228 (test only):
+* Updated gcode parser \(grbl/gcode.c\) to use bitfields structs instead of bitfield variables.  
+Done to improve readability and for easier debugging.  
+Note that this is a major change and there is a non-zero risk that mistakes has been made.
+* Changed signature of user mcode validation function to use bitfield struct for value words available.  
+Removed the need for user mcode parameter words to have an associated value. This means that [user mcode](https://github.com/terjeio/grblHAL/tree/test/templates) implementations now must check this locally.  
+If no associated value is provided the corresponding value in the value struct is set to `NAN` (Not A Number) for floats and all bits set to 1 for integers.
+* Refactored Trinamic driver code, added initial support for TMC2209. Work in progress.
+* Removed the need to copy the core grbl and plugin code to the driver chosen, this is now kept in sync with the master Subversion repository automatically.
+
 Build 20201224 (test only):
 * Added initial support for RADDS 1.6 board to SAM3X8E driver \(Arduino Due\). Untested!
 * Added C-axis support to iMXRT1962 driver \(Teensy 4.x\).  
 Untested and none of the current board maps has the needed pins defined.
 * Added alarm and error message for power on self-test \(POS\) failure.  
-If POS fails only $-commands are available.
+If POS fails only $-commands are accepted.
 * Work in good progress for Trinamic TMC2209 driver support \(UART mode\).  
 Processor/board specific driver code has to be added for this, currently testing with STM32F446 and Nucleo-64 breakout board.
 * Some bug fixes.

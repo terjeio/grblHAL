@@ -397,6 +397,21 @@
 // #define INVERT_LIMIT_PIN_MASK (X_AXIS_BIT|Y_AXIS_BIT) // Default disabled. Uncomment to enable.
 // For inverting the probe pin use DEFAULT_INVERT_PROBE_PIN in defaults.h
 
+// Inverts the spindle enable pin from low-disabled/high-enabled to low-enabled/high-disabled. Useful
+// for some pre-built electronic boards.
+// NOTE: If VARIABLE_SPINDLE is enabled(default), this option has no effect as the PWM output and
+// spindle enable are combined to one pin. If you need both this option and spindle speed PWM,
+// uncomment the config option USE_SPINDLE_DIR_AS_ENABLE_PIN below.
+// #define INVERT_SPINDLE_ENABLE_PIN 1 // Default disabled. Uncomment to enable.
+// #define INVERT_SPINDLE_CCW_PIN 1    // Default disabled. Uncomment to enable. NOTE: not supported by all drivers.
+// #define INVERT_SPINDLE_PWM_PIN 1    // Default disabled. Uncomment to enable. NOTE: not supported by all drivers.
+
+// Inverts the selected coolant pin from low-disabled/high-enabled to low-enabled/high-disabled. Useful
+// for some pre-built electronic boards.
+// #define INVERT_COOLANT_FLOOD_PIN 1 // Default disabled. Uncomment to enable.
+// #define INVERT_COOLANT_MIST_PIN 1  // Default disabled. Note: Enable M7 mist coolant in config.h
+
+
 // Used by variable spindle output only. This forces the PWM output to a minimum duty cycle when enabled.
 // The PWM pin will still read 0V when the spindle is disabled. Most users will not need this option, but
 // it may be useful in certain scenarios. This minimum PWM settings coincides with the spindle rpm minimum

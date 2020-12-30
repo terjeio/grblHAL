@@ -29,78 +29,6 @@
 #include "spindle_control.h"
 #include "errors.h"
 
-// Define modal group internal numbers for checking multiple command violations and tracking the
-// type of command that is called in the block. A modal group is a group of g-code commands that are
-// mutually exclusive, or cannot exist on the same line, because they each toggle a state or execute
-// a unique motion. These are defined in the NIST RS274-NGC v3 g-code standard, available online,
-// and are similar/identical to other g-code interpreters by manufacturers (Haas,Fanuc,Mazak,etc).
-// NOTE: Modal group define values must be sequential and starting from zero.
-typedef enum {
-    ModalGroup_G0 = 0,  // [G4,G10,G28,G28.1,G30,G30.1,G53,G92,G92.1] Non-modal
-    ModalGroup_G1,      // [G0,G1,G2,G3,G33,G38.2,G38.3,G38.4,G38.5,G76,G80] Motion
-    ModalGroup_G2,      // [G17,G18,G19] Plane selection
-    ModalGroup_G3,      // [G90,G91] Distance mode
-    ModalGroup_G4,      // [G91.1] Arc IJK distance mode
-    ModalGroup_G5,      // [G93,G94,G95] Feed rate mode
-    ModalGroup_G6,      // [G20,G21] Units
-    ModalGroup_G7,      // [G40] Cutter radius compensation mode. G41/42 NOT SUPPORTED.
-    ModalGroup_G8,      // [G43,G43.1,G49] Tool length offset
-    ModalGroup_G10,     // [G98,G99] Return mode in canned cycles
-    ModalGroup_G11,     // [G50,G51] Scaling
-    ModalGroup_G12,     // [G54,G55,G56,G57,G58,G59] Coordinate system selection
-    ModalGroup_G13,     // [G61] Control mode
-    ModalGroup_G14,     // [G96,G97] Spindle Speed Mode
-    ModalGroup_G15,     // [G7,G8] Lathe Diameter Mode
-
-    ModalGroup_M4,      // [M0,M1,M2,M30] Stopping
-    ModalGroup_M6,      // [M6] Tool change
-    ModalGroup_M7,      // [M3,M4,M5] Spindle turning
-    ModalGroup_M8,      // [M7,M8,M9] Coolant control
-    ModalGroup_M9,      // [M49,M50,M51,M53,M56] Override control
-    ModalGroup_M10,     // User defined M commands
-} modal_group_t;
-
-// Define parameter word mapping.
-typedef enum {
-    Word_E = 0,
-    Word_F,
-    Word_H,
-    Word_I,
-    Word_J,
-    Word_K,
-    Word_L,
-    Word_N,
-    Word_P,
-    Word_R,
-    Word_S,
-    Word_T,
-    Word_X,
-    Word_Y,
-    Word_Z,
-    Word_Q,
-#if N_AXIS > 3
-    Word_A,
-    Word_B,
-    Word_C,
-#endif
-    Word_D
-} parameter_word_t;
-
-#if N_AXIS == 3
-#define AXIS_WORDS_MASK ((1 << Word_X)|(1 << Word_Y)|(1 << Word_Z))
-#elif N_AXIS == 4
-#define AXIS_WORDS_MASK ((1 << Word_X)|(1 << Word_Y)|(1 << Word_Z)|(1 << Word_A))
-#elif N_AXIS == 5
-#define AXIS_WORDS_MASK ((1 << Word_X)|(1 << Word_Y)|(1 << Word_Z)|(1 << Word_A)|(1 << Word_B))
-#else
-#define AXIS_WORDS_MASK ((1 << Word_X)|(1 << Word_Y)|(1 << Word_Z)|(1 << Word_A)|(1 << Word_B)|(1 << Word_C))
-#endif
-
-typedef union {
-    parameter_word_t parameter;
-    modal_group_t group;
-} word_bit_t;
-
 // Define command actions for within execution-type modal groups (motion, stopping, non-modal). Used
 // internally by the parser to know which command to execute.
 // NOTE: Some values are assigned specific values to make g-code state reporting and parsing
@@ -212,7 +140,6 @@ typedef enum {
     SpindleSpeedMode_CSS = 1   // G97 (Do not alter value)
 } spindle_rpm_mode_t;
 
-
 typedef struct output_command {
     bool is_digital;
     bool is_executed;
@@ -234,6 +161,11 @@ typedef enum {
 // NOTE: Not used by core, may be used by driver code
 typedef enum {
     UserMCode_Ignore = 0,
+    UserMCode_Generic0 = 100,
+    UserMCode_Generic1 = 101,
+    UserMCode_Generic2 = 102,
+    UserMCode_Generic3 = 103,
+    UserMCode_Generic4 = 104,
     LaserPPI_Enable = 112,
     LaserPPI_Rate = 113,
     LaserPPI_PulseLength = 114,
@@ -266,6 +198,36 @@ typedef enum {
     GCProbe_CheckMode = GCUpdatePos_Target
   #endif
 } gc_probe_t;
+
+// Define parser words bitfield
+typedef union {
+    uint32_t mask;
+    uint32_t value;
+    struct {
+        uint32_t e :1,
+                 f :1,
+                 h :1,
+                 i :1,
+                 j :1,
+                 k :1,
+                 l :1,
+                 n :1,
+                 p :1,
+                 r :1,
+                 s :1,
+                 t :1,
+                 x :1,
+                 y :1,
+                 z :1,
+                 q :1,
+#if N_AXIS > 3
+                 a :1,
+                 b :1,
+                 c :1,
+#endif
+                 d :1;
+    };
+} parameter_words_t;
 
 // Define gcode parser flags for handling special cases.
 

@@ -23,6 +23,7 @@
 
 // NOTE: Only one board may be enabled!
 // If none is enabled pin mappings from generic_map.h will be used
+//#define BOARD_ESPDUINO32
 //#define BOARD_BDRING_V3P5
 //#define BOARD_BDRING_V4
 //#define BOARD_BDRING_I2S6A // NOT production ready!
@@ -38,7 +39,7 @@
 //#define SDCARD_ENABLE      1 // Run gcode programs from SD card, requires sdcard plugin.
 //#define BLUETOOTH_ENABLE   1 // Enable Bloetooht streaming.
 //#define MPG_MODE_ENABLE    1 // Enable MPG mode (secondary serial port)
-#define EEPROM_ENABLE      1 // I2C EEPROM support. Set to 1 for 24LC16(2K), 2 for larger sizes. Requires eeprom plugin.
+//#define EEPROM_ENABLE      1 // I2C EEPROM support. Set to 1 for 24LC16(2K), 2 for larger sizes. Requires eeprom plugin.
 //#define EEPROM_IS_FRAM     1 // Uncomment when EEPROM is enabled and chip is FRAM, this to remove write delay.
 
 #if NETWORKING_ENABLE

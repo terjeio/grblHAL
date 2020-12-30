@@ -623,10 +623,14 @@ static void plasma_warning (uint_fast16_t state)
     report_message("Plasma mode failed to initialize!", Message_Warning);
 }
 
-static void onReportOptions (void)
+static void onReportOptions (bool newopt)
 {
-    on_report_options();
-    hal.stream.write("[PLUGIN:PLASMA v0.01]" ASCII_EOL);
+    on_report_options(newopt);
+
+    if(newopt)
+        hal.stream.write(",THC");
+    else
+        hal.stream.write("[PLUGIN:PLASMA v0.01]" ASCII_EOL);
 }
 
 bool plasma_init (void)

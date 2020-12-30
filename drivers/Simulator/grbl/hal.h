@@ -239,7 +239,7 @@ typedef struct {
 // User M-codes (optional)
 
 typedef user_mcode_t (*user_mcode_check_ptr)(user_mcode_t mcode);
-typedef status_code_t (*user_mcode_validate_ptr)(parser_block_t *gc_block, uint32_t *value_words);
+typedef status_code_t (*user_mcode_validate_ptr)(parser_block_t *gc_block, parameter_words_t *parameter_words);
 typedef void (*user_mcode_execute_ptr)(uint_fast16_t state, parser_block_t *gc_block);
 
 typedef struct {

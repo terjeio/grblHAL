@@ -31,8 +31,8 @@
 
 #if !USB_SERIAL_CDC
 
-static stream_rx_buffer_t rxbuf = {0};
-static stream_tx_buffer_t txbuf = {0}, rxbackup;
+static stream_rx_buffer_t rxbuf = {0}, rxbackup;
+static stream_tx_buffer_t txbuf = {0};
 
 void serialInit (void)
 {

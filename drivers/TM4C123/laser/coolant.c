@@ -56,24 +56,33 @@ static user_mcode_t userMCodeCheck (user_mcode_t mcode)
                      : (user_mcode.check ? user_mcode.check(mcode) : UserMCode_Ignore);
 }
 
-static status_code_t userMCodeValidate (parser_block_t *gc_block, uint32_t *value_words)
+static status_code_t userMCodeValidate (parser_block_t *gc_block, parameter_words_t *value_words)
 {
     status_code_t state = Status_GcodeValueWordMissing;
 
     switch(gc_block->user_mcode) {
 
         case Laser_Coolant:
-            if((bit_istrue(*value_words, bit(Word_P)) && gc_block->values.q > 0.0f && !can_wait) ||
-               (bit_istrue(*value_words, bit(Word_R)) && gc_block->values.r > 0.0f && !can_monitor))
-                state = Status_GcodeUnusedWords;
-            else if(bit_istrue(*value_words, bit(Word_Q))) {
-                state = Status_OK;
-                gc_block->user_mcode_sync = true;
-                if(bit_isfalse(*value_words, bit(Word_P)))
-                    gc_block->values.p = 0.0f;
-                if(bit_isfalse(*value_words, bit(Word_R)))
-                    gc_block->values.r = NAN;
-                bit_false(*value_words, bit(Word_P)|bit(Word_Q)|bit(Word_R));
+            if((*value_words).p && isnan(gc_block->values.p))
+                state = Status_BadNumberFormat;
+            if((*value_words).q && isnan(gc_block->values.q))
+                state = Status_BadNumberFormat;
+            if((*value_words).r && isnan(gc_block->values.r))
+                state = Status_BadNumberFormat;
+
+            if(state != Status_BadNumberFormat) {
+                if(((*value_words).q && gc_block->values.q > 0.0f && !can_wait) ||
+                   ((*value_words).r && gc_block->values.r > 0.0f && !can_monitor))
+                    state = Status_GcodeUnusedWords;
+                else if((*value_words).q) {
+                    state = Status_OK;
+                    gc_block->user_mcode_sync = true;
+                    if(!(*value_words).p)
+                        gc_block->values.p = 0.0f;
+                    if(!(*value_words).r)
+                        gc_block->values.r = NAN;
+                    (*value_words).p = (*value_words).q = (*value_words).r = Off;
+                }
             }
             break;
 

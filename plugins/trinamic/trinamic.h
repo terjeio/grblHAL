@@ -19,18 +19,20 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef _TRINAMIC_OPTION_H_
-#define _TRINAMIC_OPTION_H_
+#ifndef _TMC_2130_H_
+#define _TMC_2130_H_
 
 #ifdef ARDUINO_SAMD_MKRZERO
 #include "../driver.h"
+#include "../trinamic/tmc2130.h"
 #if TRINAMIC_I2C
-#include "../trinamic/TMC2130_I2C_map.h"
+#include "../trinamic/tmc2130_i2c_map.h"
 #endif
 #else
 #include "driver.h"
+#include "trinamic/tmc2130.h"
 #if TRINAMIC_I2C
-#include "trinamic/TMC2130_I2C_map.h"
+#include "trinamic/tmc2130_i2c_map.h"
 #endif
 #endif
 
@@ -51,10 +53,10 @@
 #define tmc_hysteresis_end(axis, val)   { stepper[axis].chopconf.reg.hend = (uint8_t)(val + 3) & 0x0F; TMC2130_WriteRegister(&stepper[axis], (TMC2130_datagram_t *)&stepper[axis].chopconf); }
 
 // General
-#if TRINAMIC_ENABLE == 2130 && defined(BOARD_CNC_BOOSTERPACK)
-#define TMC_X_ENABLE 1 // Do not change
-#else
+#if TRINAMIC_MIXED_DRIVERS
 #define TMC_X_ENABLE 0
+#else
+#define TMC_X_ENABLE 1 // Do not change
 #endif
 #define TMC_X_MONITOR 1
 #define TMC_X_MICROSTEPS TMC2130_Microsteps_16
@@ -75,12 +77,11 @@ tmc_tbl(X_AXIS, 1); \
 tmc_chopper_mode(X_AXIS, 0); \
 tmc_hysteresis_start(X_AXIS, 4); \
 tmc_hysteresis_end(X_AXIS, -2);
-// General
 
-#if TRINAMIC_ENABLE == 2130 && defined(BOARD_CNC_BOOSTERPACK)
-#define TMC_Y_ENABLE 1 // Do not change
-#else
+#if TRINAMIC_MIXED_DRIVERS
 #define TMC_Y_ENABLE 0
+#else
+#define TMC_Y_ENABLE 1 // Do not change
 #endif
 #define TMC_Y_MONITOR 1
 #define TMC_Y_MICROSTEPS TMC2130_Microsteps_16
@@ -102,10 +103,10 @@ tmc_chopper_mode(Y_AXIS, 0); \
 tmc_hysteresis_start(Y_AXIS, 5); \
 tmc_hysteresis_end(Y_AXIS, 1);
 
-#if TRINAMIC_ENABLE == 2130 && defined(BOARD_CNC_BOOSTERPACK)
-#define TMC_Z_ENABLE 1 // Do not change
-#else
+#if TRINAMIC_MIXED_DRIVERS
 #define TMC_Z_ENABLE 0
+#else
+#define TMC_Z_ENABLE 1 // Do not change
 #endif
 #define TMC_Z_MONITOR 1
 #define TMC_Z_MICROSTEPS TMC2130_Microsteps_16
@@ -127,6 +128,93 @@ tmc_chopper_mode(Z_AXIS, 0); \
 tmc_hysteresis_start(Z_AXIS, 5); \
 tmc_hysteresis_end(Z_AXIS, 1);
 
+#ifdef A_AXIS
+
+#if TRINAMIC_MIXED_DRIVERS
+#define TMC_A_ENABLE 0
+#else
+#define TMC_A_ENABLE 1 // Do not change
+#endif
+#define TMC_A_MONITOR 1
+#define TMC_A_MICROSTEPS TMC2130_Microsteps_16
+#define TMC_A_R_SENSE TMC2130_R_SENSE         // mOhm
+#define TMC_A_CURRENT 500         // mA RMS
+#define TMC_A_HOLD_CURRENT_PCT 50
+#define TMC_A_SGT 22
+
+#define TMC_A_ADVANCED \
+tmc_stealthChop(A_AXIS, 1); \
+tmc_sg_filter(A_AXIS, 1); \
+tmc_sg_stall_value(A_AXIS, 33); \
+tmc_sedn(A_AXIS, 1); \
+tmc_semin(A_AXIS, 5); \
+tmc_semax(A_AXIS, 2); \
+tmc_toff(A_AXIS, 3); \
+tmc_tbl(A_AXIS, 1); \
+tmc_chopper_mode(A_AXIS, 0); \
+tmc_hysteresis_start(A_AXIS, 5); \
+tmc_hysteresis_end(A_AXIS, 1);
+
+#endif
+
+#ifdef B_AXIS
+
+#if TRINAMIC_MIXED_DRIVERS
+#define TMC_B_ENABLE 0
+#else
+#define TMC_B_ENABLE 1 // Do not change
+#endif
+#define TMC_B_MONITOR 1
+#define TMC_B_MICROSTEPS TMC2130_Microsteps_16
+#define TMC_B_R_SENSE TMC2130_R_SENSE         // mOhm
+#define TMC_B_CURRENT 500         // mA RMS
+#define TMC_B_HOLD_CURRENT_PCT 50
+#define TMC_B_SGT 22
+
+#define TMC_B_ADVANCED \
+tmc_stealthChop(B_AXIS, 1); \
+tmc_sg_filter(B_AXIS, 1); \
+tmc_sg_stall_value(B_AXIS, 33); \
+tmc_sedn(B_AXIS, 1); \
+tmc_semin(B_AXIS, 5); \
+tmc_semax(B_AXIS, 2); \
+tmc_toff(B_AXIS, 3); \
+tmc_tbl(B_AXIS, 1); \
+tmc_chopper_mode(B_AXIS, 0); \
+tmc_hysteresis_start(B_AXIS, 5); \
+tmc_hysteresis_end(B_AXIS, 1);
+
+#endif
+
+#ifdef C_AXIS
+
+#if TRINAMIC_MIXED_DRIVERS
+#define TMC_C_ENABLE 0
+#else
+#define TMC_C_ENABLE 1 // Do not change
+#endif
+#define TMC_C_MONITOR 1
+#define TMC_C_MICROSTEPS TMC2130_Microsteps_16
+#define TMC_C_R_SENSE TMC2130_R_SENSE         // mOhm
+#define TMC_C_CURRENT 500         // mA RMS
+#define TMC_C_HOLD_CURRENT_PCT 50
+#define TMC_C_SGT 22
+
+#define TMC_C_ADVANCED \
+tmc_stealthChop(C_AXIS, 1); \
+tmc_sg_filter(C_AXIS, 1); \
+tmc_sg_stall_value(C_AXIS, 33); \
+tmc_sedn(C_AXIS, 1); \
+tmc_semin(C_AXIS, 5); \
+tmc_semax(C_AXIS, 2); \
+tmc_toff(C_AXIS, 3); \
+tmc_tbl(C_AXIS, 1); \
+tmc_chopper_mode(C_AXIS, 0); \
+tmc_hysteresis_start(C_AXIS, 5); \
+tmc_hysteresis_end(C_AXIS, 1);
+
+#endif
+
 //
 
 typedef struct {
@@ -142,16 +230,20 @@ typedef struct {
     motor_settings_t driver[N_AXIS];
 } trinamic_settings_t;
 
-// Init wrapper for physical interface
-void TMC_DriverInit (TMC_io_driver_t *driver);
+typedef void (*trinamic_on_drivers_init_ptr)(axes_signals_t enabled);
+
+typedef struct {
+    trinamic_on_drivers_init_ptr on_drivers_init;
+    TMC2130_interface_t interface;
+} trinamic_driver_if_t;
 
 bool trinamic_init (void);
-void trinamic_start (bool allow_mixed);
 void trinamic_homing (bool enable);
 axes_signals_t trinamic_stepper_enable (axes_signals_t enable);
 void trinamic_fault_handler (void);
 void trinamic_warn_handler (void);
+void trinamic_if_init (trinamic_driver_if_t *driver);
 
-#endif
+#endif // TRINAMIC_ENABLE
 
 #endif

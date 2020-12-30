@@ -149,6 +149,8 @@ const settings_t defaults = {
     .spindle.rpm_min = DEFAULT_SPINDLE_RPM_MIN,
     .spindle.disable_with_zero_speed = DEFAULT_SPINDLE_ENABLE_OFF_WITH_ZERO_SPEED,
     .spindle.invert.on = INVERT_SPINDLE_ENABLE_PIN,
+    .spindle.invert.ccw = INVERT_SPINDLE_CCW_PIN,
+    .spindle.invert.pwm = INVERT_SPINDLE_PWM_PIN,
     .spindle.pwm_freq = DEFAULT_SPINDLE_PWM_FREQ,
     .spindle.pwm_off_value = DEFAULT_SPINDLE_PWM_OFF_VALUE,
     .spindle.pwm_min_value = DEFAULT_SPINDLE_PWM_MIN_VALUE,
@@ -548,6 +550,8 @@ void settings_restore (settings_restore_t restore)
         settings.control_disable_pullup.block_delete &= hal.driver_cap.block_delete;
         settings.control_disable_pullup.e_stop &= hal.driver_cap.e_stop;
         settings.control_disable_pullup.stop_disable &= hal.driver_cap.program_stop;
+        settings.spindle.invert.ccw &= hal.driver_cap.spindle_dir;
+        settings.spindle.invert.pwm &= hal.driver_cap.spindle_pwm_invert;
 
         settings_write_global();
     }

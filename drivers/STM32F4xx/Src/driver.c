@@ -1347,16 +1347,6 @@ bool driver_init (void)
 
     // GPIO_PinRemapConfig(GPIO_Remap_SWJ_Disable, ENABLE); // ??? Disable JTAG and SWD!?? Bug?
 
-#if USB_SERIAL_CDC
-    usbInit();
-#else
-    serialInit();
-#endif
-
-#ifdef I2C_PORT
-    i2c_init();
-#endif
-
     // __HAL_AFIO_REMAP_SWJ_NOJTAG();
 
 #ifdef STM32F446xx
@@ -1366,7 +1356,7 @@ bool driver_init (void)
 #else
     hal.info = "STM32F401CC";
 #endif
-    hal.driver_version = "201225";
+    hal.driver_version = "201228";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1428,6 +1418,16 @@ bool driver_init (void)
     hal.stream.reset_read_buffer = serialRxFlush;
     hal.stream.cancel_read_buffer = serialRxCancel;
     hal.stream.suspend_read = serialSuspendInput;
+#endif
+
+#if USB_SERIAL_CDC
+    usbInit();
+#else
+    serialInit();
+#endif
+
+#ifdef I2C_PORT
+    i2c_init();
 #endif
 
 #if EEPROM_ENABLE

@@ -25,6 +25,7 @@
 
 #if PPI_ENABLE
 
+#include <math.h>
 #include <string.h>
 
 #include "grbl/hal.h"
@@ -135,32 +136,32 @@ static user_mcode_t userMCodeCheck (user_mcode_t mcode)
                      : (user_mcode.check ? user_mcode.check(mcode) : UserMCode_Ignore);
 }
 
-static status_code_t userMCodeValidate (parser_block_t *gc_block, uint32_t *value_words)
+static status_code_t userMCodeValidate (parser_block_t *gc_block, parameter_words_t *parameter_words)
 {
     status_code_t state = Status_GcodeValueWordMissing;
 
     switch(gc_block->user_mcode) {
 
         case LaserPPI_Enable:
-            if(bit_istrue(*value_words, bit(Word_P))) {
-                state = Status_OK;
-                bit_false(*value_words, bit(Word_P));
+            if((*parameter_words).p) {
+                state = isnan(gc_block->values.p) ? Status_BadNumberFormat : Status_OK;
+                (*parameter_words).p = Off;
             }
             break;
 
         case LaserPPI_Rate:
-            if(bit_istrue(*value_words, bit(Word_P))) {
-                state = Status_OK;
+            if((*parameter_words).p) {
+                state = isnan(gc_block->values.p) ? Status_BadNumberFormat : Status_OK;
                 gc_block->user_mcode_sync = true;
-                bit_false(*value_words, bit(Word_P));
+                (*parameter_words).p = Off;
             }
             break;
 
         case LaserPPI_PulseLength:
-            if(bit_istrue(*value_words, bit(Word_P))) {
-                state = Status_OK;
+            if((*parameter_words).p) {
+                state = isnan(gc_block->values.p) ? Status_BadNumberFormat : Status_OK;
                 gc_block->user_mcode_sync = true;
-                bit_false(*value_words, bit(Word_P));
+                (*parameter_words).p = Off;
             }
             break;
 
@@ -169,7 +170,7 @@ static status_code_t userMCodeValidate (parser_block_t *gc_block, uint32_t *valu
             break;
     }
 
-    return state == Status_Unhandled && user_mcode.validate ? user_mcode.validate(gc_block, value_words) : state;
+    return state == Status_Unhandled && user_mcode.validate ? user_mcode.validate(gc_block, parameter_words) : state;
 }
 
 static void userMCodeExecute (uint_fast16_t state, parser_block_t *gc_block)

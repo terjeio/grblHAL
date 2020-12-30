@@ -28,8 +28,8 @@
 
 #include "main.h"
 
-static stream_rx_buffer_t rxbuf = {0};
-static stream_tx_buffer_t txbuf = {0}, rxbackup;
+static stream_rx_buffer_t rxbuf = {0}, rxbackup;
+static stream_tx_buffer_t txbuf = {0};
 
 #ifdef SERIAL2_MOD
 static stream_rx_buffer_t rxbuf2 = {0};
