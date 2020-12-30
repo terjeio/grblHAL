@@ -94,7 +94,7 @@
 // Define user-control CONTROLs (cycle start, reset, feed hold) input pins.
 #define RESET_PIN           GPIO_NUM_2
 #define FEED_HOLD_PIN       GPIO_NUM_4
-#define CYCLE_START_PIN     GPIO_NUM_36
+#define CYCLE_START_PIN     GPIO_NUM_35
 #define CONTROL_MASK        (1ULL << RESET_PIN|1ULL << FEED_HOLD_PIN|1ULL << CYCLE_START_PIN)
 
 // Define probe switch input pin.
