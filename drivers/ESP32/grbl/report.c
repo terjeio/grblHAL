@@ -1131,9 +1131,6 @@ void report_build_info (char *line, bool extended)
         if(hal.driver_cap.sd_card)
             strcat(buf, "SD,");
 
-        if(hal.driver_cap.bluetooth)
-            strcat(buf, "BT,");
-
         if(hal.driver_cap.ethernet)
             strcat(buf, "ETH,");
 

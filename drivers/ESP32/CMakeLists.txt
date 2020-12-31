@@ -12,7 +12,7 @@ OPTION(BOARD_BDRING_V3P5 "Compile for v3.5 3-axis board" OFF)
 OPTION(BOARD_BDRING_V4 "Compile for bdring v4 3-axis board" ON)
 OPTION(BOARD_BDRING_I2S6A "Compile for bdring 6-axis I2S board - untested!" OFF)
 OPTION(BOARD_CNC_BOOSTERPACK "Compile for CNC BoosterPack" OFF)
-OPTION(BOARD_ESPDUINO32 "Compile for ESPDUINO-32 Wemos D1 R32" ON)
+OPTION(BOARD_ESPDUINO32 "Compile for ESPDUINO-32 Wemos D1 R32" OFF)
 
 # The following plugins/options are supported:
 
@@ -25,6 +25,9 @@ OPTION(WebUI "WebUI services" OFF)
 OPTION(WebAuth "WebUI authentication" OFF)
 OPTION(MPGMode "MPG mode" OFF)
 OPTION(I2SStepping "Use I2S Stepping" OFF)
+
+# Networking options (WiFi)
+OPTION(SoftAP "Enable soft AP mode" OFF)
 
 # For Huanyan spindle support copy the spindle plugin code to the project.
 OPTION(HUANYANG "Compile with Huanyang RS485 Spindle support" OFF)
@@ -131,6 +134,10 @@ if(Networking)
 target_compile_definitions(grbl.elf PUBLIC NETWORKING_ENABLE)
 endif()
 
+if(SoftAP)
+target_compile_definitions(grbl.elf PUBLIC WIFI_SOFTAP)
+endif()
+
 if(Bluetooth)
 target_compile_definitions(grbl.elf PUBLIC BLUETOOTH_ENABLE)
 endif()
@@ -191,6 +198,7 @@ unset(BOARD_CNC_BOOSTERPACK CACHE)
 unset(BOARD_ESPDUINO32 CACHE)
 
 unset(Networking CACHE)
+unset(SoftAP CACHE)
 unset(Bluetooth CACHE)
 unset(Keypad CACHE)
 unset(SDcard CACHE)

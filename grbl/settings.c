@@ -619,18 +619,6 @@ bool settings_is_group_available (setting_group_t group)
 
     switch(group) {
 
-        case Group_Bluetooth:
-            available = hal.driver_cap.bluetooth;
-            break;
-
-        case Group_Networking:
-            available = hal.driver_cap.ethernet || hal.driver_cap.wifi;
-            break;
-
-        case Group_Networking_Wifi:
-            available = hal.driver_cap.wifi;
-            break;
-
         case Group_Probing:
             available = hal.probe.get_state != NULL;
             break;
@@ -678,7 +666,7 @@ bool settings_is_group_available (setting_group_t group)
             {
                 uint_fast16_t idx;
                 setting_details_t *details = settings_get_details();
-                 do {
+                do {
                     if(details->settings) {
                         for(idx = 0; idx < details->n_settings; idx++) {
                             if(details->settings[idx].group != group)

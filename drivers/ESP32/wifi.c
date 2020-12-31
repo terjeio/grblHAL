@@ -676,7 +676,7 @@ static status_code_t wifi_setting (uint_fast16_t setting, float value, char *sva
 #if WIFI_SOFTAP
 
         case Setting_WiFi_AP_SSID:
-            if(!(is_valid_ssid(svalue) && strlcpy(wifi.ap.ssid, svalue, sizeof(ssid_t)) <= sizeof(ssid_t))=
+            if(!(is_valid_ssid(svalue) && strlcpy(wifi.ap.ssid, svalue, sizeof(ssid_t)) <= sizeof(ssid_t)))
                 status = Status_InvalidStatement; // too long...
             break;
 

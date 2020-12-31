@@ -48,11 +48,11 @@
 #endif
 
 #if TELNET_ENABLE
-#include "networking/TCPSTream.h"
+#include "networking/TCPStream.h"
 #endif
 
 #if WEBSOCKET_ENABLE
-#include "networking/WsSTream.h"
+#include "networking/WsStream.h"
 #endif
 
 #if BLUETOOTH_ENABLE
@@ -1475,7 +1475,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "ESP32";
-    hal.driver_version = "201230";
+    hal.driver_version = "201231";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif

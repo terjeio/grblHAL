@@ -209,7 +209,9 @@ static void report_bt_MAC (bool newopt)
 
     on_report_options(newopt);
 
-    if(!newopt) {
+    if(newopt)
+        hal.stream.write(",BT");
+    else {
         hal.stream.write("[BT DEVICE MAC:");
         hal.stream.write(bluetooth_get_device_mac());
         hal.stream.write("]" ASCII_EOL);
@@ -675,8 +677,6 @@ bool bluetooth_init (void)
         hal.driver_settings.report = bluetooth_settings_report;
         hal.driver_settings.load = bluetooth_settings_load;
         hal.driver_settings.restore = bluetooth_settings_restore;
-
-        hal.driver_cap.bluetooth = On;
 
         on_report_options = grbl.on_report_options;
         grbl.on_report_options = report_bt_MAC;
