@@ -1140,9 +1140,6 @@ void report_build_info (char *line, bool extended)
         if(hal.driver_cap.mpg_mode)
             strcat(buf, "MPG,");
 
-        if(hal.driver_cap.wifi)
-            strcat(buf, "WIFI,");
-
         if(settings.mode == Mode_Lathe)
             strcat(buf, "LATHE,");
 

@@ -239,33 +239,35 @@ static bool get_settings (void)
 
     if((ok = (root && (settings = cJSON_AddArrayToObject(root, "EEPROM"))))) {
 
+        wifi_settings_t *wifi = get_wifi_settings();
+
         webui_print_is_json();
 #if WIFI_ENABLE
-        add_setting(settings, Setting_Hostname, WebUIType_String, -1, driver_settings.wifi.ap.network.hostname, "Hostname", "33", "1");
+        add_setting(settings, Setting_Hostname, WebUIType_String, -1, wifi->ap.network.hostname, "Hostname", "33", "1");
   #if HTTP_ENABLE
-        add_setting(settings, Setting_NetworkServices, WebUIType_Boolean, 2, uitoa(driver_settings.wifi.sta.network.services.http), "HTTP protocol", "Enabled,Disabled", "1,0");
-        add_setting(settings, Setting_HttpPort, WebUIType_Integer, -1, uitoa(driver_settings.wifi.sta.network.http_port), "HTTP Port", "65535", "1");
+        add_setting(settings, Setting_NetworkServices, WebUIType_Boolean, 2, uitoa(wifi->sta.network.services.http), "HTTP protocol", "Enabled,Disabled", "1,0");
+        add_setting(settings, Setting_HttpPort, WebUIType_Integer, -1, uitoa(wifi->sta.network.http_port), "HTTP Port", "65535", "1");
   #endif
   #if TELNET_ENABLE
-        add_setting(settings, Setting_NetworkServices, WebUIType_Boolean, 0, uitoa(driver_settings.wifi.sta.network.services.telnet), "Telnet protocol", "Enabled,Disabled", "1,0");
-        add_setting(settings, Setting_TelnetPort, WebUIType_Integer, -1, uitoa(driver_settings.wifi.sta.network.telnet_port), "Telnet Port", "65535", "1");
+        add_setting(settings, Setting_NetworkServices, WebUIType_Boolean, 0, uitoa(wifi->sta.network.services.telnet), "Telnet protocol", "Enabled,Disabled", "1,0");
+        add_setting(settings, Setting_TelnetPort, WebUIType_Integer, -1, uitoa(wifi->sta.network.telnet_port), "Telnet Port", "65535", "1");
   #endif
-        add_setting(settings, Setting_WifiMode, WebUIType_Boolean, -1, uitoa(driver_settings.wifi.mode), "Radio mode", "None,STA,AP", "0,1,2");
+        add_setting(settings, Setting_WifiMode, WebUIType_Boolean, -1, uitoa(wifi->mode), "Radio mode", "None,STA,AP", "0,1,2");
 
-        add_setting(settings, Setting_WiFi_STA_SSID, WebUIType_String, -1, driver_settings.wifi.sta.ssid, "Station SSID", "32", "1");
+        add_setting(settings, Setting_WiFi_STA_SSID, WebUIType_String, -1, wifi->sta.ssid, "Station SSID", "32", "1");
         add_setting(settings, Setting_WiFi_STA_Password, WebUIType_String, -1, HIDDEN_PASSWORD, "Station Password", "64", "1");
-        add_setting(settings, Setting_IpMode, WebUIType_Boolean, -1, uitoa(driver_settings.wifi.sta.network.ip_mode), "Station IP Mode", "DHCP,Static", "1,0");
-        add_setting(settings, Setting_IpAddress, WebUIType_IPAddress, -1, iptoa(&driver_settings.wifi.sta.network.ip), "Station Static IP", "", "");
-        add_setting(settings, Setting_Gateway, WebUIType_IPAddress, -1, iptoa(&driver_settings.wifi.sta.network.gateway), "Station Static Gateway", "", "");
-        add_setting(settings, Setting_NetMask, WebUIType_IPAddress, -1, iptoa(&driver_settings.wifi.sta.network.mask), "Station Static Mask", "", "");
+        add_setting(settings, Setting_IpMode, WebUIType_Boolean, -1, uitoa(wifi->sta.network.ip_mode), "Station IP Mode", "DHCP,Static", "1,0");
+        add_setting(settings, Setting_IpAddress, WebUIType_IPAddress, -1, iptoa(&wifi->sta.network.ip), "Station Static IP", "", "");
+        add_setting(settings, Setting_Gateway, WebUIType_IPAddress, -1, iptoa(&wifi->sta.network.gateway), "Station Static Gateway", "", "");
+        add_setting(settings, Setting_NetMask, WebUIType_IPAddress, -1, iptoa(&wifi->sta.network.mask), "Station Static Mask", "", "");
 
-        add_setting(settings, Setting_WiFi_AP_SSID, WebUIType_String, -1, driver_settings.wifi.ap.ssid, "AP SSID", "32", "1");
+        add_setting(settings, Setting_WiFi_AP_SSID, WebUIType_String, -1, wifi->ap.ssid, "AP SSID", "32", "1");
         add_setting(settings, Setting_WiFi_AP_Password, WebUIType_String, -1, HIDDEN_PASSWORD, "AP Password", "64", "1");
-        add_setting(settings, Setting_IpAddress2, WebUIType_IPAddress, -1, iptoa(&driver_settings.wifi.ap.network.ip), "AP Static IP", "", "");
+        add_setting(settings, Setting_IpAddress2, WebUIType_IPAddress, -1, iptoa(&wifi->ap.network.ip), "AP Static IP", "", "");
 
 #endif
 #if BLUETOOTH_ENABLE
-//      add_setting(settings, Setting_WifiMode, WebUIType_Boolean, -1, uitoa(driver_settings.wifi.mode), "Radio mode", "None,BT", "0,1");
+//      add_setting(settings, Setting_WifiMode, WebUIType_Boolean, -1, uitoa(wifi->mode), "Radio mode", "None,BT", "0,1");
 #endif
 
         char *resp = cJSON_PrintUnformatted(root);
@@ -302,12 +304,13 @@ static void set_setting(char *args)
             *bitp++ = '\0';
             uint32_t pmask = 1 << atoi(bitp), tmask;
             bool ok = false;
+            wifi_settings_t *wifi = get_wifi_settings();
 
             switch(atoi(setting)) {
 
                 case Setting_NetworkServices:
                     ok = true;
-                    tmask = driver_settings.wifi.sta.network.services.mask;
+                    tmask = wifi->sta.network.services.mask;
                     break;
 
                 default:
@@ -334,6 +337,7 @@ static void set_setting(char *args)
 static bool get_system_status (void)
 {
     char buf[200];
+    wifi_settings_t *wifi = get_wifi_settings();
 
     webui_print_chunk(strappend(buf, 3, "Processor: ", hal.info, "\n"));
     webui_print_chunk(strappend(buf, 3, "CPU Frequency: ", uitoa(hal.f_step_timer / (1024 * 1024)), "Mhz\n"));
@@ -343,13 +347,13 @@ static bool get_system_status (void)
 #if WIFI_ENABLE
     webui_print_chunk(strappend(buf, 3, "IP: ", wifi_get_ip(), "\n"));
  #if TELNET_ENABLE
-    webui_print_chunk(strappend(buf, 3, "Data port: ", uitoa(driver_settings.wifi.sta.network.telnet_port), "\n"));
+    webui_print_chunk(strappend(buf, 3, "Data port: ", uitoa(wifi->sta.network.telnet_port), "\n"));
  #endif
  #if TELNET_ENABLE
-    webui_print_chunk(strappend(buf, 3, "Web port: ", uitoa(driver_settings.wifi.sta.network.http_port), "\n"));
+    webui_print_chunk(strappend(buf, 3, "Web port: ", uitoa(wifi->sta.network.http_port), "\n"));
  #endif
  #if WEBSOCKET_ENABLE
-    webui_print_chunk(strappend(buf, 3, "Websocket port: ", uitoa(driver_settings.wifi.sta.network.websocket_port), "\n"));
+    webui_print_chunk(strappend(buf, 3, "Websocket port: ", uitoa(wifi->sta.network.websocket_port), "\n"));
  #endif
 #endif
     webui_print_flush();
@@ -360,6 +364,7 @@ static bool get_system_status (void)
 static bool get_firmware_spec (void)
 {
     char buf[200];
+    wifi_settings_t *wifi = get_wifi_settings();
 
     strcpy(buf, "FW version:");
     strcat(buf, GRBL_VERSION);
@@ -378,10 +383,10 @@ static bool get_firmware_spec (void)
     #if WIFI_ENABLE
     #if HTTP_ENABLE
     strcat(buf, " # webcommunication: Sync: ");
-    strcat(buf, uitoa(driver_settings.wifi.sta.network.websocket_port));
+    strcat(buf, uitoa(wifi->sta.network.websocket_port));
     #endif
     strcat(buf, "# hostname:");
-    strcat(buf, driver_settings.wifi.sta.network.hostname);
+    strcat(buf, wifi->sta.network.hostname);
     #if WIFI_SOFTAP
     strcat(buf,"(AP mode)");
     #endif
@@ -455,7 +460,7 @@ static char *get_setting_value (char *data, setting_type_t setting)
     org_stream = hal.stream.write;
     hal.stream.write = stream_trap;
 
-    hal.driver_settings_report(setting);
+    hal.driver_settings.report(setting);
 
     hal.stream.write = org_stream;
 
@@ -497,6 +502,8 @@ status_code_t webui_command_handler (uint32_t command, char *args)
 
         if(map) {
 
+            wifi_settings_t *wifi = get_wifi_settings();
+
             status = Status_Unhandled;
 
             if(map->setting != 0 && map->bit == -1) { // straight mapping
@@ -517,7 +524,7 @@ status_code_t webui_command_handler (uint32_t command, char *args)
                 case WebUICmd_GetSetSTA_IPMode:
                     if(*args == '\0') {
                         char mode[7];
-                        strgetentry(mode, "STATIC,DHCP,AUTOIP", driver_settings.wifi.sta.network.ip_mode, ',');
+                        strgetentry(mode, "STATIC,DHCP,AUTOIP", wifi->sta.network.ip_mode, ',');
                         webui_print(strappend(response, 2, mode, "\n"));
                         status = Status_OK;
                     } else {
@@ -563,7 +570,7 @@ status_code_t webui_command_handler (uint32_t command, char *args)
                 case WebUICmd_GetSetRadioMode:
                     if(*args == '\0') {
                         char mode[6];
-                        strgetentry(mode, "OFF,STA,AP,APSTA", driver_settings.wifi.mode, ',');
+                        strgetentry(mode, "OFF,STA,AP,APSTA", wifi->mode, ',');
                         webui_print(strappend(response, 2, mode, "\n"));
                         status = Status_OK;
                     } else {
@@ -578,10 +585,10 @@ status_code_t webui_command_handler (uint32_t command, char *args)
                 case WebUICmd_GetSetHTTPOnOff:
                 case WebUICmd_GetSetTelnetOnOff:
                     {
-                        uint32_t pmask = 1 << map->bit, tmask = driver_settings.wifi.sta.network.services.mask;
+                        uint32_t pmask = 1 << map->bit, tmask = wifi->sta.network.services.mask;
                         if(*args == '\0') {
                             status = Status_OK;
-                            webui_print(strappend(response, 2, driver_settings.wifi.sta.network.services.mask & pmask ? "ON" : "OFF", "\n"));
+                            webui_print(strappend(response, 2, wifi->sta.network.services.mask & pmask ? "ON" : "OFF", "\n"));
                         } else {
                             int32_t mode = strlookup(get_arg(args, NULL, true), "OFF,ON", ',');
                             if(mode >= 0) {

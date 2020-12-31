@@ -1,5 +1,5 @@
 # CMake for GrblHAL driver for ESP32
-# 2020-12-29
+# 2020-12-30
 
 cmake_minimum_required(VERSION 3.5)
 
@@ -12,7 +12,7 @@ OPTION(BOARD_BDRING_V3P5 "Compile for v3.5 3-axis board" OFF)
 OPTION(BOARD_BDRING_V4 "Compile for bdring v4 3-axis board" ON)
 OPTION(BOARD_BDRING_I2S6A "Compile for bdring 6-axis I2S board - untested!" OFF)
 OPTION(BOARD_CNC_BOOSTERPACK "Compile for CNC BoosterPack" OFF)
-OPTION(BOARD_ESPDUINO32 "Compile for ESPDUINO-32 Wemos D1 R32" OFF)
+OPTION(BOARD_ESPDUINO32 "Compile for ESPDUINO-32 Wemos D1 R32" ON)
 
 # The following plugins/options are supported:
 
@@ -35,6 +35,7 @@ OPTION(RS485_DIR_OUT "Compile with RS485 direction pin enabled" OFF)
 # For EEPROM/FRAM support copy the EEPROM plugin code to the project.
 OPTION(EEPROM "Compile with I2C EEPROM support" OFF)
 OPTION(FRAM "Compile with I2C FRAM support" OFF)
+OPTION(NOPROBE "Compile without probe support" OFF)
 
 set(SDCARD_SOURCE sdcard/sdcard.c)
 set(KEYPAD_SOURCE keypad/keypad.c)
@@ -175,6 +176,10 @@ if(FRAM)
 target_compile_definitions(grbl.elf PUBLIC EEPROM_IS_FRAM)
 endif()
 
+if(NOPROBE)
+target_compile_definitions(grbl.elf PUBLIC NOPROBE)
+endif()
+
 target_add_binary_data(grbl.elf "favicon.ico" BINARY)
 target_add_binary_data(grbl.elf "index.html" BINARY)
 target_add_binary_data(grbl.elf "ap_login.html" BINARY)
@@ -197,6 +202,7 @@ unset(HUANYANG CACHE)
 unset(RS485_DIR_OUT CACHE)
 unset(EEPROM CACHE)
 unset(FRAM CACHE)
+unset(NOPROBE CACHE)
 
 include_directories(BEFORE ".")
 

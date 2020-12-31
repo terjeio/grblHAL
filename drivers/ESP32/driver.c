@@ -88,14 +88,6 @@ static spindle_pwm_t spindle_pwm;
 #undef SPINDLE_RPM_CONTROLLED
 #endif
 
-#ifndef SPINDLE_MASK
-#define SPINDLE_MASK 0
-#endif
-
-#ifndef COOLANT_MASK
-#define COOLANT_MASK 0
-#endif
-
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/timers.h"
@@ -283,12 +275,36 @@ state_signal_t inputpin[] = {
 #endif
 };
 
+gpio_num_t outputpin[] =
+{
+#ifdef STEPPERS_DISABLE_PIN
+    STEPPERS_DISABLE_PIN,
+#endif
+#if defined(SPINDLE_ENABLE_PIN) && SPINDLE_ENABLE_PIN != IOEXPAND
+    SPINDLE_ENABLE_PIN,
+#endif
+#if defined(SPINDLE_DIRECTION_PIN) && SPINDLE_DIRECTION_PIN != IOEXPAND
+    SPINDLE_DIRECTION_PIN,
+#endif
+#if defined(COOLANT_FLOOD_PIN) && COOLANT_FLOOD_PIN != IOEXPAND
+    COOLANT_FLOOD_PIN,
+#endif
+#if defined(COOLANT_MIST_PIN) && COOLANT_MIST_PIN != IOEXPAND
+    COOLANT_MIST_PIN,
+#endif
+    X_DIRECTION_PIN,
+    Y_DIRECTION_PIN,
+    Z_DIRECTION_PIN
+};
+
 static volatile uint32_t ms_count = 1; // NOTE: initial value 1 is for "resetting" systick timer
 static bool IOInitDone = false;
 static portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
+#if PROBE_ENABLE
 static probe_state_t probe = {
     .connected = On
 };
+#endif
 
 #ifdef USE_I2S_OUT
 #define DIGITAL_IN(pin) i2s_out_state(pin)
@@ -579,7 +595,7 @@ IRAM_ATTR static void I2S_stepperCyclesPerTick (uint32_t cycles_per_tick)
 // Sets stepper direction and pulse pins and starts a step pulse
 IRAM_ATTR static void I2S_stepperPulseStart (stepper_t *stepper)
 {
-    if(stepper->dir_change) {
+    if(stepper->dir_change)
         set_dir_outputs(stepper->dir_outbits);
 
     if(stepper->step_outbits.value) {
@@ -838,7 +854,6 @@ IRAM_ATTR inline static void spindle_on (void)
     gpio_set_level(SPINDLE_ENABLE_PIN, settings.spindle.invert.on ? 0 : 1);
 #endif
 }
-
 
 IRAM_ATTR inline static void spindle_dir (bool ccw)
 {
@@ -1303,9 +1318,9 @@ static void settings_changed (settings_t *settings)
 }
 
 #if WIFI_ENABLE
-static void reportConnection (void)
+static void reportConnection (bool newopt)
 {
-    if(services.telnet || services.websocket) {
+    if(!newopt && (services.telnet || services.websocket)) {
         hal.stream.write("[NETCON:");
         hal.stream.write(services.telnet ? "Telnet" : "Websocket");
         hal.stream.write("]" ASCII_EOL);
@@ -1342,21 +1357,23 @@ static bool driver_setup (settings_t *settings)
      *  Output signals  *
      ********************/
 
-    uint32_t channel;
-    for(channel = 0; channel < N_AXIS; channel++)
-        rmt_set_source_clk(channel, RMT_BASECLK_APB);
+    uint32_t idx;
+    for(idx = 0; idx < N_AXIS; idx++)
+        rmt_set_source_clk(idx, RMT_BASECLK_APB);
 
     gpio_config_t gpioConfig = {
-#if IOEXPAND_ENABLE
-        .pin_bit_mask = DIRECTION_MASK,
-#else
-        .pin_bit_mask = DIRECTION_MASK|STEPPERS_DISABLE_MASK|SPINDLE_MASK|COOLANT_MASK,
-#endif
+        .pin_bit_mask = 0,
         .mode = GPIO_MODE_OUTPUT,
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type = GPIO_INTR_DISABLE
     };
+
+    idx = sizeof(outputpin) / sizeof(gpio_num_t);
+
+    do {
+        gpioConfig.pin_bit_mask |= (1ULL << outputpin[--idx]);
+    } while(idx);
 
     gpio_config(&gpioConfig);
 
@@ -1458,7 +1475,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "ESP32";
-    hal.driver_version = "201229";
+    hal.driver_version = "201230";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif

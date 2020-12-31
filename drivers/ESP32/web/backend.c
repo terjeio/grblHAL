@@ -428,12 +428,14 @@ static esp_err_t get_handler(httpd_req_t *req)
 
             inet_ntop(AF_INET, &addr.sin6_addr.un.u32_addr[3], ipstr, sizeof(ipstr));
 
+            wifi_settings_t *settings = get_wifi_settings();
+
             // From local AP?
-            if(!internal && memcmp(&driver_settings.wifi.ap.network.ip, &addr.sin6_addr.un.u32_addr[3], sizeof(ip4_addr_t))) {
+            if(!internal && memcmp(&settings->ap.network.ip, &addr.sin6_addr.un.u32_addr[3], sizeof(ip4_addr_t))) {
 
                 char loc[50];
 
-                inet_ntop(AF_INET, &driver_settings.wifi.ap.network.ip, ipstr, sizeof(ipstr));
+                inet_ntop(AF_INET, &settings->ap.network.ip, ipstr, sizeof(ipstr));
 
                 sprintf(loc, "http://%s/ap_login.html", ipstr);
 

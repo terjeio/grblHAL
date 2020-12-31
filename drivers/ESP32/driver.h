@@ -125,7 +125,11 @@
 static const DRAM_ATTR float FZERO = 0.0f;
 
 #define PWM_RAMPED       0 // Ramped spindle PWM.
-#define PROBE_ENABLE     1 // Probe input
+#ifdef NOPROBE
+#define PROBE_ENABLE     0 // No probe input.
+#else
+#define PROBE_ENABLE     1 // Probe input.
+#endif
 #define PROBE_ISR        0 // Catch probe state change by interrupt TODO: needs verification!
 #define TRINAMIC_DEV     0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
 
@@ -170,6 +174,8 @@ static const DRAM_ATTR float FZERO = 0.0f;
 #define TRINAMIC_ENABLE  0
 #define TRINAMIC_I2C     0
 #endif
+
+#define IOEXPAND 0xFF   // Dummy pin number for I2C IO expander
 
 // end configuration
 

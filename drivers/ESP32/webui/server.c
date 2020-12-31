@@ -929,7 +929,7 @@ esp_err_t webui_login_handler (httpd_req_t *req)
                         switch(strlookup(user, "user,admin", ',')) {
 
                             case 0:
-                                if(hal.driver_setting(Setting_UserPassword, NAN, password) != Status_OK) {
+                                if(hal.driver_settings.set(Setting_UserPassword, NAN, password) != Status_OK) {
                                     status = 401;
                                     strcpy(msg, "Error: Cannot apply changes");
                                 }
@@ -938,7 +938,7 @@ esp_err_t webui_login_handler (httpd_req_t *req)
                             case 1:
                                 ESP_LOGI("newp", "admin");
 
-                                if(hal.driver_setting(Setting_AdminPassword, NAN, password) != Status_OK) {
+                                if(hal.driver_settings.set(Setting_AdminPassword, NAN, password) != Status_OK) {
                                     ESP_LOGI("newp", "admin failed");
                                     status = 401;
                                     strcpy(msg, "Error: Cannot apply changes");
@@ -963,11 +963,12 @@ esp_err_t webui_login_handler (httpd_req_t *req)
                     if(*user) {
 
                         auth_level = WebUIAuth_Guest;
+                        wifi_settings_t *settings = get_wifi_settings();
 
                         switch(strlookup(user, "user,admin", ',')) {
 
                             case 0:
-                                if(strcmp(password, driver_settings.wifi.user_password)) {
+                                if(strcmp(password, settings->user_password)) {
                                     status = 401;
                                     strcpy(msg, "Error: Incorrect password");
                                 } else
@@ -975,7 +976,7 @@ esp_err_t webui_login_handler (httpd_req_t *req)
                                 break;
 
                             case 1:
-                                if(strcmp(password, driver_settings.wifi.admin_password)) {
+                                if(strcmp(password, settings->admin_password)) {
                                     status = 401;
                                     strcpy(msg, "Error: Incorrect password");
                                 } else

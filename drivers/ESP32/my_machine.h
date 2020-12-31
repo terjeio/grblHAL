@@ -39,6 +39,7 @@
 //#define SDCARD_ENABLE      1 // Run gcode programs from SD card, requires sdcard plugin.
 //#define BLUETOOTH_ENABLE   1 // Enable Bloetooht streaming.
 //#define MPG_MODE_ENABLE    1 // Enable MPG mode (secondary serial port)
+//#define NOPROBE            1 // Comment out to disable porbe input.
 //#define EEPROM_ENABLE      1 // I2C EEPROM support. Set to 1 for 24LC16(2K), 2 for larger sizes. Requires eeprom plugin.
 //#define EEPROM_IS_FRAM     1 // Uncomment when EEPROM is enabled and chip is FRAM, this to remove write delay.
 

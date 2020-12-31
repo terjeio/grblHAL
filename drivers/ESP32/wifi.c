@@ -115,7 +115,9 @@ static void reportIP (bool newopt)
 {
     on_report_options(newopt);
 
-    if(!newopt) {
+    if(newopt)
+        hal.stream.write(",WIFI");
+    else {
         hal.stream.write("[WIFI MAC:");
         hal.stream.write(wifi_get_mac());
         hal.stream.write("]" ASCII_EOL);
@@ -975,7 +977,6 @@ bool wifi_init (void)
 {
     if((hal.driver_settings.nvs_address = nvs_alloc(sizeof(wifi_settings_t)))) {
         memcpy(&driver_settings, &hal.driver_settings, sizeof(driver_setting_ptrs_t));
-        hal.driver_cap.wifi = On;
         hal.driver_settings.set = wifi_setting;
         hal.driver_settings.report = wifi_settings_report;
         hal.driver_settings.load = wifi_settings_load;
