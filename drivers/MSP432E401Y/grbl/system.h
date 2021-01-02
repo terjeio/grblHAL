@@ -3,7 +3,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2017-2020 Terje Io
+  Copyright (c) 2017-2021 Terje Io
   Copyright (c) 2014-2016 Sungeun K. Jeon for Gnea Research LLC
 
   Grbl is free software: you can redistribute it and/or modify
@@ -81,6 +81,7 @@ typedef enum {
     Message_HomingCycleRequired = 13,
     Message_CycleStartToRerun = 14,
     Message_ReferenceTLOEstablished = 15,
+    Message_MotorFault = 16,
     Message_NextMessage // Next unassigned message number
 } message_code_t;
 
@@ -208,8 +209,8 @@ typedef struct {
     bool abort;                         // System abort flag. Forces exit back to main loop for reset.
     bool cancel;                        // System cancel flag.
     bool suspend;                       // System suspend state flag.
+    bool position_lost;                 // Set when mc_reset is called when machine is moving.
     volatile bool steppers_deenergize;  // Set to true to deenergize stepperes
-    bool mpg_mode;                      // To be moved to system_flags_t
     axes_signals_t tlo_reference_set;   // Axes with tool length reference offset set
     int32_t tlo_reference[N_AXIS];      // Tool length reference offset
     alarm_code_t alarm_pending;         // Delayed alarm, currently used for probe protection
@@ -217,22 +218,24 @@ typedef struct {
     step_control_t step_control;        // Governs the step segment generator depending on system state.
     axes_signals_t homing_axis_lock;    // Locks axes when limits engage. Used as an axis motion mask in the stepper ISR.
     axes_signals_t homing;              // Axes with homing enabled.
-    axes_signals_t homed;               // Indicates which axes has been homed.
     overrides_t override;               // Override values & states
     report_tracking_flags_t report;     // Tracks when to add data to status reports.
     parking_state_t parking_state;      // Tracks parking state
     hold_state_t holding_state;         // Tracks holding state
-    float home_position[N_AXIS];        // Home position for homed axes
     float spindle_rpm;
 #ifdef PID_LOG
     pid_data_t pid_log;
 #endif
+    // The following variables are not cleared upon soft reset, do NOT move. homed must be first!
+    axes_signals_t homed;               // Indicates which axes has been homed.
+    float home_position[N_AXIS];        // Home position for homed axes
     // The following variables are not cleared upon soft reset, do NOT move. state must be first!
     uint_fast16_t state;                // Tracks the current system state of Grbl.
                                         // NOTE: Setting the state variable directly is NOT allowed! Use the set_state() function!
     alarm_code_t alarm;                 // Current alarm, only valid if sys.state STATE_ALARM flag set.
     bool cold_start;                    // Set to true on boot, is false on subsequent soft resets.
     bool driver_started;                // Set to true when driver initialization is completed.
+    bool mpg_mode;                      // To be moved to system_flags_t
 } system_t;
 
 extern system_t sys;

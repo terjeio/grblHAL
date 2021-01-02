@@ -3,7 +3,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -46,11 +46,13 @@ static driver_setting_ptrs_t driver_settings;
 static network_settings_t ethernet, network;
 static on_report_options_ptr on_report_options;
 
-static void reportIP (bool newopt)
+static void report_options (bool newopt)
 {
     on_report_options(newopt);
 
-    if(!newopt) {
+    if(newopt)
+        hal.stream.write(",ETH");
+    else {
         hal.stream.write("[IP:");
         hal.stream.write(IPAddress);
         hal.stream.write("]" ASCII_EOL);
@@ -406,14 +408,13 @@ bool grbl_enet_init (network_settings_t *settings)
 {
     if((hal.driver_settings.nvs_address = nvs_alloc(sizeof(network_settings_t)))) {
         memcpy(&driver_settings, &hal.driver_settings, sizeof(driver_setting_ptrs_t));
-        hal.driver_cap.ethernet = On;
         hal.driver_settings.set = ethernet_setting;
         hal.driver_settings.report = ethernet_settings_report;
         hal.driver_settings.restore = ethernet_settings_restore;
         hal.driver_settings.load = ethernet_settings_load;
 
         on_report_options = grbl.on_report_options;
-        grbl.on_report_options = reportIP;
+        grbl.on_report_options = report_options;
 
         details.on_report_settings = grbl.on_report_settings;
         grbl.on_report_settings = on_report_settings;

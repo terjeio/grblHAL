@@ -3,7 +3,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2017-2020 Terje Io
+  Copyright (c) 2017-2021 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -102,6 +102,10 @@ bool protocol_main_loop (void)
         // Check for e-stop active. Blocks everything until cleared.
         system_raise_alarm(Alarm_EStop);
         grbl.report.feedback_message(Message_EStop);
+    } else if(hal.control.get_state().motor_fault) {
+        // Check for motor fault active. Blocks everything until cleared.
+        system_raise_alarm(Alarm_MotorFault);
+        grbl.report.feedback_message(Message_MotorFault);
     } else if (limits_homing_required()) {
         // Check for power-up and set system alarm if homing is enabled to force homing cycle
         // by setting Grbl's alarm state. Alarm locks out all g-code commands, including the
@@ -415,9 +419,25 @@ bool protocol_exec_rt_system (void)
         }
 
         // Halt everything upon a critical event flag. Currently hard and soft limits flag this.
-        if ((alarm_code_t)rt_exec == Alarm_HardLimit || (alarm_code_t)rt_exec == Alarm_SoftLimit || (alarm_code_t)rt_exec == Alarm_EStop) {
+        if ((alarm_code_t)rt_exec == Alarm_HardLimit ||
+            (alarm_code_t)rt_exec == Alarm_SoftLimit ||
+             (alarm_code_t)rt_exec == Alarm_EStop ||
+              (alarm_code_t)rt_exec == Alarm_MotorFault) {
             system_set_exec_alarm(rt_exec);
-            grbl.report.feedback_message((alarm_code_t)rt_exec == Alarm_EStop ? Message_EStop : Message_CriticalEvent);
+            switch((alarm_code_t)rt_exec) {
+
+                case Alarm_EStop:
+                    grbl.report.feedback_message(Message_EStop);
+                    break;
+
+                case Alarm_MotorFault:
+                    grbl.report.feedback_message(Message_MotorFault);
+                    break;
+
+                default:
+                    grbl.report.feedback_message(Message_CriticalEvent);
+                    break;
+            }
             system_clear_exec_state_flag(EXEC_RESET); // Disable any existing reset
             while (bit_isfalse(sys_rt_exec_state, EXEC_RESET)) {
                 // Block everything, except reset and status reports, until user issues reset or power
@@ -447,7 +467,19 @@ bool protocol_exec_rt_system (void)
                 // Tell driver/plugins about reset.
                 hal.driver_reset();
             }
-            sys.abort = !hal.control.get_state().e_stop;  // Only place this is set true.
+
+            // Only place sys.abort is set true, when E-stop is not asserted.
+            if(!(sys.abort = !hal.control.get_state().e_stop)) {
+                hal.stream.reset_read_buffer();
+                system_raise_alarm(Alarm_EStop);
+                grbl.report.feedback_message(Message_EStop);
+            } else if(hal.control.get_state().motor_fault) {
+                sys.abort = false;
+                hal.stream.reset_read_buffer();
+                system_raise_alarm(Alarm_MotorFault);
+                grbl.report.feedback_message(Message_MotorFault);
+            }
+
             return !sys.abort; // Nothing else to do but exit.
         }
 

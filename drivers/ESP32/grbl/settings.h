@@ -3,7 +3,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2017-2020 Terje Io
+  Copyright (c) 2017-2021 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -406,7 +406,8 @@ typedef union {
                 force_set_origin     :1,
                 manual               :1,
                 override_locks       :1,
-                unassigned           :2;
+                keep_on_reset        :1,
+                unassigned           :1;
     };
 } homing_settings_flags_t;
 

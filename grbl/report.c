@@ -3,7 +3,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2017-2020 Terje Io
+  Copyright (c) 2017-2021 Terje Io
   Copyright (c) 2012-2016 Sungeun K. Jeon for Gnea Research LLC
 
   Grbl is free software: you can redistribute it and/or modify
@@ -353,6 +353,10 @@ message_code_t report_feedback_message (message_code_t message_code)
             hal.stream.write_all("Reference tool length offset established");
             break;
 
+        case Message_MotorFault:
+            hal.stream.write_all("Motor fault");
+            break;
+
         default:
             if(grbl.on_unknown_feedback_message)
                 grbl.on_unknown_feedback_message(hal.stream.write_all);
@@ -528,7 +532,8 @@ void report_grbl_settings (bool all)
     report_uint_setting(Setting_HomingEnable, (settings.homing.flags.value & 0x0F) |
                                                (settings.limits.flags.two_switches ? bit(4) : 0) |
                                                 (settings.homing.flags.manual ? bit(5) : 0) |
-                                                 (settings.homing.flags.override_locks ? bit(6) : 0));
+                                                 (settings.homing.flags.override_locks ? bit(6) : 0) |
+                                                  (settings.homing.flags.keep_on_reset ? bit(7) : 0));
     report_uint_setting(Setting_HomingDirMask, settings.homing.dir_mask.value);
     report_float_setting(Setting_HomingFeedRate, settings.homing.feed_rate, N_DECIMAL_SETTINGVALUE);
     report_float_setting(Setting_HomingSeekRate, settings.homing.seek_rate, N_DECIMAL_SETTINGVALUE);
@@ -1131,9 +1136,6 @@ void report_build_info (char *line, bool extended)
         if(hal.driver_cap.sd_card)
             strcat(buf, "SD,");
 
-        if(hal.driver_cap.ethernet)
-            strcat(buf, "ETH,");
-
         if(hal.driver_cap.mpg_mode)
             strcat(buf, "MPG,");
 
@@ -1379,6 +1381,10 @@ void report_realtime_status (void)
                     *append++ = 'B';
                 if (hal.driver_cap.program_stop ? ctrl_pin_state.stop_disable : sys.flags.optional_stop_disable)
                     *append++ = 'T';
+                if (ctrl_pin_state.motor_warning)
+                    *append++ = 'W';
+                if (ctrl_pin_state.motor_fault)
+                    *append++ = 'M';
             }
             *append = '\0';
             hal.stream.write_all(buf);

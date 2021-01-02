@@ -1,5 +1,10 @@
 ## grblHAL changelog
 
+Build 20210102 (test only):
+* Added handling for motor fault signal to the core, similar to E-stop handling. Added new alarm and error code for this.
+* Changed to clear homed status on a soft reset only if machine was in motion. Added setting flag for always keeping homed status on soft reset to `$22` setting.  
+__NOTE:__ This change is experimental and might be changed or reverted. Please report any problems related to this.
+
 Build 20201228 (test only):
 * Updated gcode parser \(grbl/gcode.c\) to use bitfields structs instead of bitfield variables.  
 Done to improve readability and for easier debugging.  

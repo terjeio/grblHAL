@@ -3,7 +3,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2017-2020 Terje Io
+  Copyright (c) 2017-2021 Terje Io
   Copyright (c) 2011-2015 Sungeun K. Jeon
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -230,10 +230,10 @@ int grbl_enter (void)
         // Reset report entry points
         report_init_fns();
 
-        // Reset system variables, keeping current state and MPG mode.
-        bool prior_mpg_mode = sys.mpg_mode;
-
-        memset(&sys, 0, offsetof(system_t, state)); // Clear system struct variables except state & alarm.
+        if(!sys.position_lost || settings.homing.flags.keep_on_reset)
+            memset(&sys, 0, offsetof(system_t, homed)); // Clear system variables except state, alarm & homed status.
+        else
+            memset(&sys, 0, offsetof(system_t, state)); // Clear system variables except state & alarm.
 
         sys.override.feed_rate = DEFAULT_FEED_OVERRIDE;          // Set to 100%
         sys.override.rapid_rate = DEFAULT_RAPID_OVERRIDE;        // Set to 100%
@@ -274,10 +274,8 @@ int grbl_enter (void)
         if(sys.state == STATE_ESTOP)
             set_state(STATE_ALARM);
 
-        if(hal.driver_cap.mpg_mode) {
-            sys.mpg_mode = prior_mpg_mode;
+        if(hal.driver_cap.mpg_mode)
             hal.stream.enqueue_realtime_command(sys.mpg_mode ? CMD_STATUS_REPORT_ALL : CMD_STATUS_REPORT);
-        }
 
         // Start Grbl main loop. Processes program inputs and executes them.
         if(!(looping = protocol_main_loop()))

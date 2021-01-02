@@ -3,7 +3,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2017-2020 Terje Io
+  Copyright (c) 2017-2021 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -968,6 +968,8 @@ ISR_CODE void mc_reset ()
         // violated, by which, all bets are off.
         if ((sys.state & (STATE_CYCLE|STATE_HOMING|STATE_JOG)) || sys.step_control.execute_hold || sys.step_control.execute_sys_motion) {
 
+            sys.position_lost = true;
+
             if (sys.state != STATE_HOMING)
                 system_set_exec_alarm(Alarm_AbortCycle);
             else if (!sys_rt_exec_alarm)
@@ -978,5 +980,7 @@ ISR_CODE void mc_reset ()
 
         if(hal.control.get_state().e_stop)
             system_set_exec_alarm(Alarm_EStop);
+        else if(hal.control.get_state().motor_fault)
+            system_set_exec_alarm(Alarm_MotorFault);
     }
 }

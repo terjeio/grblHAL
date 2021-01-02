@@ -1,7 +1,7 @@
 //
 // enet.c - lwIP/FreeRTOS TCP/IP stream implementation
 //
-// v1.2 / 2020-09-25 / Io Engineering / Terje
+// v1.2 / 2020-01-01 / Io Engineering / Terje
 //
 
 /*
@@ -93,11 +93,13 @@ static char *enet_ip_address (void)
     return ip;
 }
 
-static void reportIP (bool newopt)
+static void report_options (bool newopt)
 {
     on_report_options(newopt);
 
-    if(!newopt) {
+    if(newopt)
+        hal.stream.write("[IP:");
+    else {
         hal.stream.write("[IP:");
         hal.stream.write(enet_ip_address());
         hal.stream.write("]\r\n");
@@ -509,7 +511,7 @@ bool enet_init (void)
         hal.driver_settings.restore = ethernet_settings_restore;
 
         on_report_options = grbl.on_report_options;
-        grbl.on_report_options = reportIP;
+        grbl.on_report_options = report_options;
 
         details.on_report_settings = grbl.on_report_settings;
         grbl.on_report_settings = on_report_settings;

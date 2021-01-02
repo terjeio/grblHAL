@@ -42,7 +42,8 @@ typedef enum {
     Alarm_ProbeProtect = 13,
     Alarm_Spindle = 14,
     Alarm_HomingFailAutoSquaringApproach = 15,
-    Alarm_SelftestFailed = 16
+    Alarm_SelftestFailed = 16,
+    Alarm_MotorFault = 17
 } alarm_code_t;
 
 typedef struct {
@@ -67,7 +68,8 @@ static const alarm_detail_t alarm_detail[] = {
     { Alarm_ProbeProtect, "Probe protection triggered", "Probe protection triggered. Clear before continuing." },
     { Alarm_Spindle, "Spindle at speed timeout", "Spindle at speed timeout. Clear before continuing." },
     { Alarm_HomingFailAutoSquaringApproach, "Homing fail", "Homing fail. Could not find second limit switch for auto squared axis within search distances. Try increasing max travel, decreasing pull-off distance, or check wiring." },
-    { Alarm_SelftestFailed, "Selftest failed", "Power on selftest (POS) failed." }
+    { Alarm_SelftestFailed, "Selftest failed", "Power on selftest (POS) failed." },
+    { Alarm_MotorFault, "Motor fault", "Motor fault." }
 };
 
 #endif

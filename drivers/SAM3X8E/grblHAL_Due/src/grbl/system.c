@@ -3,7 +3,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2017-2020 Terje Io
+  Copyright (c) 2017-2021 Terje Io
   Copyright (c) 2014-2016 Sungeun K. Jeon for Gnea Research LLC
 
   Grbl is free software: you can redistribute it and/or modify
@@ -43,7 +43,7 @@ ISR_CODE void control_interrupt_handler (control_signals_t signals)
         return; // for now...
 
     if (signals.value) {
-        if ((signals.reset || signals.e_stop) && sys.state != STATE_ESTOP)
+        if ((signals.reset || signals.e_stop || signals.motor_fault) && sys.state != STATE_ESTOP)
             mc_reset();
         else {
 #ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
@@ -282,6 +282,8 @@ status_code_t system_execute_line (char *line)
                 // Block if e-stop is active.
                 else if (control_signals.e_stop)
                     retval = Status_EStop;
+                else if(control_signals.motor_fault)
+                    retval = Status_MotorFault;
                 else if (!(settings.homing.flags.enabled && (sys.homing.mask || settings.homing.flags.single_axis_commands || settings.homing.flags.manual)))
                     retval = Status_SettingDisabled;
                 // Block if safety door is ajar.

@@ -3,7 +3,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2017-2020 Terje Io
+  Copyright (c) 2017-2021 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -81,6 +81,7 @@ typedef enum {
     Status_SelfTestFailed = 49,
 
     Status_EStop = 50,
+    Status_MotorFault = 51,
     Status_Unhandled = 59, // For internal use only
 
 // Some error codes as defined in bdring's ESP32 port
@@ -151,6 +152,7 @@ static const status_detail_t status_detail[] = {
     { Status_ValueWordConflict, "Invalid gcode ID:48", "Value word conflict." },
     { Status_SelfTestFailed, "Self test failed", "Power on self test failed. A hard reset is required." },
     { Status_EStop, "E-stop", "Emergency stop active." },
+    { Status_MotorFault, "Motor fault", "Motor fault." },
     { Status_SDMountError, "SD Card", "SD Card mount failed." },
     { Status_SDReadError, "SD Card", "SD Card file open/read failed." },
     { Status_SDFailedOpenDir, "SD Card", "SD Card directory listing failed." },
