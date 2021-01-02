@@ -26,8 +26,13 @@ If compiling for STM32F446, change/add some symbols in project properties _C\/C+
 
 * if the oscillator frequency is different from the default 25 MHz then add the symbol `HSE_VALUE` and set the value to the frequency in Hz. E.g. `8000000` for 8 Mhz.
 
-__NOTE:__ Internal flash page for parameters is not at the end of the flash memory due to size restrictions. This means each firmware upgrade will erase any saved parameters. 
+If compiling for STM32F407 (STM32F4-discovery), change/add some symbols in project properties _C\/C++ General > Paths and Symbols > Symbols_.
 
+* remove the symbol `STM32F401xC` and add `STM32F407xx`.
+
+* if the oscillator frequency is different from the default 25 MHz then add the symbol `HSE_VALUE` and set the value to the frequency in Hz. E.g. `8000000` for 8 Mhz. This is necessary for STM32F4-discovery.
+
+__NOTE:__ Internal flash page for parameters is not at the end of the flash memory due to size restrictions. This means each firmware upgrade will erase any saved parameters.
 ---
 
 CNC breakout boards:
@@ -35,4 +40,4 @@ CNC breakout boards:
 [CNC breakout for Nucleo-64](https://github.com/terjeio/CNC_Breakout_Nucleo64) by Terje Io.
 
 ---
-2020-10-30
+2021-01-02
