@@ -1,9 +1,9 @@
 /*
   sleep.c - determines and executes sleep procedures
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2018-2019 Terje Io
+  Copyright (c) 2018-2021 Terje Io
   Copyright (c) 2016 Sungeun K. Jeon
 
   Grbl is free software: you can redistribute it and/or modify
@@ -21,6 +21,7 @@
 */
 
 #include "hal.h"
+#include "state_machine.h"
 
 volatile bool slumber;
 
@@ -41,7 +42,7 @@ static void sleep_execute()
 
     do {
         // Monitor for any new input stream data or external events (queries, buttons, alarms) to exit.
-        if ((hal.stream.get_rx_buffer_available() != rx_initial) || sys_rt_exec_state || sys_rt_exec_alarm ) {
+        if ((hal.stream.get_rx_buffer_available() != rx_initial) || sys.rt_exec_state || sys.rt_exec_alarm ) {
             // Disable sleep timeout and return to normal operation.
             hal.delay_ms(0, NULL);
             return;
@@ -67,7 +68,7 @@ void sleep_check()
     // NOTE: With overrides or in laser mode, modal spindle and coolant state are not guaranteed. Need
     // to directly monitor and record running state during parking to ensure proper function.
     if (!sys.steppers_deenergize && (gc_state.modal.spindle.value || gc_state.modal.coolant.value)) {
-        switch(sys.state) {
+        switch(state_get()) {
 
             case STATE_IDLE:
                 sleep_execute();

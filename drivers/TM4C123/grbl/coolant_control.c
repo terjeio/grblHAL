@@ -1,8 +1,9 @@
 /*
   coolant_control.c - coolant control methods
 
-  Part of GrblHAL
+  Part of grblHAL
 
+  Copyright (c) 2016-2021 Terje Io
   Copyright (c) 2012-2016 Sungeun K. Jeon for Gnea Research LLC
 
   Grbl is free software: you can redistribute it and/or modify
@@ -25,6 +26,7 @@
 #include "hal.h"
 #include "protocol.h"
 #include "coolant_control.h"
+#include "state_machine.h"
 
 // Main program only. Immediately sets flood coolant running state and also mist coolant,
 // if enabled. Also sets a flag to report an update to a coolant state.
@@ -44,7 +46,7 @@ void coolant_set_state (coolant_state_t mode)
 bool coolant_sync (coolant_state_t mode)
 {
     bool ok = true;
-    if (sys.state != STATE_CHECK_MODE) {
+    if (state_get() != STATE_CHECK_MODE) {
         if((ok = protocol_buffer_synchronize())) // Ensure coolant changes state when specified in program.
             coolant_set_state(mode);
     }

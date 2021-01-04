@@ -36,7 +36,7 @@
 
 //#define tmc_stealthChop(axis, val)      { stepper[axis].gconf.reg.en_pwm_mode = val; TMC2209_WriteRegister(&stepper[axis], (TMC2209_datagram_t *)&stepper[axis].gconf); }
 //#define tmc_sg_filter(axis, val)        { stepper[axis].coolconf.reg.sfilt = val; TMC2209_WriteRegister(&stepper[axis], (TMC2209_datagram_t *)&stepper[axis].coolconf); }
-//#define tmc_sg_stall_value(axis, val)   { stepper[axis].coolconf.reg.sgt = val; TMC2209_WriteRegister(&stepper[axis], (TMC2209_datagram_t *)&stepper[axis].coolconf); }
+#define tmc_sg_stall_value(axis, val)   { stepper[axis].sgthrs.reg.threshold = val; TMC2209_WriteRegister(&stepper[axis], (TMC2209_datagram_t *)&stepper[axis].sgthrs); }
 #define tmc_sedn(axis, val)             { stepper[axis].coolconf.reg.sedn = val; TMC2209_WriteRegister(&stepper[axis], (TMC2209_datagram_t *)&stepper[axis].coolconf); }
 #define tmc_semin(axis, val)            { stepper[axis].coolconf.reg.semin = val; TMC2209_WriteRegister(&stepper[axis], (TMC2209_datagram_t *)&stepper[axis].coolconf); }
 #define tmc_semax(axis, val)            { stepper[axis].coolconf.reg.semax = val; TMC2209_WriteRegister(&stepper[axis], (TMC2209_datagram_t *)&stepper[axis].coolconf); }
@@ -59,8 +59,9 @@
 #define TMC_X_SGT 22
 //tmc_stealthChop(X_AXIS, 1);
 //tmc_sg_filter(X_AXIS, 1);
-//tmc_sg_stall_value(X_AXIS, 33);
+
 #define TMC_X_ADVANCED \
+tmc_sg_stall_value(X_AXIS, TMC_X_SGT); \
 tmc_sedn(X_AXIS, 1); \
 tmc_semin(X_AXIS, 5); \
 tmc_semax(X_AXIS, 2); \
@@ -82,9 +83,9 @@ tmc_hysteresis_end(X_AXIS, -2);
 #define TMC_Y_SGT 22
 //tmc_stealthChop(Y_AXIS, 1);
 //tmc_sg_filter(Y_AXIS, 1);
-//tmc_sg_stall_value(Y_AXIS, 33);
 
 #define TMC_Y_ADVANCED \
+tmc_sg_stall_value(Y_AXIS, TMC_Y_SGT); \
 tmc_sedn(Y_AXIS, 1); \
 tmc_semin(Y_AXIS, 5); \
 tmc_semax(Y_AXIS, 2); \
@@ -106,9 +107,9 @@ tmc_hysteresis_end(Y_AXIS, 1);
 #define TMC_Z_SGT 22
 //tmc_stealthChop(Z_AXIS, 1);
 //tmc_sg_filter(Z_AXIS, 1);
-//tmc_sg_stall_value(Z_AXIS, 33);
 
 #define TMC_Z_ADVANCED \
+tmc_sg_stall_value(Z_AXIS, TMC_Z_SGT); \
 tmc_sedn(Z_AXIS, 1); \
 tmc_semin(Z_AXIS, 5); \
 tmc_semax(Z_AXIS, 2); \
@@ -132,9 +133,9 @@ tmc_hysteresis_end(Z_AXIS, 1);
 #define TMC_A_SGT 22
 //tmc_stealthChop(A_AXIS, 1);
 //tmc_sg_filter(A_AXIS, 1);
-//tmc_sg_stall_value(A_AXIS, 33);
 
 #define TMC_A_ADVANCED \
+tmc_sg_stall_value(A_AXIS, TMC_A_SGT); \
 tmc_sedn(A_AXIS, 1); \
 tmc_semin(A_AXIS, 5); \
 tmc_semax(A_AXIS, 2); \
@@ -161,9 +162,9 @@ tmc_hysteresis_end(A_AXIS, 1);
 #define TMC_B_SGT 22
 //tmc_stealthChop(B_AXIS, 1);
 //tmc_sg_filter(B_AXIS, 1);
-//tmc_sg_stall_value(B_AXIS, 33);
 
 #define TMC_B_ADVANCED \
+tmc_sg_stall_value(B_AXIS, TMC_B_SGT); \
 tmc_sedn(B_AXIS, 1); \
 tmc_semin(B_AXIS, 5); \
 tmc_semax(B_AXIS, 2); \
@@ -190,9 +191,9 @@ tmc_hysteresis_end(B_AXIS, 1);
 #define TMC_C_SGT 22
 //tmc_stealthChop(C_AXIS, 1);
 //tmc_sg_filter(C_AXIS, 1);
-//tmc_sg_stall_value(C_AXIS, 33);
 
 #define TMC_C_ADVANCED \
+tmc_sg_stall_value(C_AXIS, TMC_C_SGT); \
 tmc_sedn(C_AXIS, 1); \
 tmc_semin(C_AXIS, 5); \
 tmc_semax(C_AXIS, 2); \

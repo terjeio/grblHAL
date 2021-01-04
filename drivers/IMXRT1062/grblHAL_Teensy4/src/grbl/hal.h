@@ -3,7 +3,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2016-2020 Terje Io
+  Copyright (c) 2016-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -240,7 +240,7 @@ typedef struct {
 
 typedef user_mcode_t (*user_mcode_check_ptr)(user_mcode_t mcode);
 typedef status_code_t (*user_mcode_validate_ptr)(parser_block_t *gc_block, parameter_words_t *parameter_words);
-typedef void (*user_mcode_execute_ptr)(uint_fast16_t state, parser_block_t *gc_block);
+typedef void (*user_mcode_execute_ptr)(sys_state_t state, parser_block_t *gc_block);
 
 typedef struct {
     user_mcode_check_ptr check;
@@ -352,10 +352,10 @@ typedef struct {
 // Core event handler and other entry points.
 // Most of the event handlers defaults to NULL, a few is set up to call a dummy handler for simpler code.
 
-typedef void (*on_state_change_ptr)(uint_fast16_t state);
+typedef void (*on_state_change_ptr)(sys_state_t state);
 typedef void (*on_probe_completed_ptr)(void);
 typedef void (*on_program_completed_ptr)(program_flow_t program_flow);
-typedef void (*on_execute_realtime_ptr)(uint_fast16_t state);
+typedef void (*on_execute_realtime_ptr)(sys_state_t state);
 typedef void (*on_unknown_accessory_override_ptr)(uint8_t cmd);
 typedef void (*on_report_options_ptr)(bool newopt);
 typedef void (*on_report_command_help_ptr)(void);
@@ -365,7 +365,7 @@ typedef setting_details_t *(*on_report_settings_ptr)(void); // NOTE: this must m
 typedef void (*on_realtime_report_ptr)(stream_write_ptr stream_write, report_tracking_flags_t report);
 typedef void (*on_unknown_feedback_message_ptr)(stream_write_ptr stream_write);
 typedef bool (*on_laser_ppi_enable_ptr)(uint_fast16_t ppi, uint_fast16_t pulse_length);
-typedef status_code_t (*on_unknown_sys_command_ptr)(uint_fast16_t state, char *line, char *lcline); // return Status_Unhandled.
+typedef status_code_t (*on_unknown_sys_command_ptr)(sys_state_t state, char *line, char *lcline); // return Status_Unhandled.
 typedef status_code_t (*on_user_command_ptr)(char *line);
 
 typedef struct {

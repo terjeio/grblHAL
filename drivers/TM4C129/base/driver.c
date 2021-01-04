@@ -5,7 +5,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2018-2020 Terje Io
+  Copyright (c) 2018-2021 Terje Io
 
   Some parts
    Copyright (c) 2011-2015 Sungeun K. Jeon
@@ -31,6 +31,7 @@
 #include "serial.h"
 
 #include "grbl/protocol.h"
+#include "grbl/state_machine.h"
 
 #ifdef FreeRTOS
 #include "FreeRTOS.h"
@@ -1102,7 +1103,7 @@ static void modeSelect (bool mpg_mode)
     static stream_type_t normal_stream = StreamType_Serial;
 
     // Deny entering MPG mode if busy
-    if(mpg_mode == sys.mpg_mode || (mpg_mode && (gc_state.file_run || !(sys.state == STATE_IDLE || (sys.state & (STATE_ALARM|STATE_ESTOP)))))) {
+    if(mpg_mode == sys.mpg_mode || (mpg_mode && (gc_state.file_run || !(state_get() == STATE_IDLE || (state_get() & (STATE_ALARM|STATE_ESTOP)))))) {
         hal.stream.enqueue_realtime_command(CMD_STATUS_REPORT_ALL);
         return;
     }
@@ -1644,7 +1645,7 @@ bool driver_init (void)
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
-    hal.driver_version = "2001226";
+    hal.driver_version = "210103";
     hal.driver_setup = driver_setup;
 #if !USE_32BIT_TIMER
     hal.f_step_timer = hal.f_step_timer / (STEPPER_DRIVER_PRESCALER + 1);

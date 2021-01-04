@@ -41,10 +41,17 @@ or add the MSC library as well \(not needed\).
 Download the libraries above as zip files and add to your Arduino installation with _Sketch > Include Library > Add .ZIP Library..._
 
 ---
+#### Board maps:
 
-CNC breakout boards:
+|                      |Processor|Ethernet|SD card|Keypad|EEPROM|N_AXIS|Ganged axes<sup>1</sup>|Encoders|Digital I/O|Analog I/O|
+|----------------------|---------|--------|-------|------|------|------|-----------------------|--------|-----------|----------|
+|Generic|All|no|no|yes|yes<sup>2</sup>|3|||||
+|[BOARD_T40X101](https://github.com/phil-barrett/grbl-teensy-4)|Teensy 4.0|no|no|yes|yes<sup>2</sup>|max 4|max 1|max 1|||
+|[BOARD_T41U5XBB](https://github.com/phil-barrett/grbl-teensy-4)|Teensy 4.1|yes|yes|yes|yes<sup>2</sup>|max 5|max 2|max 1|4/3 or 1/3<sup>3</sup>||
 
-[GRBL Header for a Teensy 4](https://github.com/phil-barrett/grbl-teensy-4) by Phil Barrett.
+<sup>1</sup> Each enabled reduces N_AXIS with one. Currently the board map file must be edited to enable ganged/auto squared axes.  
+<sup>2</sup> I<sup>2</sup>C EEPROM \(or FRAM\) is [optional](https://github.com/terjeio/grblHAL/blob/master/plugins/eeprom/README.md) and must be added to the board. FRAM is recommended when the [Odometer plugin](https://github.com/terjeio/grblHAL/blob/master/plugins/odometer/README.md) is added to the build.  
+<sup>3</sup> Number of digital input pins available is reduced when the [Encoder plugin](https://github.com/terjeio/grblHAL/blob/master/plugins/encoder/README.md) is added to the build.
 
 ---
-2020-08-23
+2021-01-03

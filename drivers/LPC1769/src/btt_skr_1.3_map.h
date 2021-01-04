@@ -3,7 +3,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -28,7 +28,6 @@
 #if TRINAMIC_ENABLE == 2130
 #define HAS_BOARD_INIT
 void board_init (void);
-#include "trinamic/tmc2130.h"
 #endif
 
 #if EEPROM_ENABLE
@@ -215,7 +214,7 @@ void board_init (void);
 #define SD_CS_PIN   6
 #endif
 
-#if TRINAMIC_ENABLE == 2130
+#if TRINAMIC_ENABLE == 2130 || TRINAMIC_ENABLE == 5160
 
 #define TRINAMIC_MOSI_PN    4
 #define TRINAMIC_MOSI_PORT  port(TRINAMIC_MOSI_PN)

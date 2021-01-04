@@ -400,18 +400,23 @@ typedef union {
     uint32_t value;
     struct {
         uint32_t
-        sg_result  :10,
-        reserved1  :5,
-        fsactive   :1,
-        cs_actual  :5,
-        reserved   :3,
-        stallGuard :1,
-        ot         :1,
         otpw       :1,
+        ot         :1,
         s2ga       :1,
         s2gb       :1,
+        s2vsa      :1,
+        s2vsb      :1,
         ola        :1,
         olb        :1,
+        t120       :1,
+        t143       :1,
+        t150       :1,
+        t157       :1,
+        reserved1  :4,
+        cs_actual  :5,
+        reserved2  :3,
+        reserved3  :6,
+        stealth    :1,
         stst       :1;
     };
 } TMC2209_drv_status_reg_t;

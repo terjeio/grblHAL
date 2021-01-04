@@ -3,7 +3,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -24,9 +24,8 @@
 #if defined(BOARD_BTT_SKR_13) || defined(BOARD_BTT_SKR_14_TURBO)
 
 #include "chip.h"
-#include <trinamic/tmc2130.h>
 
-#if TRINAMIC_ENABLE == 2130
+#if TRINAMIC_ENABLE == 2130 || TRINAMIC_ENABLE == 5160
 
 #define spi_get_byte() sw_spi_xfer(0)
 #define spi_put_byte(d) sw_spi_xfer(d)
@@ -51,9 +50,9 @@ static uint8_t sw_spi_xfer (uint8_t byte)
     return res;
 }
 
-static TMC2130_status_t TMC_SPI_ReadRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
+static TMC_SPI_status_t TMC_SPI_ReadRegister (TMC_SPI_driver_t *driver, TMC_SPI_datagram_t *reg)
 {
-    static TMC2130_status_t status = {0};
+    static TMC_SPI_status_t status = {0};
 
     BITBAND_GPIO(TRINAMIC_CS_PORT->PIN, cs_pin[driver->axis]) = 0;
 
@@ -78,9 +77,9 @@ static TMC2130_status_t TMC_SPI_ReadRegister (TMC2130_t *driver, TMC2130_datagra
     return status;
 }
 
-static TMC2130_status_t TMC_SPI_WriteRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
+static TMC_SPI_status_t TMC_SPI_WriteRegister (TMC_SPI_driver_t *driver, TMC_SPI_datagram_t *reg)
 {
-    static TMC2130_status_t status = {0};
+    static TMC_SPI_status_t status = {0};
 
     BITBAND_GPIO(TRINAMIC_CS_PORT->PIN, cs_pin[driver->axis]) = 0;
 
@@ -100,7 +99,7 @@ static TMC2130_status_t TMC_SPI_WriteRegister (TMC2130_t *driver, TMC2130_datagr
 
 void board_init (void)
 {
-#if TRINAMIC_ENABLE == 2130
+#if TRINAMIC_ENABLE == 2130 || TRINAMIC_ENABLE == 5160
 
     trinamic_driver_if_t driver = {
         .interface.WriteRegister = TMC_SPI_WriteRegister,

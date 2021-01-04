@@ -39,7 +39,7 @@
 #endif
 
 #ifdef SPINDLE_PWM_DIRECT
-#error Not supported!
+#error "Uncomment SPINDLE_RPM_CONTROLLED in grbl/config.h to add Huanyang spindle support!"
 #endif
 
 #ifndef VFD_ADDRESS

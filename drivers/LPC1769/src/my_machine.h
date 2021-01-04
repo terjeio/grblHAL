@@ -31,8 +31,9 @@
 // Uncomment to enable, for some a value > 1 may be assigned, if so the default value is shown.
 
 #define USB_SERIAL_CDC     1 // for Arduino class library and 2 for PJRC C library. Comment out to use UART communication.
-#define SDCARD_ENABLE      1 // Run gcode programs from SD card, requires sdcard plugin.
+//#define SDCARD_ENABLE      1 // Run gcode programs from SD card, requires sdcard plugin.
 //#define TRINAMIC_ENABLE 2130 // Uncomment to enable Trinamic TMC2130 driver support. NOTE: Experimental for now, currently for SKR 1.x boards only
+//#define TRINAMIC_ENABLE 5160 // Uncomment to enable Trinamic TMC5160 driver support. NOTE: Experimental for now, currently for SKR 1.x boards only
 //#define LIMIT_MAX_ENABLE   1 // Uncomment to enable max limit input pins (when available)
 //#define EEPROM_ENABLE      1 // I2C EEPROM support. Set to 1 for 24LC16(2K), 2 (64 byte pages) or 3 (32 byte pages) for larger sizes. Requires eeprom plugin.
 //#define EEPROM_IS_FRAM     1 // Uncomment when EEPROM is enabled and chip is FRAM, this to remove write delay.

@@ -1,9 +1,9 @@
 /*
   encoder.c - quadrature encoder plugin
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -43,7 +43,7 @@
 
 #define MIN(a, b) (((a) > (b)) ? (b) : (a))
 
-typedef bool (*mpg_algo_ptr)(uint_fast16_t state, axes_signals_t axes);
+typedef bool (*mpg_algo_ptr)(sys_state_t state, axes_signals_t axes);
 
 typedef union {
     uint8_t events;
@@ -105,7 +105,7 @@ static char *append (char *s)
 // MPG encoder movement algorithms
 // Bind the one to use to the axis MPGs at end of encoder_init(), later this will be made configurable (per axis?)
 
-static bool mpg_move_absolute (uint_fast16_t state, axes_signals_t axes)
+static bool mpg_move_absolute (sys_state_t state, axes_signals_t axes)
 {
     static bool is_moving = false;
 
@@ -151,7 +151,7 @@ serialWriteS(ASCII_EOL);
     return is_moving;
 }
 
-static bool mpg_jog_relative (uint_fast16_t state, axes_signals_t axes)
+static bool mpg_jog_relative (sys_state_t state, axes_signals_t axes)
 {
     static bool is_moving = false;
 
@@ -247,7 +247,7 @@ static void encoder_report_mode (uint_fast16_t state)
     }
 }
 
-static void encoder_execute_realtime (uint_fast16_t state)
+static void encoder_execute_realtime (sys_state_t state)
 {
     static uint32_t elapsed = 0;
 
@@ -315,7 +315,7 @@ serialWriteS(ASCII_EOL);
 
                     if(!mpg[idx].flags.moving) {
                         float target[N_AXIS];
-                        system_convert_array_steps_to_mpos(target, sys_position);
+                        system_convert_array_steps_to_mpos(target, sys.position);
                         mpg[idx].flags.moving = On;
                         mpg[idx].pos = target[idx] - gc_get_offset(idx);
                     }

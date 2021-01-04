@@ -116,6 +116,13 @@
 #include "tmc2130/trinamic.h"
 #endif
 
+#if TRINAMIC_ENABLE == 5160
+#ifndef TRINAMIC_MIXED_DRIVERS
+#define TRINAMIC_MIXED_DRIVERS 1
+#endif
+#include "tmc5160/trinamic.h"
+#endif
+
 #ifndef X_STEP_PORT
 #define X_STEP_PORT STEP_PORT
 #endif

@@ -3,7 +3,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2016-2020 Terje Io
+  Copyright (c) 2016-2021 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -27,6 +27,7 @@
 
 #include "hal.h"
 #include "protocol.h"
+#include "state_machine.h"
 
 //#include "debug.h"
 
@@ -172,7 +173,7 @@ static st_prep_t prep;
 //
 
 // Output message in sync with motion, called by foreground process.
-static void output_message (uint_fast16_t state)
+static void output_message (sys_state_t state)
 {
     if(message) {
         report_message(message, Message_Plain);
@@ -213,10 +214,12 @@ ISR_CODE void st_go_idle ()
 {
     // Disable Stepper Driver Interrupt. Allow Stepper Port Reset Interrupt to finish, if active.
 
+    sys_state_t state = state_get();
+
     hal.stepper.go_idle(false);
 
     // Set stepper driver idle state, disabled or enabled, depending on settings and circumstances.
-    if (((settings.steppers.idle_lock_time != 255) || sys_rt_exec_alarm || sys.state == STATE_SLEEP) && sys.state != STATE_HOMING) {
+    if (((settings.steppers.idle_lock_time != 255) || sys.rt_exec_alarm || state == STATE_SLEEP) && state != STATE_HOMING) {
         // Force stepper dwell to lock axes for a defined amount of time to ensure the axes come to a complete
         // stop and not drift from residual inertial forces at the end of the last movement.
         sys.steppers_deenergize = true;
@@ -395,10 +398,10 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
     // Check probing state.
     // Monitors probe pin state and records the system position when detected.
     // NOTE: This function must be extremely efficient as to not bog down the stepper ISR.
-    if (sys_probing_state == Probing_Active && hal.probe.get_state().triggered) {
-        sys_probing_state = Probing_Off;
-        memcpy(sys_probe_position, sys_position, sizeof(sys_position));
-        bit_true(sys_rt_exec_state, EXEC_MOTION_CANCEL);
+    if (sys.probing_state == Probing_Active && hal.probe.get_state().triggered) {
+        sys.probing_state = Probing_Off;
+        memcpy(sys.probe_position, sys.position, sizeof(sys.position));
+        bit_true(sys.rt_exec_state, EXEC_MOTION_CANCEL);
     }
 
     register axes_signals_t step_outbits = (axes_signals_t){0};
@@ -412,7 +415,7 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
 #ifdef ENABLE_BACKLASH_COMPENSATION
         if(!backlash_motion)
 #endif
-            sys_position[X_AXIS] = sys_position[X_AXIS] + (st.dir_outbits.x ? -1 : 1);
+            sys.position[X_AXIS] = sys.position[X_AXIS] + (st.dir_outbits.x ? -1 : 1);
     }
 
     st.counter_y += st.steps[Y_AXIS];
@@ -422,7 +425,7 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
 #ifdef ENABLE_BACKLASH_COMPENSATION
         if(!backlash_motion)
 #endif
-            sys_position[Y_AXIS] = sys_position[Y_AXIS] + (st.dir_outbits.y ? -1 : 1);
+            sys.position[Y_AXIS] = sys.position[Y_AXIS] + (st.dir_outbits.y ? -1 : 1);
     }
 
     st.counter_z += st.steps[Z_AXIS];
@@ -432,7 +435,7 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
 #ifdef ENABLE_BACKLASH_COMPENSATION
         if(!backlash_motion)
 #endif
-            sys_position[Z_AXIS] = sys_position[Z_AXIS] + (st.dir_outbits.z ? -1 : 1);
+            sys.position[Z_AXIS] = sys.position[Z_AXIS] + (st.dir_outbits.z ? -1 : 1);
     }
 
   #ifdef A_AXIS
@@ -443,7 +446,7 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
 #ifdef ENABLE_BACKLASH_COMPENSATION
         if(!backlash_motion)
 #endif
-              sys_position[A_AXIS] = sys_position[A_AXIS] + (st.dir_outbits.a ? -1 : 1);
+              sys.position[A_AXIS] = sys.position[A_AXIS] + (st.dir_outbits.a ? -1 : 1);
       }
   #endif
 
@@ -455,7 +458,7 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
 #ifdef ENABLE_BACKLASH_COMPENSATION
         if(!backlash_motion)
 #endif
-              sys_position[B_AXIS] = sys_position[B_AXIS] + (st.dir_outbits.b ? -1 : 1);
+              sys.position[B_AXIS] = sys.position[B_AXIS] + (st.dir_outbits.b ? -1 : 1);
       }
   #endif
 
@@ -467,14 +470,14 @@ ISR_CODE void stepper_driver_interrupt_handler (void)
 #ifdef ENABLE_BACKLASH_COMPENSATION
         if(!backlash_motion)
 #endif
-              sys_position[C_AXIS] = sys_position[C_AXIS] + (st.dir_outbits.c ? -1 : 1);
+              sys.position[C_AXIS] = sys.position[C_AXIS] + (st.dir_outbits.c ? -1 : 1);
       }
   #endif
 
     st.step_outbits.value = step_outbits.value;
 
     // During a homing cycle, lock out and prevent desired axes from moving.
-    if (sys.state == STATE_HOMING)
+    if (state_get() == STATE_HOMING)
         st.step_outbits.value &= sys.homing_axis_lock.mask;
 
     if (st.step_count == 0 || --st.step_count == 0) {
@@ -782,7 +785,7 @@ void st_prep_buffer()
                 }
             }
 
-            if(sys.state != STATE_HOMING)
+            if(state_get() != STATE_HOMING)
                 sys.step_control.update_spindle_rpm |= (settings.mode == Mode_Laser); // Force update whenever updating block in laser mode.
         }
 
@@ -1033,5 +1036,5 @@ void st_prep_buffer()
 // divided by the ACCELERATION TICKS PER SECOND in seconds.
 float st_get_realtime_rate()
 {
-    return sys.state & (STATE_CYCLE|STATE_HOMING|STATE_HOLD|STATE_JOG|STATE_SAFETY_DOOR) ? prep.current_speed : 0.0f;
+    return state_get() & (STATE_CYCLE|STATE_HOMING|STATE_HOLD|STATE_JOG|STATE_SAFETY_DOOR) ? prep.current_speed : 0.0f;
 }

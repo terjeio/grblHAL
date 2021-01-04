@@ -1,9 +1,9 @@
 /*
   planner.c - buffers movement commands and manages the acceleration profile plan
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2017-2020 Terje Io
+  Copyright (c) 2017-2021 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
   Copyright (c) 2011 Jens Geisler
@@ -382,7 +382,7 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
     pl_data->message = NULL;
 
     // Copy position data based on type of motion being planned.
-    memcpy(position_steps, block->condition.system_motion ? sys_position : pl.position, sizeof(position_steps));
+    memcpy(position_steps, block->condition.system_motion ? sys.position : pl.position, sizeof(position_steps));
 
     // Compute and store initial move distance data.
 
@@ -535,7 +535,7 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
 // Reset the planner position vectors. Called by the system abort/initialization routine.
 void plan_sync_position ()
 {
-    memcpy(pl.position, sys_position, sizeof(pl.position));
+    memcpy(pl.position, sys.position, sizeof(pl.position));
 }
 
 

@@ -1,5 +1,9 @@
 ## grblHAL changelog
 
+Build 20210103 (test only):
+* Last round of planned code refactoring in the core completed.
+* Initial support for Trinamic TMC5160 drivers added, currently for the SKR 1.x boards \(LPC176x driver\) - not yet tested.
+
 Build 20210102 (test only):
 * Added handling for motor fault signal to the core, similar to E-stop handling. Added new alarm and error code for this.
 * Changed to clear homed status on a soft reset only if machine was in motion. Added setting flag for always keeping homed status on soft reset to `$22` setting.  
@@ -9,7 +13,7 @@ Build 20201228 (test only):
 * Updated gcode parser \(grbl/gcode.c\) to use bitfields structs instead of bitfield variables.  
 Done to improve readability and for easier debugging.  
 Note that this is a major change and there is a non-zero risk that mistakes has been made.
-* Changed signature of user mcode validation function to use bitfield struct for value words available.  
+* Changed signature of user mcode validation function to use a bitfield union for value words available.  
 Removed the need for user mcode parameter words to have an associated value. This means that [user mcode](https://github.com/terjeio/grblHAL/tree/test/templates) implementations now must check this locally.  
 If no associated value is provided the corresponding value in the value struct is set to `NAN` (Not A Number) for floats and all bits set to 1 for integers.
 * Refactored Trinamic driver code, added initial support for TMC2209. Work in progress.
@@ -17,7 +21,7 @@ If no associated value is provided the corresponding value in the value struct i
 
 Build 20201224 (test only):
 * Added initial support for RADDS 1.6 board to SAM3X8E driver \(Arduino Due\). Untested!
-* Added C-axis support to iMXRT1962 driver \(Teensy 4.x\).  
+* Added C-axis support to iMXRT1062 driver \(Teensy 4.x\).  
 Untested and none of the current board maps has the needed pins defined.
 * Added alarm and error message for power on self-test \(POS\) failure.  
 If POS fails only $-commands are accepted.

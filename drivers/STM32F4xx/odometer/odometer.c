@@ -2,9 +2,9 @@
 
   odometer.c - axis odometers including run time + spindle run time
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -33,9 +33,11 @@
 #include <stdio.h>
 
 #ifdef ARDUINO
+#include "../grbl/system.h"
 #include "../grbl/protocol.h"
 #include "../grbl/nvs_buffer.h"
 #else
+#include "grbl/system.h"
 #include "grbl/protocol.h"
 #include "grbl/nvs_buffer.h"
 #endif
@@ -90,7 +92,7 @@ static void stepperPulseStart (stepper_t *stepper)
     stepper_pulse_start(stepper);
 }
 
-void onStateChanged (uint_fast16_t state)
+void onStateChanged (sys_state_t state)
 {
     static uint32_t ms = 0;
 
@@ -119,7 +121,7 @@ void onStateChanged (uint_fast16_t state)
 }
 
 // Called by foreground process.
-static void odometers_write (uint_fast16_t state)
+static void odometers_write (sys_state_t state)
 {
     nvs.memcpy_to_nvs(odometers_address, (uint8_t *)&odometers, sizeof(odometer_data_t), true);
 }
@@ -187,7 +189,7 @@ static void odometers_report (odometer_data_t *odometers)
     }
 }
 
-static status_code_t commandExecute (uint_fast16_t state, char *line, char *lcline)
+static status_code_t commandExecute (sys_state_t state, char *line, char *lcline)
 {
     status_code_t retval = Status_Unhandled;
 

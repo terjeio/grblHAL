@@ -199,6 +199,14 @@
 #include "tmc2209/trinamic.h"
 #endif
 
+#if TRINAMIC_ENABLE == 5160
+#define SERIAL2_MOD
+#ifndef TRINAMIC_MIXED_DRIVERS
+#define TRINAMIC_MIXED_DRIVERS 1
+#endif
+#include "tmc5160/trinamic.h"
+#endif
+
 // End configuration
 
 #if KEYPAD_ENABLE && !defined(KEYPAD_PORT)

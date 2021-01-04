@@ -182,7 +182,7 @@ static nvs_transfer_result_t memcpy_from_ram (uint8_t *destination, uint32_t sou
     return with_checksum ? (checksum == ram_get_byte(source) ? NVS_TransferResult_OK : NVS_TransferResult_Failed) : NVS_TransferResult_OK;
 }
 
-static void nvs_warning (uint_fast16_t state)
+static void nvs_warning (sys_state_t state)
 {
     report_message("Not enough heap for NVS buffer!", Message_Warning);
 }

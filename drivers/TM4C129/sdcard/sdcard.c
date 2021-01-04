@@ -1,9 +1,9 @@
 /*
   sdcard.c - SDCard plugin for FatFs
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2018-2020 Terje Io
+  Copyright (c) 2018-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -34,6 +34,7 @@
 #ifdef ARDUINO
   #include "../grbl/report.h"
   #include "../grbl/protocol.h"
+  #include "../grbl/state_machine.h"
   #ifdef __IMXRT1062__
     #include "uSDFS.h"
     #define SDCARD_DEV "1:/"
@@ -42,6 +43,7 @@
 #else
   #include "grbl/report.h"
   #include "grbl/protocol.h"
+  #include "grbl/state_machine.h"
 #endif
 
 #ifdef __IMXRT1062__
@@ -361,13 +363,14 @@ static void sdcard_end_job (void)
 static int16_t sdcard_read (void)
 {
     int16_t c = -1;
+    sys_state_t state = state_get();
 
     if(file.eol == 1)
         file.line++;
 
     if(file.handle) {
 
-        if(sys.state == STATE_IDLE || (sys.state & (STATE_CYCLE|STATE_HOLD|STATE_CHECK_MODE)))
+        if(state == STATE_IDLE || (state & (STATE_CYCLE|STATE_HOLD|STATE_CHECK_MODE)))
             c = file_read();
 
         if(c == -1) { // EOF or error reading or grbl problem
@@ -376,7 +379,7 @@ static int16_t sdcard_read (void)
                 c = '\n';
         }
 
-    } else if(sys.state == STATE_IDLE) // TODO: end on ok count match line count?
+    } else if(state == STATE_IDLE) // TODO: end on ok count match line count?
         sdcard_end_job();
 
     return c;
@@ -395,7 +398,7 @@ static ISR_CODE bool drop_input_stream (char c)
     return true;
 }
 
-static void trap_state_change_request(uint_fast16_t state)
+static void trap_state_change_request (sys_state_t state)
 {
     if(state == STATE_CYCLE) {
 
@@ -429,7 +432,7 @@ static void sdcard_report (stream_write_ptr stream_write, report_tracking_flags_
     if(hal.stream.read != await_cycle_start) {
         char *pct_done = ftoa((float)file.pos / (float)file.size * 100.0f, 1);
 
-        if(sys.state != STATE_IDLE && !strncmp(pct_done, "100.0", 5))
+        if(state_get() != STATE_IDLE && !strncmp(pct_done, "100.0", 5))
             strcpy(pct_done, "99.9");
 
         stream_write("|SD:");
@@ -442,7 +445,7 @@ static void sdcard_report (stream_write_ptr stream_write, report_tracking_flags_
         on_realtime_report(stream_write, report);
 }
 
-static void sdcard_restart_msg (uint_fast16_t state)
+static void sdcard_restart_msg (sys_state_t state)
 {
     report_feedback_message(Message_CycleStartToRerun);
 }
@@ -487,7 +490,7 @@ static bool sdcard_suspend (bool suspend)
 }
 #endif
 
-static status_code_t commandExecute (uint_fast16_t state, char *line, char *lcline)
+static status_code_t commandExecute (sys_state_t state, char *line, char *lcline)
 {
     status_code_t retval = Status_Unhandled;
 
@@ -603,7 +606,7 @@ void sdcard_init (void)
     grbl.on_report_command_help = onReportCommandHelp;
 }
 
-FATFS *sdcard_getfs(void)
+FATFS *sdcard_getfs (void)
 {
     if(file.fs == NULL)
         sdcard_mount();

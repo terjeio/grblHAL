@@ -223,15 +223,15 @@ static int32_t wait_on_input (bool digital, uint8_t port, wait_mode_t wait_mode,
     return value;
 }
 
-#if TRINAMIC_ENABLE == 2130
+#if TRINAMIC_ENABLE == 2130 || TRINAMIC_ENABLE == 5160
 
 static axes_signals_t tmc;
 static uint32_t n_axis;
-static TMC2130_datagram_t datagram[N_AXIS];
+static TMC_SPI_datagram_t datagram[N_AXIS];
 
-static TMC2130_status_t TMC_SPI_ReadRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
+static TMC_SPI_status_t TMC_SPI_ReadRegister (TMC_SPI_driver_t *driver, TMC_SPI_datagram_t *reg)
 {
-    static TMC2130_status_t status = {0};
+    static TMC_SPI_status_t status = {0};
 
     uint8_t res;
     uint_fast8_t idx = N_AXIS, ridx = 0;
@@ -297,16 +297,16 @@ static TMC2130_status_t TMC_SPI_ReadRegister (TMC2130_t *driver, TMC2130_datagra
     return status;
 }
 
-static TMC2130_status_t TMC_SPI_WriteRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
+static TMC_SPI_status_t TMC_SPI_WriteRegister (TMC_SPI_driver_t *driver, TMC_SPI_datagram_t *reg)
 {
-    static TMC2130_status_t status = {0};
+    static TMC_SPI_status_t status = {0};
 
     uint8_t res;
     uint_fast8_t idx = N_AXIS, ridx = 0;
     uint32_t f_spi = spi_set_speed(SPI_BAUDRATEPRESCALER_32);
     volatile uint32_t dly = 100;
 
-    memcpy(&datagram[driver->axis], reg, sizeof(TMC2130_datagram_t));
+    memcpy(&datagram[driver->axis], reg, sizeof(TMC_SPI_datagram_t));
     datagram[driver->axis].addr.write = 1;
 
     BITBAND_PERI(TRINAMIC_CS_PORT->ODR, TRINAMIC_CS_PIN) = 0;
@@ -325,7 +325,7 @@ static TMC2130_status_t TMC_SPI_WriteRegister (TMC2130_t *driver, TMC2130_datagr
                 status.value = res;
 
             if(idx == driver->axis) {
-                datagram[idx].addr.reg = TMC2130Reg_DRV_STATUS;
+                datagram[idx].addr.reg = TMC_SPI_STATUS_REG;
                 datagram[idx].addr.write = 0;
             }
         }
@@ -430,14 +430,13 @@ void board_init (void)
     GPIO_Init.Pin = AUXOUTPUT1_BIT;
     HAL_GPIO_Init(AUXOUTPUT1_PORT, &GPIO_Init);
 
-#if TRINAMIC_ENABLE == 2130
+#if TRINAMIC_ENABLE == 2130 || TRINAMIC_ENABLE == 5160
 
     trinamic_driver_if_t driver = {
         .on_drivers_init = TMC_SPI_DriverInit,
         .interface.WriteRegister = TMC_SPI_WriteRegister,
         .interface.ReadRegister = TMC_SPI_ReadRegister
     };
-
 
     spi_init();
     GPIO_Init.Pin = TRINAMIC_CS_BIT;
@@ -446,7 +445,7 @@ void board_init (void)
 
     uint_fast8_t idx = N_AXIS;
     do {
-        datagram[--idx].addr.reg = TMC2130Reg_DRV_STATUS;
+        datagram[--idx].addr.reg = TMC_SPI_STATUS_REG;
     } while(idx);
 
     trinamic_if_init(&driver);

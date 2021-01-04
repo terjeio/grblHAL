@@ -1392,12 +1392,6 @@ bool driver_init (void)
     BITBAND_PERI(MODE_PORT->OUT, MODE_SWITCH_PIN) = 0;
 #endif
 
-    serialInit();
-
-#ifdef USE_I2C
-    i2c_init();
-#endif
-
     hal.info = "MSP432";
     hal.driver_version = "201226";
 #ifdef BOARD_NAME
@@ -1446,16 +1440,22 @@ bool driver_init (void)
     hal.stream.write_all = serialWriteS;
     hal.stream.suspend_read = serialSuspendInput;
 
+    hal.get_elapsed_ticks = getElapsedTicks;
+    hal.set_bits_atomic = bitsSetAtomic;
+    hal.clear_bits_atomic = bitsClearAtomic;
+    hal.set_value_atomic = valueSetAtomic;
+
+    serialInit();
+
+#ifdef USE_I2C
+    i2c_init();
+#endif
+
 #if EEPROM_ENABLE
     i2c_eeprom_init();
 #else
     hal.nvs.type = NVS_None;
 #endif
-
-    hal.get_elapsed_ticks = getElapsedTicks;
-    hal.set_bits_atomic = bitsSetAtomic;
-    hal.clear_bits_atomic = bitsClearAtomic;
-    hal.set_value_atomic = valueSetAtomic;
 
 #ifdef ENABLE_SPINDLE_LINEARIZATION
     grbl.on_realtime_report = driver_rt_report;

@@ -3,7 +3,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2017-2020 Terje Io
+  Copyright (c) 2017-2021 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -28,6 +28,7 @@
 #include "hal.h"
 #include "motion_control.h"
 #include "protocol.h"
+#include "state_machine.h"
 
 // NOTE: Max line number is defined by the g-code standard to be 99999. It seems to be an
 // arbitrary value, and some GUIs may require more. So we increased it based on a max safe
@@ -2212,8 +2213,10 @@ status_code_t gc_execute_block(char *block, char *message)
     gc_state.line_number = gc_block.values.n;
     plan_data.line_number = gc_state.line_number; // Record data for planner use.
 
+    bool check_mode = state_get() == STATE_CHECK_MODE;
+
     // [1. Comments feedback ]: Extracted in protocol.c if HAL entry point provided
-    if(message && sys.state != STATE_CHECK_MODE && (plan_data.message = malloc(strlen(message) + 1)))
+    if(message && !check_mode && (plan_data.message = malloc(strlen(message) + 1)))
         strcpy(plan_data.message, message);
 
     // [2. Set feed rate mode ]:
@@ -2257,7 +2260,7 @@ status_code_t gc_execute_block(char *block, char *message)
     // else { plan_data.spindle.speed = 0.0; } // Initialized as zero already.
 
     // [5. Select tool ]: Only tracks tool value if ATC or manual tool change is not possible.
-    if(gc_state.tool_pending != gc_block.values.t && sys.state != STATE_CHECK_MODE) {
+    if(gc_state.tool_pending != gc_block.values.t && !check_mode) {
 
         gc_state.tool_pending = gc_block.values.t;
 
@@ -2313,7 +2316,7 @@ status_code_t gc_execute_block(char *block, char *message)
     }
 
     // [6. Change tool ]: Delegated to (possible) driver implementation
-    if (command_words.M6 && !set_tool && sys.state != STATE_CHECK_MODE) {
+    if (command_words.M6 && !set_tool && !check_mode) {
 
         protocol_buffer_synchronize();
 
@@ -2380,12 +2383,12 @@ status_code_t gc_execute_block(char *block, char *message)
     }
 
     // [9a. User defined M commands ]:
-    if(gc_block.user_mcode && sys.state != STATE_CHECK_MODE) {
+    if(gc_block.user_mcode && !check_mode) {
 
         if(gc_block.user_mcode_sync)
             protocol_buffer_synchronize(); // Ensure user defined mcode is executed when specified in program.
 
-        hal.user_mcode.execute(sys.state, &gc_block);
+        hal.user_mcode.execute(state_get(), &gc_block);
     }
 
     // [10. Dwell ]:
@@ -2644,7 +2647,7 @@ status_code_t gc_execute_block(char *block, char *message)
         if (gc_update_pos == GCUpdatePos_Target)
             memcpy(gc_state.position, gc_block.values.xyz, sizeof(gc_state.position)); // gc_state.position[] = gc_block.values.xyz[]
         else if (gc_update_pos == GCUpdatePos_System)
-            gc_sync_position(); // gc_state.position[] = sys_position
+            gc_sync_position(); // gc_state.position[] = sys.position
         // == GCUpdatePos_None
     }
 
@@ -2663,7 +2666,7 @@ status_code_t gc_execute_block(char *block, char *message)
         protocol_buffer_synchronize(); // Sync and finish all remaining buffered motions before moving on.
 
         if (gc_state.modal.program_flow == ProgramFlow_Paused || gc_block.modal.program_flow == ProgramFlow_OptionalStop || gc_block.modal.program_flow == ProgramFlow_CompletedM60) {
-            if (sys.state != STATE_CHECK_MODE) {
+            if (!check_mode) {
                 if(gc_block.modal.program_flow == ProgramFlow_CompletedM60 && hal.pallet_shuttle)
                     hal.pallet_shuttle();
                 system_set_exec_state_flag(EXEC_FEED_HOLD); // Use feed hold for program pause.
@@ -2675,7 +2678,7 @@ status_code_t gc_execute_block(char *block, char *message)
             // and [M-code 7,8,9] reset to [G1,G17,G90,G94,G40,G54,M5,M9,M48]. The remaining modal groups
             // [G-code 4,6,8,10,13,14,15] and [M-code 4,5,6] and the modal words [F,S,T,H] do not reset.
 
-            if(sys.state != STATE_CHECK_MODE && gc_block.modal.program_flow == ProgramFlow_CompletedM30 && hal.pallet_shuttle)
+            if(!check_mode && gc_block.modal.program_flow == ProgramFlow_CompletedM30 && hal.pallet_shuttle)
                 hal.pallet_shuttle();
 
             gc_state.file_run = false;
@@ -2705,7 +2708,7 @@ status_code_t gc_execute_block(char *block, char *message)
             }
 
             // Execute coordinate change and spindle/coolant stop.
-            if (sys.state != STATE_CHECK_MODE) {
+            if (!check_mode) {
 
                 float g92_offset_stored[N_AXIS];
                 if(settings_read_coord_data(CoordinateSystem_G92, &g92_offset_stored) && !isequal_position_vector(g92_offset_stored, gc_state.g92_coord_offset))

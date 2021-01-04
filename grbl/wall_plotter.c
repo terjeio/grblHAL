@@ -1,7 +1,7 @@
 /*
   wall_plotter.c - wall plotter kinematics implementation
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Code lifted from Grbl_Esp32 pull request by user @ https://github.com/rognlien
 
@@ -163,20 +163,20 @@ static void wp_limits_set_target_pos (uint_fast8_t idx) // fn name?
     float xy[2];
     int32_t axis_position;
 
-    xy[X_AXIS] = sys_position[X_AXIS] / settings.axis[X_AXIS].steps_per_mm;
-    xy[Y_AXIS] = sys_position[Y_AXIS] / settings.axis[Y_AXIS].steps_per_mm;
+    xy[X_AXIS] = sys.position[X_AXIS] / settings.axis[X_AXIS].steps_per_mm;
+    xy[Y_AXIS] = sys.position[Y_AXIS] / settings.axis[Y_AXIS].steps_per_mm;
 
     switch(idx) {
         case X_AXIS:
             axis_position = wp_convert_to_b_motor_steps(xy);
-            sys_position[A_MOTOR] = axis_position;
-            sys_position[B_MOTOR] = -axis_position;
+            sys.position[A_MOTOR] = axis_position;
+            sys.position[B_MOTOR] = -axis_position;
             break;
         case Y_AXIS:
-            sys_position[A_MOTOR] = sys_position[B_MOTOR] = wp_convert_to_a_motor_steps(xy);
+            sys.position[A_MOTOR] = sys.position[B_MOTOR] = wp_convert_to_a_motor_steps(xy);
             break;
         default:
-            sys_position[idx] = 0;
+            sys.position[idx] = 0;
             break;
     }
 }
@@ -189,22 +189,22 @@ static void wp_limits_set_machine_positions (axes_signals_t cycle)
     float xy[2];
     uint_fast8_t idx = N_AXIS;
 
-    xy[X_AXIS] = sys_position[X_AXIS] / settings.axis[X_AXIS].steps_per_mm;
-    xy[Y_AXIS] = sys_position[Y_AXIS] / settings.axis[Y_AXIS].steps_per_mm;
+    xy[X_AXIS] = sys.position[X_AXIS] / settings.axis[X_AXIS].steps_per_mm;
+    xy[Y_AXIS] = sys.position[Y_AXIS] / settings.axis[Y_AXIS].steps_per_mm;
 
     if(settings.homing.flags.force_set_origin) {
         if (cycle.mask & bit(--idx)) do {
             switch(--idx) {
                 case X_AXIS:
-                    sys_position[A_MOTOR] = wp_convert_to_b_motor_steps(xy);
-                    sys_position[B_MOTOR] = - sys_position[A_MOTOR];
+                    sys.position[A_MOTOR] = wp_convert_to_b_motor_steps(xy);
+                    sys.position[B_MOTOR] = - sys.position[A_MOTOR];
                     break;
                 case Y_AXIS:
-                    sys_position[A_MOTOR] = wp_convert_to_a_motor_steps(xy);
-                    sys_position[B_MOTOR] = sys_position[A_MOTOR];
+                    sys.position[A_MOTOR] = wp_convert_to_a_motor_steps(xy);
+                    sys.position[B_MOTOR] = sys.position[A_MOTOR];
                     break;
                 default:
-                    sys_position[idx] = 0;
+                    sys.position[idx] = 0;
                     break;
             }
         } while (idx);
@@ -217,16 +217,16 @@ static void wp_limits_set_machine_positions (axes_signals_t cycle)
              switch(idx) {
                  case X_AXIS:
                      off_axis_position = wp_convert_to_b_motor_steps(xy);
-                     sys_position[A_MOTOR] = set_axis_position + off_axis_position;
-                     sys_position[B_MOTOR] = set_axis_position - off_axis_position;
+                     sys.position[A_MOTOR] = set_axis_position + off_axis_position;
+                     sys.position[B_MOTOR] = set_axis_position - off_axis_position;
                      break;
                  case Y_AXIS:
                      off_axis_position = wp_convert_to_a_motor_steps(xy);
-                     sys_position[A_MOTOR] = off_axis_position + set_axis_position;
-                     sys_position[B_MOTOR] = off_axis_position - set_axis_position;
+                     sys.position[A_MOTOR] = off_axis_position + set_axis_position;
+                     sys.position[B_MOTOR] = off_axis_position - set_axis_position;
                      break;
                  default:
-                     sys_position[idx] = set_axis_position;
+                     sys.position[idx] = set_axis_position;
                      break;
              }
          }
@@ -248,7 +248,7 @@ void wall_plotter_init (void)
     machine.spindlezero_mm[A_MOTOR] = (float)machine.spindlezero[A_MOTOR] / settings.axis[A_MOTOR].steps_per_mm;
     machine.spindlezero_mm[B_MOTOR] = (float)machine.spindlezero[B_MOTOR] / settings.axis[B_MOTOR].steps_per_mm;
 
-    sys_position[B_MOTOR] = machine.width;
+    sys.position[B_MOTOR] = machine.width;
 
     kinematics.limits_set_target_pos = wp_limits_set_target_pos;
     kinematics.limits_get_axis_mask = wp_limits_get_axis_mask;

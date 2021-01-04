@@ -36,6 +36,7 @@
 #include "hal.h"
 #include "report.h"
 #include "nvs_buffer.h"
+#include "state_machine.h"
 
 #ifdef ENABLE_SPINDLE_LINEARIZATION
 #include <stdio.h>
@@ -746,7 +747,7 @@ void report_probe_parameters (void)
 {
     // Report in terms of machine position.
     float print_position[N_AXIS];
-    system_convert_array_steps_to_mpos(print_position, sys_probe_position);
+    system_convert_array_steps_to_mpos(print_position, sys.probe_position);
     hal.stream.write("[PRB:");
     hal.stream.write(get_axis_values(print_position));
     hal.stream.write(sys.flags.probe_succeeded ? ":1" : ":0");
@@ -1238,7 +1239,7 @@ void report_realtime_status (void)
         .triggered = Off
     };
 
-    memcpy(current_position, sys_position, sizeof(sys_position));
+    memcpy(current_position, sys.position, sizeof(sys.position));
     system_convert_array_steps_to_mpos(print_position, current_position);
 
     if(hal.probe.get_state)
@@ -1247,7 +1248,9 @@ void report_realtime_status (void)
     // Report current machine state and sub-states
     hal.stream.write_all("<");
 
-    switch (gc_state.tool_change && sys.state == STATE_CYCLE ? STATE_TOOL_CHANGE : sys.state) {
+    sys_state_t state = state_get();
+
+    switch (gc_state.tool_change && state == STATE_CYCLE ? STATE_TOOL_CHANGE : state) {
 
         case STATE_IDLE:
             hal.stream.write_all("Idle");
@@ -1255,7 +1258,7 @@ void report_realtime_status (void)
 
         case STATE_CYCLE:
             hal.stream.write_all("Run");
-            if(sys_probing_state == Probing_Active && settings.status_report.run_substate)
+            if(sys.probing_state == Probing_Active && settings.status_report.run_substate)
                 probing = true;
             else if (probing)
                 probing = probe_state.triggered;
@@ -1396,7 +1399,7 @@ void report_realtime_status (void)
         if (wco_counter > 0 && !sys.report.wco)
             wco_counter--;
         else
-            wco_counter = sys.state & (STATE_HOMING|STATE_CYCLE|STATE_HOLD|STATE_JOG|STATE_SAFETY_DOOR)
+            wco_counter = state_get() & (STATE_HOMING|STATE_CYCLE|STATE_HOLD|STATE_JOG|STATE_SAFETY_DOOR)
                             ? (REPORT_WCO_REFRESH_BUSY_COUNT - 1) // Reset counter for slow refresh
                             : (REPORT_WCO_REFRESH_IDLE_COUNT - 1);
     } else
@@ -1410,7 +1413,7 @@ void report_realtime_status (void)
             sys.report.overrides = On;
             sys.report.spindle = sys.report.spindle || hal.spindle.get_state().on;
             sys.report.coolant = sys.report.coolant || hal.coolant.get_state().value != 0;
-            override_counter = sys.state & (STATE_HOMING|STATE_CYCLE|STATE_HOLD|STATE_JOG|STATE_SAFETY_DOOR)
+            override_counter = state_get() & (STATE_HOMING|STATE_CYCLE|STATE_HOLD|STATE_JOG|STATE_SAFETY_DOOR)
                                  ? (REPORT_OVERRIDE_REFRESH_BUSY_COUNT - 1) // Reset counter for slow refresh
                                  : (REPORT_OVERRIDE_REFRESH_IDLE_COUNT - 1);
         }

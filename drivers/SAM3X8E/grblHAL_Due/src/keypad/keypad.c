@@ -38,12 +38,14 @@
 #include "../grbl/override.h"
 #include "../grbl/protocol.h"
 #include "../grbl/nvs_buffer.h"
+#include "../grbl/state_machine.h"
 #else
 #include "i2c.h"
 #include "grbl/report.h"
 #include "grbl/override.h"
 #include "grbl/protocol.h"
 #include "grbl/nvs_buffer.h"
+#include "grbl/state_machine.h"
 #endif
 
 typedef struct {
@@ -220,7 +222,7 @@ static char *strrepl (char *str, int c, char *str3)
     return str;
 }
 
-static void keypad_process_keypress (uint_fast16_t state)
+static void keypad_process_keypress (sys_state_t state)
 {
     bool addedGcode, jogCommand = false;
     char command[30] = "", keycode = keypad_get_keycode();

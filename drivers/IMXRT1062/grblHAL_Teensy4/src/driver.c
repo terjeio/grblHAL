@@ -200,7 +200,7 @@ static gpio_t KeypadStrobe;
 static gpio_t ModeSelect;
 #endif
 #if QEI_ENABLE
-static qei_enable = false;
+static bool qei_enable = false;
 static gpio_t QEI_A, QEI_B;
  #ifdef QEI_SELECT_PIN
   #define QEI_SELECT_ENABLED 1

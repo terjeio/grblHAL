@@ -81,7 +81,7 @@ void mc_backlash_init (void)
 void mc_sync_backlash_position (void)
 {
     // Update target_prev
-    system_convert_array_steps_to_mpos(target_prev, sys_position);
+    system_convert_array_steps_to_mpos(target_prev, sys.position);
 }
 
 #endif
@@ -103,7 +103,7 @@ bool mc_line (float *target, plan_line_data_t *pl_data)
         limits_soft_check(target);
 
     // If in check gcode mode, prevent motion by blocking planner. Soft limits still work.
-    if (sys.state != STATE_CHECK_MODE && protocol_execute_realtime()) {
+    if (state_get() != STATE_CHECK_MODE && protocol_execute_realtime()) {
 
         // NOTE: Backlash compensation may be installed here. It will need direction info to track when
         // to insert a backlash line motion(s) before the intended line motion and will require its own
@@ -644,7 +644,7 @@ void mc_thread (plan_line_data_t *pl_data, float *position, gc_thread_data *thre
         if(!mc_line(target, pl_data))
             return;
 
-        if(!protocol_buffer_synchronize() && sys.state != STATE_IDLE) // Wait until any previous moves are finished.
+        if(!protocol_buffer_synchronize() && state_get() != STATE_IDLE) // Wait until any previous moves are finished.
             return;
 
         pl_data->condition.rapid_motion = Off;          // Clear rapid motion condition flag,
@@ -725,8 +725,9 @@ status_code_t mc_jog_execute (plan_line_data_t *pl_data, parser_block_t *gc_bloc
 
     // Valid jog command. Plan, set state, and execute.
     mc_line(gc_block->values.xyz, pl_data);
-    if ((sys.state == STATE_IDLE || sys.state == STATE_TOOL_CHANGE) && plan_get_current_block() != NULL) { // Check if there is a block to execute.
-        set_state(STATE_JOG);
+    sys_state_t state = state_get();
+    if ((state == STATE_IDLE || state == STATE_TOOL_CHANGE) && plan_get_current_block() != NULL) { // Check if there is a block to execute.
+        state_set(STATE_JOG);
         st_prep_buffer();
         st_wake_up();  // NOTE: Manual start. No state machine required.
     }
@@ -737,7 +738,7 @@ status_code_t mc_jog_execute (plan_line_data_t *pl_data, parser_block_t *gc_bloc
 // Execute dwell in seconds.
 void mc_dwell (float seconds)
 {
-    if (sys.state != STATE_CHECK_MODE) {
+    if (state_get() != STATE_CHECK_MODE) {
         protocol_buffer_synchronize();
         delay_sec(seconds, DelayMode_Dwell);
     }
@@ -775,7 +776,7 @@ status_code_t mc_homing_cycle (axes_signals_t cycle)
             return Status_Unhandled;
         }
 
-        set_state(STATE_HOMING);                                // Set homing system state.
+        state_set(STATE_HOMING);                                // Set homing system state.
 #if COMPATIBILITY_LEVEL == 0
         hal.stream.enqueue_realtime_command(CMD_STATUS_REPORT); // Force a status report and
         delay_sec(0.1f, DelayMode_Dwell);                       // delay a bit to get it sent (or perhaps wait a bit for a request?)
@@ -852,7 +853,7 @@ status_code_t mc_homing_cycle (axes_signals_t cycle)
 gc_probe_t mc_probe_cycle (float *target, plan_line_data_t *pl_data, gc_parser_flags_t parser_flags)
 {
     // TODO: Need to update this cycle so it obeys a non-auto cycle start.
-    if (sys.state == STATE_CHECK_MODE)
+    if (state_get() == STATE_CHECK_MODE)
         return GCProbe_CheckMode;
 
     // Finish all queued commands and empty planner buffer before starting probe cycle.
@@ -878,27 +879,27 @@ gc_probe_t mc_probe_cycle (float *target, plan_line_data_t *pl_data, gc_parser_f
         return GCProbe_Abort;
 
     // Activate the probing state monitor in the stepper module.
-    sys_probing_state = Probing_Active;
+    sys.probing_state = Probing_Active;
 
     // Perform probing cycle. Wait here until probe is triggered or motion completes.
     system_set_exec_state_flag(EXEC_CYCLE_START);
     do {
         if(!protocol_execute_realtime()) // Check for system abort
             return GCProbe_Abort;
-    } while (!(sys.state == STATE_IDLE || sys.state == STATE_TOOL_CHANGE));
+    } while (!(state_get() == STATE_IDLE || state_get() == STATE_TOOL_CHANGE));
 
     // Probing cycle complete!
 
     // Set state variables and error out, if the probe failed and cycle with error is enabled.
-    if (sys_probing_state == Probing_Active) {
+    if (sys.probing_state == Probing_Active) {
         if (parser_flags.probe_is_no_error)
-            memcpy(sys_probe_position, sys_position, sizeof(sys_position));
+            memcpy(sys.probe_position, sys.position, sizeof(sys.position));
         else
             system_set_exec_alarm(Alarm_ProbeFailContact);
     } else
         sys.flags.probe_succeeded = On; // Indicate to system the probing cycle completed successfully.
 
-    sys_probing_state = Probing_Off;                // Ensure probe state monitor is disabled.
+    sys.probing_state = Probing_Off;                // Ensure probe state monitor is disabled.
     hal.probe.configure(false, false);  // Re-initialize invert mask.
     protocol_execute_realtime();                    // Check and execute run-time commands
 
@@ -955,7 +956,7 @@ void mc_override_ctrl_update (gc_override_flags_t override_state)
 ISR_CODE void mc_reset ()
 {
     // Only this function can set the system reset. Helps prevent multiple kill calls.
-    if (bit_isfalse(sys_rt_exec_state, EXEC_RESET)) {
+    if (bit_isfalse(sys.rt_exec_state, EXEC_RESET)) {
 
         system_set_exec_state_flag(EXEC_RESET);
 
@@ -966,13 +967,13 @@ ISR_CODE void mc_reset ()
         // NOTE: If steppers are kept enabled via the step idle delay setting, this also keeps
         // the steppers enabled by avoiding the go_idle call altogether, unless the motion state is
         // violated, by which, all bets are off.
-        if ((sys.state & (STATE_CYCLE|STATE_HOMING|STATE_JOG)) || sys.step_control.execute_hold || sys.step_control.execute_sys_motion) {
+        if ((state_get() & (STATE_CYCLE|STATE_HOMING|STATE_JOG)) || sys.step_control.execute_hold || sys.step_control.execute_sys_motion) {
 
             sys.position_lost = true;
 
-            if (sys.state != STATE_HOMING)
+            if (state_get() != STATE_HOMING)
                 system_set_exec_alarm(Alarm_AbortCycle);
-            else if (!sys_rt_exec_alarm)
+            else if (!sys.rt_exec_alarm)
                 system_set_exec_alarm(Alarm_HomingFailReset);
 
             st_go_idle(); // Force kill steppers. Position has likely been lost.

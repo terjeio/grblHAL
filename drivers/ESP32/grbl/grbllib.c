@@ -51,13 +51,6 @@
 
 // Declare system global variable structure
 system_t sys = {0};
-int32_t sys_position[N_AXIS];               // Real-time machine (aka home) position vector in steps.
-int32_t sys_probe_position[N_AXIS];         // Last probe position in machine coordinates and steps.
-bool prior_mpg_mode;                        // Enter MPG mode on startup?
-volatile probing_state_t sys_probing_state; // Probing state value. Used to coordinate the probing cycle with stepper ISR.
-volatile uint_fast16_t sys_rt_exec_state;   // Global realtime executor bitflag variable for state management. See EXEC bitmasks.
-volatile uint_fast16_t sys_rt_exec_alarm;   // Global realtime executor bitflag variable for setting various alarms.
-
 grbl_t grbl;
 grbl_hal_t hal;
 
@@ -67,9 +60,9 @@ static bool stream_tx_blocking (void)
 {
     // TODO: Restructure st_prep_buffer() calls to be executed here during a long print.
 
-    grbl.on_execute_realtime(sys.state);
+    grbl.on_execute_realtime(state_get());
 
-    return !(sys_rt_exec_state & EXEC_RESET);
+    return !(sys.rt_exec_state & EXEC_RESET);
 }
 
 #ifdef KINEMATICS_API
@@ -170,7 +163,7 @@ int grbl_enter (void)
   #endif
     settings_init(); // Load Grbl settings from non-volatile storage
 
-    memset(sys_position, 0, sizeof(sys_position)); // Clear machine position.
+    memset(sys.position, 0, sizeof(sys.position)); // Clear machine position.
 
 // check and configure driver
 
@@ -207,7 +200,7 @@ int grbl_enter (void)
     }
 
     if(hal.get_position)
-        hal.get_position(&sys_position); // TODO:  restore on abort when returns true?
+        hal.get_position(&sys.position); // TODO:  restore on abort when returns true?
 
 #ifdef COREXY
     corexy_init();
@@ -231,9 +224,9 @@ int grbl_enter (void)
         report_init_fns();
 
         if(!sys.position_lost || settings.homing.flags.keep_on_reset)
-            memset(&sys, 0, offsetof(system_t, homed)); // Clear system variables except state, alarm & homed status.
+            memset(&sys, 0, offsetof(system_t, homed)); // Clear system variables except alarm & homed status.
         else
-            memset(&sys, 0, offsetof(system_t, state)); // Clear system variables except state & alarm.
+            memset(&sys, 0, offsetof(system_t, alarm)); // Clear system variables except state & alarm.
 
         sys.override.feed_rate = DEFAULT_FEED_OVERRIDE;          // Set to 100%
         sys.override.rapid_rate = DEFAULT_RAPID_OVERRIDE;        // Set to 100%
@@ -241,11 +234,6 @@ int grbl_enter (void)
 
         if(settings.parking.flags.enabled)
             sys.override.control.parking_disable = settings.parking.flags.deactivate_upon_init;
-
-        memset(sys_probe_position, 0, sizeof(sys_probe_position)); // Clear probe position.
-        sys_probing_state = Probing_Off;
-        sys_rt_exec_state = 0;
-        sys_rt_exec_alarm = 0;
 
         flush_override_buffers();
 
@@ -271,8 +259,8 @@ int grbl_enter (void)
         // Print welcome message. Indicates an initialization has occured at power-up or with a reset.
         report_init_message();
 
-        if(sys.state == STATE_ESTOP)
-            set_state(STATE_ALARM);
+        if(state_get() == STATE_ESTOP)
+            state_set(STATE_ALARM);
 
         if(hal.driver_cap.mpg_mode)
             hal.stream.enqueue_realtime_command(sys.mpg_mode ? CMD_STATUS_REPORT_ALL : CMD_STATUS_REPORT);
@@ -282,7 +270,6 @@ int grbl_enter (void)
             looping = hal.driver_release == NULL || hal.driver_release();
 
         sys.cold_start = false;
-        sys_rt_exec_state = 0;
     }
 
     return 0;

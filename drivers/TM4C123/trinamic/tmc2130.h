@@ -1,12 +1,12 @@
 /*
  * tmc2130.h - register and message (datagram) descriptors for Trinamic TMC2130 stepper driver
  *
- * v0.0.4 / 2020-12-26 / (c) Io Engineering / Terje
+ * v0.0.5 / 2020-01-04 / (c) Io Engineering / Terje
  */
 
 /*
 
-Copyright (c) 2018-2020, Terje Io
+Copyright (c) 2018-2021, Terje Io
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -698,6 +698,12 @@ typedef struct {
 } TMC2130_interface_t;
 
 #pragma pack(pop)
+
+// Generic SPI interface definitions
+typedef TMC2130_t TMC_SPI_driver_t;
+typedef TMC2130_status_t TMC_SPI_status_t;
+typedef TMC2130_datagram_t TMC_SPI_datagram_t;
+#define TMC_SPI_STATUS_REG TMC2130Reg_DRV_STATUS
 
 void TMC2130_InterfaceInit (TMC2130_interface_t *interface);
 bool TMC2130_Init(TMC2130_t *driver);

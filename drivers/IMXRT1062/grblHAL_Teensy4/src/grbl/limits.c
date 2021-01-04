@@ -3,7 +3,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2017-2020 Terje Io
+  Copyright (c) 2017-2021 Terje Io
   Copyright (c) 2012-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -31,6 +31,7 @@
 #include "motion_control.h"
 #include "limits.h"
 #include "tool_change.h"
+#include "state_machine.h"
 #ifdef KINEMATICS_API
 #include "kinematics.h"
 #endif
@@ -65,7 +66,7 @@ ISR_CODE void limit_interrupt_handler (axes_signals_t state) // DEFAULT: Limit p
     // locked out until a homing cycle or a kill lock command. Allows the user to disable the hard
     // limit setting if their limits are constantly triggering after a reset and move their axes.
 
-    if (!(sys.state & (STATE_ALARM|STATE_ESTOP)) && !sys_rt_exec_alarm) {
+    if (!(state_get() & (STATE_ALARM|STATE_ESTOP)) && !sys.rt_exec_alarm) {
 
       #ifdef HARD_LIMIT_FORCE_STATE_CHECK
         // Check limit pin state.
@@ -91,7 +92,7 @@ void limits_set_machine_positions (axes_signals_t cycle, bool add_pulloff)
     if(settings.homing.flags.force_set_origin) {
         do {
             if (cycle.mask & bit(--idx)) {
-                sys_position[idx] = 0;
+                sys.position[idx] = 0;
                 sys.home_position[idx] = 0.0f;
             }
         } while(idx);
@@ -100,7 +101,7 @@ void limits_set_machine_positions (axes_signals_t cycle, bool add_pulloff)
             sys.home_position[idx] = bit_istrue(settings.homing.dir_mask.value, bit(idx))
                                       ? settings.axis[idx].max_travel + pulloff
                                       : - pulloff;
-            sys_position[idx] = sys.home_position[idx] * settings.axis[idx].steps_per_mm;
+            sys.position[idx] = sys.home_position[idx] * settings.axis[idx].steps_per_mm;
         }
     } while(idx);
 }
@@ -118,7 +119,7 @@ static bool limits_pull_off (axes_signals_t axis, float distance)
         .line_number = HOMING_CYCLE_LINE_NUMBER
     };
 
-    system_convert_array_steps_to_mpos(target.values, sys_position);
+    system_convert_array_steps_to_mpos(target.values, sys.position);
 
     do {
         idx--;
@@ -150,9 +151,9 @@ static bool limits_pull_off (axes_signals_t axis, float distance)
         st_prep_buffer(); // Check and prep segment buffer.
 
         // Exit routines: No time to run protocol_execute_realtime() in this loop.
-        if (sys_rt_exec_state & (EXEC_SAFETY_DOOR | EXEC_RESET | EXEC_CYCLE_COMPLETE)) {
+        if (sys.rt_exec_state & (EXEC_SAFETY_DOOR | EXEC_RESET | EXEC_CYCLE_COMPLETE)) {
 
-            uint_fast16_t rt_exec = sys_rt_exec_state;
+            uint_fast16_t rt_exec = sys.rt_exec_state;
 
             // Homing failure condition: Reset issued during cycle.
             if (rt_exec & EXEC_RESET)
@@ -166,7 +167,7 @@ static bool limits_pull_off (axes_signals_t axis, float distance)
             if (hal.homing.get_state().mask & axis.mask)
                 system_set_exec_alarm(Alarm_FailPulloff);
 
-            if (sys_rt_exec_alarm) {
+            if (sys.rt_exec_alarm) {
                 mc_reset(); // Stop motors, if they are running.
                 protocol_execute_realtime();
                 return false;
@@ -247,7 +248,7 @@ static bool limits_homing_cycle (axes_signals_t cycle, axes_signals_t auto_squar
     do {
 
         // Initialize and declare variables needed for homing routine.
-        system_convert_array_steps_to_mpos(target, sys_position);
+        system_convert_array_steps_to_mpos(target, sys.position);
         axislock = (axes_signals_t){0};
         n_active_axis = 0;
 
@@ -260,7 +261,7 @@ static bool limits_homing_cycle (axes_signals_t cycle, axes_signals_t auto_squar
 #ifdef KINEMATICS_API
                 kinematics.limits_set_target_pos(idx);
 #else
-                sys_position[idx] = 0;
+                sys.position[idx] = 0;
 #endif
                 // Set target direction based on cycle mask and homing cycle approach state.
                 if (bit_istrue(settings.homing.dir_mask.value, bit(idx)))
@@ -305,7 +306,7 @@ static bool limits_homing_cycle (axes_signals_t cycle, axes_signals_t auto_squar
                         }
                     }
                     if((autosquare_check = (homing_state.mask & auto_square.mask) == 0))
-                        initial_trigger_position = sys_position[dual_motor_axis];
+                        initial_trigger_position = sys.position[dual_motor_axis];
                 }
 
                 idx = N_AXIS;
@@ -324,7 +325,7 @@ static bool limits_homing_cycle (axes_signals_t cycle, axes_signals_t auto_squar
 
                 sys.homing_axis_lock.mask = axislock.mask;
 
-                if (autosquare_check && abs(initial_trigger_position - sys_position[dual_motor_axis]) > autosquare_fail_distance) {
+                if (autosquare_check && abs(initial_trigger_position - sys.position[dual_motor_axis]) > autosquare_fail_distance) {
                     system_set_exec_alarm(Alarm_HomingFailAutoSquaringApproach);
                     mc_reset();
                     protocol_execute_realtime();
@@ -335,9 +336,9 @@ static bool limits_homing_cycle (axes_signals_t cycle, axes_signals_t auto_squar
             st_prep_buffer(); // Check and prep segment buffer. NOTE: Should take no longer than 200us.
 
             // Exit routines: No time to run protocol_execute_realtime() in this loop.
-            if (sys_rt_exec_state & (EXEC_SAFETY_DOOR | EXEC_RESET | EXEC_CYCLE_COMPLETE)) {
+            if (sys.rt_exec_state & (EXEC_SAFETY_DOOR | EXEC_RESET | EXEC_CYCLE_COMPLETE)) {
 
-                uint_fast16_t rt_exec = sys_rt_exec_state;
+                uint_fast16_t rt_exec = sys.rt_exec_state;
 
                 // Homing failure condition: Reset issued during cycle.
                 if (rt_exec & EXEC_RESET)
@@ -355,7 +356,7 @@ static bool limits_homing_cycle (axes_signals_t cycle, axes_signals_t auto_squar
                 if (approach && (rt_exec & EXEC_CYCLE_COMPLETE))
                     system_set_exec_alarm(Alarm_HomingFailApproach);
 
-                if (sys_rt_exec_alarm) {
+                if (sys.rt_exec_alarm) {
                     mc_reset(); // Stop motors, if they are running.
                     protocol_execute_realtime();
                     return false;
@@ -470,12 +471,12 @@ void limits_soft_check  (float *target)
         // Force feed hold if cycle is active. All buffered blocks are guaranteed to be within
         // workspace volume so just come to a controlled stop so position is not lost. When complete
         // enter alarm mode.
-        if (sys.state == STATE_CYCLE) {
+        if (state_get() == STATE_CYCLE) {
             system_set_exec_state_flag(EXEC_FEED_HOLD);
             do {
                 if(!protocol_execute_realtime())
                     return; // aborted!
-            } while (sys.state != STATE_IDLE);
+            } while (state_get() != STATE_IDLE);
         }
         mc_reset(); // Issue system reset and ensure spindle and coolant are shutdown.
         system_set_exec_alarm(Alarm_SoftLimit); // Indicate soft limit critical event

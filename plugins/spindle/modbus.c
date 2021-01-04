@@ -4,7 +4,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
   except modbus_CRC16x which is Copyright (c) 2006 Christian Walter <wolti@sil.at>
   Lifted from his FreeModbus Libary
 
@@ -29,11 +29,13 @@
 #include "../grbl/hal.h"
 #include "../grbl/protocol.h"
 #include "../grbl/nvs_buffer.h"
+#include "../grbl/state_machine.h"
 #else
 #include "grbl/hal.h"
 #include "grbl/protocol.h"
 #include "grbl/settings.h"
 #include "grbl/nvs_buffer.h"
+#include "grbl/state_machine.h"
 #endif
 
 #include "modbus.h"
@@ -92,7 +94,7 @@ static bool valid_crc (char *buf, uint_fast16_t len)
     return buf[len - 1] == (crc >> 8) && buf[len - 2] == (crc & 0xFF);
 }
 */
-void modbus_poll (uint_fast16_t grbl_state)
+void modbus_poll (sys_state_t grbl_state)
 {
     static uint32_t last_ms;
 
@@ -200,7 +202,7 @@ bool modbus_send (modbus_message_t *msg, bool block)
         bool poll = true;
 
         while(state != ModBus_Idle) {
-            grbl.on_execute_realtime(sys.state);
+            grbl.on_execute_realtime(state_get());
             if(ABORTED)
                 return false;
         }
@@ -221,7 +223,7 @@ bool modbus_send (modbus_message_t *msg, bool block)
 
         while(poll) {
 
-            grbl.on_execute_realtime(sys.state);
+            grbl.on_execute_realtime(state_get());
 
             if(ABORTED)
                 poll = false;
@@ -402,7 +404,7 @@ static void onReportOptions (bool newopt)
     on_report_options(newopt);
 
     if(!newopt)
-        hal.stream.write("[PLUGIN:MODBUS v0.02]" ASCII_EOL);
+        hal.stream.write("[PLUGIN:MODBUS v0.03]" ASCII_EOL);
 }
 
 bool modbus_init (modbus_stream_t *mstream)

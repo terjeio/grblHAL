@@ -2,9 +2,9 @@
 
   mcode.c - user defined M-codes template
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2019-2020 Terje Io
+  Copyright (c) 2019-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -90,7 +90,7 @@ static status_code_t validate (parser_block_t *gc_block, parameter_words_t *para
 // parameters: state - sys.state (bitmap, defined in system.h)
 //             gc_block - pointer to parser_block_t struct (defined in grbl/gcode.h).
 // returns:    -
-static void execute (uint_fast16_t state, parser_block_t *gc_block) {
+static void execute (sys_state_t state, parser_block_t *gc_block) {
 
     bool handled = true;
 

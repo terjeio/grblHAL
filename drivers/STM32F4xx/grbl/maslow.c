@@ -411,7 +411,7 @@ static void maslow_limits_set_target_pos (uint_fast8_t idx) // fn name?
     /*
     int32_t axis_position;
     float position[3];
-    maslow_convert_array_steps_to_mpos(position, sys_position);
+    maslow_convert_array_steps_to_mpos(position, sys.position);
 
     float aCl,bCl;    // set initial chain lengths to table center when $HOME
     void triangularInverse(float ,float , float* , float* );
@@ -431,27 +431,27 @@ static void maslow_limits_set_target_pos (uint_fast8_t idx) // fn name?
     set_axis_position = 0;    // force to center of table -- its a Maslow thing
 
     triangularInverse((float)(set_axis_position), (float)(set_axis_position), &aCl, &bCl);
-    sys_position[A_MOTOR] = (int32_t) lround(aCl * settings.steps_per_mm[A_MOTOR]);
-    sys_position[B_MOTOR] = (int32_t) lround(bCl * settings.steps_per_mm[B_MOTOR]);
-    sys_position[Z_AXIS] = set_axis_position;
+    sys.position[A_MOTOR] = (int32_t) lround(aCl * settings.steps_per_mm[A_MOTOR]);
+    sys.position[B_MOTOR] = (int32_t) lround(bCl * settings.steps_per_mm[B_MOTOR]);
+    sys.position[Z_AXIS] = set_axis_position;
 
     store_current_machine_pos();    // reset all the way out to stored space
     sys.step_control = STEP_CONTROL_NORMAL_OP; // Return step control to normal operation.
     return;
 
-  sys_position[idx] = set_axis_position;
+  sys.position[idx] = set_axis_position;
 
     switch(idx) {
         case X_AXIS:
-            axis_position = system_convert_maslow_to_y_axis_steps(sys_position);
-            sys_position[A_MOTOR] = axis_position;
-            sys_position[B_MOTOR] = -axis_position;
+            axis_position = system_convert_maslow_to_y_axis_steps(sys.position);
+            sys.position[A_MOTOR] = axis_position;
+            sys.position[B_MOTOR] = -axis_position;
             break;
         case Y_AXIS:
-            sys_position[A_MOTOR] = sys_position[B_MOTOR] = system_convert_maslow_to_x_axis_steps(sys_position);
+            sys.position[A_MOTOR] = sys.position[B_MOTOR] = system_convert_maslow_to_x_axis_steps(sys.position);
             break;
         default:
-            sys_position[idx] = 0;
+            sys.position[idx] = 0;
             break;
     }
     */
@@ -468,15 +468,15 @@ static void maslow_limits_set_machine_positions (axes_signals_t cycle)
         if (cycle.mask & bit(--idx)) do {
             switch(--idx) {
                 case X_AXIS:
-                    sys_position[A_MOTOR] = system_convert_maslow_to_y_axis_steps(sys_position);
-                    sys_position[B_MOTOR] = - sys_position[A_MOTOR];
+                    sys.position[A_MOTOR] = system_convert_maslow_to_y_axis_steps(sys.position);
+                    sys.position[B_MOTOR] = - sys.position[A_MOTOR];
                     break;
                 case Y_AXIS:
-                    sys_position[A_MOTOR] = system_convert_maslow_to_x_axis_steps(sys_position);
-                    sys_position[B_MOTOR] = sys_position[A_MOTOR];
+                    sys.position[A_MOTOR] = system_convert_maslow_to_x_axis_steps(sys.position);
+                    sys.position[B_MOTOR] = sys.position[A_MOTOR];
                     break;
                 default:
-                    sys_position[idx] = 0;
+                    sys.position[idx] = 0;
                     break;
             }
         } while (idx);
@@ -488,17 +488,17 @@ static void maslow_limits_set_machine_positions (axes_signals_t cycle)
                                           : lroundf(-settings.homing.pulloff * settings.steps_per_mm[idx]);
              switch(idx) {
                  case X_AXIS:
-                     off_axis_position = system_convert_maslow_to_y_axis_steps(sys_position);
-                     sys_position[A_MOTOR] = set_axis_position + off_axis_position;
-                     sys_position[B_MOTOR] = set_axis_position - off_axis_position;
+                     off_axis_position = system_convert_maslow_to_y_axis_steps(sys.position);
+                     sys.position[A_MOTOR] = set_axis_position + off_axis_position;
+                     sys.position[B_MOTOR] = set_axis_position - off_axis_position;
                      break;
                  case Y_AXIS:
-                     off_axis_position = system_convert_maslow_to_x_axis_steps(sys_position);
-                     sys_position[A_MOTOR] = off_axis_position + set_axis_position;
-                     sys_position[B_MOTOR] = off_axis_position - set_axis_position;
+                     off_axis_position = system_convert_maslow_to_x_axis_steps(sys.position);
+                     sys.position[A_MOTOR] = off_axis_position + set_axis_position;
+                     sys.position[B_MOTOR] = off_axis_position - set_axis_position;
                      break;
                  default:
-                     sys_position[idx] = set_axis_position;
+                     sys.position[idx] = set_axis_position;
                      break;
              }
          }
@@ -507,7 +507,7 @@ static void maslow_limits_set_machine_positions (axes_signals_t cycle)
 }
 
 // TODO: format output in grbl fashion: [...]
-status_code_t maslow_tuning (uint_fast16_t state, char *line, char *lcline)
+status_code_t maslow_tuning (sys_state_t state, char *line, char *lcline)
 {
     status_code_t retval = Status_OK;
 
@@ -709,7 +709,7 @@ bool maslow_init (void)
         hal.driver_axis_settings = AxisSetting_MaslowMaxSetting - AXIS_SETTINGS_INCREMENT;
 
         recomputeGeometry();
-        triangularInverse(sys_position, xy);
+        triangularInverse(sys.position, xy);
 
         selected_motor = A_MOTOR;
 
