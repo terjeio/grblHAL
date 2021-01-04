@@ -1,9 +1,9 @@
 /*
-  trinamic.c - Trinamic TMC2209 plugin
+  trinamic.c - Trinamic TMC5160 plugin
 
   Part of grblHAL
 
-  Copyright (c) 2020-2021 Terje Io
+  Copyright (c) 2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -25,7 +25,7 @@
 #include "driver.h"
 #endif
 
-#if TRINAMIC_ENABLE == 2209
+#if TRINAMIC_ENABLE == 5160
 
 #include <stdio.h>
 #include <string.h>
@@ -36,9 +36,11 @@
 #ifdef ARDUINO
 #include "../grbl/nvs_buffer.h"
 #include "../grbl/protocol.h"
+#include "../grbl/state_machine.h"
 #else
 #include "grbl/nvs_buffer.h"
 #include "grbl/protocol.h"
+#include "grbl/state_machine.h"
 #endif
 
 #include "grbl/report.h"
@@ -52,35 +54,36 @@
   #if TRINAMIC_I2C
     #include "i2c.h"
   #else
-    #include "spi.h"
+//    #include "spi.h"
   #endif
 #endif
 
 static bool warning = false, is_homing = false;
 static volatile uint_fast16_t diag1_poll = 0;
 static char sbuf[65]; // string buffer for reports
-static TMC2209_t stepper[N_AXIS];
+static TMC5160_t stepper[N_AXIS];
 static axes_signals_t homing = {0}, otpw_triggered = {0};
 static limits_get_state_ptr limits_get_state = NULL;
 static stepper_pulse_start_ptr hal_stepper_pulse_start = NULL;
 static driver_setting_ptrs_t driver_settings;
 static on_realtime_report_ptr on_realtime_report;
 static on_report_options_ptr on_report_options;
+static trinamic_on_drivers_init_ptr on_drivers_init;
 static user_mcode_ptrs_t user_mcode;
 static trinamic_settings_t trinamic;
-static parameter_words_t command_words;
 static struct {
+    axes_signals_t axes;
     bool raw;
     bool sg_status_enable;
     volatile bool sg_status;
     bool sfilt;
     uint32_t sg_status_axis;
-    axes_signals_t sg_status_axismask;
     uint32_t msteps;
 } report = {0};
+parameter_words_t word;
 
 #if TRINAMIC_DEV
-static TMC2209_datagram_t *reg_ptr = NULL;
+static TMC5160_datagram_t *reg_ptr = NULL;
 #endif
 
 #if TRINAMIC_I2C
@@ -93,12 +96,13 @@ TMCI2C_monitor_status_dgr_t dgr_monitor = {
 };
 #endif
 
-static void write_debug_report (axes_signals_t axes);
+static void write_debug_report (void);
 
-// Wrapper for initializing physical interface (since two alternatives are provided)
-void trinamic_if_init (TMC2209_interface_t *driver)
+// Wrapper for initializing physical interfac
+void trinamic_if_init (trinamic_driver_if_t *driver)
 {
-    TMC2209_InterfaceInit(driver);
+    on_drivers_init = driver->on_drivers_init;
+    TMC5160_InterfaceInit(&driver->interface);
 }
 
 static const setting_detail_t trinamic_settings[] = {
@@ -121,36 +125,27 @@ static setting_details_t *on_report_settings (void)
     return &details;
 }
 
-static void pos_failed (uint_fast16_t state)
+static void pos_failed (sys_state_t state)
 {
     report_message("Could not communicate with stepper driver!", Message_Warning);
 }
 
 static void trinamic_driver_config (uint_fast8_t axis)
 {
-    uint_fast8_t idx = N_AXIS;
+    TMC5160_SetDefaults(&stepper[axis]); // Init shadow registers to default values
 
-    hal.delay_ms(10, NULL);
-
-    TMC2209_SetDefaults(&stepper[axis]); // Init shadow registers to default values
-
-    stepper[axis].axis = idx;
-    stepper[axis].current = trinamic.driver[axis].current;
-    stepper[axis].microsteps = trinamic.driver[axis].microsteps;
-    stepper[axis].r_sense = trinamic.driver[axis].r_sense;
-
-    if(!TMC2209_Init(&stepper[axis])) {
+    if(!TMC5160_Init(&stepper[axis])) {
         protocol_enqueue_rt_command(pos_failed);
         system_raise_alarm(Alarm_SelftestFailed);
         return;
     }
 
-//          #if TRINAMIC_I2C
-//            TMC2209_WriteRegister(NULL, (TMC2209_datagram_t *)&dgr_enable);
-//          #endif
+    stepper[axis].axis = axis;
+    stepper[axis].current = trinamic.driver[axis].current;
+    stepper[axis].microsteps = trinamic.driver[axis].microsteps;
+    stepper[axis].r_sense = trinamic.driver[axis].r_sense;
 
-/*
-    switch(idx) {
+    switch(axis) {
 
         case X_AXIS:
           #ifdef TMC_X_ADVANCED
@@ -178,10 +173,47 @@ static void trinamic_driver_config (uint_fast8_t axis)
             dgr_enable.reg.monitor.x = TMC_Z_MONITOR;
           #endif
             break;
-    } */
 
-    TMC2209_SetCurrent(&stepper[axis], trinamic.driver[axis].current, stepper[axis].hold_current_pct);
-    TMC2209_SetMicrosteps(&stepper[axis], trinamic.driver[axis].microsteps);
+#ifdef A_AXIS
+        case A_AXIS:
+          #ifdef TMC_A_ADVANCED
+            TMC_A_ADVANCED
+          #endif
+          #if TRINAMIC_I2C && TMC_A_MONITOR
+            dgr_enable.reg.monitor.x = TMC_A_MONITOR;
+          #endif
+            break;
+#endif
+
+#ifdef B_AXIS
+        case B_AXIS:
+          #ifdef TMC_B_ADVANCED
+            TMC_B_ADVANCED
+          #endif
+          #if TRINAMIC_I2C && TMC_B_MONITOR
+            dgr_enable.reg.monitor.x = TMC_B_MONITOR;
+          #endif
+            break;
+#endif
+
+#ifdef C_AXIS
+        case C_AXIS:
+          #ifdef TMC_C_ADVANCED
+            TMC_C_ADVANCED
+          #endif
+          #if TRINAMIC_I2C && TMC_C_MONITOR
+            dgr_enable.reg.monitor.x = TMC_C_MONITOR;
+          #endif
+            break;
+#endif
+    }
+
+    TMC5160_SetCurrent(&stepper[axis], trinamic.driver[axis].current, stepper[axis].hold_current_pct);
+    TMC5160_SetMicrosteps(&stepper[axis], trinamic.driver[axis].microsteps);
+
+  #if TRINAMIC_I2C
+    TMC5160_WriteRegister(NULL, (TMC5160_datagram_t *)&dgr_enable);
+  #endif
 }
 
 // Parse and set driver specific parameters
@@ -198,14 +230,19 @@ status_code_t trinamic_setting (setting_type_t setting, float value, char *svalu
 
             case AxisSetting_StepperCurrent:
                 trinamic.driver[idx].current = (uint16_t)value;
-                TMC2209_SetCurrent(&stepper[idx], trinamic.driver[idx].current, stepper[idx].hold_current_pct);
+                TMC5160_SetCurrent(&stepper[idx], trinamic.driver[idx].current, stepper[idx].hold_current_pct);
                 break;
 
             case AxisSetting_MicroSteps:
-                if(TMC2209_MicrostepsIsValid((uint16_t)value)) {
-                    trinamic.driver[idx].microsteps = (tmc2209_microsteps_t)value;
-                    TMC2209_SetMicrosteps(&stepper[idx], trinamic.driver[idx].microsteps);
-                    TMC2209_ReadRegister(&stepper[idx], (TMC2209_datagram_t *)&stepper[idx].ifcnt);
+                /*
+                if(value >= 0 && value <= 8) {
+                    trinamic.driver[idx].microsteps = (tmc5160_microsteps_t)value;
+                    stepper[idx].chopconf.reg.mres = trinamic.driver[idx].microsteps;
+                    TMC5160_WriteRegister(&stepper[idx], (TMC5160_datagram_t *)&stepper[idx].chopconf);
+                } */
+                if(TMC5160_MicrostepsIsValid((uint16_t)value)) {
+                    trinamic.driver[idx].microsteps = (tmc5160_microsteps_t)value;
+                    TMC5160_SetMicrosteps(&stepper[idx], trinamic.driver[idx].microsteps);
                 }
                 else
                     status = Status_InvalidStatement;
@@ -219,6 +256,8 @@ status_code_t trinamic_setting (setting_type_t setting, float value, char *svalu
 #if TRINAMIC_MIXED_DRIVERS
         case Setting_TrinamicDriver:
             trinamic.driver_enable.mask = (uint8_t)value & AXES_BITMASK;
+            if(on_drivers_init)
+                on_drivers_init(trinamic.driver_enable);
             break;
 #endif
         case Setting_TrinamicHoming:
@@ -303,7 +342,6 @@ static void trinamic_settings_restore (void)
         }
     } while(idx);
 
-
     hal.nvs.memcpy_to_nvs(driver_settings.nvs_address, (uint8_t *)&trinamic, sizeof(trinamic_settings_t), true);
 
     if(driver_settings.restore)
@@ -331,10 +369,14 @@ static void trinamic_settings_load (void)
     trinamic.driver_enable.mask = AXES_BITMASK;
 #endif
 
+    if(on_drivers_init)
+        on_drivers_init(trinamic.driver_enable);
+
     trinamic_drivers_init();
 }
 
-// Append Trinamic settings to '$$' report
+// Append Trinamic settings to '$$' reports
+
 static void trinamic_settings_report (setting_type_t setting)
 {
     bool reported = true;
@@ -388,7 +430,7 @@ static void trinamic_realtime_report (stream_write_ptr stream_write, report_trac
     if(warning) {
         warning = false;
 #if TRINAMIC_I2C
-        TMCI2C_status_t status = (TMCI2C_status_t)TMC2209_ReadRegister(NULL, (TMC2209_datagram_t *)&dgr_monitor).value;
+        TMCI2C_status_t status = (TMCI2C_status_t)TMC5160_ReadRegister(NULL, (TMC5160_datagram_t *)&dgr_monitor).value;
         otpw_triggered.mask |= dgr_monitor.reg.otpw.mask;
         sprintf(sbuf, "|TMCMON:%d:%d:%d:%d:%d", status.value, dgr_monitor.reg.ot.mask, dgr_monitor.reg.otpw.mask, dgr_monitor.reg.otpw_cnt.mask, dgr_monitor.reg.error.mask);
         stream_write(sbuf);
@@ -417,9 +459,9 @@ static void write_line (char *s)
 //
 static void report_sg_status (sys_state_t state)
 {
-    TMC2209_ReadRegister(&stepper[report.sg_status_axis], (TMC2209_datagram_t *)&stepper[report.sg_status_axis].sg_result);
+    TMC5160_ReadRegister(&stepper[report.sg_status_axis], (TMC5160_datagram_t *)&stepper[report.sg_status_axis].drv_status);
     hal.stream.write("[SG:");
-    hal.stream.write(uitoa((uint32_t)stepper[report.sg_status_axis].sg_result.reg.result));
+    hal.stream.write(uitoa((uint32_t)stepper[report.sg_status_axis].drv_status.reg.sg_result));
     hal.stream.write("]" ASCII_EOL);
 }
 
@@ -429,7 +471,9 @@ static void stepper_pulse_start (stepper_t *motors)
 
     hal_stepper_pulse_start(motors);
 
-    if(motors->step_outbits.mask & report.sg_status_axismask.mask) {
+    report.sg_status_axis = 0;
+
+    if(motors->step_outbits.x) {
         step_count++;
         if(step_count == report.msteps) {
             step_count = 0;
@@ -451,16 +495,15 @@ static void report_sg_params (void)
 // Enable/disable stallGuard
 static void stallGuard_enable (uint32_t axis, bool enable)
 {
-//    stepper[axis].gconf.reg.diag1_stall = enable;
-    stepper[axis].gconf.reg.en_spreadcycle = !enable; // stealthChop
-    TMC2209_WriteRegister(&stepper[axis], (TMC2209_datagram_t *)&stepper[axis].gconf);
-/*
-    stepper[axis].tcoolthrs.reg.tcoolthrs = enable ? (1 << 20) - 1 : 0;
-    TMC2209_WriteRegister(&stepper[axis], (TMC2209_datagram_t *)&stepper[axis].tcoolthrs);
-    */
-    stepper[axis].sgthrs.reg.threshold = trinamic.driver[axis].homing_sensitivity & 0x7F; // 7-bits signed value
-    TMC2209_WriteRegister(&stepper[axis], (TMC2209_datagram_t *)&stepper[axis].sgthrs);
+    stepper[axis].gconf.reg.diag1_stall = enable;
+    stepper[axis].gconf.reg.en_pwm_mode = !enable; // stealthChop
+    TMC5160_WriteRegister(&stepper[axis], (TMC5160_datagram_t *)&stepper[axis].gconf);
 
+    stepper[axis].tcoolthrs.reg.tcoolthrs = enable ? (1 << 20) - 1 : 0;
+    TMC5160_WriteRegister(&stepper[axis], (TMC5160_datagram_t *)&stepper[axis].tcoolthrs);
+
+    stepper[axis].coolconf.reg.sgt = trinamic.driver[axis].homing_sensitivity & 0x7F; // 7-bits signed value
+    TMC5160_WriteRegister(&stepper[axis], (TMC5160_datagram_t *)&stepper[axis].coolconf);
 }
 
 // Validate M-code axis parameters
@@ -531,41 +574,41 @@ static status_code_t trinamic_MCodeValidate (parser_block_t *gc_block, parameter
                 if(isnan(gc_block->values.r) || isnan(gc_block->values.q))
                     state = Status_BadNumberFormat;
                 else {
-                    reg_ptr = TMC2130_GetRegPtr(&stepper[report.sg_status_axis], (tmc2130_regaddr_t)gc_block->values.r);
+                    reg_ptr = TMC5160_GetRegPtr(&stepper[report.sg_status_axis], (tmc5160_regaddr_t)gc_block->values.r);
                     state = reg_ptr == NULL ? Status_GcodeValueOutOfRange : Status_OK;
                     (*parameter_words).r = (*parameter_words).q = Off;
                 }
             }
             break;
 
-    #endif
+#endif
 
         case Trinamic_DebugReport:
             state = Status_OK;
-            command_words = *parameter_words;
+            word = *parameter_words;
 
-            if(command_words.h && gc_block->values.h > 1)
+            if(word.h && gc_block->values.h > 1)
                 state = Status_BadNumberFormat;
 
-            if(command_words.q && isnan(gc_block->values.q))
+            if(word.q && isnan(gc_block->values.q))
                 state = Status_BadNumberFormat;
 
-            if(command_words.s && isnan(gc_block->values.s))
+            if(word.s && isnan(gc_block->values.s))
                 state = Status_BadNumberFormat;
 
             (*parameter_words).h = (*parameter_words).i = (*parameter_words).q = (*parameter_words).s =
               (*parameter_words).x = (*parameter_words).y = (*parameter_words).z = Off;
 
-    #ifdef A_AXIS
+#ifdef A_AXIS
             (*parameter_words).a = Off;
-    #endif
-    #ifdef B_AXIS
+#endif
+#ifdef B_AXIS
             (*parameter_words).b = Off;
-    #endif
-    #ifdef C_AXIS
+#endif
+#ifdef C_AXIS
             (*parameter_words).c = Off;
-    #endif
-    //            gc_block->user_mcode_sync = true;
+#endif
+//            gc_block->user_mcode_sync = true;
             break;
 
         case Trinamic_StepperCurrent:
@@ -612,7 +655,7 @@ static status_code_t trinamic_MCodeValidate (parser_block_t *gc_block, parameter
 }
 
 // Execute driver specific M-code
-static void trinamic_MCodeExecute (sys_state_t state, parser_block_t *gc_block)
+static void trinamic_MCodeExecute (uint_fast16_t state, parser_block_t *gc_block)
 {
     bool handled = true;
     uint_fast8_t idx = N_AXIS;
@@ -627,29 +670,54 @@ static void trinamic_MCodeExecute (sys_state_t state, parser_block_t *gc_block)
 
         case Trinamic_WriteRegister:
             reg_ptr->payload.value = (uint32_t)gc_block->values.q;
-            TMC2209_WriteRegister(&stepper[report.sg_status_axis], reg_ptr);
+            TMC5160_WriteRegister(&stepper[report.sg_status_axis], reg_ptr);
             break;
 
 #endif
 
-        case Trinamic_DebugReport:;
-            axes_signals_t axes;
-            axes.x = command_words.x;
-            axes.y = command_words.y;
-            axes.z = command_words.z;
+        case Trinamic_DebugReport:
+            if(word.i)
+                trinamic_drivers_init();
+
+            if(word.h)
+                report.sfilt = gc_block->values.h != 0.0f;
+
+            if(word.q)
+                report.raw = gc_block->values.q != 0.0f;
+
+            if(word.s) {
+                report.sg_status_enable = gc_block->values.s != 0.0f;
+                report.msteps = trinamic.driver[report.sg_status_axis].microsteps;
+            }
+
+            if(report.sg_status_enable) {
+                if(hal_stepper_pulse_start == NULL) {
+                    hal_stepper_pulse_start = hal.stepper.pulse_start;
+                    hal.stepper.pulse_start = stepper_pulse_start;
+                }
+                stepper[report.sg_status_axis].coolconf.reg.sfilt = report.sfilt;
+                TMC5160_WriteRegister(&stepper[report.sg_status_axis], (TMC5160_datagram_t *)&stepper[report.sg_status_axis].coolconf);
+            } else if(hal_stepper_pulse_start != NULL) {
+                hal.stepper.pulse_start = hal_stepper_pulse_start;
+                hal_stepper_pulse_start = NULL;
+            }
+
+            report.axes.x = word.x;
+            report.axes.y = word.y;
+            report.axes.z = word.z;
 #ifdef A_AXIS
-            axes.a = command_words.a;
+            report.axes.a = word.a;
 #endif
 #ifdef B_AXIS
-            axes.b = command_words.b;
+            report.axes.b = word.b;
 #endif
 #ifdef C_AXIS
-            axes.c = command_words.c;
+            report.axes.c = word.c;
 #endif
 
-            if(axes.mask) {
-                axes.mask &= trinamic.driver_enable.mask;
-                uint32_t axis = 0, mask = axes.mask;
+            if(report.axes.mask) {
+                report.axes.mask &= trinamic.driver_enable.mask;
+                uint32_t axis = 0, mask = report.axes.mask;
                 while(mask) {
                     if(mask & 0x01) {
                         report.sg_status_axis = axis;
@@ -658,57 +726,32 @@ static void trinamic_MCodeExecute (sys_state_t state, parser_block_t *gc_block)
                     axis++;
                     mask >>= 1;
                 }
-            }
+            } else
+                report.axes.mask = trinamic.driver_enable.mask;
 
-            if(command_words.i)
-                trinamic_drivers_init();
+            if(!(word.i || word.s || word.h || word.q))
+                write_debug_report();
 
-            if(command_words.h)
-                report.sfilt = gc_block->values.h != 0.0f;
-
-            if(command_words.q)
-                report.raw = gc_block->values.q != 0.0f;
-
-            if(command_words.s) {
-                report.sg_status_enable = gc_block->values.s != 0.0f;
-                report.msteps = trinamic.driver[report.sg_status_axis].microsteps;
-            }
-
-            if(report.sg_status_enable) {
-                report.sg_status_axismask.mask = 1 << report.sg_status_axis;
-                if(hal_stepper_pulse_start == NULL) {
-                    hal_stepper_pulse_start = hal.stepper.pulse_start;
-                    hal.stepper.pulse_start = stepper_pulse_start;
-                }
-  //              stepper[report.sg_status_axis].coolconf.reg.sfilt = report.sfilt;
-  //              TMC2209_WriteRegister(&stepper[report.sg_status_axis], (TMC2130_datagram_t *)&stepper[report.sg_status_axis].coolconf);
-            } else if(hal_stepper_pulse_start != NULL) {
-                hal.stepper.pulse_start = hal_stepper_pulse_start;
-                hal_stepper_pulse_start = NULL;
-            }
-
-            stallGuard_enable(report.sg_status_axis, report.sg_status_enable);
-
-            if(!(command_words.i || command_words.s || command_words.h || command_words.q))
-                write_debug_report(axes.mask ? axes : trinamic.driver_enable);
+            word.value = 0;
             break;
 
         case Trinamic_StepperCurrent:
             do {
                 idx--;
                 if(!isnan(gc_block->values.xyz[idx]))
-                    TMC2209_SetCurrent(&stepper[idx], (uint16_t)gc_block->values.xyz[idx],
+                    TMC5160_SetCurrent(&stepper[idx], (uint16_t)gc_block->values.xyz[idx],
                                         isnan(gc_block->values.q) ? stepper[idx].hold_current_pct : (uint8_t)gc_block->values.q);
             } while(idx);
             break;
 
         case Trinamic_ReportPrewarnFlags:; // TODO: format grbl style?
+            TMC5160_status_t status;
             for(idx = 0; idx < N_AXIS; idx++) {
                 if(bit_istrue(trinamic.driver_enable.mask, bit(idx))) {
-                    bool ok = TMC2209_ReadRegister(&stepper[idx], (TMC2209_datagram_t *)&stepper[idx].drv_status);
+                    status = TMC5160_ReadRegister(&stepper[idx], (TMC5160_datagram_t *)&stepper[idx].drv_status);
                     strcpy(sbuf, axis_letter[idx]);
                     strcat(sbuf, ":");
-                    if(!ok)
+                    if(status.driver_error)
                         strcat(sbuf, "E");
                     else if(stepper[idx].drv_status.reg.ot)
                         strcat(sbuf, "O");
@@ -730,7 +773,7 @@ static void trinamic_MCodeExecute (sys_state_t state, parser_block_t *gc_block)
             do {
                 idx--;
                 if(!isnan(gc_block->values.xyz[idx]))
-                    TMC2209_SetHybridThreshold(&stepper[idx], (uint32_t)gc_block->values.xyz[idx], settings.axis[idx].steps_per_mm);
+                    TMC5160_SetHybridThreshold(&stepper[idx], (uint32_t)gc_block->values.xyz[idx], settings.axis[idx].steps_per_mm);
             } while(idx);
             break;
 
@@ -739,9 +782,9 @@ static void trinamic_MCodeExecute (sys_state_t state, parser_block_t *gc_block)
                 idx--;
                 if(!isnan(gc_block->values.xyz[idx])) {
                     trinamic.driver[idx].homing_sensitivity = (int8_t)gc_block->values.xyz[idx];
-                    stepper[idx].sgthrs.reg.threshold = trinamic.driver[idx].homing_sensitivity & 0x7F; // 7-bits signed value
-                    //!                    stepper[idx].coolconf.reg.sfilt = report.sfilt;
-                    TMC2209_WriteRegister(&stepper[idx], (TMC2209_datagram_t *)&stepper[idx].sgthrs);
+                    stepper[idx].coolconf.reg.sfilt = report.sfilt;
+                    stepper[idx].coolconf.reg.sgt = trinamic.driver[idx].homing_sensitivity; // 7 bits signed
+                    TMC5160_WriteRegister(&stepper[idx], (TMC5160_datagram_t *)&stepper[idx].coolconf);
                 }
             } while(idx);
             break;
@@ -761,7 +804,7 @@ axes_signals_t trinamic_stepper_enable (axes_signals_t enable)
 {
     dgr_enable.reg.enable.mask = enable.mask & trinamic.driver_enable.mask;
 
-    TMC2209_WriteRegister(NULL, (TMC2209_datagram_t *)&dgr_enable);
+    TMC5160_WriteRegister(NULL, (TMC5160_datagram_t *)&dgr_enable);
 
     return trinamic.driver_enable;
 }
@@ -779,8 +822,8 @@ static axes_signals_t trinamic_limits (void)
         uint_fast8_t idx = N_AXIS;
         do {
             if(bit_istrue(homing.mask, bit(--idx))) {
-                TMC2209_ReadRegister(&stepper[idx], (TMC2209_datagram_t *)&stepper[idx].ioin);
-                if(stepper[idx].ioin.reg.diag)
+                TMC5160_ReadRegister(&stepper[idx], (TMC5160_datagram_t *)&stepper[idx].drv_status);
+                if(stepper[idx].drv_status.reg.stallGuard)
                     bit_true(signals.mask, idx);
             }
         } while(idx);
@@ -818,18 +861,18 @@ void trinamic_homing (bool enable)
 
 // Write Marlin style driver debug report to output stream (M122)
 // NOTE: this output is not in a parse friendly format for grbl senders
-static void write_debug_report (axes_signals_t axes)
+static void write_debug_report (void)
 {
     uint_fast8_t idx = N_AXIS;
 
     hal.stream.write("[TRINAMIC]" ASCII_EOL);
 
     do {
-        if(bit_istrue(axes.mask, bit(--idx))) {
-            TMC2209_ReadRegister(&stepper[idx], (TMC2209_datagram_t *)&stepper[idx].chopconf);
-            TMC2209_ReadRegister(&stepper[idx], (TMC2209_datagram_t *)&stepper[idx].drv_status);
-            TMC2209_ReadRegister(&stepper[idx], (TMC2209_datagram_t *)&stepper[idx].pwm_scale);
-            TMC2209_ReadRegister(&stepper[idx], (TMC2209_datagram_t *)&stepper[idx].tstep);
+        if(bit_istrue(report.axes.mask, bit(--idx))) {
+            TMC5160_ReadRegister(&stepper[idx], (TMC5160_datagram_t *)&stepper[idx].chopconf);
+            TMC5160_ReadRegister(&stepper[idx], (TMC5160_datagram_t *)&stepper[idx].drv_status);
+            TMC5160_ReadRegister(&stepper[idx], (TMC5160_datagram_t *)&stepper[idx].pwm_scale);
+            TMC5160_ReadRegister(&stepper[idx], (TMC5160_datagram_t *)&stepper[idx].tstep);
             if(stepper[idx].drv_status.reg.otpw)
                 otpw_triggered.mask |= bit(idx);
         }
@@ -841,84 +884,84 @@ static void write_debug_report (axes_signals_t axes)
 
         sprintf(sbuf, "%-15s", "");
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx)))
+            if(bit_istrue(report.axes.mask, bit(idx)))
                 sprintf(append(sbuf), "%8s", axis_letter[idx]);
         }
         write_line(sbuf);
 
         sprintf(sbuf, "%-15s", "Set current");
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx)))
+            if(bit_istrue(report.axes.mask, bit(idx)))
                 sprintf(append(sbuf), "%8d", stepper[idx].current);
         }
         write_line(sbuf);
 
         sprintf(sbuf, "%-15s", "RMS current");
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx)))
-                sprintf(append(sbuf), "%8d", TMC2209_GetCurrent(&stepper[idx]));
+            if(bit_istrue(report.axes.mask, bit(idx)))
+                sprintf(append(sbuf), "%8d", TMC5160_GetCurrent(&stepper[idx]));
         }
         write_line(sbuf);
 
         sprintf(sbuf, "%-15s", "Peak current");
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx)))
-                sprintf(append(sbuf), "%8ld", (uint32_t)((float)TMC2209_GetCurrent(&stepper[idx]) * sqrtf(2)));
+            if(bit_istrue(report.axes.mask, bit(idx)))
+                sprintf(append(sbuf), "%8ld", (uint32_t)((float)TMC5160_GetCurrent(&stepper[idx]) * sqrtf(2)));
         }
         write_line(sbuf);
 
         sprintf(sbuf, "%-15s", "Run current");
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx)))
+            if(bit_istrue(report.axes.mask, bit(idx)))
                 sprintf(append(sbuf), "%5d/31", stepper[idx].ihold_irun.reg.irun);
         }
         write_line(sbuf);
 
         sprintf(sbuf, "%-15s", "Hold current");
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx)))
+            if(bit_istrue(report.axes.mask, bit(idx)))
                 sprintf(append(sbuf), "%5d/31", stepper[idx].ihold_irun.reg.ihold);
         }
         write_line(sbuf);
 
         sprintf(sbuf, "%-15s", "CS actual");
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx)))
+            if(bit_istrue(report.axes.mask, bit(idx)))
                 sprintf(append(sbuf), "%5d/31", stepper[idx].drv_status.reg.cs_actual);
         }
         write_line(sbuf);
-
+/*
         sprintf(sbuf, "%-15s", "PWM scale");
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx)))
+            if(bit_istrue(report.axes.mask, bit(idx)))
                 sprintf(append(sbuf), "%8d", stepper[idx].pwm_scale.reg.pwm_scale);
         }
         write_line(sbuf);
-
+*/
         sprintf(sbuf, "%-15s", "vsense");
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx)))
+            if(bit_istrue(report.axes.mask, bit(idx)))
                 sprintf(append(sbuf), "%8s", stepper[idx].chopconf.reg.vsense ? "1=0.180" : "0=0.325");
         }
         write_line(sbuf);
 
         sprintf(sbuf, "%-15s", "stealthChop");
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx)))
-                sprintf(append(sbuf), "%8s", stepper[idx].gconf.reg.en_spreadcycle ? "true" : "false");
+            if(bit_istrue(report.axes.mask, bit(idx)))
+                sprintf(append(sbuf), "%8s", stepper[idx].gconf.reg.en_pwm_mode ? "true" : "false");
         }
         write_line(sbuf);
 
         sprintf(sbuf, "%-15s", "msteps");
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx)))
+            if(bit_istrue(report.axes.mask, bit(idx)))
                 sprintf(append(sbuf), "%8d", 1 << (8 - stepper[idx].chopconf.reg.mres));
         }
         write_line(sbuf);
 
         sprintf(sbuf, "%-15s", "tstep");
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx)))
+            if(bit_istrue(report.axes.mask, bit(idx)))
                 sprintf(append(sbuf), "%8d", stepper[idx].tstep.reg.tstep);
         }
         write_line(sbuf);
@@ -927,16 +970,16 @@ static void write_debug_report (axes_signals_t axes)
 
         sprintf(sbuf, "%-15s", "threshold");
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx)))
+            if(bit_istrue(report.axes.mask, bit(idx)))
                 sprintf(append(sbuf), "%8d", stepper[idx].tpwmthrs.reg.tpwmthrs);
         }
         write_line(sbuf);
 
         sprintf(sbuf, "%-15s", "[mm/s]");
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx))) {
+            if(bit_istrue(report.axes.mask, bit(idx))) {
                 if(stepper[idx].tpwmthrs.reg.tpwmthrs)
-                    sprintf(append(sbuf), "%8ld", TMC2209_GetTPWMTHRS(&stepper[idx], settings.axis[idx].steps_per_mm));
+                    sprintf(append(sbuf), "%8ld", TMC5160_GetTPWMTHRS(&stepper[idx], settings.axis[idx].steps_per_mm));
                 else
                     sprintf(append(sbuf), "%8s", "-");
             }
@@ -945,7 +988,7 @@ static void write_debug_report (axes_signals_t axes)
 
         sprintf(sbuf, "%-15s", "OT prewarn");
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx)))
+            if(bit_istrue(report.axes.mask, bit(idx)))
                 sprintf(append(sbuf), "%8s", stepper[idx].drv_status.reg.otpw ? "true" : "false");
         }
         write_line(sbuf);
@@ -953,7 +996,7 @@ static void write_debug_report (axes_signals_t axes)
         hal.stream.write("OT prewarn has" ASCII_EOL);
         sprintf(sbuf, "%-15s", "been triggered");
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx)))
+            if(bit_istrue(report.axes.mask, bit(idx)))
                 sprintf(append(sbuf), "%8s", bit_istrue(otpw_triggered.mask, bit(idx)) ? "true" : "false");
         }
         write_line(sbuf);
@@ -962,21 +1005,21 @@ static void write_debug_report (axes_signals_t axes)
         sprintf(sbuf, "%-15s", "pwm autoscale");
 
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx)))
+            if(bit_istrue(report.axes.mask, bit(idx)))
                 sprintf(append(sbuf), "%8d", stepper[idx].pwmconf.reg.pwm_autoscale);
         }
         write_line(sbuf);
 
         sprintf(sbuf, "%-15s", "pwm ampl");
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx)))
+            if(bit_istrue(report.axes.mask, bit(idx)))
                 sprintf(append(sbuf), "%8d", stepper[idx].pwmconf.reg.pwm_ampl);
         }
         write_line(sbuf);
 
         sprintf(sbuf, "%-15s", "pwm grad");
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx)))
+            if(bit_istrue(report.axes.mask, bit(idx)))
                 sprintf(append(sbuf), "%8d", stepper[idx].pwmconf.reg.pwm_grad);
         }
         write_line(sbuf);
@@ -984,14 +1027,14 @@ static void write_debug_report (axes_signals_t axes)
 
         sprintf(sbuf, "%-15s", "off time");
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx)))
+            if(bit_istrue(report.axes.mask, bit(idx)))
                 sprintf(append(sbuf), "%8d", stepper[idx].chopconf.reg.toff);
         }
         write_line(sbuf);
 
         sprintf(sbuf, "%-15s", "blank time");
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx)))
+            if(bit_istrue(report.axes.mask, bit(idx)))
                 sprintf(append(sbuf), "%8d", stepper[idx].chopconf.reg.tbl);
         }
         write_line(sbuf);
@@ -1000,22 +1043,22 @@ static void write_debug_report (axes_signals_t axes)
 
         sprintf(sbuf, "%-15s", "-end");
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx)))
+            if(bit_istrue(report.axes.mask, bit(idx)))
                 sprintf(append(sbuf), "%8d", (int)stepper[idx].chopconf.reg.hend - 3);
         }
         write_line(sbuf);
 
         sprintf(sbuf, "%-15s", "-start");
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx)))
+            if(bit_istrue(report.axes.mask, bit(idx)))
                 sprintf(append(sbuf), "%8d", stepper[idx].chopconf.reg.hstrt + 1);
         }
         write_line(sbuf);
 
         sprintf(sbuf, "%-15s", "Stallguard thrs");
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx))) {
-                int8_t x = stepper[idx].sgthrs.reg.threshold;
+            if(bit_istrue(report.axes.mask, bit(idx))) {
+                int8_t x = stepper[idx].coolconf.reg.sgt;
                 x |= (x & 0x40) ? 0x80 : 0x00;
                 sprintf(append(sbuf), "%8d", (int)x);
             }
@@ -1028,70 +1071,70 @@ static void write_debug_report (axes_signals_t axes)
         write_line(sbuf);
         sprintf(sbuf, "%-15s", "sg_result");
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx)))
-                sprintf(append(sbuf), "%8d", stepper[idx].sg_result.reg.result);
+            if(bit_istrue(report.axes.mask, bit(idx)))
+                sprintf(append(sbuf), "%8d", stepper[idx].drv_status.reg.sg_result);
         }
         write_line(sbuf);
 
         sprintf(sbuf, "%-15s", "stst");
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx)))
+            if(bit_istrue(report.axes.mask, bit(idx)))
                 sprintf(append(sbuf), "%8s", stepper[idx].drv_status.reg.stst ? "*" : "");
         }
         write_line(sbuf);
-/*
+
         sprintf(sbuf, "%-15s", "fsactive");
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx)))
+            if(bit_istrue(report.axes.mask, bit(idx)))
                 sprintf(append(sbuf), "%8s", stepper[idx].drv_status.reg.fsactive ? "*" : "");
         }
         write_line(sbuf);
-*/
+
         sprintf(sbuf, "%-15s", "olb");
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx)))
+            if(bit_istrue(report.axes.mask, bit(idx)))
                 sprintf(append(sbuf), "%8s", stepper[idx].drv_status.reg.olb ? "*" : "");
         }
         write_line(sbuf);
 
         sprintf(sbuf, "%-15s", "ola");
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx)))
+            if(bit_istrue(report.axes.mask, bit(idx)))
                 sprintf(append(sbuf), "%8s", stepper[idx].drv_status.reg.ola ? "*" : "");
         }
         write_line(sbuf);
 
         sprintf(sbuf, "%-15s", "s2gb");
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx)))
+            if(bit_istrue(report.axes.mask, bit(idx)))
                 sprintf(append(sbuf), "%8s", stepper[idx].drv_status.reg.s2gb ? "*" : "");
         }
         write_line(sbuf);
 
         sprintf(sbuf, "%-15s", "s2ga");
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx)))
+            if(bit_istrue(report.axes.mask, bit(idx)))
                 sprintf(append(sbuf), "%8s", stepper[idx].drv_status.reg.s2ga ? "*" : "");
         }
         write_line(sbuf);
 
         sprintf(sbuf, "%-15s", "otpw");
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx)))
+            if(bit_istrue(report.axes.mask, bit(idx)))
                 sprintf(append(sbuf), "%8s", stepper[idx].drv_status.reg.otpw ? "*" : "");
         }
         write_line(sbuf);
 
         sprintf(sbuf, "%-15s", "ot");
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx)))
+            if(bit_istrue(report.axes.mask, bit(idx)))
                 sprintf(append(sbuf), "%8s", stepper[idx].drv_status.reg.ot ? "*" : "");
         }
         write_line(sbuf);
 
         hal.stream.write("STATUS REGISTERS:" ASCII_EOL);
         for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(axes.mask, bit(idx))) {
+            if(bit_istrue(report.axes.mask, bit(idx))) {
                 uint32_t reg = stepper[idx].drv_status.reg.value;
                 sprintf(sbuf, " %s = 0x%02X:%02X:%02X:%02X", axis_letter[idx], (uint8_t)(reg >> 24), (uint8_t)((reg >> 16) & 0xFF), (uint8_t)((reg >> 8) & 0xFF), (uint8_t)(reg & 0xFF));
                 write_line(sbuf);
@@ -1105,7 +1148,7 @@ static void onReportOptions (bool newopt)
     on_report_options(newopt);
 
     if(!newopt)
-        hal.stream.write("[PLUGIN:TMC2209 v0.01]" ASCII_EOL);
+        hal.stream.write("[PLUGIN:TMC5160 v0.01]" ASCII_EOL);
     else if(trinamic.driver_enable.mask) {
         hal.stream.write(",TMC=");
         hal.stream.write(uitoa(trinamic.driver_enable.mask));

@@ -1,36 +1,84 @@
-## Trinamic TMC2130 stepper driver plugin
+## Trinamic stepper driver plugins
 
-This plugin adds settings, M-Code extensions and reports for TMC2130 and TMC2209 stepper drivers.
+These plugins adds settings, M-Code extensions and reports for TMC2130, TMC2209 and TMC5160 stepper drivers.
 
-I supports Marlin-style M-codes such as `M122`, `M911`, `M912`, `M913` and `M914` - some with extensions and some with sligthly different syntax.
+They support Marlin-style M-codes such as `M122`, `M911`, `M912`, `M913` and `M914` - some with extensions and some with sligthly different syntax.
 
-* M122 XYZHSQ - output debug info
-* M906 XYZQ - stepper current
-* M911 - ReportPrewarnFlags
-* M912 - ClearPrewarnFlags:
-* M913 - HybridThreshold
-* M914 - HomingSensivity
+### M-codes
 
-Settings \($n=...\) are provided for axis enable, homing, stepper current, microsteps and sensorless homing. More to follow.
+#### M122 - output debug info or reset driver.
+
+`M122 axes <H-> <S-> <Q-> <I>`
+
+* `H` - 0 = SFILT off, 1 = SFILT on \(TMC2130\) only.
+* `I` - reinitialize driver.
+* `S` - 0 = disable StallGuard and live output of sg-value, 1 = enable StallGuard and live output. 
+* `Q` - not yet enabled.
+
+Examples:  
+`M122` - output debug info for all enabled drivers. This is a plain text report, do not issue from a sender!  
+`M122 Y` - output debug info for Y axis only. This is a plain text report, do not issue from a sender!  
+`M122 I` - reset drivers.  
+`M122 X S1` - enable live output of StallGuard value for tuning. Do not enable when running g-code jobs!  
+
+#### M906 - set stepper current
+
+`M906 axes`
+
+Note: Stepper current is not permanently stored.
+
+Example:  
+`M122 X700 Y950`
+
+#### M912 - Report prewarn flags
+
+`M911`  
+
+#### M122 - Clear prewarn flags
+
+`M912`
+
+#### M913 - Set hybrid threshold
+
+`M913 axes`
+
+Note: Hybrid threshold is not permanently stored.
+
+Example:  
+`M913 X31`
+
+ #### M914 - Set homing sensitivity.
+
+`M914 axes`
+
+Note: Homing sensitivity is not permanently stored.
+
+Example:  
+`M914 X31`
+
+### Settings
+
+Settings are provided for axis enable, homing, stepper current, microsteps and sensorless homing. More to follow.
+
+#### $14x - Stepper current. x = 0 for X-axis, 1 for Y axis etc. 
+
+#### $15x - Motor microsteps. x = 0 for X-axis, 1 for Y axis etc.
+
+Valid values are 1, 2, 4, , 8, 16, 32, 64, 128 and 256.
 
 #### $338 - Driver enable
 
-| Mode | Description |
-|------|-------------|
-| 0    | Uses an external arc voltage input to calculate both Arc Voltage (for Torch Height Control) and Arc OK.|
-| 1    | Uses an external arc voltage input to calculate Arc Voltage (for Torch Height Control).<br>Uses an external Arc OK input for Arc OK.|
-| 2    | Uses an external Arc OK input for Arc OK.<br>Use external up/down signals for Torch Height Control.|
+Parameter is a axismask where value is sum of X=0, Y=1, Z=2 etc.
+
+__NOTE__: Some boards does not allow mixed drivers, for these this setting is not available.
 
 #### $339 - Sensorless homing enable
 
-| Mode | Description |
-|------|-------------|
-| 0    | Uses an external arc voltage input to calculate both Arc Voltage (for Torch Height Control) and Arc OK.|
-| 1    | Uses an external arc voltage input to calculate Arc Voltage (for Torch Height Control).<br>Uses an external Arc OK input for Arc OK.|
-| 2    | Uses an external Arc OK input for Arc OK.<br>Use external up/down signals for Torch Height Control.|
+Parameter is a axismask where value is sum of X=0, Y=1, Z=2 etc.
 
+---
 
-The driver and driver configuration has to be extended to support this plugin.
+The driver and driver configuration has to be extended to support these plugins.
 
 Dependencies:
 
@@ -39,4 +87,4 @@ Dependencies:
 [Trinamic TMC2130 I2C<>SPI Bridge](https://github.com/terjeio/Trinamic_TMC2130_I2C_SPI_Bridge) \(optional\)
 
 ---
-2020-12-25
+2020-01-04
