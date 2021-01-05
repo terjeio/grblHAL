@@ -176,7 +176,7 @@ typedef enum {
     Trinamic_ReportPrewarnFlags = 911,
     Trinamic_ClearPrewarnFlags = 912,
     Trinamic_HybridThreshold = 913,
-    Trinamic_HomingSensivity = 914
+    Trinamic_HomingSensitivity = 914
 } user_mcode_t;
 
 // Define g-code parser position updating flags

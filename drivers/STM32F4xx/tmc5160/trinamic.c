@@ -551,7 +551,7 @@ static user_mcode_t trinamic_MCodeCheck (user_mcode_t mcode)
 
     return trinamic.driver_enable.mask &&
             (mcode == Trinamic_DebugReport || mcode == Trinamic_StepperCurrent || mcode == Trinamic_ReportPrewarnFlags ||
-              mcode == Trinamic_ClearPrewarnFlags || mcode == Trinamic_HybridThreshold || mcode == Trinamic_HomingSensivity)
+              mcode == Trinamic_ClearPrewarnFlags || mcode == Trinamic_HybridThreshold || mcode == Trinamic_HomingSensitivity)
               ? mcode
               : (user_mcode.check ? user_mcode.check(mcode) : UserMCode_Ignore);
 }
@@ -634,7 +634,7 @@ static status_code_t trinamic_MCodeValidate (parser_block_t *gc_block, parameter
             }
             break;
 
-        case Trinamic_HomingSensivity:
+        case Trinamic_HomingSensitivity:
             if(check_params(gc_block, parameter_words)) {
                 uint_fast8_t idx = N_AXIS;
                 state = Status_OK;
@@ -777,7 +777,7 @@ static void trinamic_MCodeExecute (uint_fast16_t state, parser_block_t *gc_block
             } while(idx);
             break;
 
-        case Trinamic_HomingSensivity:
+        case Trinamic_HomingSensitivity:
             do {
                 idx--;
                 if(!isnan(gc_block->values.xyz[idx])) {

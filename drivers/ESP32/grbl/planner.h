@@ -1,9 +1,9 @@
 /*
   planner.h - buffers movement commands and manages the acceleration profile plan
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2019-2020 Terje Io
+  Copyright (c) 2019-2021 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -141,7 +141,7 @@ void plan_sync_position();
 void plan_cycle_reinitialize();
 
 // Returns the number of available blocks in the planner buffer.
-uint8_t plan_get_block_buffer_available();
+uint_fast16_t plan_get_block_buffer_available();
 
 // Returns the status of the block ring buffer. True, if buffer is full.
 bool plan_check_full_buffer();

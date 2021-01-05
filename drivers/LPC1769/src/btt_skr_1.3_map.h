@@ -25,7 +25,7 @@
 
 #define BOARD_NAME "BTT SKR V1.3"
 
-#if TRINAMIC_ENABLE == 2130
+#if TRINAMIC_ENABLE == 2130 || TRINAMIC_ENABLE == 5160
 #define HAS_BOARD_INIT
 void board_init (void);
 #endif

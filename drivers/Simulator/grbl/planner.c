@@ -540,11 +540,11 @@ void plan_sync_position ()
 
 
 // Returns the number of available blocks are in the planner buffer.
-uint8_t plan_get_block_buffer_available ()
+uint_fast16_t plan_get_block_buffer_available ()
 {
-    return (uint8_t)(block_buffer_head >= block_buffer_tail
-                      ? ((BLOCK_BUFFER_SIZE - 1) - (block_buffer_head - block_buffer_tail))
-                      : ((block_buffer_tail - block_buffer_head) - 1));
+    return (uint_fast16_t)(block_buffer_head >= block_buffer_tail
+                            ? ((BLOCK_BUFFER_SIZE - 1) - (block_buffer_head - block_buffer_tail))
+                            : ((block_buffer_tail - block_buffer_head) - 1));
 }
 
 
