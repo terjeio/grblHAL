@@ -78,6 +78,7 @@ static struct {
     volatile bool sg_status;
     bool sfilt;
     uint32_t sg_status_axis;
+    axes_signals_t sg_status_axismask;
     uint32_t msteps;
 } report = {0};
 parameter_words_t word;
@@ -130,20 +131,20 @@ static void pos_failed (sys_state_t state)
     report_message("Could not communicate with stepper driver!", Message_Warning);
 }
 
-static void trinamic_driver_config (uint_fast8_t axis)
+static bool trinamic_driver_config (uint_fast8_t axis)
 {
     TMC5160_SetDefaults(&stepper[axis]); // Init shadow registers to default values
-
-    if(!TMC5160_Init(&stepper[axis])) {
-        protocol_enqueue_rt_command(pos_failed);
-        system_raise_alarm(Alarm_SelftestFailed);
-        return;
-    }
 
     stepper[axis].axis = axis;
     stepper[axis].current = trinamic.driver[axis].current;
     stepper[axis].microsteps = trinamic.driver[axis].microsteps;
     stepper[axis].r_sense = trinamic.driver[axis].r_sense;
+
+    if(!TMC5160_Init(&stepper[axis])) {
+        protocol_enqueue_rt_command(pos_failed);
+    //    system_raise_alarm(Alarm_SelftestFailed);
+        return false;
+    }
 
     switch(axis) {
 
@@ -214,6 +215,8 @@ static void trinamic_driver_config (uint_fast8_t axis)
   #if TRINAMIC_I2C
     TMC5160_WriteRegister(NULL, (TMC5160_datagram_t *)&dgr_enable);
   #endif
+
+    return true;
 }
 
 // Parse and set driver specific parameters
@@ -352,8 +355,10 @@ static void trinamic_drivers_init (void)
 {
     uint_fast8_t idx = N_AXIS;
     do {
-        if(bit_istrue(trinamic.driver_enable.mask, bit(--idx)))
-            trinamic_driver_config(idx);
+        if(bit_istrue(trinamic.driver_enable.mask, bit(--idx))) {
+            if(!trinamic_driver_config(idx))
+                break;
+        }
     } while(idx);
 }
 
@@ -471,11 +476,9 @@ static void stepper_pulse_start (stepper_t *motors)
 
     hal_stepper_pulse_start(motors);
 
-    report.sg_status_axis = 0;
-
-    if(motors->step_outbits.x) {
+    if(motors->step_outbits.mask & report.sg_status_axismask.mask) {
         step_count++;
-        if(step_count == report.msteps) {
+        if(step_count >= report.msteps) {
             step_count = 0;
             protocol_enqueue_rt_command(report_sg_status);
         }
@@ -687,10 +690,11 @@ static void trinamic_MCodeExecute (uint_fast16_t state, parser_block_t *gc_block
 
             if(word.s) {
                 report.sg_status_enable = gc_block->values.s != 0.0f;
-                report.msteps = trinamic.driver[report.sg_status_axis].microsteps;
             }
 
             if(report.sg_status_enable) {
+                report.sg_status_axismask.mask = 1 << report.sg_status_axis;
+                report.msteps = trinamic.driver[report.sg_status_axis].microsteps;
                 if(hal_stepper_pulse_start == NULL) {
                     hal_stepper_pulse_start = hal.stepper.pulse_start;
                     hal.stepper.pulse_start = stepper_pulse_start;

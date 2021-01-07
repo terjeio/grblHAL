@@ -34,7 +34,7 @@ static uint8_t cs_pin[N_AXIS];
 
 static uint8_t sw_spi_xfer (uint8_t byte)
 {
-    uint8_t idx = 8, msk = 0x80, res = 0;
+    uint_fast8_t msk = 0x80, res = 0;
 
     BITBAND_GPIO(TRINAMIC_SCK_PORT->PIN, TRINAMIC_SCK_PIN) = 0;
 
@@ -43,11 +43,12 @@ static uint8_t sw_spi_xfer (uint8_t byte)
         msk >>= 1;
         BITBAND_GPIO(TRINAMIC_SCK_PORT->PIN, TRINAMIC_SCK_PIN) = 1;
         res = (res << 1) | BITBAND_GPIO(TRINAMIC_MISO_PORT->PIN, TRINAMIC_MISO_PIN);
-        if(idx != 1)
+        if(msk)
             BITBAND_GPIO(TRINAMIC_SCK_PORT->PIN, TRINAMIC_SCK_PIN) = 0;
-    } while (--idx);
 
-    return res;
+    } while (msk);
+
+    return (uint8_t)res;
 }
 
 static TMC_SPI_status_t TMC_SPI_ReadRegister (TMC_SPI_driver_t *driver, TMC_SPI_datagram_t *reg)

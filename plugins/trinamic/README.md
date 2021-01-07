@@ -30,11 +30,11 @@ Note: Stepper current is not permanently stored.
 Example:  
 `M122 X700 Y950`
 
-#### M912 - Report prewarn flags
+#### M911 - Report prewarn flags
 
 `M911`  
 
-#### M122 - Clear prewarn flags
+#### M912 - Clear prewarn flags
 
 `M912`
 
@@ -87,4 +87,4 @@ Dependencies:
 [Trinamic TMC2130 I2C<>SPI Bridge](https://github.com/terjeio/Trinamic_TMC2130_I2C_SPI_Bridge) \(optional\)
 
 ---
-2020-01-04
+2020-01-06

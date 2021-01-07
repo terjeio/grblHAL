@@ -2,7 +2,7 @@
 
   usb_serial.cpp - USB serial port wrapper for Arduino MKRZERO
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2018-2020 Terje Io
 
@@ -121,11 +121,11 @@ void usb_serialWriteS (const char *s)
 
             while(txbuf.length) {
 
-                if((avail = Serial.availableForWrite()) > 10) {
+                if((avail = SerialUSB.availableForWrite()) > 10) {
 
                     length = avail < txbuf.length ? avail : txbuf.length;
 
-                    Serial.write((uint8_t *)txbuf.s, length); // doc is wrong - does not return bytes sent!
+                    SerialUSB.write((uint8_t *)txbuf.s, length); // doc is wrong - does not return bytes sent!
 
                     txbuf.length -= length;
                     txbuf.s += length;
