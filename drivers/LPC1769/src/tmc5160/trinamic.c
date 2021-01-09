@@ -827,7 +827,7 @@ static axes_signals_t trinamic_limits (void)
         do {
             if(bit_istrue(homing.mask, bit(--idx))) {
                 TMC5160_ReadRegister(&stepper[idx], (TMC5160_datagram_t *)&stepper[idx].drv_status);
-                if(stepper[idx].drv_status.reg.stallGuard)
+                if(stepper[idx].drv_status.reg.stallguard)
                     bit_true(signals.mask, idx);
             }
         } while(idx);
@@ -928,6 +928,13 @@ static void write_debug_report (void)
         }
         write_line(sbuf);
 
+        sprintf(sbuf, "%-15s", "Global scaler");
+        for(idx = 0; idx < N_AXIS; idx++) {
+            if(bit_istrue(report.axes.mask, bit(idx)))
+                sprintf(append(sbuf), "%4d/256", stepper[idx].global_scaler.reg.scaler);
+        }
+        write_line(sbuf);
+
         sprintf(sbuf, "%-15s", "CS actual");
         for(idx = 0; idx < N_AXIS; idx++) {
             if(bit_istrue(report.axes.mask, bit(idx)))
@@ -942,12 +949,7 @@ static void write_debug_report (void)
         }
         write_line(sbuf);
 */
-        sprintf(sbuf, "%-15s", "vsense");
-        for(idx = 0; idx < N_AXIS; idx++) {
-            if(bit_istrue(report.axes.mask, bit(idx)))
-                sprintf(append(sbuf), "%8s", stepper[idx].chopconf.reg.vsense ? "1=0.180" : "0=0.325");
-        }
-        write_line(sbuf);
+
 
         sprintf(sbuf, "%-15s", "stealthChop");
         for(idx = 0; idx < N_AXIS; idx++) {

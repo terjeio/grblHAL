@@ -34,7 +34,7 @@
 
 #if SDCARD_ENABLE
 
-#if defined(STM32F103xB) || defined(STM32F401xC) || defined(STM32F411xE) || defined(STM32F446xx)
+#if defined(STM32F103xB) || defined(STM32F401xC) ||  defined(STM32F407xx) || defined(STM32F411xE) || defined(STM32F446xx)
 #define STM32_PLATFORM
 #endif
 

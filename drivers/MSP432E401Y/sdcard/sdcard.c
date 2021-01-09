@@ -120,6 +120,7 @@ static on_report_command_help_ptr on_report_command_help;
 static on_realtime_report_ptr on_realtime_report;
 static on_state_change_ptr state_change_requested;
 static on_program_completed_ptr on_program_completed;
+static on_report_options_ptr on_report_options;
 
 static void sdcard_end_job (void);
 static void sdcard_report (stream_write_ptr stream_write, report_tracking_flags_t report);
@@ -592,10 +593,18 @@ static void onReportCommandHelp (void)
         on_report_command_help();
 }
 
+static void onReportOptions (bool newopt)
+{
+    on_report_options(newopt);
+
+    if(newopt)
+        hal.stream.write(",SD");
+    else
+        hal.stream.write("[PLUGIN:SDCARD v1.00]" ASCII_EOL);
+}
+
 void sdcard_init (void)
 {
-    hal.driver_cap.sd_card = On;
-
     driver_reset = hal.driver_reset;
     hal.driver_reset = sdcard_reset;
 
@@ -604,6 +613,9 @@ void sdcard_init (void)
 
     on_report_command_help = grbl.on_report_command_help;
     grbl.on_report_command_help = onReportCommandHelp;
+
+    on_report_options = grbl.on_report_options;
+    grbl.on_report_options = onReportOptions;
 }
 
 FATFS *sdcard_getfs (void)

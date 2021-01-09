@@ -36,7 +36,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 */
 
-#include <trinamic/tmc2130_i2c_map.h>
+#include "trinamic/tmc2130_i2c_map.h"
 
 #define WR 0x80
 

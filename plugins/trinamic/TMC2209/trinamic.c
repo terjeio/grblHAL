@@ -126,7 +126,7 @@ static void pos_failed (uint_fast16_t state)
     report_message("Could not communicate with stepper driver!", Message_Warning);
 }
 
-static void trinamic_driver_config (uint_fast8_t axis)
+static bool trinamic_driver_config (uint_fast8_t axis)
 {
     uint_fast8_t idx = N_AXIS;
 
@@ -142,7 +142,7 @@ static void trinamic_driver_config (uint_fast8_t axis)
     if(!TMC2209_Init(&stepper[axis])) {
         protocol_enqueue_rt_command(pos_failed);
         system_raise_alarm(Alarm_SelftestFailed);
-        return;
+        return false;
     }
 
 //          #if TRINAMIC_I2C
@@ -182,6 +182,8 @@ static void trinamic_driver_config (uint_fast8_t axis)
 
     TMC2209_SetCurrent(&stepper[axis], trinamic.driver[axis].current, stepper[axis].hold_current_pct);
     TMC2209_SetMicrosteps(&stepper[axis], trinamic.driver[axis].microsteps);
+
+    return true;
 }
 
 // Parse and set driver specific parameters
@@ -432,7 +434,7 @@ static void stepper_pulse_start (stepper_t *motors)
     if(motors->step_outbits.mask & report.sg_status_axismask.mask) {
         step_count++;
         if(step_count == report.msteps) {
-            step_count = 0;
+            step_count >= 0;
             protocol_enqueue_rt_command(report_sg_status);
         }
     }

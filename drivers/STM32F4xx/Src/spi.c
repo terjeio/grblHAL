@@ -1,7 +1,7 @@
 /*
   spi.c - SPI support for SD card & Trinamic plugins
 
-  Part of GrblHAL driver for STM32F4xx
+  Part of grblHAL driver for STM32F4xx
 
   Copyright (c) 2020 Terje Io
 
@@ -81,12 +81,6 @@ uint32_t spi_set_speed (uint32_t prescaler)
     hspi1.Instance->CR1 |= prescaler;
 
     return cur;
-}
-
-
-void spi_disable (void)
-{
-    __HAL_SPI_DISABLE(&hspi1);
 }
 
 uint8_t spi_get_byte (void)

@@ -209,9 +209,9 @@ void board_init (void);
 
 #if TRINAMIC_ENABLE == 2130 || TRINAMIC_ENABLE == 5160
 
-#define TRINAMIC_MOSI_PN    4
+#define TRINAMIC_MOSI_PN    1
 #define TRINAMIC_MOSI_PORT  port(TRINAMIC_MOSI_PN)
-#define TRINAMIC_MOSI_PIN   28
+#define TRINAMIC_MOSI_PIN   17
 #define TRINAMIC_MISO_PN    0
 #define TRINAMIC_MISO_PORT  port(TRINAMIC_MISO_PN)
 #define TRINAMIC_MISO_PIN   5
@@ -219,13 +219,13 @@ void board_init (void);
 #define TRINAMIC_SCK_PORT   port(TRINAMIC_SCK_PN)
 #define TRINAMIC_SCK_PIN    4
 
-#define TRINAMIC_CS_PN 1
+#define TRINAMIC_CS_PN     1
 #define TRINAMIC_CS_PORT   port(TRINAMIC_CS_PN)
-#define TRINAMIC_CSX_PIN   17
-#define TRINAMIC_CSY_PIN   15
-#define TRINAMIC_CSZ_PIN   10
+#define TRINAMIC_CSX_PIN   10
+#define TRINAMIC_CSY_PIN   9
+#define TRINAMIC_CSZ_PIN   8
 #ifdef A_AXIS
-#define TRINAMIC_CSA_PIN   8
+#define TRINAMIC_CSA_PIN   4
 #endif
 #ifdef B_AXIS
 #define TRINAMIC_CSB_PIN   1

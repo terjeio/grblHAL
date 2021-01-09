@@ -2,7 +2,7 @@
 
   serial.c - serial port implementation for STM32F4xx ARM processors
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2019-2020 Terje Io
 
@@ -24,7 +24,7 @@
 #include <string.h>
 
 #include "serial.h"
-#include "grbl.h"
+#include "grbl/hal.h"
 
 #include "main.h"
 

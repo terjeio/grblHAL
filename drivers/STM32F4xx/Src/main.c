@@ -25,7 +25,7 @@
 #include "main.h"
 #include "usb_device.h"
 
-#include "grbllib.h"
+#include "grbl/grbllib.h"
 
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);

@@ -436,7 +436,6 @@ DRESULT disk_read (
 
     DESELECT();            /* CS = H */
     rcvr_spi();            /* Idle (Release DO) */
-//  __HAL_SPI_DISABLE(&hspi1);
 
     return count ? RES_ERROR : RES_OK;
 }
@@ -591,8 +590,6 @@ DRESULT disk_ioctl (
 
         DESELECT();            /* CS = H */
         rcvr_spi();            /* Idle (Release DO) */
-//      __HAL_SPI_DISABLE(&hspi1);
-
     }
 
     return res;
