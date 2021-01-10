@@ -21,7 +21,7 @@
 
 // NOTE: Only one board may be enabled!
 // If none is enabled pin mappings from generic_map.h will be used.
-#define BOARD_CNC3040
+//#define BOARD_CNC3040
 //#define BOARD_CNC_BOOSTERPACK
 
 // Configuration
@@ -29,8 +29,8 @@
 #define USB_SERIAL_CDC       1 // Serial communication via native USB.
 //#define SDCARD_ENABLE        1 // Run gcode programs from SD card, requires sdcard plugin.
 //#define KEYPAD_ENABLE        1 // I2C keypad for jogging etc., requires keypad plugin.
-//#define ODOMETER_ENABLE      1 // Odometer plugin.
-//#define EEPROM_ENABLE        2 // I2C EEPROM support. Set to 1 for 24LC16(2K), 2 for larger sizes. Requires eeprom plugin.
+#define ODOMETER_ENABLE      1 // Odometer plugin.
+#define EEPROM_ENABLE        2 // I2C EEPROM support. Set to 1 for 24LC16(2K), 2 for larger sizes. Requires eeprom plugin.
 //#define EEPROM_IS_FRAM       1 // Uncomment when EEPROM is enabled and chip is FRAM, this to remove write delay.
 
 /**/

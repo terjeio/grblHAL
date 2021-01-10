@@ -250,7 +250,11 @@ static void stepperGoIdle (bool clear_signals)
 // Sets up stepper driver interrupt timeout, "Normal" version
 static void stepperCyclesPerTick (uint32_t cycles_per_tick)
 {
-    STEPPER_TIMER->ARR = cycles_per_tick < (1UL << 20) ? cycles_per_tick : 0x000FFFFFUL;
+    cycles_per_tick = cycles_per_tick < (1UL << 20) ? cycles_per_tick : 0x000FFFFFUL;
+
+    STEPPER_TIMER->ARR = cycles_per_tick;
+    if(cycles_per_tick < STEPPER_TIMER->CNT + 50)
+        STEPPER_TIMER->CNT = cycles_per_tick - 50;
 }
 
 // Set stepper pulse output pins
@@ -1035,12 +1039,12 @@ bool driver_init (void)
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_15, GPIO_PIN_RESET);
 
     hal.info = "STM32F303";
-    hal.driver_version = "210108";
+    hal.driver_version = "210110";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
     hal.driver_setup = driver_setup;
-    hal.f_step_timer = HAL_RCC_GetPCLK1Freq() * 2;
+    hal.f_step_timer = HAL_RCC_GetPCLK2Freq();
     hal.rx_buffer_size = RX_BUFFER_SIZE;
     hal.delay_ms = &driver_delay;
     hal.settings_changed = settings_changed;

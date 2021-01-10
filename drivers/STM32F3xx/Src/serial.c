@@ -24,7 +24,7 @@
 #include <string.h>
 
 #include "serial.h"
-#include "grbl.h"
+#include "grbl/hal.h"
 
 #include "main.h"
 

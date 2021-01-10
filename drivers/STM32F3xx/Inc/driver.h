@@ -142,11 +142,8 @@
 #endif
 
 #if EEPROM_ENABLE|| KEYPAD_ENABLE
-  #if defined(NUCLEO_F411) || defined(NUCLEO_F446)
-    #define I2C_PORT 1 // GPIOB, SCL_PIN = 8, SDA_PIN = 9
-  #else
-    #define I2C_PORT 2 // GPIOB, SCL_PIN = 10, SDA_PIN = 11
-  #endif
+//    #define I2C_PORT 1 // GPIOB, SCL_PIN = 8, SDA_PIN = 9
+    #define I2C_PORT 2 // GPIOA, SCL_PIN = 9, SDA_PIN = 10
 #endif
 
 // End configuration

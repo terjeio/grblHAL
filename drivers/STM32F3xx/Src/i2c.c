@@ -22,7 +22,7 @@
 #include <main.h>
 
 #include "i2c.h"
-#include "grbl.h"
+#include "grbl/hal.h"
 
 #if KEYPAD_ENABLE
 #include "keypad/keypad.h"
