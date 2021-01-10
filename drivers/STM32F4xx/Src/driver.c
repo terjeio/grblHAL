@@ -1374,6 +1374,8 @@ bool driver_init (void)
     hal.info = "STM32F446";
 #elif defined(STM32F411xE)
     hal.info = "STM32F411";
+#elif defined(STM32F407xx)
+    hal.info = "STM32F407";
 #else
     hal.info = "STM32F401CC";
 #endif
