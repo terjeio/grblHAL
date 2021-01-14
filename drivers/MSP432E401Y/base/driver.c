@@ -240,7 +240,7 @@ state_signal_t inputpin[] = {
 static bool pwmEnabled = false, IOInitDone = false;
 static uint32_t pulse_length, pulse_delay;
 static axes_signals_t next_step_outbits;
-static spindle_pwm_t spindle_pwm;
+static spindle_pwm_t spindle_pwm = {0};
 static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
 static probe_state_t probe = {
     .connected = On
@@ -305,16 +305,16 @@ void selectStream (stream_type_t stream)
 
 #if TELNET_ENABLE
         case StreamType_Telnet:
+            hal.stream.write_all("[MSG:TELNET STREAM ACTIVE]" ASCII_EOL);
             memcpy(&hal.stream, &ethernet_stream, sizeof(io_stream_t));
             services.telnet = On;
-            hal.stream.write_all("[MSG:TELNET STREAM ACTIVE]" ASCII_EOL);
             break;
 #endif
 #if WEBSOCKET_ENABLE
         case StreamType_WebSocket:
+            hal.stream.write_all("[MSG:WEBSOCKET STREAM ACTIVE]" ASCII_EOL);
             memcpy(&hal.stream, &websocket_stream, sizeof(io_stream_t));
             services.websocket = On;
-            hal.stream.write_all("[MSG:WEBSOCKET STREAM ACTIVE]" ASCII_EOL);
             break;
 #endif
         case StreamType_Serial:
@@ -949,7 +949,7 @@ static void spindle_set_speed (uint_fast16_t pwm_value)
 {
     if (pwm_value == spindle_pwm.off_value) {
         pwmEnabled = false;
-        if(settings.spindle.disable_with_zero_speed)
+        if(settings.spindle.flags.pwm_action == SpindleAction_DisableWithZeroSPeed)
             spindle_off();
         if(spindle_pwm.always_on) {
             TimerPrescaleMatchSet(SPINDLE_PWM_TIMER_BASE, TIMER_B, spindle_pwm.off_value >> 16);
@@ -1137,6 +1137,7 @@ static void modechange (void)
 // Configures perhipherals when settings are initialized or changed
 static void settings_changed (settings_t *settings)
 {
+    spindle_pwm.offset = -1;
     hal.driver_cap.variable_spindle = spindle_precompute_pwm_values(&spindle_pwm, configCPU_CLOCK_HZ);
 
 #if (STEP_OUTMODE == GPIO_MAP) || (DIRECTION_OUTMODE == GPIO_MAP)
@@ -1645,7 +1646,7 @@ bool driver_init (void)
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
-    hal.driver_version = "210103";
+    hal.driver_version = "210111";
     hal.driver_setup = driver_setup;
 #if !USE_32BIT_TIMER
     hal.f_step_timer = hal.f_step_timer / (STEPPER_DRIVER_PRESCALER + 1);

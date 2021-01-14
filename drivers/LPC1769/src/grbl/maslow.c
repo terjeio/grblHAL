@@ -96,13 +96,13 @@ static const maslow_settings_t maslow_defaults = {
     .YcorrScaling = MASLOW_BCORRSCALING
 };
 
-static status_code_t maslow_settings_set (setting_type_t setting, float value, char *svalue)
+static status_code_t maslow_settings_set (setting_id_t setting, float value, char *svalue)
 {
     status_code_t status = Status_Unhandled;
 
     // TODO: PID settings should be moved to axis settings range...
 
-    if((setting_type_t)setting >= Setting_AxisSettingsBase2 && (setting_type_t)setting < Setting_AxisSettingsBase + AxisSetting_MaslowMaxSetting * AXIS_SETTINGS_INCREMENT) {
+    if((setting_id_t)setting >= Setting_AxisSettingsBase2 && (setting_id_t)setting < Setting_AxisSettingsBase + AxisSetting_MaslowMaxSetting * AXIS_SETTINGS_INCREMENT) {
         uint_fast16_t base_idx = (uint_fast16_t)setting - (uint_fast16_t)Setting_AxisSettingsBase2;
         uint_fast8_t axis_idx = base_idx % AXIS_SETTINGS_INCREMENT;
 
@@ -178,37 +178,37 @@ static status_code_t maslow_settings_set (setting_type_t setting, float value, c
     return status;
 }
 
-static void maslow_settings_report (setting_type_t setting)
+static void maslow_settings_report (setting_id_t setting)
 {
     bool reported = true;
 
     switch(setting) {
 
-        case (setting_type_t)Maslow_ChainOverSprocket:
+        case (setting_id_t)Maslow_ChainOverSprocket:
             report_uint_setting(setting, maslow_hal.settings.chainOverSprocket);
             break;
 
-        case (setting_type_t)Maslow_MachineWidth:
+        case (setting_id_t)Maslow_MachineWidth:
             report_float_setting(setting, maslow_hal.settings.machineWidth, N_DECIMAL_SETTINGVALUE);
             break;
 
-        case (setting_type_t)Maslow_MachineHeight:
+        case (setting_id_t)Maslow_MachineHeight:
             report_float_setting(setting, maslow_hal.settings.machineHeight, N_DECIMAL_SETTINGVALUE);
             break;
 
-        case (setting_type_t)Maslow_DistBetweenMotors:
+        case (setting_id_t)Maslow_DistBetweenMotors:
             report_float_setting(setting, maslow_hal.settings.distBetweenMotors, N_DECIMAL_SETTINGVALUE);
             break;
 
-        case (setting_type_t)Maslow_MotorOffsetY:
+        case (setting_id_t)Maslow_MotorOffsetY:
             report_float_setting(setting, maslow_hal.settings.motorOffsetY, N_DECIMAL_SETTINGVALUE);
             break;
 
-        case (setting_type_t)Maslow_AcorrScaling:
+        case (setting_id_t)Maslow_AcorrScaling:
             report_float_setting(setting, maslow_hal.settings.XcorrScaling, N_DECIMAL_SETTINGVALUE);
             break;
 
-        case (setting_type_t)Maslow_BcorrScaling:
+        case (setting_id_t)Maslow_BcorrScaling:
             report_float_setting(setting, maslow_hal.settings.YcorrScaling, N_DECIMAL_SETTINGVALUE);
             break;
 
@@ -221,7 +221,7 @@ static void maslow_settings_report (setting_type_t setting)
         driver_settings.report(setting);
 }
 
-static void maslow_axis_settings_report (axis_setting_type_t setting, uint8_t axis_idx)
+static void maslow_axis_settings_report (axis_setting_id_t setting, uint8_t axis_idx)
 {
     bool reported = true;
 
@@ -230,19 +230,19 @@ static void maslow_axis_settings_report (axis_setting_type_t setting, uint8_t ax
     switch((maslow_axis_setting_t)setting) {
 
         case AxisSetting_MaslowKP:
-            report_float_setting((setting_type_t)(basetype + axis_idx), maslow_hal.settings.pid[axis_idx].Kp, 3);
+            report_float_setting((setting_id_t)(basetype + axis_idx), maslow_hal.settings.pid[axis_idx].Kp, 3);
             break;
 
         case AxisSetting_MaslowKI:
-            report_float_setting((setting_type_t)(basetype + axis_idx), maslow_hal.settings.pid[axis_idx].Ki, 3);
+            report_float_setting((setting_id_t)(basetype + axis_idx), maslow_hal.settings.pid[axis_idx].Ki, 3);
             break;
 
         case AxisSetting_MaslowKD:
-            report_float_setting((setting_type_t)(basetype + axis_idx), maslow_hal.settings.pid[axis_idx].Kd, 3);
+            report_float_setting((setting_id_t)(basetype + axis_idx), maslow_hal.settings.pid[axis_idx].Kd, 3);
             break;
 
         case AxisSetting_MaslowIMax:
-            report_float_setting((setting_type_t)(basetype + axis_idx), maslow_hal.settings.pid[axis_idx].Imax, 3);
+            report_float_setting((setting_id_t)(basetype + axis_idx), maslow_hal.settings.pid[axis_idx].Imax, 3);
             break;
 
         default:

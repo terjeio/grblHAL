@@ -3,9 +3,9 @@
 
   Webserver backend
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2019-2020 Terje Io
+  Copyright (c) 2019-2021 Terje Io
 
   Some parts of the code is based on example code by Espressif, in the public domain
 
@@ -578,7 +578,7 @@ static esp_err_t settings_set_handler(httpd_req_t *req)
                 cJSON *id = cJSON_GetObjectItemCaseSensitive(setting, "id");
                 cJSON *value = cJSON_GetObjectItemCaseSensitive(setting, "value");
 
-                if((status = settings_store_global_setting ((setting_type_t)((int)id->valuedouble), value->valuestring)) != Status_OK)
+                if((status = settings_store_global_setting ((setting_id_t)((int)id->valuedouble), value->valuestring)) != Status_OK)
                     break;
             }
             cJSON_Delete(root);

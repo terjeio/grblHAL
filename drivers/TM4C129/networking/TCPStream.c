@@ -1,12 +1,12 @@
 //
 // TCPStream.c - lwIP stream implementation, raw "Telnet"
 //
-// v1.1 / 2020-07-13 / Io Engineering / Terje
+// v1.2 / 2021-01-10 / Io Engineering / Terje
 //
 
 /*
 
-Copyright (c) 2018-2020, Terje Io
+Copyright (c) 2018-2021, Terje Io
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -375,9 +375,10 @@ static err_t TCPStreamAccept (void *arg, struct tcp_pcb *pcb, err_t err)
     session->pcbConnect = pcb;
     session->state = TCPState_Connected;
 
-    tcp_accepted(pcb);
-
     TCPStreamRxFlush();
+    TCPStreamTxFlush();
+
+    tcp_accepted(pcb);
 
     session->timeout = 0;
 

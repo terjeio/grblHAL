@@ -4,7 +4,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2019-2020 Terje Io
+  Copyright (c) 2019-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -610,7 +610,7 @@ static void spindle_set_speed (uint_fast16_t pwm_value)
 {
     if (pwm_value == spindle_pwm.off_value) {
         pwmEnabled = false;
-        if(settings.spindle.disable_with_zero_speed)
+        if(settings.spindle.flags.pwm_action == SpindleAction_DisableWithZeroSPeed)
             spindle_off();
         if(spindle_pwm.always_on) {
             SPINDLE_PWM_TIMER->CCR1 = spindle_pwm.off_value;
@@ -1345,10 +1345,6 @@ bool driver_init (void)
 {
     // Enable EEPROM and serial port here for Grbl to be able to configure itself and report any errors
 
-    // GPIO_PinRemapConfig(GPIO_Remap_SWJ_Disable, ENABLE); // ??? Disable JTAG and SWD!?? Bug?
-
-    // __HAL_AFIO_REMAP_SWJ_NOJTAG();
-
 #ifdef STM32F446xx
     hal.info = "STM32F446";
 #elif defined(STM32F411xE)
@@ -1358,12 +1354,12 @@ bool driver_init (void)
 #else
     hal.info = "STM32F401CC";
 #endif
-    hal.driver_version = "201228";
+    hal.driver_version = "210111";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
     hal.driver_setup = driver_setup;
-    hal.f_step_timer = HAL_RCC_GetPCLK1Freq() * 2;
+    hal.f_step_timer = HAL_RCC_GetPCLK2Freq();
     hal.rx_buffer_size = RX_BUFFER_SIZE;
     hal.delay_ms = &driver_delay;
     hal.settings_changed = settings_changed;

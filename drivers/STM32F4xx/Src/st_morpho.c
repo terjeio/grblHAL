@@ -3,7 +3,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -87,7 +87,7 @@ static void aux_set_pullup (void)
     HAL_GPIO_Init(AUXINPUT1_PORT, &GPIO_Init);
 }
 */
-static status_code_t aux_settings_set (setting_type_t setting, float value, char *svalue)
+static status_code_t aux_settings_set (setting_id_t setting, float value, char *svalue)
 {
     status_code_t status = Status_OK;
 
@@ -135,7 +135,7 @@ static status_code_t aux_settings_set (setting_type_t setting, float value, char
     return status == Status_Unhandled && driver_settings.set ? driver_settings.set(setting, value, svalue) : status;
 }
 
-static void aux_settings_report (setting_type_t setting)
+static void aux_settings_report (setting_id_t setting)
 {
     bool reported = true;
 

@@ -1,15 +1,16 @@
 ## grblHAL changelog
 
-Build 20210103 (test only):
-* Last round of planned code refactoring in the core completed.
+2021-01-12:
+* Added $7 setting for option "Spindle off with zero speed".
+* Added `|FW:grblHAL` element to full real-time report requested by sending `0x87`. 
+* Simplified settings handling.
+* No longer sends any messages to networking streams on connect.
+* Added [driver](drivers/STM32F3xx) for STM32F303 based Blackpills.
+* Updated support for Trinamic TMC5160 drivers, currently for the SKR 1.x boards \(LPC176x driver\) - testing i progress.
 * Initial support for Trinamic TMC5160 drivers added, currently for the SKR 1.x boards \(LPC176x driver\) - not yet tested.
-
-Build 20210102 (test only):
 * Added handling for motor fault signal to the core, similar to E-stop handling. Added new alarm and error code for this.
 * Changed to clear homed status on a soft reset only if machine was in motion. Added setting flag for always keeping homed status on soft reset to `$22` setting.  
 __NOTE:__ This change is experimental and might be changed or reverted. Please report any problems related to this.
-
-Build 20201228 (test only):
 * Updated gcode parser \(grbl/gcode.c\) to use bitfields structs instead of bitfield variables.  
 Done to improve readability and for easier debugging.  
 Note that this is a major change and there is a non-zero risk that mistakes has been made.
@@ -18,8 +19,6 @@ Removed the need for user mcode parameter words to have an associated value. Thi
 If no associated value is provided the corresponding value in the value struct is set to `NAN` (Not A Number) for floats and all bits set to 1 for integers.
 * Refactored Trinamic driver code, added initial support for TMC2209. Work in progress.
 * Removed the need to copy the core grbl and plugin code to the driver chosen, this is now kept in sync with the master Subversion repository automatically.
-
-Build 20201224 (test only):
 * Added initial support for RADDS 1.6 board to SAM3X8E driver \(Arduino Due\). Untested!
 * Added C-axis support to iMXRT1062 driver \(Teensy 4.x\).  
 Untested and none of the current board maps has the needed pins defined.
@@ -28,16 +27,12 @@ If POS fails only $-commands are accepted.
 * Work in good progress for Trinamic TMC2209 driver support \(UART mode\).  
 Processor/board specific driver code has to be added for this, currently testing with STM32F446 and Nucleo-64 breakout board.
 * Some bug fixes.
-
-Build 20201219 (test only):
 * Renumbered setting groups for more logical sorting (by id).
 * Harmonized probing code across drivers for planned future extensions.
 * Added additional I/O support for the [Teensy 4.1 T41U5XBB board](https://github.com/phil-barrett/grbl-teensy-4) \(iMXRT1062 driver\), 3 outputs and 4 inputs available via `M62` - `M66`.  
 Not that the result from reading inputs with `M66` cannot be used in a gcode program in any meaningful way.
 * Fixed excessive step pulse jitter in STM32F4xx driver.
 * Added [more options](https://github.com/terjeio/grblHAL/wiki/Report-extensions#controller-information-extensions) to the `NEWOPT` tag in the extended `$I` report.
-
-Build 20201212 (test only):
 * Error 7 is no longer issued on startup if non-volatile storage \(Flash/EEPROM/FRAM\) for settings is not available.
 * [Alarm substate](https://github.com/terjeio/grblHAL/wiki/Report-extensions#realtime-report) \(if available\) is always added to the real-time report if a [complete report](https://github.com/terjeio/grblHAL/wiki/For-sender-developers#single-character-real-time-commands) is requested by sending `0x87`.
 * Added input signal and handling for limit switches override.  
@@ -46,20 +41,13 @@ This allows normal operation so that a manual pull-off can be done before e.g. h
 Currently only the iMXRT1062 \(Teensy 4.x\) driver has support for this, for now by reassigning the safety door input when this is not used for its intended purpose.  
 __NOTE:__ A override will _not_ affect handling of homing and limit switch events elsewhere.
 * Now adds `ODO` to `NEWOPT` tag values if odometer data is available.
-
-Build 20201205 (test only):
 * Updated _[my_plugin.c](templates/my_plugin.c)_ [template](templates/README.md) with settings details for `$HELP` and `$ES`/`$EG` enumerations.
 * Settings/setting groups handling enhanced, moved some to plugins and added sorting (requres enough heap).
 * Removed external dependecies by adding driver source/USB blob to LPC176x driver.
 * Some bug fixes.
-
-Build 20201125 (test only):
 * Enhanced and improved ModBus support code for VFD spindle, added settings for baud rate and receive timeout.
 * Added support for enumeration of and help for driver and plugin provided settings and setting groups.
 * Some bug fixes.
-
-Build 20201120 (test only):
-
 * Moved board selection etc. to [CMakeLists.txt](drivers/ESP32/CMakeLists.txt) for [ESP32 driver](drivers/ESP32/README.md) for simpler configuration.
 * Fixed regression for VFD spindle code, should now be able to run tests.
 * Added build configurations for processor variants and Nucleo-64 boards for the [STM32F4xx driver](drivers/STM32F4xx/README.md).
@@ -81,11 +69,7 @@ __NOTE:__ This is a preview version, format and group codes may change for setti
 `$HELP Settings` - print information about all available settings.  
 `$HELP <argument>` print information about settings from the setting group provided in `<argument>`. E.g. `$HELP Spindle` will print information about spindle settings.  
 __NOTE:__ do _NOT_ issue these commands from a sender MDI as the output may crash it, output is in plaintext and thus intended for use from a terminal only.
-
-Build 20201115 (test only):
-
 __NOTE:__ Settings data format has been changed and settings will be reset to default on update. Backup and restore.
-
 * Moved `#define` values to settings for auto square failure distances:  
 `$347` - default value from `DUAL_AXIS_HOMING_FAIL_AXIS_LENGTH_PERCENT` \(5%\) in grbl/config.h.  
 `$348` - default value from `DUAL_AXIS_HOMING_FAIL_DISTANCE_MIN` \(2.5mm\) in grbl/config.h.  
@@ -98,9 +82,6 @@ Note that settings values will only be reported for axes with dual motors instal
 * Blocked loophole where machine could be unlocked by issuing a single axis homing command when _Homing on startup required_ is enabled.  
 Alarm 11 will now be reissued until all axes configured for homing are homed.
 * Added software debounce for the safety door switch to STM32 drivers.
-
-Build 20201111 (test only):
-
 * "Hardened" parking functionality. It should now tolerate a bouncy door switch and multiple closing/reopenings of the door during retract/restore.  
 __NOTE:__ Not extensively tested. Use with care!
 * Added `$I+` system command. This can be used when [compatibility level](https://github.com/terjeio/grblHAL/wiki/Compatibility-level) is > 0 to get the extended version including the current compatibility setting.

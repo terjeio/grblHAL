@@ -5,7 +5,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2016-2020 Terje Io
+  Copyright (c) 2016-2021 Terje Io
 
   Some parts
    Copyright (c) 2011-2015 Sungeun K. Jeon
@@ -97,7 +97,7 @@ static void stepperPulseStartSyncronized (stepper_t *stepper);
 static bool pwmEnabled = false, IOInitDone = false;
 static uint32_t pulse_length, pulse_delay;
 static axes_signals_t next_step_outbits;
-static spindle_pwm_t spindle_pwm;
+static spindle_pwm_t spindle_pwm = {0};
 static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
 static probe_state_t probe = {
     .connected = On
@@ -511,7 +511,7 @@ static void spindle_set_speed (uint_fast16_t pwm_value)
 {
     if (pwm_value == spindle_pwm.off_value) {
         pwmEnabled = false;
-        if(settings.spindle.disable_with_zero_speed)
+        if(settings.spindle.flags.pwm_action == SpindleAction_DisableWithZeroSPeed)
             spindle_off();
         if(spindle_pwm.always_on) {
             TimerPrescaleMatchSet(SPINDLE_PWM_TIMER_BASE, TIMER_A, spindle_pwm.off_value >> 16);
@@ -673,6 +673,7 @@ static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t 
 // Configures perhipherals when settings are initialized or changed
 static void settings_changed (settings_t *settings)
 {
+    spindle_pwm.offset = -1;
     hal.driver_cap.variable_spindle = spindle_precompute_pwm_values(&spindle_pwm, SysCtlClockGet());
 
 #if (STEP_OUTMODE == GPIO_MAP) || (DIRECTION_OUTMODE == GPIO_MAP)
@@ -1030,7 +1031,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "TM4C123HP6PM";
-    hal.driver_version = "201226";
+    hal.driver_version = "210111";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif

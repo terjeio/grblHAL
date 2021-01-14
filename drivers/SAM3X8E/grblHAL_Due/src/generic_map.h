@@ -98,9 +98,11 @@
 #define CYCLE_START_PIN     16
 #define CYCLE_START_BIT     (1<<CYCLE_START_PIN)
 
+#ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
 #define SAFETY_DOOR_PORT    PIOC
 #define SAFETY_DOOR_PIN     18
 #define SAFETY_DOOR_BIT     (1<<SAFETY_DOOR_PIN)
+#endif
 
 // Define probe switch input pin.
 #define PROBE_PORT          PIOC

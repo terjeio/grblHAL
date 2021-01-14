@@ -5,7 +5,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2018-2020 Terje Io
+  Copyright (c) 2018-2021 Terje Io
 
   Some parts
    Copyright (c) 2011-2015 Sungeun K. Jeon
@@ -380,17 +380,17 @@ void selectStream (stream_type_t stream)
 
 #if TELNET_ENABLE
         case StreamType_Telnet:
+            hal.stream.write_all("[MSG:TELNET STREAM ACTIVE]\r\n");
             activateStream(&telnet_stream);
             services.telnet = On;
-            hal.stream.write_all("[MSG:TELNET STREAM ACTIVE]\r\n");
             break;
 #endif
 
 #if WEBSOCKET_ENABLE
         case StreamType_WebSocket:
+            hal.stream.write_all("[MSG:WEBSOCKET STREAM ACTIVE]\r\n");
             activateStream(&websocket_stream);
             services.websocket = On;
-            hal.stream.write_all("[MSG:WEBSOCKET STREAM ACTIVE]\r\n");
             break;
 #endif
 
@@ -884,7 +884,7 @@ IRAM_ATTR static void spindleSetState (spindle_state_t state, float rpm)
 IRAM_ATTR static void spindle_set_speed (uint_fast16_t pwm_value)
 {
     if (pwm_value == spindle_pwm.off_value) {
-        if(settings.spindle.disable_with_zero_speed)
+        if(settings.spindle.flags.pwm_action == SpindleAction_DisableWithZeroSPeed)
             spindle_off();
 #if PWM_RAMPED
         pwm_ramp.pwm_target = pwm_value;
@@ -1139,7 +1139,7 @@ static void settings_changed (settings_t *settings)
                 spindle_pwm.off_value = pwm_max_value - spindle_pwm.off_value;
         }
         spindle_pwm.min_value = (uint32_t)(pwm_max_value * settings->spindle.pwm_min_value / 100.0f);
-        spindle_pwm.max_value = (uint32_t)(pwm_max_value * settings->spindle.pwm_max_value / 100.0f);
+        spindle_pwm.max_value = (uint32_t)(pwm_max_value * settings->spindle.pwm_max_value / 100.0f) + (settings->spindle.invert.pwm ? -1 : 1);
         spindle_pwm.pwm_gradient = (float)(spindle_pwm.max_value - spindle_pwm.min_value) / (settings->spindle.rpm_max - settings->spindle.rpm_min);
         spindle_pwm.always_on = settings->spindle.pwm_off_value != 0.0f;
 
@@ -1475,7 +1475,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "ESP32";
-    hal.driver_version = "201231";
+    hal.driver_version = "210111";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif

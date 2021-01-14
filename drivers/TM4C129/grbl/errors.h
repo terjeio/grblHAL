@@ -33,7 +33,7 @@ typedef enum {
     Status_BadNumberFormat = 2,
     Status_InvalidStatement = 3,
     Status_NegativeValue = 4,
-    Status_SettingDisabled = 5,
+    Status_HomingDisabled = 5,
     Status_SettingStepPulseMin = 6,
     Status_SettingReadFail = 7,
     Status_IdleError = 8,
@@ -79,10 +79,10 @@ typedef enum {
     Status_GCodeToolError = 47,
     Status_ValueWordConflict = 48,
     Status_SelfTestFailed = 49,
-
     Status_EStop = 50,
     Status_MotorFault = 51,
-    Status_Unhandled = 59, // For internal use only
+    Status_SettingValueOutOfRange = 52,
+    Status_SettingDisabled = 53,
 
 // Some error codes as defined in bdring's ESP32 port
     Status_SDMountError = 60,
@@ -91,7 +91,8 @@ typedef enum {
     Status_SDDirNotFound = 63,
     Status_SDFileEmpty = 64,
 
-    Status_BTInitError = 70
+    Status_BTInitError = 70,
+    Status_Unhandled // For internal use only
 } status_code_t;
 
 typedef struct {
@@ -106,7 +107,7 @@ static const status_detail_t status_detail[] = {
     { Status_BadNumberFormat, "Bad number format", "Missing the expected G-code word value or numeric value format is not valid." },
     { Status_InvalidStatement, "Invalid statement", "Grbl '$' system command was not recognized or supported." },
     { Status_NegativeValue, "Value < 0", "Negative value received for an expected positive value." },
-    { Status_SettingDisabled, "Setting disabled", "Homing cycle failure. Homing is not enabled via settings." },
+    { Status_HomingDisabled, "Homing disabled", "Homing cycle failure. Homing is not configured via settings." },
     { Status_SettingStepPulseMin, "Value < 2 microseconds", "Step pulse time must be greater or equal to 2 microseconds." },
     { Status_SettingReadFail, "EEPROM read fail. Using defaults", "An EEPROM read failed. Auto-restoring affected EEPROM to default values." },
     { Status_IdleError, "Not idle", "Grbl '$' command cannot be used unless Grbl is IDLE. Ensures smooth operation during a job." },
@@ -153,6 +154,8 @@ static const status_detail_t status_detail[] = {
     { Status_SelfTestFailed, "Self test failed", "Power on self test failed. A hard reset is required." },
     { Status_EStop, "E-stop", "Emergency stop active." },
     { Status_MotorFault, "Motor fault", "Motor fault." },
+    { Status_SettingValueOutOfRange, "Value out of range.", "Setting value is out of range." },
+    { Status_SettingDisabled, "Setting disabled", "Setting is not available, possibly due to limited driver support." },
     { Status_SDMountError, "SD Card", "SD Card mount failed." },
     { Status_SDReadError, "SD Card", "SD Card file open/read failed." },
     { Status_SDFailedOpenDir, "SD Card", "SD Card directory listing failed." },

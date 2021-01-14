@@ -68,8 +68,7 @@
 #define SPINDLE_DIRECTION_BIT   (1<<SPINDLE_DIRECTION_PIN)
 
 // Start of PWM & Stepper Enabled Spindle
-#define SPINDLE_PWM_TIMER   (TC2->TC_CHANNEL[0])
-#define SPINDLE_PWM_CCREG   2
+#define SPINDLE_PWM_TIMER   (TC2->TC_CHANNEL[2])
 #define SPINDLE_PWM_PORT    PIOD
 #define SPINDLE_PWM_PIN     7 // TIOA8
 #define SPINDLE_PWM_BIT     (1<<SPINDLE_PWM_PIN)
@@ -95,9 +94,11 @@
 #define CYCLE_START_PIN     23
 #define CYCLE_START_BIT     (1<<CYCLE_START_PIN)
 /*
+#ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
 #define SAFETY_DOOR_PORT    PIOC
 #define SAFETY_DOOR_PIN     18
 #define SAFETY_DOOR_BIT     (1<<SAFETY_DOOR_PIN)
+#endif
 */
 // Define probe switch input pin.
 #define PROBE_PORT          PIOA

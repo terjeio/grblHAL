@@ -1,12 +1,12 @@
 //
 // enet.c - lwIP/FreeRTOS TCP/IP stream implementation
 //
-// v1.2 / 2020-01-01 / Io Engineering / Terje
+// v1.3 / 2021-01-12 / Io Engineering / Terje
 //
 
 /*
 
-Copyright (c) 2018-2020, Terje Io
+Copyright (c) 2018-2021, Terje Io
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -278,7 +278,7 @@ static setting_details_t *on_report_settings (void)
     return &details;
 }
 
-static status_code_t ethernet_setting (setting_type_t setting, float value, char *svalue)
+static status_code_t ethernet_setting (setting_id_t setting, float value, char *svalue)
 {
     status_code_t status = svalue ? Status_OK : Status_Unhandled;
 
@@ -385,7 +385,7 @@ static status_code_t ethernet_setting (setting_type_t setting, float value, char
     return status == Status_Unhandled && driver_settings.set ? driver_settings.set(setting, value, svalue) : status;
 }
 
-static void ethernet_settings_report (setting_type_t setting)
+static void ethernet_settings_report (setting_id_t setting)
 {
     bool reported = true;
 

@@ -78,9 +78,8 @@
 
 // Start of PWM & Stepper Enabled Spindle
 #define SPINDLE_PWM_TIMER   (TC2->TC_CHANNEL[0])
-#define SPINDLE_PWM_CCREG   2
 #define SPINDLE_PWM_PORT    PIOC
-#define SPINDLE_PWM_PIN     25
+#define SPINDLE_PWM_PIN     25 // Due Digital Pin 5 / TIOA6
 #define SPINDLE_PWM_BIT     (1<<SPINDLE_PWM_PIN)
 
 // Define flood and mist coolant enable output pins.
@@ -104,9 +103,11 @@
 #define CYCLE_START_PIN     19  // DUE Analog Pin 10
 #define CYCLE_START_BIT     (1<<CYCLE_START_PIN)
 
+#ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
 #define SAFETY_DOOR_PORT    PIOB
 #define SAFETY_DOOR_PIN     20  // DUE Analog Pin 11
 #define SAFETY_DOOR_BIT     (1<<SAFETY_DOOR_PIN)
+#endif
 
 // Define probe switch input pin.
 #define PROBE_PORT          PIOA

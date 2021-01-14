@@ -561,7 +561,7 @@ static void spindle_set_speed (uint_fast16_t pwm_value)
 {
     if (pwm_value == spindle_pwm.off_value) {
         pwmEnabled = false;
-        if(settings.spindle.disable_with_zero_speed)
+        if(settings.spindle.flags.pwm_action == SpindleAction_DisableWithZeroSPeed)
             spindle_off();
         if(spindle_pwm.always_on) {
             pwm_set_width(&SPINDLE_PWM_CHANNEL, spindle_pwm.off_value);
@@ -999,7 +999,39 @@ void settings_changed (settings_t *settings)
 // Initializes MCU peripherals for Grbl use
 static bool driver_setup (settings_t *settings)
 {
- // Stepper init
+
+    // Cleanup after sloppy bootloader
+    Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, X_STEP_PN, X_STEP_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
+    Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, Y_STEP_PN, Y_STEP_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
+    Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, Z_STEP_PN, Z_STEP_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
+    Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, X_DIRECTION_PN, X_DIRECTION_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
+    Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, Y_DIRECTION_PN, Y_DIRECTION_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
+    Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, Z_DIRECTION_PN, Z_DIRECTION_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
+    Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, X_DISABLE_PN, X_DISABLE_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
+    Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, Y_DISABLE_PN, Y_DISABLE_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
+    Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, Z_DISABLE_PN, Z_DISABLE_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
+#ifdef A_AXIS
+    Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, A_STEP_PN, A_STEP_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
+    Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, A_DIRECTION_PN, A_DIRECTION_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
+    Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, A_DISABLE_PN, A_DISABLE_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
+#endif
+#ifdef B_AXIS
+    Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, B_STEP_PN, B_STEP_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
+    Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, B_DIRECTION_PN, B_DIRECTION_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
+    Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, B_DISABLE_PN, B_DISABLE_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
+#endif
+#ifdef B_AXIS
+    Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, C_STEP_PN, C_STEP_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
+    Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, C_DIRECTION_PN, C_DIRECTION_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
+    Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, C_DISABLE_PN, C_DISABLE_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
+#endif
+
+    Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, COOLANT_FLOOD_PN, COOLANT_FLOOD_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
+#ifdef COOLANT_MIST_PORT
+    Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, COOLANT_MIST_PN, COOLANT_MIST_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
+#endif
+
+    // Stepper init
 
     BITBAND_GPIO(X_STEP_PORT->DIR, X_STEP_PIN) = 1;
     BITBAND_GPIO(Y_STEP_PORT->DIR, Y_STEP_PIN) = 1;
@@ -1138,7 +1170,7 @@ bool driver_init (void) {
 #endif
 
     hal.info = "LCP1769";
-    hal.driver_version = "210105";
+    hal.driver_version = "210111";
     hal.driver_setup = driver_setup;
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;

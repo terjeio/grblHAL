@@ -180,7 +180,7 @@ static setting_details_t *on_report_settings (void)
     return &details;
 }
 
-status_code_t ethernet_setting (setting_type_t setting, float value, char *svalue)
+status_code_t ethernet_setting (setting_id_t setting, float value, char *svalue)
 {
     status_code_t status = svalue ? Status_OK : Status_Unhandled;
 
@@ -288,7 +288,7 @@ status_code_t ethernet_setting (setting_type_t setting, float value, char *svalu
     return status == Status_Unhandled && driver_settings.set ? driver_settings.set(setting, value, svalue) : status;
 }
 
-void ethernet_settings_report (setting_type_t setting)
+void ethernet_settings_report (setting_id_t setting)
 {
     bool reported = true;
 

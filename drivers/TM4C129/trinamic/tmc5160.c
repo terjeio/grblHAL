@@ -1,7 +1,7 @@
 /*
  * tmc5160.c - interface for Trinamic TMC5160 stepper driver
  *
- * v0.0.1 / 2021-01-04 / (c) Io Engineering / Terje
+ * v0.0.1 / 2021-01-08 / (c) Io Engineering / Terje
  */
 
 /*
@@ -38,7 +38,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 /*
  * Reference for calculations:
- * https://www.trinamic.com/fileadmin/assets/Products/ICs_Documents/TMC5130_TMC5160_TMC2100_Calculations.xlsx
+ * https://www.trinamic.com/fileadmin/assets/Products/ICs_Documents/TMC5160_Calculations.xlsx
  *
  */
 
@@ -60,6 +60,7 @@ static const TMC5160_t tmc5160_defaults = {
     .gconf.addr.reg = TMC5160Reg_GCONF,
     .gstat.addr.reg = TMC5160Reg_GSTAT,
     .ioin.addr.reg = TMC5160Reg_IOIN,
+    .global_scaler.addr.reg = TMC5160Reg_GLOBAL_SCALER,
     .ihold_irun.addr.reg = TMC5160Reg_IHOLD_IRUN,
     .tpowerdown.addr.reg = TMC5160Reg_TPOWERDOWN,
     .tstep.addr.reg = TMC5160Reg_TSTEP,
@@ -100,7 +101,6 @@ static const TMC5160_t tmc5160_defaults = {
     .chopconf.reg.toff = TMC5160_CONSTANT_OFF_TIME,
     .chopconf.reg.chm = TMC5160_CHOPPER_MODE,
     .chopconf.reg.tbl = TMC5160_BLANK_TIME,
-    .chopconf.reg.rndtf = TMC5160_RANDOM_TOFF,
 #if TMC5160_CHOPPER_MODE == 0
     .chopconf.reg.hstrt = TMC5160_HSTRT,
     .chopconf.reg.hend = TMC5160_HEND,
@@ -119,10 +119,13 @@ static const TMC5160_t tmc5160_defaults = {
     .gconf.reg.en_pwm_mode = TMC5160_EN_PWM_MODE,
 
 #if TMC5160_EN_PWM_MODE == 1 // stealthChop
-    .pwmconf.reg.pwm_autoscale = TMC5160_PWM_AUTOSCALE,
-    .pwmconf.reg.pwm_ampl = TMC5160_PWM_AMPL,
-    .pwmconf.reg.pwm_grad = TMC5160_PWM_GRAD,
-    .pwmconf.reg.pwm_freq = TMC5160_PWM_FREQ,
+    .pwmconf.reg.pwm_lim = 12,
+    .pwmconf.reg.pwm_reg = 8,
+    .pwmconf.reg.pwm_autograd = true,
+    .pwmconf.reg.pwm_autoscale = true,
+    .pwmconf.reg.pwm_freq = 0b01,
+    .pwmconf.reg.pwm_grad = 14,
+    .pwmconf.reg.pwm_ofs = 36,
 #endif
 
     .tpwmthrs.reg.tpwmthrs = TMC5160_TPWM_THRS
@@ -195,9 +198,21 @@ bool TMC5160_Init (TMC5160_t *driver)
     return driver->chopconf.reg.value == chopconf;
 }
 
+uint_fast16_t cs2rms (TMC5160_t *driver, uint8_t CS)
+{
+    uint32_t numerator = (driver->global_scaler.reg.scaler ? driver->global_scaler.reg.scaler : 256) * (CS + 1);
+    numerator *= 325;
+    numerator >>= (8 + 5); // Divide by 256 and 32
+    numerator *= 1000000;
+    uint32_t denominator = driver->r_sense;
+    denominator *= 1414;
+
+    return numerator / denominator;
+}
+
 uint16_t TMC5160_GetCurrent (TMC5160_t *driver)
 {
-    return (uint16_t)((float)(driver->ihold_irun.reg.irun + 1) / 32.0f * (driver->chopconf.reg.vsense ? 180.0f : 325.0f) / (float)(driver->r_sense + 20) / 1.41421f * 1000.0f);
+    return cs2rms(driver, driver->ihold_irun.reg.irun);
 }
 
 // r_sense = mOhm, Vsense = mV, current = mA (RMS)
@@ -206,18 +221,31 @@ void TMC5160_SetCurrent (TMC5160_t *driver, uint16_t mA, uint8_t hold_pct)
     driver->current = mA;
     driver->hold_current_pct = hold_pct;
 
-    float maxv = (((float)(driver->r_sense + 20)) * (float)(32UL * driver->current)) * 1.41421f / 1000.0f;
+    const uint32_t V_fs = 325; // 0.325 * 1000
+    uint_fast8_t CS = 31;
+    uint32_t scaler = 0; // = 256
 
-    uint8_t current_scaling = (uint8_t)(maxv / 325.0f) - 1;
+    uint16_t RS_scaled = ((float)driver->r_sense / 1000.f) * 0xFFFF; // Scale to 16b
+    uint32_t numerator = 11585; // 32 * 256 * sqrt(2)
+    numerator *= RS_scaled;
+    numerator >>= 8;
+    numerator *= mA;
 
-    // If the current scaling is too low set the vsense bit and recalculate the current setting
-    if ((driver->chopconf.reg.vsense = (current_scaling < 16)))
-        current_scaling = (uint8_t)(maxv / 180.0f) - 1;
+    do {
+        uint32_t denominator = V_fs * 0xFFFF >> 8;
+        denominator *= CS + 1;
+        scaler = numerator / denominator;
+        if (scaler > 255)
+            scaler = 0; // Maximum
+        else if (scaler < 128)
+            CS--;  // Try again with smaller CS
+    } while(scaler && scaler < 128);
 
-    driver->ihold_irun.reg.irun = current_scaling > 31 ? 31 : current_scaling;
+    driver->global_scaler.reg.scaler = scaler;
+    driver->ihold_irun.reg.irun = CS > 31 ? 31 : CS;
     driver->ihold_irun.reg.ihold = (driver->ihold_irun.reg.irun * driver->hold_current_pct) / 100;
 
-    io.WriteRegister(driver, (TMC5160_datagram_t *)&driver->chopconf);
+    io.WriteRegister(driver, (TMC5160_datagram_t *)&driver->global_scaler);
     io.WriteRegister(driver, (TMC5160_datagram_t *)&driver->ihold_irun);
 }
 
@@ -280,7 +308,6 @@ void TMC5160_SetConstantOffTimeChopper (TMC5160_t *driver, uint8_t constant_off_
     driver->chopconf.reg.tbl = blank_time;
     driver->chopconf.reg.toff = constant_off_time < 2 ? 2 : (constant_off_time > 15 ? 15 : constant_off_time);
     driver->chopconf.reg.hend = (sine_wave_offset < -3 ? -3 : (sine_wave_offset > 12 ? 12 : sine_wave_offset)) + 3;
-    driver->chopconf.reg.rndtf = !use_current_comparator;
 
     io.WriteRegister(driver, (TMC5160_datagram_t *)&driver->chopconf);
 }

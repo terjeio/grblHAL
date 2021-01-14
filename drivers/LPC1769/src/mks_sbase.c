@@ -1,3 +1,24 @@
+/*
+  mks_sbase.c - driver code for LPC176x processor, MKS SBASE V1.3 board
+
+  Part of grblHAL
+
+  Copyright (c) 2020-2021 Terje Io
+
+  Grbl is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  Grbl is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
 #include "driver.h"
 
 #ifdef BOARD_MKS_SBASE_13
@@ -50,11 +71,11 @@ static void mks_set_current (uint_fast8_t axis, float current)
 }
 
 // Parse and set driver specific parameters
-static status_code_t mks_setting (setting_type_t setting, float value, char *svalue)
+static status_code_t mks_setting (setting_id_t setting, float value, char *svalue)
 {
     status_code_t status = Status_OK;
 
-    if((setting_type_t)setting >= Setting_AxisSettingsBase && (setting_type_t)setting <= Setting_AxisSettingsMax) {
+    if((setting_id_t)setting >= Setting_AxisSettingsBase && (setting_id_t)setting <= Setting_AxisSettingsMax) {
 
         uint_fast16_t base_idx = (uint_fast16_t)setting - (uint_fast16_t)Setting_AxisSettingsBase;
         uint_fast8_t idx = base_idx % AXIS_SETTINGS_INCREMENT;
@@ -110,15 +131,15 @@ static void mks_settings_load (void)
         driver_settings.load();
 }
 
-static void mks_axis_settings_report (axis_setting_type_t setting, uint8_t axis_idx)
+static void mks_axis_settings_report (axis_setting_id_t setting, uint8_t axis_idx)
 {
     bool reported = true;
-    setting_type_t basetype = (setting_type_t)(Setting_AxisSettingsBase + setting * AXIS_SETTINGS_INCREMENT);
+    setting_id_t basetype = (setting_id_t)(Setting_AxisSettingsBase + setting * AXIS_SETTINGS_INCREMENT);
 
     switch(setting) {
 
         case AxisSetting_StepperCurrent:
-            report_float_setting((setting_type_t)(basetype + axis_idx), mks.driver[axis_idx].current, 1);
+            report_float_setting((setting_id_t)(basetype + axis_idx), mks.driver[axis_idx].current, 1);
             break;
 
         default:

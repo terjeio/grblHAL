@@ -4,7 +4,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -72,7 +72,7 @@ static setting_details_t *on_report_settings (void)
 
 // Set a settings value.
 // Call set() function of next plugin in chain if not our setting.
-static status_code_t plugin_settings_set (setting_type_t setting, float value, char *svalue)
+static status_code_t plugin_settings_set (setting_id_t setting, float value, char *svalue)
 {
     status_code_t status = Status_OK;
 
@@ -106,7 +106,7 @@ static status_code_t plugin_settings_set (setting_type_t setting, float value, c
 
 // Report settings value when called for.
 // Call report() function of next plugin in chain if not our setting.
-static void plugin_settings_report (setting_type_t setting)
+static void plugin_settings_report (setting_id_t setting)
 {
     bool reported = true;
 

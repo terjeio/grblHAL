@@ -442,7 +442,7 @@ static void spindle_set_speed (uint_fast16_t pwm_value)
 {
     if (pwm_value == spindle_pwm.off_value) {
         pwmEnabled = false;
-        if(settings.spindle.disable_with_zero_speed)
+        if(settings.spindle.flags.pwm_action == SpindleAction_DisableWithZeroSPeed)
             spindle_off();
         if(spindle_pwm.always_on) {
             SPINDLE_PWM_TIMER->CCR1 = spindle_pwm.off_value;
@@ -1036,10 +1036,8 @@ bool driver_init (void)
 {
     // Enable EEPROM and serial port here for Grbl to be able to configure itself and report any errors
 
-    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_15, GPIO_PIN_RESET);
-
     hal.info = "STM32F303";
-    hal.driver_version = "210110";
+    hal.driver_version = "210111";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif

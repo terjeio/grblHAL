@@ -199,10 +199,10 @@ typedef struct {
 
 // Driver/plugin settings (optional)
 
-typedef status_code_t (*driver_setting_ptr)(setting_type_t setting, float value, char *svalue);
+typedef status_code_t (*driver_setting_ptr)(setting_id_t setting, float value, char *svalue);
 typedef void (*settings_changed_ptr)(settings_t *settings);
-typedef void (*driver_settings_report_ptr)(setting_type_t setting_type);
-typedef void (*driver_axis_settings_report_ptr)(axis_setting_type_t setting_type, uint8_t axis_idx);
+typedef void (*driver_settings_report_ptr)(setting_id_t setting_type);
+typedef void (*driver_axis_settings_report_ptr)(axis_setting_id_t setting_type, uint8_t axis_idx);
 typedef void (*driver_settings_load_ptr)(void);
 typedef void (*driver_settings_restore_ptr)(void);
 
@@ -272,6 +272,7 @@ typedef struct {
     char *board;
     uint32_t f_step_timer;
     uint32_t rx_buffer_size;
+    uint32_t max_step_rate;
     uint8_t driver_axis_settings;
 
     bool (*driver_setup)(settings_t *settings);

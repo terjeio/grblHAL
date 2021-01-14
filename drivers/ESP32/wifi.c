@@ -5,7 +5,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2018-2020 Terje Io
+  Copyright (c) 2018-2021 Terje Io
 
   Some parts of the code is based on example code by Espressif, in the public domain
 
@@ -762,7 +762,7 @@ static status_code_t wifi_setting (uint_fast16_t setting, float value, char *sva
     return status == Status_Unhandled && driver_settings.set ? driver_settings.set(setting, value, svalue) : status;
 }
 
-static void wifi_settings_report (setting_type_t setting)
+static void wifi_settings_report (setting_id_t setting)
 {
     bool reported = true;
 

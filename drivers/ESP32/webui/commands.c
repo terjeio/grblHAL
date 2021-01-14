@@ -3,9 +3,9 @@
 
   WebUI backend for https://github.com/luc-github/ESP3D-webui
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2019-2020 Terje Io
+  Copyright (c) 2019-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -104,7 +104,7 @@ typedef enum {
 
 typedef struct {
     webui_cmd_t command;
-    setting_type_t setting;
+    setting_id_t setting;
     int8_t bit;
 } webui_setting_map_t;
 
@@ -172,7 +172,7 @@ static char *get_arg(char *args, char *arg, bool spacedelimited)
 
 
 // add file to the JSON response array
-static bool add_setting (cJSON *settings, setting_type_t p, char t, int32_t bit, char *v, char *h, char *s, char *m)
+static bool add_setting (cJSON *settings, setting_id_t p, char t, int32_t bit, char *v, char *h, char *s, char *m)
 {
     bool ok = true;
 
@@ -448,7 +448,7 @@ static void stream_trap (const char *data)
     strcat(tmpstr, data);
 }
 
-static char *get_setting_value (char *data, setting_type_t setting)
+static char *get_setting_value (char *data, setting_id_t setting)
 {
     stream_write_ptr org_stream;
 

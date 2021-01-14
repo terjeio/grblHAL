@@ -53,7 +53,9 @@
 #define RESET_PIN       (17u)
 #define FEED_HOLD_PIN   (9u)
 #define CYCLE_START_PIN (8u)
+#ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
 #define SAFETY_DOOR_PIN (16u)
+#endif
 
 // Start of PWM & Stepper Enabled Spindle
 #define SPINDLE_PWM_TIMER   TCC0

@@ -545,7 +545,7 @@ static setting_details_t *on_report_settings (void)
 }
 
 
-static status_code_t encoder_setting (setting_type_t setting, float value, char *svalue)
+static status_code_t encoder_setting (setting_id_t setting, float value, char *svalue)
 {
     status_code_t status = setting >= Setting_EncoderSettingsBase && setting <= Setting_EncoderSettingsMax ? Status_OK : Status_Unhandled;
 
@@ -593,7 +593,7 @@ static status_code_t encoder_setting (setting_type_t setting, float value, char 
     return status == Status_Unhandled && driver_settings.set ? driver_settings.set(setting, value, svalue) : status;
 }
 
-static void encoder_settings_report (setting_type_t setting)
+static void encoder_settings_report (setting_id_t setting)
 {
     bool reported = setting >= Setting_EncoderSettingsBase && setting <= Setting_EncoderSettingsMax;
 

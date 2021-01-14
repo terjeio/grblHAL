@@ -50,13 +50,13 @@ typedef enum {
     AxisSetting_Backlash = 6,
     AxisSetting_AutoSquareOffset = 7,
     AxisSetting_NumSettings
-} axis_setting_type_t;
+} axis_setting_id_t;
 
 typedef enum {
     DriverAxisSetting_MicroSteps = 0,
     DriverAxisSetting_StepperCurrent = 1,
     DriverAxisSetting_NumSettings
-} driver_axis_setting_type_t;
+} driver_axis_setting_id_t;
 
 typedef enum {
     Setting_PulseMicroseconds = 0,
@@ -66,6 +66,7 @@ typedef enum {
     Setting_InvertStepperEnable = 4,
     Setting_LimitPinsInvertMask = 5,
     Setting_InvertProbePin = 6,
+    Setting_SpindlePWMBehaviour = 7,
     Setting_StatusReportMask = 10,
     Setting_JunctionDeviation = 11,
     Setting_ArcTolerance = 12,
@@ -273,15 +274,15 @@ typedef enum {
     Setting_AxisAutoSquareOffsetBase = Setting_AxisSettingsBase + AxisSetting_AutoSquareOffset * AXIS_SETTINGS_INCREMENT,
 
     // Calculated base values for driver stepper settings
-    Setting_DriverAxisStepsPerMMBase    = Setting_AxisSettingsBase2 + DriverAxisSetting_MicroSteps * AXIS_SETTINGS_INCREMENT,
-    Setting_DriverAxisMaxRateBase       = Setting_AxisSettingsBase2 + DriverAxisSetting_StepperCurrent * AXIS_SETTINGS_INCREMENT,
+    Setting_DriverAxisStepsPerMMBase = Setting_AxisSettingsBase2 + DriverAxisSetting_MicroSteps * AXIS_SETTINGS_INCREMENT,
+    Setting_DriverAxisMaxRateBase    = Setting_AxisSettingsBase2 + DriverAxisSetting_StepperCurrent * AXIS_SETTINGS_INCREMENT,
 
     // Calculated base values for encoder settings
     Setting_EncoderModeBase           = Setting_EncoderSettingsBase + Setting_EncoderMode,
     Setting_EncoderCPRBase            = Setting_EncoderSettingsBase + Setting_EncoderCPR,
     Setting_EncoderCPDBase            = Setting_EncoderSettingsBase + Setting_EncoderCPD,
     Setting_EncoderDblClickWindowBase = Setting_EncoderSettingsBase + Setting_EncoderDblClickWindow
-} setting_type_t;
+} setting_id_t;
 
 typedef union {
     uint8_t mask;
@@ -377,6 +378,21 @@ typedef struct {
     float max_error;
 } pid_values_t;
 
+typedef enum {
+    SpindleAction_None = 0,
+    SpindleAction_DisableWithZeroSPeed,
+    SpindleAction_EnableWithAllSPeeds,
+} spindle_action_t;
+
+typedef union {
+    uint8_t value;
+    uint8_t mask;
+    struct {
+        uint8_t pwm_action :2,
+                unassigned     :6;
+    };
+} spindle_settings_flags_t;
+
 typedef struct {
     float rpm_max;
     float rpm_min;
@@ -390,7 +406,7 @@ typedef struct {
     pid_values_t pid;
     uint16_t ppr; // Spindle encoder pulses per revolution
     spindle_state_t invert;
-    bool disable_with_zero_speed;
+    spindle_settings_flags_t flags;
 } spindle_settings_t;
 
 typedef struct {
@@ -591,12 +607,15 @@ typedef enum {
     Format_XBitfield,
     Format_RadioButtons,
     Format_AxisMask,
-    Format_Integer,
+    Format_Integer, // 32 bit
     Format_Decimal,
     Format_String,
     Format_Password,
-    Format_IPv4
-} setting_format_t;
+    Format_IPv4,
+    // For internal use only
+    Format_Int8,
+    Format_Int16,
+} setting_datatype_t;
 
 typedef struct {
     setting_group_t parent;
@@ -604,15 +623,29 @@ typedef struct {
     const char *name;
 } setting_group_detail_t;
 
+typedef enum {
+    Setting_NonCore = 0,
+    Setting_NonCoreFn,
+    Setting_IsExtended,
+    Setting_IsExtendedFn,
+    Setting_IsLegacy,
+    Setting_IsLegacyFn,
+    Setting_IsExpanded,
+    Setting_IsExpandedFn
+} setting_type_t;
+
 typedef struct {
-    setting_type_t id;
+    setting_id_t id;
     setting_group_t group;
     const char *name;
     const char *unit;
-    setting_format_t type;
+    setting_datatype_t datatype;
     const char *format;
     const char *min_value;
     const char *max_value;
+    setting_type_t type;
+    void *value;
+    void *get_value;
 } setting_detail_t;
 
 typedef struct setting_details {
@@ -622,6 +655,13 @@ typedef struct setting_details {
     const setting_detail_t *settings;
     struct setting_details *(*on_report_settings)(void);
 } setting_details_t;
+
+typedef status_code_t (*setting_set_int_ptr)(setting_id_t id, uint_fast16_t value);
+typedef status_code_t (*setting_set_float_ptr)(setting_id_t id, float value);
+typedef status_code_t (*setting_set_string_ptr)(setting_id_t id, char *value);
+typedef uint32_t (*setting_get_int_ptr)(setting_id_t id);
+typedef float (*setting_get_float_ptr)(setting_id_t id);
+typedef char *(*setting_get_string_ptr)(setting_id_t id);
 
 extern settings_t settings;
 
@@ -635,7 +675,7 @@ void settings_write_global(void);
 void settings_restore(settings_restore_t restore_flags);
 
 // A helper method to set new settings from command line
-status_code_t settings_store_global_setting(setting_type_t setting, char *svalue);
+status_code_t settings_store_global_setting(setting_id_t setting, char *svalue);
 
 // Writes the protocol line variable as a startup line in persistent storage
 void settings_write_startup_line(uint8_t idx, char *line);
@@ -663,6 +703,8 @@ bool settings_read_tool_data (uint32_t tool, tool_data_t *tool_data);
 
 setting_details_t *settings_get_details (void);
 bool settings_is_group_available (setting_group_t group);
-bool settings_is_setting_available (setting_type_t setting, setting_group_t group);
+bool settings_is_setting_available (setting_id_t setting, setting_group_t group);
+const setting_detail_t *setting_get_details (setting_id_t id);
+setting_datatype_t setting_datatype_to_external (setting_datatype_t datatype);
 
 #endif

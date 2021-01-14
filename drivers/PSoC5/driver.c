@@ -5,7 +5,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2017-2020 Terje Io
+  Copyright (c) 2017-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -36,7 +36,7 @@
 #define SYSTICK_INTERRUPT_VECTOR_NUMBER 15u
 
 static bool spindlePWM = false, IOInitDone = false;
-static spindle_pwm_t spindle_pwm;
+static spindle_pwm_t spindle_pwm = {0};
 static axes_signals_t next_step_outbits;
 static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
 
@@ -73,7 +73,7 @@ static void spindleSetStateFixed (spindle_state_t state, float rpm)
 static void spindle_set_speed (uint_fast16_t pwm_value)
 {
     if (pwm_value == spindle_pwm.off_value) {
-        if(settings.spindle.disable_with_zero_speed)
+        if(settings.spindle.flags.pwm_action == SpindleAction_DisableWithZeroSPeed)
             SpindleOutput_Write(SpindleOutput_Read() & 0x02);
     } else {
         if(!(SpindleOutput_Read() & 0x01))
@@ -419,7 +419,7 @@ bool driver_init (void)
     EEPROM_Start();
 
     hal.info = "PSoC 5";
-    hal.driver_version = "2001115";
+    hal.driver_version = "210111";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = 24000000UL;
     hal.rx_buffer_size = RX_BUFFER_SIZE;

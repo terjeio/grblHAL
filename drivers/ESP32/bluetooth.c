@@ -5,7 +5,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2018-2020 Terje Io
+  Copyright (c) 2018-2021 Terje Io
 
   Some parts of the code is based on example code by Espressif, in the public domain
 
@@ -627,7 +627,7 @@ static status_code_t bluetooth_setting (uint_fast16_t setting, float value, char
 
 }
 
-static void bluetooth_settings_report (setting_type_t setting)
+static void bluetooth_settings_report (setting_id_t setting)
 {
     bool reported = true;
 

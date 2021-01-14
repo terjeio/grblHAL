@@ -220,11 +220,11 @@ static bool trinamic_driver_config (uint_fast8_t axis)
 }
 
 // Parse and set driver specific parameters
-status_code_t trinamic_setting (setting_type_t setting, float value, char *svalue)
+status_code_t trinamic_setting (setting_id_t setting, float value, char *svalue)
 {
     status_code_t status = Status_OK;
 
-    if((setting_type_t)setting >= Setting_AxisSettingsBase && (setting_type_t)setting <= Setting_AxisSettingsMax) {
+    if(setting >= Setting_AxisSettingsBase && setting <= Setting_AxisSettingsMax) {
 
         uint_fast16_t base_idx = (uint_fast16_t)setting - (uint_fast16_t)Setting_AxisSettingsBase;
         uint_fast8_t idx = base_idx % AXIS_SETTINGS_INCREMENT;
@@ -255,7 +255,7 @@ status_code_t trinamic_setting (setting_type_t setting, float value, char *svalu
                 status = Status_Unhandled;
                 break;
         }
-    } else switch((setting_type_t)setting) {
+    } else switch(setting) {
 #if TRINAMIC_MIXED_DRIVERS
         case Setting_TrinamicDriver:
             trinamic.driver_enable.mask = (uint8_t)value & AXES_BITMASK;
@@ -382,7 +382,7 @@ static void trinamic_settings_load (void)
 
 // Append Trinamic settings to '$$' reports
 
-static void trinamic_settings_report (setting_type_t setting)
+static void trinamic_settings_report (setting_id_t setting)
 {
     bool reported = true;
 
@@ -405,19 +405,19 @@ static void trinamic_settings_report (setting_type_t setting)
         driver_settings.report(setting);
 }
 
-static void trinamic_axis_settings_report (axis_setting_type_t setting, uint8_t axis_idx)
+static void trinamic_axis_settings_report (axis_setting_id_t setting, uint8_t axis_idx)
 {
     bool reported = true;
-    setting_type_t basetype = (setting_type_t)(Setting_AxisSettingsBase + setting * AXIS_SETTINGS_INCREMENT);
+    setting_id_t basetype = (setting_id_t)(Setting_AxisSettingsBase + setting * AXIS_SETTINGS_INCREMENT);
 
     switch(setting) {
 
         case AxisSetting_StepperCurrent:
-            report_uint_setting((setting_type_t)(basetype + axis_idx), trinamic.driver[axis_idx].current);
+            report_uint_setting((setting_id_t)(basetype + axis_idx), trinamic.driver[axis_idx].current);
             break;
 
         case AxisSetting_MicroSteps:
-            report_uint_setting((setting_type_t)(basetype + axis_idx), trinamic.driver[axis_idx].microsteps);
+            report_uint_setting((setting_id_t)(basetype + axis_idx), trinamic.driver[axis_idx].microsteps);
             break;
 
         default:

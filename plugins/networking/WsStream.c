@@ -1,12 +1,12 @@
 //
 // WsStream.c - lwIP websocket stream implementation
 //
-// v1.1 / 2020-07-13 / Io Engineering / Terje
+// v1.2 / 2021-01-10 / Io Engineering / Terje
 //
 
 /*
 
-Copyright (c) 2019-2020, Terje Io
+Copyright (c) 2019-2021, Terje Io
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -483,10 +483,10 @@ static err_t WsStreamAccept (void *arg, struct tcp_pcb *pcb, err_t err)
     session->traffic_handler = WsConnectionHandler;
     session->pingCount = 0;
 
-    tcp_accepted(pcb);
-
     WsStreamRxFlush();
     WsStreamTxFlush();
+
+    tcp_accepted(pcb);
 
     session->timeout = 0;
 

@@ -1,7 +1,7 @@
 /*
   spindle_control.h - spindle control methods
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2012-2015 Sungeun K. Jeon
@@ -54,6 +54,7 @@ typedef struct {
     float pwm_gradient;
     bool invert_pwm; // NOTE: set (by driver) when inversion is done in code
     bool always_on;
+    int_fast16_t offset;
     uint_fast16_t n_pieces;
     pwm_piece_t piece[SPINDLE_NPWM_PIECES];
 } spindle_pwm_t;

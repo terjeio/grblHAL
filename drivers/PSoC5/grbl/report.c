@@ -478,264 +478,201 @@ status_code_t report_help (char *args, char *lcargs)
 
 // Grbl settings print out.
 
-void report_uint_setting (setting_type_t n, uint32_t val)
+void report_uint_setting (setting_id_t n, uint32_t val)
 {
     hal.stream.write(appendbuf(3, "$", uitoa((uint32_t)n), "="));
     hal.stream.write(appendbuf(2, uitoa(val), ASCII_EOL));
 }
 
-
-void report_float_setting (setting_type_t n, float val, uint8_t n_decimal)
+void report_float_setting (setting_id_t n, float val, uint8_t n_decimal)
 {
     hal.stream.write(appendbuf(3, "$", uitoa((uint32_t)n), "="));
     hal.stream.write(appendbuf(2, ftoa(val, n_decimal), ASCII_EOL));
 }
 
-void report_string_setting (setting_type_t n, char *val)
+void report_string_setting (setting_id_t n, char *val)
 {
     hal.stream.write(appendbuf(3, "$", uitoa((uint32_t)n), "="));
     hal.stream.write(appendbuf(2, val, ASCII_EOL));
 }
 
-void report_grbl_settings (bool all)
+static int cmp_settings (const void *a, const void *b)
 {
-    uint_fast16_t idx;
+  return (*(setting_detail_t **)(a))->id - (*(setting_detail_t **)(b))->id;
+}
 
-    // Print Grbl settings.
-    report_float_setting(Setting_PulseMicroseconds, settings.steppers.pulse_microseconds, 1);
-    report_uint_setting(Setting_StepperIdleLockTime, settings.steppers.idle_lock_time);
-    report_uint_setting(Setting_StepInvertMask, settings.steppers.step_invert.mask);
-    report_uint_setting(Setting_DirInvertMask, settings.steppers.dir_invert.mask);
-    report_uint_setting(Setting_InvertStepperEnable, settings.steppers.enable_invert.mask);
-    report_uint_setting(Setting_LimitPinsInvertMask, settings.limits.invert.mask);
-    if(hal.probe.configure)
-        report_uint_setting(Setting_InvertProbePin, settings.probe.invert_probe_pin);
-    if(all)
-        report_uint_setting(Setting_StatusReportMask, (uint32_t)settings.status_report.mask);
-    else
-        report_uint_setting(Setting_StatusReportMask, settings.status_report.mask & ~0b11);
-    report_float_setting(Setting_JunctionDeviation, settings.junction_deviation, N_DECIMAL_SETTINGVALUE);
-    report_float_setting(Setting_ArcTolerance, settings.arc_tolerance, N_DECIMAL_SETTINGVALUE);
-    report_uint_setting(Setting_ReportInches, settings.flags.report_inches);
+inline static uint8_t get_decimal_places (const char *format)
+{
+    char *dp = format == NULL ? NULL : strchr(format, '.');
 
-    if(all) {
-        report_uint_setting(Setting_ControlInvertMask, settings.control_invert.mask);
-        report_uint_setting(Setting_CoolantInvertMask, settings.coolant_invert.mask);
-        report_uint_setting(Setting_SpindleInvertMask, settings.spindle.invert.mask);
-        report_uint_setting(Setting_ControlPullUpDisableMask, settings.control_disable_pullup.mask);
-        report_uint_setting(Setting_LimitPullUpDisableMask, settings.limits.disable_pullup.mask);
-        if(hal.probe.configure)
-            report_uint_setting(Setting_ProbePullUpDisable, settings.probe.disable_probe_pullup);
-    }
+    return dp ? strchr(format, '\0') - dp - 1 : 1;
+}
 
-    report_uint_setting(Setting_SoftLimitsEnable, settings.limits.flags.soft_enabled);
-    report_uint_setting(Setting_HardLimitsEnable, ((settings.limits.flags.hard_enabled & bit(0)) ? bit(0) | (settings.limits.flags.check_at_init ? bit(1) : 0) : 0));
-    report_uint_setting(Setting_HomingEnable, (settings.homing.flags.value & 0x0F) |
-                                               (settings.limits.flags.two_switches ? bit(4) : 0) |
-                                                (settings.homing.flags.manual ? bit(5) : 0) |
-                                                 (settings.homing.flags.override_locks ? bit(6) : 0) |
-                                                  (settings.homing.flags.keep_on_reset ? bit(7) : 0));
-    report_uint_setting(Setting_HomingDirMask, settings.homing.dir_mask.value);
-    report_float_setting(Setting_HomingFeedRate, settings.homing.feed_rate, N_DECIMAL_SETTINGVALUE);
-    report_float_setting(Setting_HomingSeekRate, settings.homing.seek_rate, N_DECIMAL_SETTINGVALUE);
-    report_uint_setting(Setting_HomingDebounceDelay, settings.homing.debounce_delay);
-    report_float_setting(Setting_HomingPulloff, settings.homing.pulloff, N_DECIMAL_SETTINGVALUE);
+static void report_setting (const setting_detail_t *setting, uint_fast16_t offset)
+{
+    setting_id_t id = (setting_id_t)(setting->id + offset);
 
-    if(all) {
-        report_float_setting(Setting_G73Retract, settings.g73_retract, N_DECIMAL_SETTINGVALUE);
-        if(hal.driver_cap.step_pulse_delay)
-            report_float_setting(Setting_PulseDelayMicroseconds, settings.steppers.pulse_delay_microseconds, 1);
-    }
+    switch(setting->type) {
 
-    report_float_setting(Setting_RpmMax, settings.spindle.rpm_max, N_DECIMAL_RPMVALUE);
-    report_float_setting(Setting_RpmMin, settings.spindle.rpm_min, N_DECIMAL_RPMVALUE);
-    report_uint_setting(Setting_Mode, (uint32_t)settings.mode);
+        case Setting_NonCore:
+        case Setting_IsExtended:
+        case Setting_IsLegacy:
+        case Setting_IsExpanded:
+            switch(setting->datatype) {
 
-    if(all) {
-
-        report_float_setting(Setting_PWMFreq, settings.spindle.pwm_freq, N_DECIMAL_SETTINGVALUE);
-        report_float_setting(Setting_PWMOffValue, settings.spindle.pwm_off_value, N_DECIMAL_SETTINGVALUE);
-        report_float_setting(Setting_PWMMinValue, settings.spindle.pwm_min_value, N_DECIMAL_SETTINGVALUE);
-        report_float_setting(Setting_PWMMaxValue, settings.spindle.pwm_max_value, N_DECIMAL_SETTINGVALUE);
-        report_uint_setting(Setting_StepperDeenergizeMask, settings.steppers.deenergize.mask);
-        if(hal.driver_cap.spindle_sync || hal.driver_cap.spindle_pid)
-            report_uint_setting(Setting_SpindlePPR, settings.spindle.ppr);
-
-        report_uint_setting(Setting_EnableLegacyRTCommands, settings.flags.legacy_rt_commands ? 1 : 0);
-        report_uint_setting(Setting_JogSoftLimited, settings.limits.flags.jog_soft_limited);
-        report_uint_setting(Setting_ParkingEnable, settings.parking.flags.value);
-        report_uint_setting(Setting_ParkingAxis, settings.parking.axis);
-
-        report_uint_setting(Setting_HomingLocateCycles, settings.homing.locate_cycles);
-
-        for(idx = 0 ; idx < N_AXIS ; idx++)
-            report_uint_setting((setting_type_t)(Setting_HomingCycle_1 + idx), settings.homing.cycle[idx].mask);
-
-        if(hal.driver_settings.report) {
-            for(idx = Setting_JogStepSpeed; idx < Setting_ParkingPulloutIncrement; idx++)
-                hal.driver_settings.report((setting_type_t)idx);
-        }
-
-        report_float_setting(Setting_ParkingPulloutIncrement, settings.parking.pullout_increment, N_DECIMAL_SETTINGVALUE);
-        report_float_setting(Setting_ParkingPulloutRate, settings.parking.pullout_rate, N_DECIMAL_SETTINGVALUE);
-        report_float_setting(Setting_ParkingTarget, settings.parking.target, N_DECIMAL_SETTINGVALUE);
-        report_float_setting(Setting_ParkingFastRate, settings.parking.rate, N_DECIMAL_SETTINGVALUE);
-        report_uint_setting(Setting_RestoreOverrides, settings.flags.restore_overrides);
-        report_uint_setting(Setting_IgnoreDoorWhenIdle, settings.flags.safety_door_ignore_when_idle);
-        report_uint_setting(Setting_SleepEnable, settings.flags.sleep_enable);
-        report_uint_setting(Setting_HoldActions, (settings.flags.disable_laser_during_hold ? bit(0) : 0) | (settings.flags.restore_after_feed_hold ? bit(1) : 0));
-        report_uint_setting(Setting_ForceInitAlarm, settings.flags.force_initialization_alarm);
-        report_uint_setting(Setting_ProbingFeedOverride, settings.probe.allow_feed_override);
-
-      #ifdef ENABLE_SPINDLE_LINEARIZATION
-        for(idx = 0 ; idx < SPINDLE_NPWM_PIECES ; idx++) {
-            if(isnan(settings.spindle.pwm_piece[idx].rpm))
-                report_float_setting((setting_type_t)(Setting_LinearSpindlePiece1 + idx), settings.spindle.pwm_piece[idx].rpm, N_DECIMAL_RPMVALUE);
-            else {
-                sprintf(buf, "$%d=%f,%f,%f" ASCII_EOL, (setting_type_t)(Setting_LinearSpindlePiece1 + idx), settings.spindle.pwm_piece[idx].rpm, settings.spindle.pwm_piece[idx].start, settings.spindle.pwm_piece[idx].end);
-                hal.stream.write(buf);
-            }
-        }
-      #endif
-
-    }
-
-    if(hal.driver_settings.report) {
-        for(idx = Setting_NetworkServices; idx < Setting_SpindlePGain; idx++)
-            hal.driver_settings.report((setting_type_t)idx);
-    }
-
-#ifdef SPINDLE_RPM_CONTROLLED
-
-    if(hal.driver_cap.spindle_pid) {
-        report_float_setting(Setting_SpindlePGain, settings.spindle.pid.p_gain, N_DECIMAL_SETTINGVALUE);
-        report_float_setting(Setting_SpindleIGain, settings.spindle.pid.i_gain, N_DECIMAL_SETTINGVALUE);
-        report_float_setting(Setting_SpindleDGain, settings.spindle.pid.d_gain, N_DECIMAL_SETTINGVALUE);
-        report_float_setting(Setting_SpindleMaxError, settings.spindle.pid.max_error, N_DECIMAL_SETTINGVALUE);
-        report_float_setting(Setting_SpindleIMaxError, settings.spindle.pid.i_max_error, N_DECIMAL_SETTINGVALUE);
-    }
-
-#endif
-
-    if(hal.driver_cap.spindle_sync) {
-        report_float_setting(Setting_PositionPGain, settings.position.pid.p_gain, N_DECIMAL_SETTINGVALUE);
-        report_float_setting(Setting_PositionIGain, settings.position.pid.i_gain, N_DECIMAL_SETTINGVALUE);
-        report_float_setting(Setting_PositionDGain, settings.position.pid.d_gain, N_DECIMAL_SETTINGVALUE);
-        report_float_setting(Setting_PositionIMaxError, settings.position.pid.i_max_error, N_DECIMAL_SETTINGVALUE);
-    }
-
-    // Print axis settings
-    uint_fast16_t set_idx, val = (uint_fast8_t)Setting_AxisSettingsBase;
-    uint_fast16_t max_set = hal.driver_settings.report ? AXIS_SETTINGS_INCREMENT : AxisSetting_NumSettings;
-    axes_signals_t auto_squared = {0};
-    if(hal.stepper.get_auto_squared)
-        auto_squared = hal.stepper.get_auto_squared();
-
-    for (set_idx = 0; set_idx < max_set; set_idx++) {
-
-        for (idx = 0; idx < N_AXIS; idx++) {
-
-            switch ((axis_setting_type_t)set_idx) {
-
-                case AxisSetting_StepsPerMM:
-                    report_float_setting((setting_type_t)(val + idx), settings.axis[idx].steps_per_mm, N_DECIMAL_SETTINGVALUE);
+                case Format_Decimal:
+                    report_float_setting(id, *((float *)(setting->value)), get_decimal_places(setting->format));
                     break;
 
-                case AxisSetting_MaxRate:
-                    report_float_setting((setting_type_t)(val + idx), settings.axis[idx].max_rate, N_DECIMAL_SETTINGVALUE);
+                case Format_Int8:
+                case Format_Bool:
+                case Format_Bitfield:
+                case Format_XBitfield:
+                case Format_AxisMask:
+                case Format_RadioButtons:
+                    report_uint_setting(id, *((uint8_t *)(setting->value)));
                     break;
 
-                case AxisSetting_Acceleration:
-                    report_float_setting((setting_type_t)(val + idx), settings.axis[idx].acceleration / (60.0f * 60.0f), N_DECIMAL_SETTINGVALUE);
+                case Format_Int16:
+                    report_uint_setting(id, *((uint16_t *)(setting->value)));
                     break;
 
-                case AxisSetting_MaxTravel:
-                    report_float_setting((setting_type_t)(val + idx), -settings.axis[idx].max_travel, N_DECIMAL_SETTINGVALUE);
+                case Format_Integer:
+                    report_uint_setting(id, *((uint32_t *)(setting->value)));
                     break;
 
-                case AxisSetting_Backlash:
-#ifdef ENABLE_BACKLASH_COMPENSATION
-                    report_float_setting((setting_type_t)(val + idx), settings.axis[idx].backlash, N_DECIMAL_SETTINGVALUE);
-#endif
-                    break;
-
-                case AxisSetting_AutoSquareOffset:
-                    if(bit_istrue(auto_squared.mask, bit(idx)))
-                        report_float_setting((setting_type_t)(val + idx), settings.axis[idx].dual_axis_offset, N_DECIMAL_SETTINGVALUE);
+                case Format_String:
+                case Format_Password:
+                case Format_IPv4:
+                    report_string_setting(id, ((char *)(setting->value)));
                     break;
 
                 default:
-                    if(hal.driver_settings.axis_report)
-                        hal.driver_settings.axis_report((axis_setting_type_t)set_idx, idx);
+                    break;
+            }
+            break;
+
+        case Setting_NonCoreFn:
+        case Setting_IsExtendedFn:
+        case Setting_IsLegacyFn:
+        case Setting_IsExpandedFn:
+            switch(setting->datatype) {
+
+                case Format_Decimal:
+                    report_float_setting(id, ((setting_get_float_ptr)(setting->get_value))(id), get_decimal_places(setting->format));
+                    break;
+
+                case Format_String:
+                case Format_Password:
+                case Format_IPv4:
+                    report_string_setting(id, ((setting_get_string_ptr)(setting->get_value))(id));
+                    break;
+
+                default:
+                    report_uint_setting(id, ((setting_get_int_ptr)(setting->get_value))(id));
+                    break;
+            }
+            break;
+    }
+}
+
+void report_grbl_settings (bool all)
+{
+    setting_details_t *details = settings_get_details();
+    uint16_t n_settings = details->n_settings;
+    const setting_detail_t *setting;
+
+    while(details->on_report_settings) {
+        details = details->on_report_settings();
+        n_settings += details->n_settings;
+    }
+
+    setting_detail_t **all_settings, **psetting;
+
+    if((all_settings = calloc(n_settings, sizeof(setting_detail_t *)))) {
+
+        uint_fast16_t idx;
+
+        details = settings_get_details();
+        psetting = all_settings;
+        n_settings = 0;
+
+        for(idx = 0; idx < details->n_settings; idx++) {
+            setting = &details->settings[idx];
+            if((all || setting->type == Setting_IsLegacy || setting->type == Setting_IsLegacyFn) &&
+                  settings_is_setting_available(setting->id, setting->group)) {
+                *psetting++ = (setting_detail_t *)setting;
+                n_settings++;
+            }
+        }
+
+        if(all) while(details->on_report_settings) {
+            details = details->on_report_settings();
+            for(idx = 0; idx < details->n_settings; idx++) {
+                setting = &details->settings[idx];
+                if(settings_is_setting_available(setting->id, setting->group)) {
+                    *psetting++ = (setting_detail_t *)setting;
+                    n_settings++;
+                }
+            }
+        }
+
+        qsort(all_settings, n_settings, sizeof(setting_detail_t *), cmp_settings);
+
+        for(idx = 0; idx < n_settings; idx++) {
+
+            setting = all_settings[idx];
+
+            switch(setting->id) {
+
+                case Setting_AxisStepsPerMMBase:
+                case Setting_AxisMaxRateBase:
+                case Setting_AxisAccelerationBase:
+                case Setting_AxisMaxTravelBase:
+                case Setting_AxisStepperCurrentBase:
+                case Setting_AxisMicroStepsBase:
+                case Setting_AxisBacklashBase:
+                case Setting_AxisAutoSquareOffsetBase:
+//                case Setting_DriverAxisStepsPerMMBase:
+                    {
+                        uint_fast8_t axis_idx = 0;
+                        for(axis_idx = 0; axis_idx < N_AXIS; axis_idx++) {
+                            if(setting->value != NULL)
+                                report_setting(setting, axis_idx);
+                            else if(hal.driver_settings.axis_report)
+                                hal.driver_settings.axis_report((axis_setting_id_t)((setting->id - Setting_AxisSettingsBase) / AXIS_SETTINGS_INCREMENT), axis_idx);
+                        }
+                    }
+                    break;
+
+                case Setting_EncoderModeBase:
+                case Setting_EncoderCPRBase:
+                case Setting_EncoderCPDBase:
+                case Setting_EncoderDblClickWindowBase:
+                    {
+                        uint_fast8_t encoder_idx = 0, n_encoders = hal.encoder.get_n_encoders();
+                        for(encoder_idx = 0; encoder_idx < n_encoders; encoder_idx++) {
+                            if(hal.driver_settings.report)
+                                hal.driver_settings.report(setting->id + encoder_idx * ENCODER_SETTINGS_INCREMENT);
+                        }
+                    }
+                    break;
+
+                default:
+                    if(setting->value != NULL)
+                        report_setting(setting, 0);
+                    else if(hal.driver_settings.report)
+                        hal.driver_settings.report(setting->id);
+                    else {
+                        hal.stream.write("$");
+                        hal.stream.write(uitoa(setting->id));
+                        hal.stream.write("=N/A" ASCII_EOL);
+                    }
                     break;
             }
         }
-        val += AXIS_SETTINGS_INCREMENT;
-    }
 
-    // Print driver specific axis settings
-    if(hal.driver_settings.report && hal.driver_axis_settings > 0) {
-        max_set = AXIS_SETTINGS_INCREMENT + hal.driver_axis_settings;
-        for (set_idx = AXIS_SETTINGS_INCREMENT; set_idx < max_set; set_idx++) {
-            for (idx = 0; idx < N_AXIS; idx++)
-                hal.driver_settings.axis_report((axis_setting_type_t)set_idx, idx);
-        }
-    }
-
-    if(all) for(idx = Setting_AxisSettingsMax2 + 1; idx <= Setting_SettingsMax; idx++) {
-
-        switch((setting_type_t)idx) {
-
-            case Setting_SpindleAtSpeedTolerance:
-                if(hal.driver_cap.spindle_at_speed)
-                    report_float_setting(Setting_SpindleAtSpeedTolerance, settings.spindle.at_speed_tolerance, 1);
-                break;
-
-            case Setting_ToolChangeMode:
-                if(!hal.driver_cap.atc && hal.stream.suspend_read)
-                    report_uint_setting(Setting_ToolChangeMode, settings.tool_change.mode);
-                break;
-
-            case Setting_ToolChangeProbingDistance:
-                if(!hal.driver_cap.atc && hal.stream.suspend_read)
-                    report_float_setting(Setting_ToolChangeProbingDistance, settings.tool_change.probing_distance, 1);
-                break;
-
-            case Setting_ToolChangeFeedRate:
-                if(!hal.driver_cap.atc && hal.stream.suspend_read)
-                    report_float_setting(Setting_ToolChangeFeedRate, settings.tool_change.feed_rate, 1);
-                break;
-
-            case Setting_ToolChangeSeekRate:
-                if(!hal.driver_cap.atc && hal.stream.suspend_read)
-                    report_float_setting(Setting_ToolChangeSeekRate, settings.tool_change.seek_rate, 1);
-                break;
-
-            case Setting_ToolChangePulloffRate:
-                if(!hal.driver_cap.atc && hal.stream.suspend_read)
-                    report_float_setting(Setting_ToolChangePulloffRate, settings.tool_change.pulloff_rate, 1);
-                break;
-
-            case Setting_DualAxisLengthFailPercent:
-                if(hal.stepper.get_auto_squared)
-                    report_float_setting(Setting_DualAxisLengthFailPercent, settings.homing.dual_axis.fail_length_percent, 1);
-                break;
-
-            case Setting_DualAxisLengthFailMin:
-                if(hal.stepper.get_auto_squared)
-                    report_float_setting(Setting_DualAxisLengthFailMin, settings.homing.dual_axis.fail_distance_min, N_DECIMAL_SETTINGVALUE);
-                break;
-
-            case Setting_DualAxisLengthFailMax:
-                if(hal.stepper.get_auto_squared)
-                    report_float_setting(Setting_DualAxisLengthFailMax, settings.homing.dual_axis.fail_distance_max, N_DECIMAL_SETTINGVALUE);
-                break;
-
-            default:
-                if(hal.driver_settings.report)
-                    hal.driver_settings.report((setting_type_t)idx);
-                break;
-        }
+        free(all_settings);
     }
 }
 
@@ -1053,7 +990,7 @@ void report_build_info (char *line, bool extended)
     if(settings.probe.allow_feed_override)
         *append++ = 'A';
 
-    if(settings.spindle.disable_with_zero_speed)
+    if(settings.spindle.flags.pwm_action == SpindleAction_DisableWithZeroSPeed)
         *append++ = '0';
 
     if(hal.driver_cap.software_debounce)
@@ -1134,9 +1071,6 @@ void report_build_info (char *line, bool extended)
         if(hal.driver_cap.e_stop)
             strcat(buf, "ES,");
 
-        if(hal.driver_cap.sd_card)
-            strcat(buf, "SD,");
-
         if(hal.driver_cap.mpg_mode)
             strcat(buf, "MPG,");
 
@@ -1200,6 +1134,12 @@ void report_build_info (char *line, bool extended)
             hal.stream.write("[BOARD:");
             hal.stream.write(hal.board);
             hal.stream.write("]" ASCII_EOL);
+        }
+
+        if(hal.max_step_rate) {
+            hal.stream.write("[MAX STEP RATE:");
+            hal.stream.write(uitoa(hal.max_step_rate));
+            hal.stream.write(" Hz]" ASCII_EOL);
         }
 
 #if COMPATIBILITY_LEVEL > 0
@@ -1497,8 +1437,11 @@ void report_realtime_status (void)
     if(grbl.on_realtime_report)
         grbl.on_realtime_report(hal.stream.write_all, sys.report);
 
-    hal.stream.write_all(">" ASCII_EOL);
-
+#if COMPATIBILITY_LEVEL <= 1
+    if(sys.report.all)
+        hal.stream.write_all("|FW:grblHAL");
+    else
+#endif
     if(settings.status_report.parser_state) {
 
         static uint32_t tool;
@@ -1525,6 +1468,8 @@ void report_realtime_status (void)
         if(sys.report.tool_offset)
             system_set_exec_state_flag(EXEC_TLO_REPORT);
     }
+
+    hal.stream.write_all(">" ASCII_EOL);
 
     sys.report.value = 0;
     sys.report.wco = settings.status_report.work_coord_offset && wco_counter == 0; // Set to report on next request
@@ -1561,7 +1506,7 @@ static void report_bitfield (const char *format, bool bitmap)
     }
 }
 
-void report_settings_detail (bool human_readable, setting_type_t id, const setting_detail_t *setting_detail, uint_fast8_t group_offset)
+void report_settings_detail (bool human_readable, setting_id_t id, const setting_detail_t *setting_detail, uint_fast8_t group_offset)
 {
     if(human_readable)
         hal.stream.write("$");
@@ -1576,7 +1521,7 @@ void report_settings_detail (bool human_readable, setting_type_t id, const setti
             hal.stream.write(axis_letter[group_offset]);
         hal.stream.write(setting_detail->name[0] == '?' ? &setting_detail->name[1] : setting_detail->name); // temporary hack for ? prefix...
 
-        switch(setting_detail->type) {
+        switch(setting_datatype_to_external(setting_detail->datatype)) {
 
             case Format_AxisMask:
                 hal.stream.write(" as axismask");
@@ -1639,7 +1584,7 @@ void report_settings_detail (bool human_readable, setting_type_t id, const setti
         if(setting_detail->unit)
             hal.stream.write(setting_detail->unit);
         hal.stream.write(vbar);
-        hal.stream.write(uitoa(setting_detail->type));
+        hal.stream.write(uitoa(setting_datatype_to_external(setting_detail->datatype)));
         hal.stream.write(vbar);
         if(setting_detail->format)
             hal.stream.write(setting_detail->format);
@@ -1672,24 +1617,20 @@ setting_group_t get_parent_group (setting_group_t group)
     return group;
 }
 
-static int cmp_settings (const void *a, const void *b)
-{
-  return (*(setting_detail_t **)(a))->id - (*(setting_detail_t **)(b))->id;
-}
-
 static status_code_t sort_settings_details (bool human_readable, setting_group_t group)
 {
     bool reported = group == Group_All;
 
     setting_details_t *details = settings_get_details();
     uint16_t n_settings = details->n_settings;
+    const setting_detail_t *setting;
 
     while(details->on_report_settings) {
         details = details->on_report_settings();
         n_settings += details->n_settings;
     }
 
-    setting_detail_t **all_settings, **setting;
+    setting_detail_t **all_settings, **psetting;
 
     if((all_settings = calloc(n_settings, sizeof(setting_detail_t *)))) {
 
@@ -1697,12 +1638,13 @@ static status_code_t sort_settings_details (bool human_readable, setting_group_t
 
         details = settings_get_details();
 
-        setting = all_settings;
+        psetting = all_settings;
         n_settings = 0;
 
         for(idx = 0; idx < details->n_settings; idx++) {
-            if(group == Group_All || details->settings[idx].group == group) {
-                *setting++ = (setting_detail_t *)&details->settings[idx];
+            setting = &details->settings[idx];
+            if((group == Group_All || setting->group == group) && settings_is_setting_available(setting->id, setting->group)) {
+                *psetting++ = (setting_detail_t *)setting;
                 n_settings++;
             }
         }
@@ -1710,8 +1652,9 @@ static status_code_t sort_settings_details (bool human_readable, setting_group_t
         while(details->on_report_settings) {
             details = details->on_report_settings();
             for(idx = 0; idx < details->n_settings; idx++) {
-                if(group == Group_All || details->settings[idx].group == group) {
-                    *setting++ = (setting_detail_t *)&details->settings[idx];
+                setting = &details->settings[idx];
+                if((group == Group_All || setting->group == group) && settings_is_setting_available(setting->id, setting->group)) {
+                    *psetting++ = (setting_detail_t *)setting;
                     n_settings++;
                 }
             }
@@ -1721,7 +1664,9 @@ static status_code_t sort_settings_details (bool human_readable, setting_group_t
 
         for(idx = 0; idx < n_settings; idx++) {
 
-            switch(all_settings[idx]->id) {
+            setting = all_settings[idx];
+
+            switch(setting->id) {
 
                 case Setting_AxisStepsPerMMBase:
                 case Setting_AxisMaxRateBase:
@@ -1732,12 +1677,11 @@ static status_code_t sort_settings_details (bool human_readable, setting_group_t
                 case Setting_AxisBacklashBase:
                 case Setting_AxisAutoSquareOffsetBase:
 //                case Setting_DriverAxisStepsPerMMBase:
-                    if(settings_is_setting_available(all_settings[idx]->id, all_settings[idx]->group)) {
+                    {
                         uint_fast8_t axis_idx = 0;
                         reported = true;
-                        for(axis_idx = 0; axis_idx < N_AXIS; axis_idx++) {
-                            report_settings_detail(human_readable, (setting_type_t)(all_settings[idx]->id + axis_idx), all_settings[idx], axis_idx);
-                        }
+                        for(axis_idx = 0; axis_idx < N_AXIS; axis_idx++)
+                            report_settings_detail(human_readable, (setting_id_t)(setting->id + axis_idx), setting, axis_idx);
                     }
                     break;
 
@@ -1745,19 +1689,16 @@ static status_code_t sort_settings_details (bool human_readable, setting_group_t
                 case Setting_EncoderCPRBase:
                 case Setting_EncoderCPDBase:
                 case Setting_EncoderDblClickWindowBase:
-                    if(settings_is_setting_available(all_settings[idx]->id, all_settings[idx]->group)) {
+                    {
                         uint_fast8_t encoder_idx = 0, n_encoders = hal.encoder.get_n_encoders();
-                        for(encoder_idx = 0; encoder_idx < n_encoders; encoder_idx++) {
-                            report_settings_detail(human_readable, (setting_type_t)(all_settings[idx]->id + encoder_idx * ENCODER_SETTINGS_INCREMENT), all_settings[idx], encoder_idx);
-                        }
+                        for(encoder_idx = 0; encoder_idx < n_encoders; encoder_idx++)
+                            report_settings_detail(human_readable, (setting_id_t)(setting->id + encoder_idx * ENCODER_SETTINGS_INCREMENT), setting, encoder_idx);
                     }
                     break;
 
                 default:
-                    if(settings_is_setting_available(all_settings[idx]->id, all_settings[idx]->group)) {
-                        reported = true;
-                        report_settings_detail(human_readable, all_settings[idx]->id, all_settings[idx], 0);
-                    }
+                    reported = true;
+                    report_settings_detail(human_readable, setting->id, setting, 0);
                     break;
             }
         }
@@ -1768,19 +1709,20 @@ static status_code_t sort_settings_details (bool human_readable, setting_group_t
     return all_settings == NULL ? Status_Unhandled : (reported ? Status_OK : Status_SettingDisabled);
 }
 
-static status_code_t print_settings_details (bool human_readable, setting_type_t setting, setting_group_t group, uint_fast16_t axis_rpt)
+static status_code_t print_settings_details (bool human_readable, setting_id_t id, setting_group_t group, uint_fast16_t axis_rpt)
 {
     status_code_t status;
 
-    if(setting == Setting_SettingsAll && (status = sort_settings_details(human_readable, group)) != Status_Unhandled)
+    if(id == Setting_SettingsAll && (status = sort_settings_details(human_readable, group)) != Status_Unhandled)
         return status;
 
-    bool reported = setting == Setting_SettingsAll && group == Group_All;
+    bool reported = id == Setting_SettingsAll && group == Group_All;
     uint_fast16_t idx;
+    const setting_detail_t *setting;
     setting_details_t *settings = settings_get_details();
 
-    if(group == Group_All && setting >= Setting_AxisSettingsBase && setting < Setting_AxisSettingsBase + (AxisSetting_NumSettings + 1) * AXIS_SETTINGS_INCREMENT) {
-        axis_rpt = setting % AXIS_SETTINGS_INCREMENT;
+    if(group == Group_All && id >= Setting_AxisSettingsBase && id < Setting_AxisSettingsBase + (AxisSetting_NumSettings + 1) * AXIS_SETTINGS_INCREMENT) {
+        axis_rpt = id % AXIS_SETTINGS_INCREMENT;
         setting -= axis_rpt;
     }
 
@@ -1788,10 +1730,12 @@ static status_code_t print_settings_details (bool human_readable, setting_type_t
 
         for(idx = 0; idx < settings->n_settings; idx++) {
 
-            if(setting != Setting_SettingsAll && settings->settings[idx].id != setting)
+            setting = &settings->settings[idx];
+
+            if(id != Setting_SettingsAll && setting->id != id)
                 continue;
 
-            if(group != Group_All && settings->settings[idx].group != group)
+            if(group != Group_All && setting->group != group)
                 continue;
 
             switch(settings->settings[idx].id) {
@@ -1804,12 +1748,12 @@ static status_code_t print_settings_details (bool human_readable, setting_type_t
                 case Setting_AxisMicroStepsBase:
                 case Setting_AxisBacklashBase:
                 case Setting_AxisAutoSquareOffsetBase:
-                    if(settings_is_setting_available(settings->settings[idx].id, settings->settings[idx].group)) {
+                    if(settings_is_setting_available(setting->id, setting->group)) {
                         uint_fast8_t axis_idx = 0;
                         for(axis_idx = 0; axis_idx < N_AXIS; axis_idx++) {
-                            if(setting == Setting_SettingsAll || axis_idx == axis_rpt) {
+                            if(id == Setting_SettingsAll || axis_idx == axis_rpt) {
                                 reported = true;
-                                report_settings_detail(human_readable, (setting_type_t)(settings->settings[idx].id + axis_idx), &settings->settings[idx], axis_idx);
+                                report_settings_detail(human_readable, (setting_id_t)(setting->id + axis_idx), setting, axis_idx);
                             }
                         }
                     }
@@ -1823,15 +1767,15 @@ static status_code_t print_settings_details (bool human_readable, setting_type_t
                         uint_fast8_t encoder_idx = 0, n_encoders = hal.encoder.get_n_encoders();
                         for(encoder_idx = 0; encoder_idx < n_encoders; encoder_idx++) {
                             reported = true;
-                            report_settings_detail(human_readable, (setting_type_t)(settings->settings[idx].id + encoder_idx * ENCODER_SETTINGS_INCREMENT), &settings->settings[idx], 0);
+                            report_settings_detail(human_readable, (setting_id_t)(setting->id + encoder_idx * ENCODER_SETTINGS_INCREMENT), setting, 0);
                         }
                     }
                     break;
 
                 default:
-                    if(settings_is_setting_available(settings->settings[idx].id, settings->settings[idx].group)) {
+                    if(settings_is_setting_available(setting->id, setting->group)) {
                         reported = true;
-                        report_settings_detail(human_readable, settings->settings[idx].id, &settings->settings[idx], 0);
+                        report_settings_detail(human_readable, setting->id, setting, 0);
                     }
                     break;
             }
@@ -1844,7 +1788,7 @@ static status_code_t print_settings_details (bool human_readable, setting_type_t
     return reported ? Status_OK : Status_SettingDisabled;
 }
 
-status_code_t report_settings_details (bool human_readable, setting_type_t setting, setting_group_t group)
+status_code_t report_settings_details (bool human_readable, setting_id_t setting, setting_group_t group)
 {
     uint_fast16_t axis_rpt = 0;
 

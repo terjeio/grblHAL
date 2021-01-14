@@ -1,9 +1,9 @@
 /*
   keypad.c - I2C keypad plugin
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2017-2020 Terje Io
+  Copyright (c) 2017-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -88,7 +88,7 @@ static setting_details_t *onReportSettings (void)
     return &details;
 }
 
-static status_code_t keypad_settings_set (setting_type_t setting, float value, char *svalue)
+static status_code_t keypad_settings_set (setting_id_t setting, float value, char *svalue)
 {
     status_code_t status = Status_OK;
 
@@ -130,7 +130,7 @@ static status_code_t keypad_settings_set (setting_type_t setting, float value, c
     return status == Status_Unhandled && driver_settings.set ? driver_settings.set(setting, value, svalue) : status;
 }
 
-static void keypad_settings_report (setting_type_t setting)
+static void keypad_settings_report (setting_id_t setting)
 {
     bool reported = true;
 

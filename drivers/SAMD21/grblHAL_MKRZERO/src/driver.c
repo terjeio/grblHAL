@@ -4,7 +4,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2018-2020 Terje Io
+  Copyright (c) 2018-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -286,7 +286,7 @@ static control_signals_t systemGetState (void)
     signals.reset = pinIn(RESET_PIN);
     signals.feed_hold = pinIn(FEED_HOLD_PIN);
     signals.cycle_start = pinIn(CYCLE_START_PIN);
-#ifdef SAFETY_DOOR_PIN
+#ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
     signals.safety_door_ajar = pinIn(SAFETY_DOOR_PIN);
 #endif
 
@@ -389,7 +389,7 @@ static void spindle_set_speed (uint_fast16_t pwm_value)
 {
     if (pwm_value == spindle_pwm.off_value) {
         pwmEnabled = false;
-        if(settings.spindle.disable_with_zero_speed)
+        if(settings.spindle.flags.pwm_action == SpindleAction_DisableWithZeroSPeed)
             spindle_off();
         if(spindle_pwm.always_on) {
             SPINDLE_PWM_TIMER->CC[SPINDLE_PWM_CCREG].bit.CC = spindle_pwm.off_value;
@@ -556,6 +556,7 @@ void settings_changed (settings_t *settings)
 
 //        while(SPINDLE_PWM_TIMER->SYNCBUSY.bit.PRESCALER);
 
+        spindle_pwm.offset = 1;
         spindle_precompute_pwm_values(&spindle_pwm, hal.f_step_timer / (settings->spindle.pwm_freq > 200.0f ? 1 : 8));
     }
 
@@ -958,7 +959,7 @@ bool driver_init (void) {
     IRQRegister(SysTick_IRQn, SysTick_IRQHandler);
 
     hal.info = "SAMD21";
-    hal.driver_version = "201226";
+    hal.driver_version = "210111";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1045,7 +1046,7 @@ bool driver_init (void) {
 #endif
 
  // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
-#ifdef SAFETY_DOOR_PIN
+#if defined(ENABLE_SAFETY_DOOR_INPUT_PIN) && defined(SAFETY_DOOR_PIN)
     hal.driver_cap.safety_door = On;
 #endif
 #ifdef SPINDLE_DIRECTION_PIN

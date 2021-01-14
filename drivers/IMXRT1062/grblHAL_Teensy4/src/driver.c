@@ -3,7 +3,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -371,7 +371,7 @@ static void enetStreamWriteS (const char *data)
         WsStreamWriteS(data);
 #endif
 #if USB_SERIAL_CDC
-    if(!(services.telnet || services.websocket))
+    if(!(services.telnet || services.websocket)) // TODO: check if usb connection is up?
         usb_serialWriteS(data);
 #else
     serialWriteS(data);
@@ -491,16 +491,16 @@ void selectStream (stream_type_t stream)
 
 #if TELNET_ENABLE
         case StreamType_Telnet:
+            hal.stream.write_all("[MSG:TELNET STREAM ACTIVE]" ASCII_EOL);
             memcpy(&hal.stream, &ethernet_stream, sizeof(io_stream_t));
             services.telnet = On;
-            hal.stream.write_all("[MSG:TELNET STREAM ACTIVE]" ASCII_EOL);
             break;
 #endif
 #if WEBSOCKET_ENABLE
         case StreamType_WebSocket:
+            hal.stream.write_all("[MSG:WEBSOCKET STREAM ACTIVE]" ASCII_EOL);
             memcpy(&hal.stream, &websocket_stream, sizeof(io_stream_t));
             services.websocket = On;
-            hal.stream.write_all("[MSG:WEBSOCKET STREAM ACTIVE]" ASCII_EOL);
             break;
 #endif
         case StreamType_Serial:
@@ -1132,7 +1132,7 @@ static void spindleSetState (spindle_state_t state, float rpm)
 static void spindle_set_speed (uint_fast16_t pwm_value)
 {
     if (pwm_value == spindle_pwm.off_value) {
-        if(settings.spindle.disable_with_zero_speed)
+        if(settings.spindle.flags.pwm_action == SpindleAction_DisableWithZeroSPeed)
             spindle_off();
         pwmEnabled = false;
         if(spindle_pwm.always_on) {

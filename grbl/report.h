@@ -3,7 +3,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2018-2019 Terje Io
+  Copyright (c) 2018-2021 Terje Io
   Copyright (c) 2012-2016 Sungeun K. Jeon for Gnea Research LLC
 
   Grbl is free software: you can redistribute it and/or modify
@@ -57,9 +57,9 @@ void report_grbl_help();
 
 // Prints Grbl setting(s)
 void report_grbl_settings (bool all);
-void report_uint_setting (setting_type_t n, uint32_t val);
-void report_float_setting (setting_type_t n, float val, uint8_t n_decimal);
-void report_string_setting (setting_type_t n, char *val);
+void report_uint_setting (setting_id_t n, uint32_t val);
+void report_float_setting (setting_id_t n, float val, uint8_t n_decimal);
+void report_string_setting (setting_id_t n, char *val);
 
 // Prints an echo of the pre-parsed line received right before execution.
 void report_echo_line_received (char *line);
@@ -89,7 +89,7 @@ void report_build_info (char *line, bool extended);
 status_code_t report_alarm_details (void);
 status_code_t report_error_details (void);
 status_code_t report_setting_group_details (bool by_id, char *prefix);
-status_code_t report_settings_details (bool human_readable, setting_type_t setting, setting_group_t group);
+status_code_t report_settings_details (bool human_readable, setting_id_t setting, setting_group_t group);
 
 // Prints current PID log.
 void report_pid_log (void);

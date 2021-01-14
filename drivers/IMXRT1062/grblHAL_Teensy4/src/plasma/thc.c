@@ -4,7 +4,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -408,7 +408,7 @@ static setting_details_t *onReportSettings (void)
     return &details;
 }
 
-static status_code_t plasma_setting (setting_type_t setting, float value, char *svalue)
+static status_code_t plasma_setting (setting_id_t setting, float value, char *svalue)
 {
     status_code_t status = svalue ? Status_OK : Status_Unhandled;
 
@@ -501,7 +501,7 @@ static status_code_t plasma_setting (setting_type_t setting, float value, char *
     return status == Status_Unhandled && driver_settings.set ? driver_settings.set(setting, value, svalue) : status;
 }
 
-static void plasma_settings_report (setting_type_t setting)
+static void plasma_settings_report (setting_id_t setting)
 {
     bool reported = true;
 

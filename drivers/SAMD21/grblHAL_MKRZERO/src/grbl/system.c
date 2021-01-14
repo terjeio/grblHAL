@@ -189,7 +189,7 @@ status_code_t system_execute_line (char *line)
                 int32_t id;
                 retval = read_int(&line[2], &id);
                 if(retval == Status_OK && id >= 0)
-                    retval = report_settings_details(true, (setting_type_t)id, Group_All);
+                    retval = report_settings_details(true, (setting_id_t)id, Group_All);
             } else if (state_get() & (STATE_CYCLE|STATE_HOLD))
                 retval =  Status_IdleError; // Block during cycle. Takes too long to print.
             else
@@ -286,7 +286,7 @@ status_code_t system_execute_line (char *line)
                 else if(control_signals.motor_fault)
                     retval = Status_MotorFault;
                 else if (!(settings.homing.flags.enabled && (sys.homing.mask || settings.homing.flags.single_axis_commands || settings.homing.flags.manual)))
-                    retval = Status_SettingDisabled;
+                    retval = Status_HomingDisabled;
                 // Block if safety door is ajar.
                 else if (control_signals.safety_door_ajar && !settings.flags.safety_door_ignore_when_idle)
                     retval = Status_CheckDoor;
@@ -512,7 +512,7 @@ status_code_t system_execute_line (char *line)
                     else if(!(isintf(parameter) && line[counter++] == '='))
                         retval = Status_InvalidStatement;
                     else
-                        retval = settings_store_global_setting((setting_type_t)parameter, &lcline[counter]);
+                        retval = settings_store_global_setting((setting_id_t)parameter, &lcline[counter]);
                 } else
                     retval = Status_IdleError;
             }

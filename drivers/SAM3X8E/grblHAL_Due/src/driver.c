@@ -4,7 +4,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2019-2020 Terje Io
+  Copyright (c) 2019-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -123,7 +123,7 @@ static axes_signals_t motors_1 = {AXES_BITMASK}, motors_2 = {AXES_BITMASK};
 
 #ifndef VFD_SPINDLE
 static bool pwmEnabled = false;
-static spindle_pwm_t spindle_pwm;
+static spindle_pwm_t spindle_pwm = {0};
 
 static void spindle_set_speed (uint_fast16_t pwm_value);
 #endif
@@ -706,7 +706,7 @@ static void spindle_set_speed (uint_fast16_t pwm_value)
 {
     if (pwm_value == spindle_pwm.off_value) {
         pwmEnabled = false;
-        if(settings.spindle.disable_with_zero_speed)
+        if(settings.spindle.flags.pwm_action == SpindleAction_DisableWithZeroSPeed)
             spindle_off();
         if(spindle_pwm.always_on) {
             SPINDLE_PWM_TIMER.TC_RA = spindle_pwm.period - spindle_pwm.off_value;
@@ -715,7 +715,7 @@ static void spindle_set_speed (uint_fast16_t pwm_value)
         } else
             SPINDLE_PWM_TIMER.TC_CMR |= TC_CMR_CPCSTOP; // Ensure output is low, by setting timer to stop at TCC match
     } else {
-        SPINDLE_PWM_TIMER.TC_RA = spindle_pwm.period - pwm_value;
+        SPINDLE_PWM_TIMER.TC_RA = spindle_pwm.period == pwm_value ? 1 : spindle_pwm.period - pwm_value;
         if(!pwmEnabled) {
             spindle_on();
             pwmEnabled = true;
@@ -908,13 +908,11 @@ void settings_changed (settings_t *settings)
 #endif
 
       #ifndef VFD_SPINDLE
-
         if(hal.driver_cap.variable_spindle && spindle_precompute_pwm_values(&spindle_pwm, hal.f_step_timer)) {
             SPINDLE_PWM_TIMER.TC_RC = spindle_pwm.period;
             hal.spindle.set_state = spindleSetStateVariable;
         } else
             hal.spindle.set_state = spindleSetState;
-
       #endif
 
         pulse_length = (uint32_t)(42.0f * (settings->steppers.pulse_microseconds - STEP_PULSE_LATENCY)) - 1;
@@ -1463,7 +1461,7 @@ bool driver_init (void)
     NVIC_EnableIRQ(SysTick_IRQn);
 
     hal.info = "SAM3X8E";
-	hal.driver_version = "201223";
+	hal.driver_version = "210111";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif

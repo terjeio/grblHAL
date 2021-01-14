@@ -5,9 +5,9 @@
 
   These are NOT referenced in the core grbl code
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -133,7 +133,7 @@ typedef enum {
     Setting_EncoderCPR = 1, // Count Per Revolution
     Setting_EncoderCPD = 2, // Count Per Detent
     Setting_EncoderDblClickWindow = 3 // ms
-} encoder_setting_type_t;
+} encoder_setting_id_t;
 
 typedef union {
     uint8_t events;

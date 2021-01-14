@@ -1,9 +1,9 @@
 /*
   nvs_buffer.c - RAM based non-volatile storage buffer/emulation
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2017-2020 Terje Io
+  Copyright (c) 2017-2021 Terje Io
   Copyright (c) 2012-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -131,7 +131,7 @@ static nvs_transfer_result_t memcpy_to_ram (uint32_t destination, uint8_t *sourc
 
         settings_dirty.is_dirty = true;
 
-        if(hal.nvs.driver_area.address && destination == hal.nvs.driver_area.address)
+        if(hal.nvs.driver_area.address && destination >= hal.nvs.driver_area.address)
             settings_dirty.driver_settings = true;
 
         else {

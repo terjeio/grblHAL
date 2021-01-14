@@ -63,7 +63,7 @@ typedef enum {
 // General
 #define TMC5160_F_CLK 12000000UL    // typical value @ 50C for internal osc - see datasheet for calibration procedure if required
 #define TMC5160_MICROSTEPS TMC5160_Microsteps_4
-#define TMC5160_R_SENSE 110         // mOhm
+#define TMC5160_R_SENSE 75          // mOhm
 #define TMC5160_CURRENT 500         // mA RMS
 #define TMC5160_HOLD_CURRENT_PCT 50
 
@@ -71,7 +71,6 @@ typedef enum {
 #define TMC5160_INTERPOLATE 1       // intpol: 0 = off, 1 = on
 #define TMC5160_CONSTANT_OFF_TIME 5 // toff: 1 - 15
 #define TMC5160_BLANK_TIME 1        // tbl: 0 = 16, 1 = 24, 2 = 36, 3 = 54 clocks
-#define TMC5160_RANDOM_TOFF 1       // rndtf: 0 = fixed, 1 = random
 #define TMC5160_CHOPPER_MODE 0      // chm: 0 = spreadCycle, 1 = constant off time
 // TMC5160_CHOPPER_MODE 0 defaults
 #define TMC5160_HSTRT 3             // hstrt: 0 � 7
@@ -93,12 +92,6 @@ typedef enum {
 
 // TPWMTHRS
 #define TMC5160_TPWM_THRS 0         // tpwmthrs: 0 � 2^20 - 1 (20 bits)
-
-// PWM_CONF
-#define TMC5160_PWM_AUTOSCALE 1     // pwm_autoscale: 0 = forward controlled mode, 1 = automatic scaling
-#define TMC5160_PWM_FREQ 1          // pwm_freq: 0 = 1/1024, 1 = 2/683, 2 = 2/512, 3 = 2/410 fCLK
-#define TMC5160_PWM_AMPL 255        // pwm_ampl: 0 � 255
-#define TMC5160_PWM_GRAD 5          // pwm_autoscale = 1: 1 � 15, pwm_autoscale = 0: 0 � 255
 
 // COOLCONF
 #define TMC5160_COOLSTEP_ENABLE 0
@@ -212,7 +205,6 @@ typedef union {
         reserved :29;
     };
 } TMC5160_gstat_reg_t;
-
 
 // IFCNT : R
 typedef union {
@@ -343,7 +335,7 @@ typedef union {
     uint32_t value;
     struct {
         uint32_t
-        scaling  :8,
+        scaler   :8,
         reserved :24;
     };
 } TMC5160_global_scaler_reg_t;
@@ -498,23 +490,23 @@ typedef union {
     uint32_t value;
     struct {
         uint32_t
-        toff     :4,
-        hstrt    :3,
-        hend     :4,
-        fd3      :1,
-        disfdcc  :1,
-        rndtf    :1,
-        chm      :1,
-        tbl      :2,
-        vsense   :1,
-        vhighfs  :1,
-        vhighchm :1,
-        sync     :4,
-        mres     :4,
-        intpol   :1,
-        dedge    :1,
-        diss2g   :1,
-        reserved :1;
+        toff      :4,
+        hstrt     :3,
+        hend      :4,
+        fd3       :1,
+        disfdcc   :1,
+        reserved1 :1,
+        chm       :1,
+        tbl       :2,
+        reserved2 :1,
+        vhighfs   :1,
+        vhighchm  :1,
+        tpfd      :4,
+        mres      :4,
+        intpol    :1,
+        dedge     :1,
+        diss2g    :1,
+        diss2vs   :1;
     };
 } TMC5160_chopconf_reg_t;
 
@@ -556,11 +548,14 @@ typedef union {
     struct {
         uint32_t
         sg_result  :10,
-        reserved1  :5,
+        reserved1  :2,
+        s2vsa      :1,
+        s2vsb      :1,
+        stealth    :1,
         fsactive   :1,
         cs_actual  :5,
-        reserved   :3,
-        stallGuard :1,
+        reserved2  :3,
+        stallguard :1,
         ot         :1,
         otpw       :1,
         s2ga       :1,
@@ -576,13 +571,15 @@ typedef union {
     uint32_t value;
     struct {
         uint32_t
-        pwm_ampl      :8,
+        pwm_ofs       :8,
         pwm_grad      :8,
         pwm_freq      :2,
         pwm_autoscale :1,
-        pwm_symmetric :1,
+        pwm_autograd  :1,
         freewheel     :2,
-        reserved      :10;
+        reserved      :2,
+        pwm_reg       :4,
+        pwm_lim       :4;
     };
 } TMC5160_pwmconf_reg_t;
 
@@ -648,6 +645,11 @@ typedef struct {
     TMC5160_addr_t addr;
     TMC5160_ioin_reg_t reg;
 } TMC5160_ioin_dgr_t;
+
+typedef struct {
+    TMC5160_addr_t addr;
+    TMC5160_global_scaler_reg_t reg;
+} TMC5160_global_scaler_dgr_t;
 
 typedef struct {
     TMC5160_addr_t addr;
@@ -752,6 +754,7 @@ typedef union {
     TMC5160_gconf_reg_t gconf;
     TMC5160_gstat_reg_t gstat;
     TMC5160_ioin_reg_t ioin;
+    TMC5160_global_scaler_dgr_t global_scaler;
     TMC5160_ihold_irun_reg_t ihold_irun;
     TMC5160_tpowerdown_reg_t tpowerdown;
     TMC5160_tstep_reg_t tstep;
@@ -783,6 +786,7 @@ typedef struct {
     TMC5160_gconf_dgr_t gconf;
     TMC5160_stat_dgr_t gstat;
     TMC5160_ioin_dgr_t ioin;
+    TMC5160_global_scaler_dgr_t global_scaler;
     TMC5160_ihold_irun_dgr_t ihold_irun;
     TMC5160_tpowerdown_dgr_t tpowerdown;
     TMC5160_tstep_dgr_t tstep;
