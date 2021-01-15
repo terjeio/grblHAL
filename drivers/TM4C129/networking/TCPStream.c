@@ -36,8 +36,11 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 */
 
-
-#include "networking.h"
+#ifdef ARDUINO
+#include "../driver.h"
+#else
+#include "driver.h"
+#endif
 
 #if TELNET_ENABLE
 
@@ -45,6 +48,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <string.h>
 
 #include "TCPStream.h"
+#include "networking.h"
 
 typedef enum
 {

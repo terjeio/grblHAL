@@ -11,7 +11,7 @@
 
 // If no OS increase TX buffer size to hold the largest message generated and then some.
 // The list settings $$ command is currently the big one.
-#if NO_SYS > 0
+#if NO_SYS > 0 && !defined(TX_BUFFER_SIZE)
 #define TX_BUFFER_SIZE 1024 // must be a power of 2
 #endif
 

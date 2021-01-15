@@ -36,7 +36,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 */
 
-#include "networking.h"
+
+#ifdef ARDUINO
+#include "../driver.h"
+#else
+#include "driver.h"
+#endif
 
 #if WEBSOCKET_ENABLE
 
@@ -44,6 +49,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdlib.h>
 #include <string.h>
 
+#include "networking.h"
 #include "WsStream.h"
 #include "base64.h"
 #include "sha1.h"
