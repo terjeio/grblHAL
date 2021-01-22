@@ -64,7 +64,12 @@ static volatile modbus_state_t state = ModBus_Idle;
 static driver_reset_ptr driver_reset;
 static on_execute_realtime_ptr on_execute_realtime;
 static on_report_options_ptr on_report_options;
-static driver_setting_ptrs_t driver_settings;
+static nvs_address_t nvs_address;
+
+static status_code_t modbus_set_baud (setting_id_t id, uint_fast16_t value);
+static uint32_t modbus_get_baud (setting_id_t setting);
+static void modbus_settings_restore (void);
+static void modbus_settings_load (void);
 
 // Compute the MODBUS RTU CRC
 static uint16_t modbus_CRC16x (char *buf, uint_fast16_t len)
@@ -303,76 +308,43 @@ static const setting_group_detail_t modbus_groups [] = {
 };
 
 static const setting_detail_t modbus_settings[] = {
-    { Settings_ModBus_BaudRate, Group_ModBus, "ModBus baud rate", NULL, Format_RadioButtons, "2400,4800,9600,19200,38400,115200", NULL, NULL },
-    { Settings_ModBus_RXTimeout, Group_ModBus, "ModBus RX timeout", "milliseconds", Format_Integer, "####0", "50", "250" }
+    { Settings_ModBus_BaudRate, Group_ModBus, "ModBus baud rate", NULL, Format_RadioButtons, "2400,4800,9600,19200,38400,115200", NULL, NULL, Setting_NonCoreFn, modbus_set_baud, modbus_get_baud, NULL },
+    { Settings_ModBus_RXTimeout, Group_ModBus, "ModBus RX timeout", "milliseconds", Format_Integer, "####0", "50", "250", Setting_NonCore, &modbus.rx_timeout, NULL, NULL }
 };
+
+static void modbus_settings_save (void)
+{
+    hal.nvs.memcpy_to_nvs(nvs_address, (uint8_t *)&modbus, sizeof(modbus_settings_t), true);
+}
 
 static setting_details_t details = {
     .groups = modbus_groups,
     .n_groups = sizeof(modbus_groups) / sizeof(setting_group_detail_t),
     .settings = modbus_settings,
-    .n_settings = sizeof(modbus_settings) / sizeof(setting_detail_t)
+    .n_settings = sizeof(modbus_settings) / sizeof(setting_detail_t),
+    .save = modbus_settings_save,
+    .load = modbus_settings_load,
+    .restore = modbus_settings_restore,
+
 };
 
-static setting_details_t *on_report_settings (void)
+static setting_details_t *on_get_settings (void)
 {
     return &details;
 }
 
-static status_code_t modbus_setting (setting_id_t setting, float value, char *svalue)
+static status_code_t modbus_set_baud (setting_id_t id, uint_fast16_t value)
 {
-    status_code_t status = svalue ? Status_OK : Status_Unhandled;
+    modbus.baud_rate = baud[(uint32_t)value];
+    silence_timeout = silence[(uint32_t)value];
+    stream->set_baud_rate(modbus.baud_rate);
 
-    if(svalue) switch(setting) {
-
-        case Settings_ModBus_BaudRate:
-            if(isintf(value) && value >= 0.0f && value < sizeof(baud) / sizeof(uint32_t)) {
-                modbus.baud_rate = baud[(uint32_t)value];
-                silence_timeout = silence[(uint32_t)value];
-                stream->set_baud_rate(modbus.baud_rate);
-            } else
-                status = Status_InvalidStatement; //out of range...
-            break;
-
-        case Settings_ModBus_RXTimeout:
-            if(isintf(value) && value >= 50.0f && value < 250.0f) {
-                modbus.rx_timeout = (uint32_t)value;
-            } else
-                status = Status_InvalidStatement; //out of range...
-            break;
-
-        default:
-            status = Status_Unhandled;
-            break;
-    }
-
-    if(status == Status_OK)
-        hal.nvs.memcpy_to_nvs(driver_settings.nvs_address, (uint8_t *)&modbus, sizeof(modbus_settings_t), true);
-
-    return status == Status_Unhandled && driver_settings.set ? driver_settings.set(setting, value, svalue) : status;
+    return Status_OK;
 }
 
-static void modbus_settings_report (setting_id_t setting)
+static uint32_t modbus_get_baud (setting_id_t setting)
 {
-    bool reported = true;
-
-    switch(setting) {
-
-        case Settings_ModBus_BaudRate:
-            report_uint_setting(setting, get_baudrate(modbus.baud_rate));
-            break;
-
-        case Settings_ModBus_RXTimeout:
-            report_uint_setting(setting, modbus.rx_timeout);
-            break;
-
-        default:
-            reported = false;
-            break;
-    }
-
-    if(!reported && driver_settings.report)
-        driver_settings.report(setting);
+    return get_baudrate(modbus.baud_rate);
 }
 
 static void modbus_settings_restore (void)
@@ -380,23 +352,17 @@ static void modbus_settings_restore (void)
     modbus.rx_timeout = 50;
     modbus.baud_rate = baud[DEFAULT_BAUDRATE];
 
-    hal.nvs.memcpy_to_nvs(driver_settings.nvs_address, (uint8_t *)&modbus, sizeof(modbus_settings_t), true);
-
-    if(driver_settings.restore)
-        driver_settings.restore();
+    hal.nvs.memcpy_to_nvs(nvs_address, (uint8_t *)&modbus, sizeof(modbus_settings_t), true);
 }
 
 static void modbus_settings_load (void)
 {
-    if(hal.nvs.memcpy_from_nvs((uint8_t *)&modbus, driver_settings.nvs_address, sizeof(modbus_settings_t), true) != NVS_TransferResult_OK)
+    if(hal.nvs.memcpy_from_nvs((uint8_t *)&modbus, nvs_address, sizeof(modbus_settings_t), true) != NVS_TransferResult_OK)
         modbus_settings_restore();
 
     silence_timeout = silence[get_baudrate(modbus.baud_rate)];
 
     stream->set_baud_rate(modbus.baud_rate);
-
-    if(driver_settings.load)
-        driver_settings.load();
 }
 
 static void onReportOptions (bool newopt)
@@ -404,18 +370,12 @@ static void onReportOptions (bool newopt)
     on_report_options(newopt);
 
     if(!newopt)
-        hal.stream.write("[PLUGIN:MODBUS v0.03]" ASCII_EOL);
+        hal.stream.write("[PLUGIN:MODBUS v0.04]" ASCII_EOL);
 }
 
 bool modbus_init (modbus_stream_t *mstream)
 {
-    if((hal.driver_settings.nvs_address = nvs_alloc(sizeof(modbus_settings_t)))) {
-        memcpy(&driver_settings, &hal.driver_settings, sizeof(driver_setting_ptrs_t));
-
-        hal.driver_settings.set = modbus_setting;
-        hal.driver_settings.report = modbus_settings_report;
-        hal.driver_settings.load = modbus_settings_load;
-        hal.driver_settings.restore = modbus_settings_restore;
+    if((nvs_address = nvs_alloc(sizeof(modbus_settings_t)))) {
 
         stream = mstream;
 
@@ -430,8 +390,8 @@ bool modbus_init (modbus_stream_t *mstream)
             on_report_options = grbl.on_report_options;
             grbl.on_report_options = onReportOptions;
 
-            details.on_report_settings = grbl.on_report_settings;
-            grbl.on_report_settings = on_report_settings;
+            details.on_get_settings = grbl.on_get_settings;
+            grbl.on_get_settings = on_get_settings;
         }
 
         head = tail = &queue[0];
@@ -441,5 +401,5 @@ bool modbus_init (modbus_stream_t *mstream)
             queue[idx].next = idx == MODBUS_QUEUE_LENGTH - 1 ? &queue[0] : &queue[idx + 1];
     }
 
-    return driver_settings.nvs_address != 0;
+    return nvs_address != 0;
 }

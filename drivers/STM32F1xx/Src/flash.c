@@ -2,7 +2,7 @@
 
   flash.c - driver code for STM32F103C8 ARM processors
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2019-2020 Terje Io
 

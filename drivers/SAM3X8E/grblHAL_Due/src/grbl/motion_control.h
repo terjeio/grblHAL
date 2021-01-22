@@ -1,7 +1,7 @@
 /*
   motion_control.h - high level interface for issuing motion commands
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017-2019 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC

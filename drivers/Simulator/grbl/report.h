@@ -55,11 +55,11 @@ void report_init_message (void);
 status_code_t report_help (char *args, char *lcargs);
 void report_grbl_help();
 
-// Prints Grbl setting(s)
-void report_grbl_settings (bool all);
-void report_uint_setting (setting_id_t n, uint32_t val);
-void report_float_setting (setting_id_t n, float val, uint8_t n_decimal);
-void report_string_setting (setting_id_t n, char *val);
+// Prints Grbl settings
+void report_grbl_settings (bool all, void *data);
+
+// Prints Grbl setting
+status_code_t report_grbl_setting (setting_id_t id, void *data);
 
 // Prints an echo of the pre-parsed line received right before execution.
 void report_echo_line_received (char *line);

@@ -3,7 +3,7 @@
 
   Buffer handlers for real-time override commands
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017-2019 Terje Io
 

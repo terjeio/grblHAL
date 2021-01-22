@@ -1,7 +1,7 @@
 /*
   T41U5XBB_map.h - driver code for IMXRT1062 processor (on Teensy 4.1 board)
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Board by Phil Barrett: https://github.com/phil-barrett/grblHAL-teensy-4.x
 

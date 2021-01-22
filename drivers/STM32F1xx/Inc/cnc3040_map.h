@@ -1,7 +1,7 @@
 /*
   cnc3040_map.h - driver code for STM32F103C8 ARM processors
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -113,18 +113,20 @@
 #define COOLANT_MIST_PIN            4
 #define COOLANT_MIST_BIT            (1<<COOLANT_MIST_PIN)
 
-
 // Define user-control controls (cycle start, reset, feed hold) input pins.
 #define CONTROL_PORT                GPIOB
 #define CONTROL_RESET_PIN           5
-#define CONTROL_FEED_HOLD_PIN       14
-#define CONTROL_CYCLE_START_PIN     15
-#define CONTROL_SAFETY_DOOR_PIN     8
 #define CONTROL_RESET_BIT           (1<<CONTROL_RESET_PIN)
+#define CONTROL_FEED_HOLD_PIN       14
 #define CONTROL_FEED_HOLD_BIT       (1<<CONTROL_FEED_HOLD_PIN)
+#define CONTROL_CYCLE_START_PIN     15
 #define CONTROL_CYCLE_START_BIT     (1<<CONTROL_CYCLE_START_PIN)
+#ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
+#define CONTROL_SAFETY_DOOR_PIN     8
 #define CONTROL_SAFETY_DOOR_BIT     (1<<CONTROL_SAFETY_DOOR_PIN)
-#define CONTROL_MASK                (CONTROL_RESET_BIT|CONTROL_FEED_HOLD_BIT|CONTROL_CYCLE_START_BIT|CONTROL_SAFETY_DOOR_BIT)
+#else
+#define CONTROL_MASK                (CONTROL_RESET_BIT|CONTROL_FEED_HOLD_BIT|CONTROL_CYCLE_START_BIT)
+#endif
 #define CONTROL_INMODE GPIO_MAP
 
 // Define probe switch input pin.

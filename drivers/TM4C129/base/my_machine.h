@@ -1,7 +1,7 @@
 /*
   my_machine.h - configuration for Texas Instruments SimpleLink ARM processors/LaunchPads
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 

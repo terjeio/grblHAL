@@ -4,7 +4,7 @@
 
   I2C I/O expander, PCA9654
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2018-2020 Terje Io
 

@@ -1,7 +1,7 @@
 //
 // utils.h - Assorted utilities for networking plugin - some sourced from internet and possibly modified (public domain)
 //
-// Part of GrblHAL
+// Part of grblHAL
 //
 
 #ifndef __NETWORKING_UTILS_H__

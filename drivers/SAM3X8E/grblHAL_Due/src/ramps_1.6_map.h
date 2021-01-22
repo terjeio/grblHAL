@@ -3,7 +3,7 @@
 
   NOTE: board must be modified for 3.3V IO before use!
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2019 Terje Io
 

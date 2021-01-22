@@ -2,7 +2,7 @@
 
   ppi.h - plugin for for laser PPI (Pulses Per Inch) mode
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 

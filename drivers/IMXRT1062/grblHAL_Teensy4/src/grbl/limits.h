@@ -1,7 +1,7 @@
 /*
   limits.h - code pertaining to limit-switches and performing the homing cycle
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017-2018 Terje Io
   Copyright (c) 2012-2015 Sungeun K. Jeon

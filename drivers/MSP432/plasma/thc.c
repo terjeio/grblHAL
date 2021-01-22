@@ -88,11 +88,14 @@ static on_execute_realtime_ptr on_execute_realtime = NULL;
 static on_realtime_report_ptr on_realtime_report = NULL;
 static control_signals_callback_ptr control_interrupt_callback = NULL;
 static stepper_pulse_start_ptr stepper_pulse_start = NULL;
-static driver_setting_ptrs_t driver_settings;
+static nvs_address_t nvs_address;
 static settings_changed_ptr settings_changed;
 static plasma_settings_t plasma;
 static on_report_options_ptr on_report_options;
 static io_port_t port = {0};
+
+static void plasma_settings_restore (void);
+static void plasma_settings_load (void);
 
 static void pause_on_error (void)
 {
@@ -378,206 +381,42 @@ static const setting_group_detail_t plasma_groups [] = {
 };
 
 static const setting_detail_t plasma_settings[] = {
-    { Setting_THC_Mode, Group_Plasma, "Plasma mode", NULL, Format_RadioButtons, "Off,Up/down,Voltage", NULL, NULL },
-    { Setting_THC_Delay, Group_Plasma, "Plasma THC delay", "s", Format_Decimal, "#0.0", NULL, NULL },
-    { Setting_THC_Threshold, Group_Plasma, "Plasma THC threshold", "V", Format_Decimal, "#0.00", NULL, NULL },
-    { Setting_THC_PGain, Group_Plasma, "Plasma THC P-gain", NULL, Format_Decimal, "###0.000", NULL, NULL },
-    { Setting_THC_IGain, Group_Plasma, "Plasma THC I-gain", NULL, Format_Decimal, "###0.000", NULL, NULL },
-    { Setting_THC_DGain, Group_Plasma, "Plasma THC D-gain", NULL, Format_Decimal, "###0.000", NULL, NULL },
-    { Setting_THC_VADThreshold, Group_Plasma, "Plasma THC VAD threshold", "percent", Format_Integer, "#0", NULL, NULL },
-    { Setting_THC_VoidOverride, Group_Plasma, "Plasma THC Void override", "percent", Format_Integer, "#0", NULL, NULL },
-    { Setting_Arc_FailTimeout, Group_Plasma, "Plasma Arc fail timeout", "seconds", Format_Decimal, "#0.0", NULL, NULL },
-    { Setting_Arc_RetryDelay, Group_Plasma, "Plasma Arc retry delay", "seconds", Format_Decimal, "#0.0", NULL, NULL },
-    { Setting_Arc_MaxRetries, Group_Plasma, "Plasma Arc max retries", NULL, Format_Integer, "#0", NULL, NULL },
-    { Setting_Arc_VoltageScale, Group_Plasma, "Plasma Arc voltage scale", NULL, Format_Decimal, "###0.000", NULL, NULL },
-    { Setting_Arc_VoltageOffset, Group_Plasma, "Plasma Arc voltage offset", NULL, Format_Decimal, "###0.000", NULL, NULL },
-    { Setting_Arc_HeightPerVolt, Group_Plasma, "Plasma Arc height per volt", "mm", Format_Decimal, "###0.000", NULL, NULL },
-    { Setting_Arc_OkHighVoltage, Group_Plasma, "Plasma Arc ok high volts", "V", Format_Decimal, "###0.000", NULL, NULL },
-    { Setting_Arc_OkLowVoltage, Group_Plasma, "Plasma Arc ok low volts", "V", Format_Decimal, "###0.000", NULL, NULL }
+    { Setting_THC_Mode, Group_Plasma, "Plasma mode", NULL, Format_RadioButtons, "Off,Up/down,Voltage", NULL, NULL, Setting_NonCore, &plasma.mode, NULL, NULL },
+    { Setting_THC_Delay, Group_Plasma, "Plasma THC delay", "s", Format_Decimal, "#0.0", NULL, NULL, Setting_NonCore, &plasma.thc_delay, NULL, NULL },
+    { Setting_THC_Threshold, Group_Plasma, "Plasma THC threshold", "V", Format_Decimal, "#0.00", NULL, NULL, Setting_NonCore, &plasma.thc_threshold, NULL, NULL },
+    { Setting_THC_PGain, Group_Plasma, "Plasma THC P-gain", NULL, Format_Decimal, "###0.000", NULL, NULL, Setting_NonCore, &plasma.pid.p_gain, NULL, NULL },
+    { Setting_THC_IGain, Group_Plasma, "Plasma THC I-gain", NULL, Format_Decimal, "###0.000", NULL, NULL, Setting_NonCore, &plasma.pid.i_gain, NULL, NULL },
+    { Setting_THC_DGain, Group_Plasma, "Plasma THC D-gain", NULL, Format_Decimal, "###0.000", NULL, NULL, Setting_NonCore, &plasma.pid.d_gain, NULL, NULL },
+    { Setting_THC_VADThreshold, Group_Plasma, "Plasma THC VAD threshold", "percent", Format_Integer, "##0", "0", "100", Setting_NonCore, &plasma.vad_threshold, NULL, NULL },
+    { Setting_THC_VoidOverride, Group_Plasma, "Plasma THC Void override", "percent", Format_Integer, "##0", "0", "100", Setting_NonCore, &plasma.thc_override, NULL, NULL },
+    { Setting_Arc_FailTimeout, Group_Plasma, "Plasma Arc fail timeout", "seconds", Format_Decimal, "#0.0", NULL, NULL, Setting_NonCore, &plasma.arc_fail_timeout, NULL, NULL },
+    { Setting_Arc_RetryDelay, Group_Plasma, "Plasma Arc retry delay", "seconds", Format_Decimal, "#0.0", NULL, NULL, Setting_NonCore, &plasma.arc_retry_delay, NULL, NULL },
+    { Setting_Arc_MaxRetries, Group_Plasma, "Plasma Arc max retries", NULL, Format_Int8, "#0", NULL, NULL, Setting_NonCore, &plasma.arc_retries, NULL, NULL },
+    { Setting_Arc_VoltageScale, Group_Plasma, "Plasma Arc voltage scale", NULL, Format_Decimal, "###0.000", NULL, NULL, Setting_NonCore, &plasma.arc_voltage_scale, NULL, NULL },
+    { Setting_Arc_VoltageOffset, Group_Plasma, "Plasma Arc voltage offset", NULL, Format_Decimal, "###0.000", NULL, NULL, Setting_NonCore, &plasma.arc_voltage_offset, NULL, NULL },
+    { Setting_Arc_HeightPerVolt, Group_Plasma, "Plasma Arc height per volt", "mm", Format_Decimal, "###0.000", NULL, NULL, Setting_NonCore, &plasma.arc_height_per_volt, NULL, NULL },
+    { Setting_Arc_OkHighVoltage, Group_Plasma, "Plasma Arc ok high volts", "V", Format_Decimal, "###0.000", NULL, NULL, Setting_NonCore, &plasma.arc_high_low_voltage, NULL, NULL },
+    { Setting_Arc_OkLowVoltage, Group_Plasma, "Plasma Arc ok low volts", "V", Format_Decimal, "###0.000", NULL, NULL, Setting_NonCore, &plasma.arc_ok_low_voltage, NULL, NULL }
 };
+
+static void plasma_settings_save (void)
+{
+    hal.nvs.memcpy_to_nvs(nvs_address, (uint8_t *)&plasma, sizeof(plasma_settings_t), true);
+}
 
 static setting_details_t details = {
     .groups = plasma_groups,
     .n_groups = sizeof(plasma_groups) / sizeof(setting_group_detail_t),
     .settings = plasma_settings,
-    .n_settings = sizeof(plasma_settings) / sizeof(setting_detail_t)
+    .n_settings = sizeof(plasma_settings) / sizeof(setting_detail_t),
+    .save = plasma_settings_save,
+    .load = plasma_settings_load,
+    .restore = plasma_settings_restore
 };
 
 static setting_details_t *onReportSettings (void)
 {
     return &details;
-}
-
-static status_code_t plasma_setting (setting_id_t setting, float value, char *svalue)
-{
-    status_code_t status = svalue ? Status_OK : Status_Unhandled;
-
-    if(svalue) switch(setting) {
-
-        case Setting_THC_Mode:
-            if(isintf(value) && value != NAN && value > Plasma_mode0 && value <= Plasma_mode2)
-                plasma.mode = (plasma_mode_t)value;
-            else
-                status = Status_InvalidStatement; //out of range...
-            break;
-
-        case Setting_THC_Delay:
-            plasma.thc_delay = value;
-            break;
-
-        case Setting_THC_Threshold:
-            plasma.thc_threshold = value;
-            break;
-
-        case Setting_THC_PGain:
-            plasma.pid.p_gain = value;
-            break;
-
-        case Setting_THC_IGain:
-            plasma.pid.i_gain = value;
-            break;
-
-        case Setting_THC_DGain:
-            plasma.pid.d_gain = value;
-            break;
-
-        case Setting_THC_VADThreshold:
-            if(isintf(value) && value != NAN && value > 0.0f && value <= 100.0f)
-                plasma.vad_threshold = (uint8_t)value;
-            else
-                status = Status_InvalidStatement; //out of range...
-            break;
-
-        case Setting_THC_VoidOverride:
-            if(isintf(value) && value != NAN && value > 0.0f && value <= 100.0f)
-                plasma.thc_override = (uint8_t)value;
-            else
-                status = Status_InvalidStatement; //out of range...
-            break;
-
-        case Setting_Arc_FailTimeout:
-            plasma.arc_fail_timeout = value;
-            break;
-
-        case Setting_Arc_RetryDelay:
-            plasma.arc_retry_delay = value;
-            break;
-
-        case Setting_Arc_MaxRetries:
-            if(isintf(value) && value != NAN && value > 0.0f)
-                plasma.arc_retries = (uint8_t)value;
-            else
-                status = Status_InvalidStatement; //out of range...
-            break;
-
-        case Setting_Arc_VoltageScale:
-            plasma.arc_voltage_scale = value;
-            break;
-
-        case Setting_Arc_VoltageOffset:
-            plasma.arc_voltage_offset = value;
-            break;
-
-        case Setting_Arc_HeightPerVolt:
-            plasma.arc_height_per_volt = value;
-            break;
-
-        case Setting_Arc_OkHighVoltage:
-            plasma.arc_high_low_voltage = value;
-            break;
-
-        case Setting_Arc_OkLowVoltage:
-            plasma.arc_ok_low_voltage = value;
-            break;
-
-        default:
-            status = Status_Unhandled;
-            break;
-    }
-
-    if(status == Status_OK)
-        hal.nvs.memcpy_to_nvs(driver_settings.nvs_address, (uint8_t *)&plasma, sizeof(plasma_settings_t), true);
-
-    return status == Status_Unhandled && driver_settings.set ? driver_settings.set(setting, value, svalue) : status;
-}
-
-static void plasma_settings_report (setting_id_t setting)
-{
-    bool reported = true;
-
-    switch(setting) {
-
-        case Setting_THC_Mode:
-            report_uint_setting(setting, (uint32_t)plasma.mode);
-            break;
-
-        case Setting_THC_Delay:
-            report_float_setting(setting, plasma.thc_delay, 1);
-            break;
-
-        case Setting_THC_Threshold:
-            report_float_setting(setting, plasma.thc_threshold, 1);
-            break;
-/*
-        case Setting_THC_PGain:
-            report_float_setting(setting, plasma.pid.p_gain, 1);
-            break;
-
-        case Setting_THC_IGain:
-            report_float_setting(setting, plasma.pid.i_gain, 3);
-            break;
-
-        case Setting_THC_DGain:
-            report_float_setting(setting, plasma.pid.d_gain, 3);
-            break;
-*/
-        case Setting_THC_VADThreshold:
-            report_uint_setting(setting, (uint32_t)plasma.vad_threshold);
-            break;
-
-        case Setting_THC_VoidOverride:
-            report_uint_setting(setting, plasma.thc_override);
-            break;
-
-        case Setting_Arc_FailTimeout:
-            report_float_setting(setting, plasma.arc_fail_timeout, 1);
-            break;
-
-        case Setting_Arc_RetryDelay:
-            report_float_setting(setting, plasma.arc_retry_delay, 1);
-            break;
-
-        case Setting_Arc_MaxRetries:
-            report_uint_setting(setting, plasma.arc_retries);
-            break;
-
-        case Setting_Arc_VoltageScale:
-            report_float_setting(setting, plasma.arc_voltage_scale, 5);
-            break;
-
-        case Setting_Arc_VoltageOffset:
-            report_float_setting(setting, plasma.arc_voltage_offset, 2);
-            break;
-
-        case Setting_Arc_HeightPerVolt:
-            report_float_setting(setting, plasma.arc_height_per_volt, 3);
-            break;
-/*
-        case Setting_Arc_OkHighVoltage:
-            report_float_setting(setting, plasma.arc_high_low_voltage, 1);
-            break;
-
-        case Setting_Arc_OkLowVoltage:
-            report_float_setting(setting, plasma.arc_ok_low_voltage, 1);
-            break;
-*/
-        default:
-            reported = false;
-            break;
-    }
-
-    if(!reported && driver_settings.report)
-        driver_settings.report(setting);
 }
 
 static void plasma_settings_restore (void)
@@ -603,19 +442,13 @@ static void plasma_settings_restore (void)
     plasma.pid.i_gain = 0.0f;
     plasma.pid.d_gain = 0.0f;
 
-    hal.nvs.memcpy_to_nvs(driver_settings.nvs_address, (uint8_t *)&plasma, sizeof(plasma_settings_t), true);
-
-    if(driver_settings.restore)
-        driver_settings.restore();
+    hal.nvs.memcpy_to_nvs(nvs_address, (uint8_t *)&plasma, sizeof(plasma_settings_t), true);
 }
 
 static void plasma_settings_load (void)
 {
-    if(hal.nvs.memcpy_from_nvs((uint8_t *)&plasma, driver_settings.nvs_address, sizeof(plasma_settings_t), true) != NVS_TransferResult_OK)
+    if(hal.nvs.memcpy_from_nvs((uint8_t *)&plasma, nvs_address, sizeof(plasma_settings_t), true) != NVS_TransferResult_OK)
         plasma_settings_restore();
-
-    if(driver_settings.load)
-        driver_settings.load();
 }
 
 static void plasma_warning (uint_fast16_t state)
@@ -637,7 +470,7 @@ bool plasma_init (void)
 {
     if(hal.port.num_analog_in > 0 && hal.port.num_digital_in > 1 && hal.port.wait_on_input && hal.stepper.output_step) {
 
-        if ((hal.driver_settings.nvs_address = nvs_alloc(sizeof(plasma_settings_t)))) {
+        if ((nvs_address = nvs_alloc(sizeof(plasma_settings_t)))) {
 
             if(port.wait_on_input == NULL) {
 
@@ -646,12 +479,6 @@ bool plasma_init (void)
                 hal.port.analog_out = analog_out;
                 hal.port.num_digital_out = max(port.num_digital_out, 3);
                 hal.port.num_analog_out = max(port.num_analog_out, 4);
-
-                memcpy(&driver_settings, &hal.driver_settings, sizeof(driver_setting_ptrs_t));
-                hal.driver_settings.set = plasma_setting;
-                hal.driver_settings.report = plasma_settings_report;
-                hal.driver_settings.load = plasma_settings_load;
-                hal.driver_settings.restore = plasma_settings_restore;
 
                 spindle_set_state_ = hal.spindle.set_state;
                 hal.spindle.set_state = arcSetState;
@@ -678,9 +505,8 @@ bool plasma_init (void)
                 on_realtime_report = grbl.on_realtime_report;
                 grbl.on_realtime_report = onRealtimeReport;
 
-                details.on_report_settings = grbl.on_report_settings;
-                grbl.on_report_settings = onReportSettings;
-
+                details.on_get_settings = grbl.on_get_settings;
+                grbl.on_get_settings = onReportSettings;
 
                 hal.driver_cap.spindle_at_speed = Off;
 
@@ -689,10 +515,10 @@ bool plasma_init (void)
         }
     }
 
-    if(!driver_settings.nvs_address != 0)
+    if(nvs_address == 0)
         protocol_enqueue_rt_command(plasma_warning);
 
-    return driver_settings.nvs_address != 0;
+    return nvs_address != 0;
 }
 
 #endif

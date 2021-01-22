@@ -33,30 +33,12 @@
 #define SETTINGS_VERSION 19  // NOTE: Check settings_reset() when moving to next version.
 
 // Define axis settings numbering scheme. Starts at Setting_AxisSettingsBase, every INCREMENT, over N_SETTINGS.
-#define AXIS_SETTINGS_INCREMENT  10 // Must be greater than the number of axis settings TODO: change to 100 to allow for a logical wider range of parameters?
+#define AXIS_SETTINGS_INCREMENT  10 // Must be greater than the number of axis settings.
 
 // Define encoder settings numbering scheme. Starts at Setting_EncoderSettingsBase, every INCREMENT, over N_SETTINGS.
 // Not referenced by the core.
 #define ENCODER_N_SETTINGS_MAX 5 // NOTE: This is the maximum number of encoders allowed.
 #define ENCODER_SETTINGS_INCREMENT 10
-
-typedef enum {
-    AxisSetting_StepsPerMM = 0,
-    AxisSetting_MaxRate = 1,
-    AxisSetting_Acceleration = 2,
-    AxisSetting_MaxTravel = 3,
-    AxisSetting_StepperCurrent = 4, // TODO: move to axis settings for driver?, 200+
-    AxisSetting_MicroSteps = 5,     // TODO: move to axis settings for driver?, 200+
-    AxisSetting_Backlash = 6,
-    AxisSetting_AutoSquareOffset = 7,
-    AxisSetting_NumSettings
-} axis_setting_id_t;
-
-typedef enum {
-    DriverAxisSetting_MicroSteps = 0,
-    DriverAxisSetting_StepperCurrent = 1,
-    DriverAxisSetting_NumSettings
-} driver_axis_setting_id_t;
 
 typedef enum {
     Setting_PulseMicroseconds = 0,
@@ -166,11 +148,11 @@ typedef enum {
     Setting_PositionDMaxError = 96,
 //
 
-// Reserving settings values >= 100 for axis settings. Up to 259. TODO: Or should that be 299...
-    Setting_AxisSettingsBase = 100,     // Reserved for core settings, up to 100 + AXIS_SETTINGS_INCREMENT * N_AXIS
-    Setting_AxisSettingsMax = 199,
-    Setting_AxisSettingsBase2 = 200,    // Reserved for driver settings, up to 200 + AXIS_SETTINGS_INCREMENT * N_AXIS
-    Setting_AxisSettingsMax2 = 255,
+// Reserving settings in the range 100 - 299 for axis settings.
+    Setting_AxisSettingsBase = 100,     // Reserved for core settings
+    Setting_AxisSettingsMax = Setting_AxisSettingsBase + AXIS_SETTINGS_INCREMENT * 7 + N_AXIS,
+    Setting_AxisSettingsBase2 = 200,    // Reserved for driver/plugin settings
+    Setting_AxisSettingsMax2 = Setting_AxisSettingsBase2 + AXIS_SETTINGS_INCREMENT * 9 + N_AXIS,
 //
 
 // Optional driver implemented settings
@@ -263,19 +245,27 @@ typedef enum {
     Setting_SettingsMax,
     Setting_SettingsAll = Setting_SettingsMax,
 
-    // Calculated base values for stepper settings
-    Setting_AxisStepsPerMMBase       = Setting_AxisSettingsBase + AxisSetting_StepsPerMM * AXIS_SETTINGS_INCREMENT,
-    Setting_AxisMaxRateBase          = Setting_AxisSettingsBase + AxisSetting_MaxRate * AXIS_SETTINGS_INCREMENT,
-    Setting_AxisAccelerationBase     = Setting_AxisSettingsBase + AxisSetting_Acceleration * AXIS_SETTINGS_INCREMENT,
-    Setting_AxisMaxTravelBase        = Setting_AxisSettingsBase + AxisSetting_MaxTravel * AXIS_SETTINGS_INCREMENT,
-    Setting_AxisStepperCurrentBase   = Setting_AxisSettingsBase + AxisSetting_StepperCurrent * AXIS_SETTINGS_INCREMENT,
-    Setting_AxisMicroStepsBase       = Setting_AxisSettingsBase + AxisSetting_MicroSteps * AXIS_SETTINGS_INCREMENT,
-    Setting_AxisBacklashBase         = Setting_AxisSettingsBase + AxisSetting_Backlash * AXIS_SETTINGS_INCREMENT,
-    Setting_AxisAutoSquareOffsetBase = Setting_AxisSettingsBase + AxisSetting_AutoSquareOffset * AXIS_SETTINGS_INCREMENT,
+    // Calculated base values for core stepper settings
+    Setting_AxisStepsPerMM       = Setting_AxisSettingsBase,
+    Setting_AxisMaxRate          = Setting_AxisSettingsBase + AXIS_SETTINGS_INCREMENT,
+    Setting_AxisAcceleration     = Setting_AxisSettingsBase + 2 * AXIS_SETTINGS_INCREMENT,
+    Setting_AxisMaxTravel        = Setting_AxisSettingsBase + 3 * AXIS_SETTINGS_INCREMENT,
+    Setting_AxisStepperCurrent   = Setting_AxisSettingsBase + 4 * AXIS_SETTINGS_INCREMENT,
+    Setting_AxisMicroSteps       = Setting_AxisSettingsBase + 5 * AXIS_SETTINGS_INCREMENT,
+    Setting_AxisBacklash         = Setting_AxisSettingsBase + 6 * AXIS_SETTINGS_INCREMENT,
+    Setting_AxisAutoSquareOffset = Setting_AxisSettingsBase + 7 * AXIS_SETTINGS_INCREMENT,
 
-    // Calculated base values for driver stepper settings
-    Setting_DriverAxisStepsPerMMBase = Setting_AxisSettingsBase2 + DriverAxisSetting_MicroSteps * AXIS_SETTINGS_INCREMENT,
-    Setting_DriverAxisMaxRateBase    = Setting_AxisSettingsBase2 + DriverAxisSetting_StepperCurrent * AXIS_SETTINGS_INCREMENT,
+    // Calculated base values for driver/plugin stepper settings
+    Setting_AxisExtended0        = Setting_AxisSettingsBase2,
+    Setting_AxisExtended1        = Setting_AxisSettingsBase2 + AXIS_SETTINGS_INCREMENT,
+    Setting_AxisExtended2        = Setting_AxisSettingsBase2 + 2 * AXIS_SETTINGS_INCREMENT,
+    Setting_AxisExtended3        = Setting_AxisSettingsBase2 + 3 * AXIS_SETTINGS_INCREMENT,
+    Setting_AxisExtended4        = Setting_AxisSettingsBase2 + 4 * AXIS_SETTINGS_INCREMENT,
+    Setting_AxisExtended5        = Setting_AxisSettingsBase2 + 5 * AXIS_SETTINGS_INCREMENT,
+    Setting_AxisExtended6        = Setting_AxisSettingsBase2 + 6 * AXIS_SETTINGS_INCREMENT,
+    Setting_AxisExtended7        = Setting_AxisSettingsBase2 + 7 * AXIS_SETTINGS_INCREMENT,
+    Setting_AxisExtended8        = Setting_AxisSettingsBase2 + 8 * AXIS_SETTINGS_INCREMENT,
+    Setting_AxisExtended9        = Setting_AxisSettingsBase2 + 9 * AXIS_SETTINGS_INCREMENT,
 
     // Calculated base values for encoder settings
     Setting_EncoderModeBase           = Setting_EncoderSettingsBase + Setting_EncoderMode,
@@ -634,7 +624,7 @@ typedef enum {
     Setting_IsExpandedFn
 } setting_type_t;
 
-typedef struct {
+typedef struct setting_detail {
     setting_id_t id;
     setting_group_t group;
     const char *name;
@@ -646,15 +636,8 @@ typedef struct {
     setting_type_t type;
     void *value;
     void *get_value;
+    bool (*is_available)(const struct setting_detail *setting);
 } setting_detail_t;
-
-typedef struct setting_details {
-    const uint8_t n_groups;
-    const setting_group_detail_t *groups;
-    const uint16_t n_settings;
-    const setting_detail_t *settings;
-    struct setting_details *(*on_report_settings)(void);
-} setting_details_t;
 
 typedef status_code_t (*setting_set_int_ptr)(setting_id_t id, uint_fast16_t value);
 typedef status_code_t (*setting_set_float_ptr)(setting_id_t id, float value);
@@ -662,6 +645,24 @@ typedef status_code_t (*setting_set_string_ptr)(setting_id_t id, char *value);
 typedef uint32_t (*setting_get_int_ptr)(setting_id_t id);
 typedef float (*setting_get_float_ptr)(setting_id_t id);
 typedef char *(*setting_get_string_ptr)(setting_id_t id);
+typedef bool (*setting_output_ptr)(const setting_detail_t *setting, uint_fast16_t offset, void *data);
+
+typedef void (*settings_changed_ptr)(settings_t *settings);
+typedef void (*driver_settings_load_ptr)(void);
+typedef void (*driver_settings_save_ptr)(void);
+typedef void (*driver_settings_restore_ptr)(void);
+
+typedef struct setting_details {
+    const uint8_t n_groups;
+    const setting_group_detail_t *groups;
+    const uint16_t n_settings;
+    const setting_detail_t *settings;
+    struct setting_details *(*on_get_settings)(void);
+    settings_changed_ptr on_changed;
+    driver_settings_save_ptr save;
+    driver_settings_load_ptr load;
+    driver_settings_restore_ptr restore;
+} setting_details_t;
 
 extern settings_t settings;
 
@@ -675,7 +676,7 @@ void settings_write_global(void);
 void settings_restore(settings_restore_t restore_flags);
 
 // A helper method to set new settings from command line
-status_code_t settings_store_global_setting(setting_id_t setting, char *svalue);
+status_code_t settings_store_setting(setting_id_t setting, char *svalue);
 
 // Writes the protocol line variable as a startup line in persistent storage
 void settings_write_startup_line(uint8_t idx, char *line);
@@ -703,8 +704,11 @@ bool settings_read_tool_data (uint32_t tool, tool_data_t *tool_data);
 
 setting_details_t *settings_get_details (void);
 bool settings_is_group_available (setting_group_t group);
-bool settings_is_setting_available (setting_id_t setting, setting_group_t group);
-const setting_detail_t *setting_get_details (setting_id_t id);
+bool settings_iterator (const setting_detail_t *setting, setting_output_ptr callback, void *data);
+const setting_detail_t *setting_get_details (setting_id_t id, setting_details_t **set);
 setting_datatype_t setting_datatype_to_external (setting_datatype_t datatype);
+setting_group_t settings_normalize_group (setting_group_t group);
+char *setting_get_value (const setting_detail_t *setting, uint_fast16_t offset);
+setting_id_t settings_get_axis_base (setting_id_t id, uint_fast8_t *idx);
 
 #endif

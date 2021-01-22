@@ -2,7 +2,7 @@
 
   eeprom_24LC16B.c - plugin for for I2C EEPROM (Microchip 24LC16B)
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017-2020 Terje Io
 

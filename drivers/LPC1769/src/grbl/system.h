@@ -242,13 +242,28 @@ typedef struct {
     int32_t position[N_AXIS];               // Real-time machine (aka home) position vector in steps.
 } system_t;
 
+typedef status_code_t (*sys_command_ptr)(sys_state_t state, char *args);
+
+typedef struct
+{
+    const char *command;
+    bool noargs;
+    sys_command_ptr execute;
+} sys_command_t;
+
+typedef struct sys_commands_str {
+    const uint8_t n_commands;
+    const sys_command_t *commands;
+    struct sys_commands_str *(*on_get_commands)(void);
+} sys_commands_t;
+
 extern system_t sys;
 
 // Executes an internal system command, defined as a string starting with a '$'
 status_code_t system_execute_line (char *line);
 
 // Execute the startup script lines stored in non-volatile storage upon initialization
-void system_execute_startup (char *line);
+void system_execute_startup (void);
 
 void system_flag_wco_change (void);
 

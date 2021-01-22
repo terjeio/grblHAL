@@ -1,7 +1,7 @@
 /*
   nvs_buffer.h - RAM based non-volatile storage buffer/emulation
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2009-2011 Simen Svale Skogsrud
@@ -23,6 +23,8 @@
 #ifndef _NVS_BUFFER_H_
 #define _NVS_BUFFER_H_
 
+typedef uint32_t nvs_address_t;
+
 typedef struct {
     bool is_dirty;
     bool global_settings;
@@ -39,7 +41,7 @@ extern settings_dirty_t settings_dirty;
 
 bool nvs_buffer_init (void);
 bool nvs_buffer_alloc (void);
-uint32_t nvs_alloc (size_t size);
+nvs_address_t nvs_alloc (size_t size);
 void nvs_buffer_sync_physical (void);
 nvs_io_t *nvs_buffer_get_physical (void);
 void nvs_memmap (void);

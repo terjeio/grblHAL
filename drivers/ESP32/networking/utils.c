@@ -1,7 +1,7 @@
 //
 // utils.c - Assorted utilities for networking plugin - some sourced from internet and possibly modified (public domain)
 //
-// Part of GrblHAL
+// Part of grblHAL
 //
 
 #include <string.h>

@@ -156,6 +156,6 @@ extern maslow_hal_t maslow_hal;
 
 // Initialize HAL pointers for Maslow Router kinematics
 bool maslow_init (void);
-static status_code_t maslow_tuning (uint_fast16_t state, char *line, char *lcline);
+static status_code_t maslow_tuning (uint_fast16_t state, char *line);
 
 #endif

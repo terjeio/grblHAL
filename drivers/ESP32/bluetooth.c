@@ -87,7 +87,7 @@ static char client_mac[18];
 static bt_tx_buffer_t txbuffer;
 static stream_rx_buffer_t rxbuffer = {0};
 static stream_rx_buffer_t rxbackup;
-static driver_setting_ptrs_t driver_settings;
+static nvs_address_t nvs_address;
 static on_report_options_ptr on_report_options;
 
 uint32_t BTStreamAvailable (void)
@@ -586,106 +586,58 @@ static const setting_group_detail_t bluetooth_groups [] = {
 };
 
 static const setting_detail_t bluetooth_settings[] = {
-    { Setting_BlueToothDeviceName, Group_Bluetooth, "Bluetooth device name", NULL, Format_String, "x(32)", NULL, "32" },
-    { Setting_BlueToothServiceName, Group_Bluetooth, "Bluetooth service name", NULL, Format_String, "x(32)", NULL, "32" }
+    { Setting_BlueToothDeviceName, Group_Bluetooth, "Bluetooth device name", NULL, Format_String, "x(32)", NULL, "32", Setting_NonCore, bluetooth.device_name, NULL, NULL },
+    { Setting_BlueToothServiceName, Group_Bluetooth, "Bluetooth service name", NULL, Format_String, "x(32)", NULL, "32", Setting_NonCore, bluetooth.service_name, NULL, NULL }
 };
-
-static setting_details_t details = {
-    .groups = bluetooth_groups,
-    .n_groups = sizeof(bluetooth_groups) / sizeof(setting_group_detail_t),
-    .settings = bluetooth_settings,
-    .n_settings = sizeof(bluetooth_settings) / sizeof(setting_detail_t)
-};
-
-static setting_details_t *on_report_settings (void)
-{
-    return &details;
-}
-
-static status_code_t bluetooth_setting (uint_fast16_t setting, float value, char *svalue)
-{
-    status_code_t status = svalue ? Status_OK : Status_Unhandled;
-
-    if(svalue) switch(setting) {
-
-        case Setting_BlueToothDeviceName:
-            if(!(strlcpy(bluetooth.device_name, svalue, sizeof(bluetooth.device_name)) <= sizeof(bluetooth.device_name)))
-                status = Status_InvalidStatement; // too long...
-            break;
-
-        case Setting_BlueToothServiceName:
-            if(!(strlcpy(bluetooth.service_name, svalue, sizeof(bluetooth.service_name)) <= sizeof(bluetooth.service_name)))
-                status = Status_InvalidStatement; // too long...
-            break;
-
-        default:
-            status = Status_Unhandled;
-            break;
-    }
-
-    return status == Status_Unhandled && driver_settings.set ? driver_settings.set(setting, value, svalue) : status;
-
-}
-
-static void bluetooth_settings_report (setting_id_t setting)
-{
-    bool reported = true;
-
-    switch(setting) {
-
-        case Setting_BlueToothDeviceName:
-            report_string_setting(Setting_BlueToothDeviceName, bluetooth.device_name);
-            break;
-
-        case Setting_BlueToothServiceName:
-            report_string_setting(Setting_BlueToothServiceName, bluetooth.service_name);
-            break;
-
-        default:
-            reported = false;
-            break;
-    }
-
-    if(!reported && driver_settings.report)
-        driver_settings.report(setting);
-}
 
 static void bluetooth_settings_restore (void)
 {
     strcpy(bluetooth.device_name, BLUETOOTH_DEVICE);
     strcpy(bluetooth.service_name, BLUETOOTH_SERVICE);
 
-    if(driver_settings.restore)
-        driver_settings.restore();
+    hal.nvs.memcpy_to_nvs(nvs_address, (uint8_t *)&bluetooth, sizeof(bluetooth_settings_t), true);
 }
 
 static void bluetooth_settings_load (void)
 {
-    if(hal.nvs.memcpy_from_nvs((uint8_t *)&bluetooth, driver_settings.nvs_address, sizeof(bluetooth_settings_t), true) != NVS_TransferResult_OK)
+    if(hal.nvs.memcpy_from_nvs((uint8_t *)&bluetooth, nvs_address, sizeof(bluetooth_settings_t), true) != NVS_TransferResult_OK)
         bluetooth_settings_restore();
+}
 
-    if(driver_settings.load)
-        driver_settings.load();
+static void bluetooth_settings_save (void)
+{
+    hal.nvs.memcpy_to_nvs(nvs_address, (uint8_t *)&bluetooth, sizeof(bluetooth_settings_t), true);
+}
+
+static setting_details_t details = {
+    .groups = bluetooth_groups,
+    .n_groups = sizeof(bluetooth_groups) / sizeof(setting_group_detail_t),
+    .settings = bluetooth_settings,
+    .n_settings = sizeof(bluetooth_settings) / sizeof(setting_detail_t),
+    .save = bluetooth_settings_save,
+    .load = bluetooth_settings_load,
+    .restore = bluetooth_settings_restore
+};
+
+static setting_details_t *on_get_settings (void)
+{
+    return &details;
 }
 
 bool bluetooth_init (void)
 {
-    if((hal.driver_settings.nvs_address = nvs_alloc(sizeof(bluetooth_settings_t)))) {
-        memcpy(&driver_settings, &hal.driver_settings, sizeof(driver_setting_ptrs_t));
+    if((nvs_address = nvs_alloc(sizeof(bluetooth_settings_t)))) {
+
         hal.driver_cap.bluetooth = On;
-        hal.driver_settings.set = bluetooth_setting;
-        hal.driver_settings.report = bluetooth_settings_report;
-        hal.driver_settings.load = bluetooth_settings_load;
-        hal.driver_settings.restore = bluetooth_settings_restore;
 
         on_report_options = grbl.on_report_options;
         grbl.on_report_options = report_bt_MAC;
 
-        details.on_report_settings = grbl.on_report_settings;
-        grbl.on_report_settings = on_report_settings;
+        details.on_get_settings = grbl.on_get_settings;
+        grbl.on_get_settings = on_get_settings;
     }
 
-    return driver_settings.nvs_address != 0;
+    return nvs_address != 0;
 }
 
 #endif

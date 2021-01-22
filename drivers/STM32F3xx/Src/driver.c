@@ -77,7 +77,6 @@ static bool pwmEnabled = false, IOInitDone = false;
 static axes_signals_t next_step_outbits;
 static spindle_pwm_t spindle_pwm;
 static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
-static status_code_t (*on_unknown_sys_command)(uint_fast16_t state, char *line, char *lcline);
 static debounce_t debounce;
 static probe_state_t probe = {
     .connected = On
@@ -251,10 +250,10 @@ static void stepperGoIdle (bool clear_signals)
 static void stepperCyclesPerTick (uint32_t cycles_per_tick)
 {
     cycles_per_tick = cycles_per_tick < (1UL << 20) ? cycles_per_tick : 0x000FFFFFUL;
-
-    STEPPER_TIMER->ARR = cycles_per_tick;
     if(cycles_per_tick < STEPPER_TIMER->CNT + 50)
         STEPPER_TIMER->CNT = cycles_per_tick - 50;
+
+    STEPPER_TIMER->ARR = cycles_per_tick;
 }
 
 // Set stepper pulse output pins
@@ -846,17 +845,6 @@ void settings_changed (settings_t *settings)
     }
 }
 
-static status_code_t jtag_enable (uint_fast16_t state, char *line, char *lcline)
-{
-    if(!strcmp(line, "$PGM")) {
-        //__HAL_AFIO_REMAP_SWJ_ENABLE();
-        on_unknown_sys_command = NULL;
-        return Status_OK;
-    }
-
-    return on_unknown_sys_command ? on_unknown_sys_command(state, line, lcline) : Status_Unhandled;
-}
-
 // Initializes MCU peripherals for Grbl use
 static bool driver_setup (settings_t *settings)
 {
@@ -998,9 +986,6 @@ static bool driver_setup (settings_t *settings)
     sdcard_init();
 
 #endif
-
-    on_unknown_sys_command = grbl.on_unknown_sys_command;
-    grbl.on_unknown_sys_command = jtag_enable;
 
 #if PPI_ENABLE
 

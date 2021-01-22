@@ -1,11 +1,11 @@
 /*
   T41U5XBB.c - driver code for IMXRT1062 processor (on Teensy 4.1 board)
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Board by Phil Barrett: https://github.com/phil-barrett/grblHAL-teensy-4.x
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -33,7 +33,10 @@
 
 static gpio_t stx[AUX_N_IN];
 static gpio_t aux_out[AUX_N_OUT];
-static driver_setting_ptrs_t driver_settings;
+
+static void aux_settings_load (void);
+static status_code_t aux_set_invert_out (setting_id_t id, uint_fast16_t int_value);
+static uint32_t aux_get_invert_out (setting_id_t setting);
 
 static input_signal_t aux_in[] = {
     { .id = Input_Aux0, .port = &stx[0], .pin = AUXINPUT0_PIN, .group = 0 }
@@ -50,23 +53,59 @@ static const setting_group_detail_t aux_groups[] = {
 
 static const setting_detail_t aux_settings[] = {
 #if AUX_N_IN == 4
-    { Settings_IoPort_InvertIn, Group_AuxPorts, "Invert I/O Port inputs", NULL, Format_Bitfield, "Port 0,Port 1,Port 2,Port 3", NULL, NULL },
+    { Settings_IoPort_InvertIn, Group_AuxPorts, "Invert I/O Port inputs", NULL, Format_Bitfield, "Port 0,Port 1,Port 2,Port 3", NULL, NULL, Setting_NonCore, &settings.ioport.invert_in.mask },
 #else
-    { Settings_IoPort_InvertIn, Group_AuxPorts, "Invert I/O Port inputs", NULL, Format_Bitfield, "Port 0", NULL, NULL },
+    { Settings_IoPort_InvertIn, Group_AuxPorts, "Invert I/O Port inputs", NULL, Format_Bitfield, "Port 0", NULL, NULL, Setting_NonCore, &settings.ioport.invert_in.mask },
 #endif
-    { Settings_IoPort_InvertOut, Group_AuxPorts, "Invert I/O Port outputs", NULL, Format_Bitfield, "Port 0,Port 1,Port 2", NULL, NULL },
+    { Settings_IoPort_InvertOut, Group_AuxPorts, "Invert I/O Port outputs", NULL, Format_Bitfield, "Port 0,Port 1,Port 2", NULL, NULL, Setting_NonCoreFn, aux_set_invert_out, aux_get_invert_out },
 };
 
 static setting_details_t details = {
     .groups = aux_groups,
     .n_groups = sizeof(aux_groups) / sizeof(setting_group_detail_t),
     .settings = aux_settings,
-    .n_settings = sizeof(aux_settings) / sizeof(setting_detail_t)
+    .n_settings = sizeof(aux_settings) / sizeof(setting_detail_t),
+    .load = aux_settings_load,
+    .save = settings_write_global
 };
 
-static setting_details_t *on_report_settings (void)
+static setting_details_t *on_get_settings (void)
 {
     return &details;
+}
+
+static void aux_settings_load (void)
+{
+    uint_fast8_t idx = AUX_N_OUT;
+
+    do {
+        idx--;
+        DIGITAL_OUT(aux_out[idx], (settings.ioport.invert_out.mask >> idx) & 0x01);
+    } while(idx);
+}
+
+static status_code_t aux_set_invert_out (setting_id_t id, uint_fast16_t value)
+{
+    ioport_bus_t invert;
+    invert.mask = (uint8_t)value & AUX_OUT_MASK;
+
+    if(invert.mask != settings.ioport.invert_out.mask) {
+        uint_fast8_t idx = AUX_N_OUT;
+        do {
+            idx--;
+            if(((settings.ioport.invert_out.mask >> idx) & 0x01) != ((invert.mask >> idx) & 0x01))
+                DIGITAL_OUT(aux_out[idx], !DIGITAL_IN(aux_out[idx]));
+        } while(idx);
+
+        settings.ioport.invert_out.mask = invert.mask;
+    }
+
+    return Status_OK;
+}
+
+static uint32_t aux_get_invert_out (setting_id_t setting)
+{
+    return settings.ioport.invert_out.mask;
 }
 
 static void digital_out (uint8_t port, bool on)
@@ -118,82 +157,6 @@ static int32_t wait_on_input (bool digital, uint8_t port, wait_mode_t wait_mode,
     return value;
 }
 
-static status_code_t aux_settings_set (setting_type_t setting, float value, char *svalue)
-{
-    status_code_t status = Status_OK;
-
-    switch(setting) {
-
-        case Settings_IoPort_InvertIn:
-            settings.ioport.invert_in.mask = (uint8_t)value & AUX_IN_MASK;
-            break;
-
-        case Settings_IoPort_InvertOut:
-            {
-                ioport_bus_t invert;
-                invert.mask = (uint8_t)value & AUX_OUT_MASK;
-                if(invert.mask != settings.ioport.invert_out.mask) {
-                    uint_fast8_t idx = AUX_N_OUT;
-                    do {
-                        idx--;
-                        if(((settings.ioport.invert_out.mask >> idx) & 0x01) != ((invert.mask >> idx) & 0x01))
-                            DIGITAL_OUT(aux_out[idx], !DIGITAL_IN(aux_out[idx]));
-                    } while(idx);
-
-                    settings.ioport.invert_out.mask = invert.mask;
-                }
-            }
-            break;
-
-        default:
-            status = Status_Unhandled;
-            break;
-    }
-
-    if(status == Status_OK)
-        settings_write_global();
-
-    return status == Status_Unhandled && driver_settings.set ? driver_settings.set(setting, value, svalue) : status;
-}
-
-static void aux_settings_report (setting_type_t setting)
-{
-    bool reported = true;
-
-    switch(setting) {
-
-        case Settings_IoPort_InvertIn:
-            if(hal.port.num_digital_in)
-                report_uint_setting(Settings_IoPort_InvertIn, settings.ioport.invert_in.mask);
-            break;
-
-        case Settings_IoPort_InvertOut:
-            if(hal.port.num_digital_out)
-                report_uint_setting(Settings_IoPort_InvertOut, settings.ioport.invert_out.mask);
-            break;
-
-        default:
-            reported = false;
-            break;
-    }
-
-    if(!reported && driver_settings.report)
-        driver_settings.report(setting);
-}
-
-static void aux_settings_load (void)
-{
-    uint_fast8_t idx = AUX_N_OUT;
-
-    do {
-        idx--;
-        DIGITAL_OUT(aux_out[idx], (settings.ioport.invert_out.mask >> idx) & 0x01);
-    } while(idx);
-
-    if(driver_settings.load)
-        driver_settings.load();
-}
-
 void board_init (void)
 {
     hal.port.digital_out = digital_out;
@@ -202,14 +165,8 @@ void board_init (void)
     hal.port.num_digital_in = AUX_N_IN;
     hal.port.num_digital_out = AUX_N_OUT;
 
-    memcpy(&driver_settings, &hal.driver_settings, sizeof(driver_setting_ptrs_t));
-
-    hal.driver_settings.set = aux_settings_set;
-    hal.driver_settings.report = aux_settings_report;
-    hal.driver_settings.load = aux_settings_load;
-
-    details.on_report_settings = grbl.on_report_settings;
-    grbl.on_report_settings = on_report_settings;
+    details.on_get_settings = grbl.on_get_settings;
+    grbl.on_get_settings = on_get_settings;
 
     bool pullup;
     uint32_t i = AUX_N_IN;

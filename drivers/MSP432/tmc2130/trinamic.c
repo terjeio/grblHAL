@@ -65,7 +65,7 @@ static TMC2130_t stepper[N_AXIS];
 static axes_signals_t homing = {0}, otpw_triggered = {0};
 static limits_get_state_ptr limits_get_state = NULL;
 static stepper_pulse_start_ptr hal_stepper_pulse_start = NULL;
-static driver_setting_ptrs_t driver_settings;
+static nvs_address_t nvs_address;
 static on_realtime_report_ptr on_realtime_report;
 static on_report_options_ptr on_report_options;
 static trinamic_on_drivers_init_ptr on_drivers_init;
@@ -105,25 +105,245 @@ void trinamic_if_init (trinamic_driver_if_t *driver)
     TMC2130_InterfaceInit(&driver->interface);
 }
 
+static void trinamic_drivers_init (void);
+static status_code_t set_axis_setting (setting_id_t setting, uint_fast16_t value);
+static uint32_t get_axis_setting (setting_id_t setting);
+static status_code_t set_axis_setting_float (setting_id_t setting, float value);
+static float get_axis_setting_float (setting_id_t setting);
+static status_code_t set_driver_enable (setting_id_t id, uint_fast16_t value);
+static uint32_t get_driver_enable (setting_id_t setting);
+static void trinamic_settings_load (void);
+static void trinamic_settings_restore (void);
+static void stallGuard_enable (uint32_t axis, bool enable);
+
 static const setting_detail_t trinamic_settings[] = {
 #if TRINAMIC_MIXED_DRIVERS
-    { Setting_TrinamicDriver, Group_MotorDriver, "Trinamic driver", NULL, Format_AxisMask, NULL, NULL, NULL },
+    { Setting_TrinamicDriver, Group_MotorDriver, "Trinamic driver", NULL, Format_AxisMask, NULL, NULL, NULL, Setting_NonCore, &trinamic.driver_enable.mask, NULL, NULL },
 #endif
-    { Setting_TrinamicHoming, Group_MotorDriver, "Sensorless homing", NULL, Format_AxisMask, NULL, NULL, NULL },
-    { Setting_AxisStepperCurrentBase, Group_Axis0, "?-axis motor current", "mA", Format_Integer, "###0", NULL, NULL },
-    { Setting_AxisMicroStepsBase, Group_Axis0, "?-axis microsteps", "steps", Format_Integer, "###0", NULL, NULL }
-/*    { Setting_AxisMicroStepsBase, Group_Axis0, "?-axis microsteps", "steps", Format_RadioButtons, "256,128,64,32,16,8,4,2,1", NULL, NULL }*/
+    { Setting_TrinamicHoming, Group_MotorDriver, "Sensorless homing", NULL, Format_AxisMask, NULL, NULL, NULL, Setting_NonCoreFn, set_driver_enable, get_driver_enable, NULL },
+    { Setting_AxisStepperCurrent, Group_Axis0, "?-axis motor current", "mA", Format_Integer, "###0", NULL, NULL, Setting_NonCoreFn, set_axis_setting, get_axis_setting, NULL },
+    { Setting_AxisMicroSteps, Group_Axis0, "?-axis microsteps", "steps", Format_Integer, "###0", NULL, NULL, Setting_NonCoreFn, set_axis_setting, get_axis_setting, NULL },
+//    { Setting_AxisExtended0, Group_Axis0, "?-axis stallGuard value", NULL, Format_Decimal, "-##0", "-64", "63", Setting_NonCoreFn, set_axis_setting_float, get_axis_setting_float, NULL }
 };
+
+static void trinamic_settings_save (void)
+{
+    hal.nvs.memcpy_to_nvs(nvs_address, (uint8_t *)&trinamic, sizeof(trinamic_settings_t), true);
+}
 
 static setting_details_t details = {
     .settings = trinamic_settings,
-    .n_settings = sizeof(trinamic_settings) / sizeof(setting_detail_t)
+    .n_settings = sizeof(trinamic_settings) / sizeof(setting_detail_t),
+    .load = trinamic_settings_load,
+    .save = trinamic_settings_save,
+    .restore = trinamic_settings_restore
 };
 
-static setting_details_t *on_report_settings (void)
+static setting_details_t *on_get_settings (void)
 {
     return &details;
 }
+
+static status_code_t set_driver_enable (setting_id_t id, uint_fast16_t value)
+{
+    trinamic.driver_enable.mask = (uint8_t)value;
+    if(on_drivers_init)
+        on_drivers_init(trinamic.driver_enable);
+
+    return Status_OK;
+}
+
+static uint32_t get_driver_enable (setting_id_t setting)
+{
+    return trinamic.driver_enable.mask;
+}
+
+// Parse and set driver specific parameters
+static status_code_t set_axis_setting (setting_id_t setting, uint_fast16_t value)
+{
+    uint_fast8_t idx;
+    status_code_t status = Status_OK;
+
+    switch(settings_get_axis_base(setting, &idx)) {
+
+        case Setting_AxisStepperCurrent:
+            trinamic.driver[idx].current = (uint16_t)value;
+            TMC2130_SetCurrent(&stepper[idx], trinamic.driver[idx].current, stepper[idx].hold_current_pct);
+            break;
+
+        case Setting_AxisMicroSteps:
+            /*
+            if(value >= 0 && value <= 8) {
+                trinamic.driver[idx].microsteps = (tmc2130_microsteps_t)value;
+                stepper[idx].chopconf.reg.mres = trinamic.driver[idx].microsteps;
+                TMC2130_WriteRegister(&stepper[idx], (TMC2130_datagram_t *)&stepper[idx].chopconf);
+            } */
+            if(TMC2130_MicrostepsIsValid((uint16_t)value)) {
+                trinamic.driver[idx].microsteps = (tmc2130_microsteps_t)value;
+                TMC2130_SetMicrosteps(&stepper[idx], trinamic.driver[idx].microsteps);
+            }
+            else
+                status = Status_InvalidStatement;
+            break;
+
+        default:
+            status = Status_Unhandled;
+            break;
+    }
+
+    return status;
+}
+
+static uint32_t get_axis_setting (setting_id_t setting)
+{
+    uint32_t value = 0;
+    uint_fast8_t idx;
+
+    switch(settings_get_axis_base(setting, &idx)) {
+
+        case Setting_AxisStepperCurrent:
+            value = trinamic.driver[idx].current;
+            break;
+
+        case Setting_AxisMicroSteps:
+            value = trinamic.driver[idx].microsteps;
+            break;
+
+        default: // for stopping compiler warning
+            break;
+    }
+
+    return value;
+}
+
+// Parse and set driver specific parameters
+static status_code_t set_axis_setting_float (setting_id_t setting, float value)
+{
+    status_code_t status = Status_OK;
+
+    uint_fast8_t idx;
+
+    switch(settings_get_axis_base(setting, &idx)) {
+
+        case Setting_AxisExtended0:
+            trinamic.driver[idx].homing_sensitivity = (int8_t)value;
+            stallGuard_enable(idx, true);
+           // TMC2130_SetCurrent(&stepper[idx], trinamic.driver[idx].current, stepper[idx].hold_current_pct);
+            break;
+
+        default:
+            status = Status_Unhandled;
+            break;
+    }
+
+    return status;
+}
+
+static float get_axis_setting_float (setting_id_t setting)
+{
+    float value = 0.0f;
+
+    uint_fast8_t idx;
+
+    switch(settings_get_axis_base(setting, &idx)) {
+
+        case Setting_AxisExtended0:
+            value = (float)trinamic.driver[idx].homing_sensitivity;
+            break;
+
+        default: // for stopping compiler warning
+            break;
+    }
+
+    return value;
+}
+
+// Initialize default EEPROM settings
+static void trinamic_settings_restore (void)
+{
+    uint_fast8_t idx = N_AXIS;
+
+    trinamic.driver_enable.mask = 0;
+    trinamic.homing_enable.mask = 0;
+
+    do {
+        switch(--idx) {
+
+            case X_AXIS:
+                trinamic.driver_enable.x = TMC_X_ENABLE;
+                trinamic.driver[idx].current = TMC_X_CURRENT;
+                trinamic.driver[idx].microsteps = TMC_X_MICROSTEPS;
+                trinamic.driver[idx].r_sense = TMC_X_R_SENSE;
+                trinamic.driver[idx].homing_sensitivity = TMC_X_SGT;
+                break;
+
+            case Y_AXIS:
+                trinamic.driver_enable.y = TMC_Y_ENABLE;
+                trinamic.driver[idx].current = TMC_Y_CURRENT;
+                trinamic.driver[idx].microsteps = TMC_Y_MICROSTEPS;
+                trinamic.driver[idx].r_sense = TMC_Y_R_SENSE;
+                trinamic.driver[idx].homing_sensitivity = TMC_Y_SGT;
+                break;
+
+            case Z_AXIS:
+                trinamic.driver_enable.z = TMC_Z_ENABLE;
+                trinamic.driver[idx].current = TMC_Z_CURRENT;
+                trinamic.driver[idx].microsteps = TMC_Z_MICROSTEPS;
+                trinamic.driver[idx].r_sense = TMC_Z_R_SENSE;
+                trinamic.driver[idx].homing_sensitivity = TMC_Z_SGT;
+                break;
+
+#ifdef A_AXIS
+            case A_AXIS:
+                trinamic.driver_enable.z = TMA_A_ENABLE;
+                trinamic.driver[idx].current = TMA_A_CURRENT;
+                trinamic.driver[idx].microsteps = TMA_A_MICROSTEPS;
+                trinamic.driver[idx].r_sense = TMA_A_R_SENSE;
+                trinamic.driver[idx].homing_sensitivity = TMA_A_SGT;
+                break;
+#endif
+
+#ifdef B_AXIS
+            case B_AXIS:
+                trinamic.driver_enable.z = TMB_B_ENABLE;
+                trinamic.driver[idx].current = TMB_B_CURRENT;
+                trinamic.driver[idx].microsteps = TMB_B_MICROSTEPS;
+                trinamic.driver[idx].r_sense = TMB_B_R_SENSE;
+                trinamic.driver[idx].homing_sensitivity = TMB_B_SGT;
+                break;
+#endif
+
+#ifdef C_AXIS
+            case C_AXIS:
+                trinamic.driver_enable.z = TMC_C_ENABLE;
+                trinamic.driver[idx].current = TMC_C_CURRENT;
+                trinamic.driver[idx].microsteps = TMC_C_MICROSTEPS;
+                trinamic.driver[idx].r_sense = TMC_C_R_SENSE;
+                trinamic.driver[idx].homing_sensitivity = TMC_C_SGT;
+                break;
+#endif
+        }
+    } while(idx);
+
+    hal.nvs.memcpy_to_nvs(nvs_address, (uint8_t *)&trinamic, sizeof(trinamic_settings_t), true);
+}
+
+static void trinamic_settings_load (void)
+{
+    if(hal.nvs.memcpy_from_nvs((uint8_t *)&trinamic, nvs_address, sizeof(trinamic_settings_t), true) != NVS_TransferResult_OK)
+        trinamic_settings_restore();
+
+#if !TRINAMIC_MIXED_DRIVERS
+    trinamic.driver_enable.mask = AXES_BITMASK;
+#endif
+
+    if(on_drivers_init)
+        on_drivers_init(trinamic.driver_enable);
+
+    trinamic_drivers_init();
+}
+
+/** End settings handling **/
 
 static void pos_failed (sys_state_t state)
 {
@@ -218,138 +438,6 @@ static bool trinamic_driver_config (uint_fast8_t axis)
     return true;
 }
 
-// Parse and set driver specific parameters
-status_code_t trinamic_setting (setting_id_t setting, float value, char *svalue)
-{
-    status_code_t status = Status_OK;
-
-    if((setting_id_t)setting >= Setting_AxisSettingsBase && (setting_id_t)setting <= Setting_AxisSettingsMax) {
-
-        uint_fast16_t base_idx = (uint_fast16_t)setting - (uint_fast16_t)Setting_AxisSettingsBase;
-        uint_fast8_t idx = base_idx % AXIS_SETTINGS_INCREMENT;
-
-        if(idx < N_AXIS) switch((base_idx - idx) / AXIS_SETTINGS_INCREMENT) {
-
-            case AxisSetting_StepperCurrent:
-                trinamic.driver[idx].current = (uint16_t)value;
-                TMC2130_SetCurrent(&stepper[idx], trinamic.driver[idx].current, stepper[idx].hold_current_pct);
-                break;
-
-            case AxisSetting_MicroSteps:
-                /*
-                if(value >= 0 && value <= 8) {
-                    trinamic.driver[idx].microsteps = (tmc2130_microsteps_t)value;
-                    stepper[idx].chopconf.reg.mres = trinamic.driver[idx].microsteps;
-                    TMC2130_WriteRegister(&stepper[idx], (TMC2130_datagram_t *)&stepper[idx].chopconf);
-                } */
-                if(TMC2130_MicrostepsIsValid((uint16_t)value)) {
-                    trinamic.driver[idx].microsteps = (tmc2130_microsteps_t)value;
-                    TMC2130_SetMicrosteps(&stepper[idx], trinamic.driver[idx].microsteps);
-                }
-                else
-                    status = Status_InvalidStatement;
-                break;
-
-            default:
-                status = Status_Unhandled;
-                break;
-        }
-    } else switch((setting_id_t)setting) {
-#if TRINAMIC_MIXED_DRIVERS
-        case Setting_TrinamicDriver:
-            trinamic.driver_enable.mask = (uint8_t)value & AXES_BITMASK;
-            if(on_drivers_init)
-                on_drivers_init(trinamic.driver_enable);
-            break;
-#endif
-        case Setting_TrinamicHoming:
-            trinamic.homing_enable.mask = (uint8_t)value & AXES_BITMASK;
-            break;
-
-        default:
-            status = Status_Unhandled;
-            break;
-    }
-
-    if(status == Status_OK)
-        hal.nvs.memcpy_to_nvs(driver_settings.nvs_address, (uint8_t *)&trinamic, sizeof(trinamic_settings_t), true);
-
-    return status == Status_Unhandled && driver_settings.set ? driver_settings.set(setting, value, svalue) : status;
-}
-
-// Initialize default EEPROM settings
-static void trinamic_settings_restore (void)
-{
-    uint_fast8_t idx = N_AXIS;
-
-    trinamic.driver_enable.mask = 0;
-    trinamic.homing_enable.mask = 0;
-
-    do {
-        switch(--idx) {
-
-            case X_AXIS:
-                trinamic.driver_enable.x = TMC_X_ENABLE;
-                trinamic.driver[idx].current = TMC_X_CURRENT;
-                trinamic.driver[idx].microsteps = TMC_X_MICROSTEPS;
-                trinamic.driver[idx].r_sense = TMC_X_R_SENSE;
-                trinamic.driver[idx].homing_sensitivity = TMC_X_SGT;
-                break;
-
-            case Y_AXIS:
-                trinamic.driver_enable.y = TMC_Y_ENABLE;
-                trinamic.driver[idx].current = TMC_Y_CURRENT;
-                trinamic.driver[idx].microsteps = TMC_Y_MICROSTEPS;
-                trinamic.driver[idx].r_sense = TMC_Y_R_SENSE;
-                trinamic.driver[idx].homing_sensitivity = TMC_Y_SGT;
-                break;
-
-            case Z_AXIS:
-                trinamic.driver_enable.z = TMC_Z_ENABLE;
-                trinamic.driver[idx].current = TMC_Z_CURRENT;
-                trinamic.driver[idx].microsteps = TMC_Z_MICROSTEPS;
-                trinamic.driver[idx].r_sense = TMC_Z_R_SENSE;
-                trinamic.driver[idx].homing_sensitivity = TMC_Z_SGT;
-                break;
-
-#ifdef A_AXIS
-            case A_AXIS:
-                trinamic.driver_enable.z = TMA_A_ENABLE;
-                trinamic.driver[idx].current = TMA_A_CURRENT;
-                trinamic.driver[idx].microsteps = TMA_A_MICROSTEPS;
-                trinamic.driver[idx].r_sense = TMA_A_R_SENSE;
-                trinamic.driver[idx].homing_sensitivity = TMA_A_SGT;
-                break;
-#endif
-
-#ifdef B_AXIS
-            case B_AXIS:
-                trinamic.driver_enable.z = TMB_B_ENABLE;
-                trinamic.driver[idx].current = TMB_B_CURRENT;
-                trinamic.driver[idx].microsteps = TMB_B_MICROSTEPS;
-                trinamic.driver[idx].r_sense = TMB_B_R_SENSE;
-                trinamic.driver[idx].homing_sensitivity = TMB_B_SGT;
-                break;
-#endif
-
-#ifdef C_AXIS
-            case C_AXIS:
-                trinamic.driver_enable.z = TMC_C_ENABLE;
-                trinamic.driver[idx].current = TMC_C_CURRENT;
-                trinamic.driver[idx].microsteps = TMC_C_MICROSTEPS;
-                trinamic.driver[idx].r_sense = TMC_C_R_SENSE;
-                trinamic.driver[idx].homing_sensitivity = TMC_C_SGT;
-                break;
-#endif
-        }
-    } while(idx);
-
-    hal.nvs.memcpy_to_nvs(driver_settings.nvs_address, (uint8_t *)&trinamic, sizeof(trinamic_settings_t), true);
-
-    if(driver_settings.restore)
-        driver_settings.restore();
-}
-
 static void trinamic_drivers_init (void)
 {
     uint_fast8_t idx = N_AXIS;
@@ -359,73 +447,6 @@ static void trinamic_drivers_init (void)
                 break;
         }
     } while(idx);
-}
-
-static void trinamic_settings_load (void)
-{
-    if(hal.nvs.memcpy_from_nvs((uint8_t *)&trinamic, driver_settings.nvs_address, sizeof(trinamic_settings_t), true) != NVS_TransferResult_OK)
-        trinamic_settings_restore();
-
-    if(driver_settings.load)
-        driver_settings.load();
-
-#if !TRINAMIC_MIXED_DRIVERS
-    trinamic.driver_enable.mask = AXES_BITMASK;
-#endif
-
-    if(on_drivers_init)
-        on_drivers_init(trinamic.driver_enable);
-
-    trinamic_drivers_init();
-}
-
-// Append Trinamic settings to '$$' reports
-
-static void trinamic_settings_report (setting_id_t setting)
-{
-    bool reported = true;
-
-    switch(setting) {
-#if TRINAMIC_MIXED_DRIVERS
-        case Setting_TrinamicDriver:
-            report_uint_setting(setting, trinamic.driver_enable.mask);
-            break;
-#endif
-        case Setting_TrinamicHoming:
-            report_uint_setting(setting, trinamic.homing_enable.mask);
-            break;
-
-        default:
-            reported = false;
-            break;
-    }
-
-    if(!reported && driver_settings.report)
-        driver_settings.report(setting);
-}
-
-static void trinamic_axis_settings_report (axis_setting_id_t setting, uint8_t axis_idx)
-{
-    bool reported = true;
-    setting_id_t basetype = (setting_id_t)(Setting_AxisSettingsBase + setting * AXIS_SETTINGS_INCREMENT);
-
-    switch(setting) {
-
-        case AxisSetting_StepperCurrent:
-            report_uint_setting((setting_id_t)(basetype + axis_idx), trinamic.driver[axis_idx].current);
-            break;
-
-        case AxisSetting_MicroSteps:
-            report_uint_setting((setting_id_t)(basetype + axis_idx), trinamic.driver[axis_idx].microsteps);
-            break;
-
-        default:
-            reported = false;
-            break;
-    }
-
-    if(!reported && driver_settings.axis_report)
-        driver_settings.axis_report(setting, axis_idx);
 }
 
 // Add warning info to next realtime report when warning flag set by drivers
@@ -1159,15 +1180,7 @@ static void onReportOptions (bool newopt)
 
 bool trinamic_init (void)
 {
-    if((hal.driver_settings.nvs_address = nvs_alloc(sizeof(trinamic_settings_t)))) {
-
-        memcpy(&driver_settings, &hal.driver_settings, sizeof(driver_setting_ptrs_t));
-
-        hal.driver_settings.set = trinamic_setting;
-        hal.driver_settings.report = trinamic_settings_report;
-        hal.driver_settings.axis_report = trinamic_axis_settings_report;
-        hal.driver_settings.load = trinamic_settings_load;
-        hal.driver_settings.restore = trinamic_settings_restore;
+    if((nvs_address = nvs_alloc(sizeof(trinamic_settings_t)))) {
 
         memcpy(&user_mcode, &hal.user_mcode, sizeof(user_mcode_ptrs_t));
 
@@ -1181,11 +1194,11 @@ bool trinamic_init (void)
         on_report_options = grbl.on_report_options;
         grbl.on_report_options = onReportOptions;
 
-        details.on_report_settings = grbl.on_report_settings;
-        grbl.on_report_settings = on_report_settings;
+        details.on_get_settings = grbl.on_get_settings;
+        grbl.on_get_settings = on_get_settings;
     }
 
-    return driver_settings.nvs_address != 0;
+    return nvs_address != 0;
 }
 
 // Interrupt handler for DIAG1 signal(s)

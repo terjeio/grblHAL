@@ -128,9 +128,7 @@ static const webui_setting_map_t setting_map[] = {
 #endif
 };
 
-static char *tmpstr = NULL;
-
-static char *get_arg(char *args, char *arg, bool spacedelimited)
+static char *get_arg (char *args, char *arg, bool spacedelimited)
 {
     static char *argsp = NULL, *argsm = NULL;
 
@@ -288,7 +286,7 @@ static bool get_settings (void)
     return ok;
 }
 
-static void set_setting(char *args)
+static void set_setting (char *args)
 {
     status_code_t status = Status_Unhandled;
     char *setting = get_arg(args, " P=", true);
@@ -345,7 +343,7 @@ static bool get_system_status (void)
     webui_print_chunk(strappend(buf, 3, "Free memory: ", uitoa(esp_get_free_heap_size()), "\n"));
     webui_print_chunk("Baud rate: 115200\n");
 #if WIFI_ENABLE
-    webui_print_chunk(strappend(buf, 3, "IP: ", wifi_get_ip(), "\n"));
+    webui_print_chunk(strappend(buf, 3, "IP: ", wifi_get_ipaddr(), "\n"));
  #if TELNET_ENABLE
     webui_print_chunk(strappend(buf, 3, "Data port: ", uitoa(wifi->sta.network.telnet_port), "\n"));
  #endif
@@ -441,40 +439,25 @@ static bool get_ap_list (void)
     return ok;
 }
 
-
-// Used for trapping settings report
-static void stream_trap (const char *data)
+static char *get_setting_value (char *data, setting_id_t id)
 {
-    strcat(tmpstr, data);
-}
-
-static char *get_setting_value (char *data, setting_id_t setting)
-{
-    stream_write_ptr org_stream;
-
-    tmpstr = data;
-    *tmpstr = '\0';
+    char *value = NULL;
 
     vTaskSuspendAll();
 
-    org_stream = hal.stream.write;
-    hal.stream.write = stream_trap;
-
-    hal.driver_settings.report(setting);
-
-    hal.stream.write = org_stream;
+    const setting_detail_t *setting = setting_get_details (id, NULL);
+    if(setting)
+        value = setting_get_value(setting, id - setting->id);
 
     xTaskResumeAll();
 
-    if(*data && (tmpstr = strchr(data, '\r')))
-        *tmpstr = '\0';
+    if(value)
+        strcpy(data, value);
 
-    tmpstr = NULL;
-
-    return *data ? strchr(data, '=') + 1 : NULL;
+    return value ? data : NULL;
 }
 
-static status_code_t sys_execute(char *cmd)
+static status_code_t sys_execute (char *cmd)
 {
     char syscmd[LINE_BUFFER_SIZE]; // system_execute_line() needs at least this buffer size!
 
@@ -613,7 +596,7 @@ status_code_t webui_command_handler (uint32_t command, char *args)
     } else switch((webui_cmd_t)command) {
 
         case WebUICmd_GetCurrentIP:
-            webui_print_chunk(strappend(response, 3, args, wifi_get_ip(), "\n"));
+            webui_print_chunk(strappend(response, 3, args, wifi_get_ipaddr(), "\n"));
             break;
 
         case WebUICmd_GetSDCardStatus:

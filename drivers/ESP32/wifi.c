@@ -65,7 +65,7 @@ static wifi_config_t wifi_sta_config;
 static SemaphoreHandle_t aplist_mutex = NULL;
 static ap_list_t ap_list = {0};
 static wifi_settings_t wifi;
-static driver_setting_ptrs_t driver_settings;
+static nvs_address_t nvs_address;
 static on_report_options_ptr on_report_options;
 
 ap_list_t *wifi_get_aplist (void)
@@ -87,7 +87,7 @@ char *iptoa (void *ip) {
     return aip;
 }
 
-char *wifi_get_ip (void)
+char *wifi_get_ipaddr (void)
 {
     ip4_addr_t *ip;
 
@@ -123,7 +123,7 @@ static void reportIP (bool newopt)
         hal.stream.write("]" ASCII_EOL);
 
         hal.stream.write("[IP:");
-        hal.stream.write(wifi_get_ip());
+        hal.stream.write(wifi_get_ipaddr());
         hal.stream.write("]" ASCII_EOL);
     }
 }
@@ -362,7 +362,7 @@ bool wifi_start (void)
 {
     wifi_mode_t currentMode;
 
-    if(driver_settings.nvs_address == 0)
+    if(nvs_address == 0)
         return false;
 
 #if !WIFI_SOFTAP
@@ -525,6 +525,13 @@ wifi_settings_t *get_wifi_settings (void)
     return &wifi;
 }
 
+static status_code_t wifi_set_int (setting_id_t setting, uint_fast16_t value);
+static uint_fast16_t wifi_get_int (setting_id_t setting);
+static status_code_t wifi_set_ip (setting_id_t setting, char *value);
+static char *wifi_get_ip (setting_id_t setting);
+static void wifi_settings_restore (void);
+static void wifi_settings_load (void);
+
 static const setting_group_detail_t ethernet_groups [] = {
     { Group_Root, Group_Networking, "Networking" },
     { Group_Networking, Group_Networking_Wifi, "WiFi" }
@@ -532,356 +539,226 @@ static const setting_group_detail_t ethernet_groups [] = {
 
 static const setting_detail_t ethernet_settings[] = {
 #if AUTH_ENABLE
-    { Setting_AdminPassword, Group_General, "Admin Password", NULL, Format_Password, "x(32)", NULL, "32" },
-    { Setting_UserPassword, Group_General, "User Password", NULL, Format_Password, "x(32)", NULL, "32" },
+    { Setting_AdminPassword, Group_General, "Admin Password", NULL, Format_Password, "x(32)", NULL, "32", Setting_NonCore, &wifi.admin_password, NULL, NULL },
+    { Setting_UserPassword, Group_General, "User Password", NULL, Format_Password, "x(32)", NULL, "32", Setting_NonCore, &wifi.user_password, NULL, NULL },
 #endif
-    { Setting_WiFi_STA_SSID, Group_Networking_Wifi, "WiFi Station (STA) SSID", NULL, Format_String, "x(64)", NULL, "64" },
-    { Setting_WiFi_STA_Password, Group_Networking_Wifi, "WiFi Station (STA) Password", NULL, Format_Password, "x(32)", NULL, "32" },
-    { Setting_NetworkServices, Group_Networking, "Network Services", NULL, Format_Bitfield, "Telnet,Websocket,HTTP,DNS", NULL, NULL },
-    { Setting_Hostname, Group_Networking, "Hostname", NULL, Format_String, "x(64)", NULL, "64" },
-/*    { Setting_IpMode, Group_Networking, "IP Mode", NULL, Format_RadioButtons, "Static,DHCP,AutoIP", NULL, NULL }, */
-    { Setting_IpAddress, Group_Networking, "IP Address", NULL, Format_IPv4, NULL, NULL, NULL },
-    { Setting_Gateway, Group_Networking, "Gateway", NULL, Format_IPv4, NULL, NULL, NULL },
-    { Setting_NetMask, Group_Networking, "Netmask", NULL, Format_IPv4, NULL, NULL, NULL },
+    { Setting_WiFi_STA_SSID, Group_Networking_Wifi, "WiFi Station (STA) SSID", NULL, Format_String, "x(64)", NULL, "64", Setting_NonCore, &wifi.sta.ssid, NULL, NULL },
+    { Setting_WiFi_STA_Password, Group_Networking_Wifi, "WiFi Station (STA) Password", NULL, Format_Password, "x(32)", NULL, "32", Setting_NonCore, &wifi.sta.password, NULL, NULL },
+    { Setting_NetworkServices, Group_Networking, "Network Services", NULL, Format_Bitfield, "Telnet,Websocket,HTTP,DNS", NULL, NULL, Setting_NonCoreFn, wifi_set_int, wifi_get_int, NULL },
+    { Setting_Hostname, Group_Networking, "Hostname", NULL, Format_String, "x(64)", NULL, "64", Setting_NonCore, &wifi.sta.network.hostname, NULL, NULL },
+/*    { Setting_IpMode, Group_Networking, "IP Mode", NULL, Format_RadioButtons, "Static,DHCP,AutoIP", NULL, NULL, Setting_NonCoreFn, wifi_set_int, wifi_get_int, NULL }, */
+    { Setting_IpAddress, Group_Networking, "IP Address", NULL, Format_IPv4, NULL, NULL, NULL, Setting_NonCoreFn, wifi_set_ip, wifi_get_ip, NULL },
+    { Setting_Gateway, Group_Networking, "Gateway", NULL, Format_IPv4, NULL, NULL, NULL, Setting_NonCoreFn, wifi_set_ip, wifi_get_ip, NULL },
+    { Setting_NetMask, Group_Networking, "Netmask", NULL, Format_IPv4, NULL, NULL, NULL, Setting_NonCoreFn, wifi_set_ip, wifi_get_ip, NULL },
 #if WIFI_SOFTAP
-    { Setting_WifiMode, Group_Networking_Wifi, "WiFi Mode", NULL, Format_RadioButtons, "Off,Station,Access Point,Access Point/Station", NULL, NULL },
-    { Setting_WiFi_AP_SSID, Group_Networking_Wifi, "WiFi Access Point (AP) SSID", NULL, Format_String, "x(64)", NULL, "64" },
-    { Setting_WiFi_AP_Password, Group_Networking_Wifi, "WiFi Access Point (AP) Password", NULL, Format_Password, "x(32)", NULL, "32" },
-    { Setting_Hostname2, Group_Networking, "Hostname (AP)", NULL, Format_String, "x(64)", NULL, "64" },
-    { Setting_IpAddress2, Group_Networking, "IP Address (AP)", NULL, Format_IPv4, NULL, NULL, NULL },
-    { Setting_Gateway2, Group_Networking, "Gateway (AP)", NULL, Format_IPv4, NULL, NULL, NULL },
-    { Setting_NetMask2, Group_Networking, "Netmask (AP)", NULL, Format_IPv4, NULL, NULL, NULL },
+    { Setting_WifiMode, Group_Networking_Wifi, "WiFi Mode", NULL, Format_RadioButtons, "Off,Station,Access Point,Access Point/Station", NULL, NULL, Setting_NonCore, &wifi.mode, NULL, NULL },
+    { Setting_WiFi_AP_SSID, Group_Networking_Wifi, "WiFi Access Point (AP) SSID", NULL, Format_String, "x(64)", NULL, "64", Setting_NonCore, &wifi.ap.ssid, NULL, NULL },
+    { Setting_WiFi_AP_Password, Group_Networking_Wifi, "WiFi Access Point (AP) Password", NULL, Format_Password, "x(32)", NULL, "32", Setting_NonCore, &wifi.ap.password, NULL, NULL },
+    { Setting_Hostname2, Group_Networking, "Hostname (AP)", NULL, Format_String, "x(64)", NULL, "64", Setting_NonCore, &wifi.ap.network.hostname, NULL, NULL },
+    { Setting_IpAddress2, Group_Networking, "IP Address (AP)", NULL, Format_IPv4, NULL, NULL, NULL, Setting_NonCoreFn, wifi_set_ip, wifi_get_ip, NULL },
+    { Setting_Gateway2, Group_Networking, "Gateway (AP)", NULL, Format_IPv4, NULL, NULL, NULL, Setting_NonCoreFn, wifi_set_ip, wifi_get_ip, NULL },
+    { Setting_NetMask2, Group_Networking, "Netmask (AP)", NULL, Format_IPv4, NULL, NULL, NULL, Setting_NonCoreFn, wifi_set_ip, wifi_get_ip, NULL },
 #else
-    { Setting_WifiMode, Group_Networking_Wifi, "WiFi Mode", NULL, Format_RadioButtons, "Off,Station", NULL, NULL },
+    { Setting_WifiMode, Group_Networking_Wifi, "WiFi Mode", NULL, Format_RadioButtons, "Off,Station", NULL, NULL, Setting_NonCore, &wifi.mode, NULL, NULL },
 #endif
 #if TELNET_ENABLE
-    { Setting_TelnetPort, Group_Networking, "Telnet port", NULL, Format_Integer, "####0", "1", "65535" },
+    { Setting_TelnetPort, Group_Networking, "Telnet port", NULL, Format_Integer, "####0", "1", "65535", Setting_NonCoreFn, wifi_set_int, wifi_get_int, NULL },
 #endif
 #if HTTP_ENABLE
-    { Setting_HttpPort, Group_Networking, "HTTP port", NULL, Format_Integer, "####0", "1", "65535" },
+    { Setting_HttpPort, Group_Networking, "HTTP port", NULL, Format_Integer, "####0", "1", "65535", Setting_NonCoreFn, wifi_set_int, wifi_get_int, NULL },
 #endif
 #if WEBSOCKET_ENABLE
-    { Setting_WebSocketPort, Group_Networking, "Websocket port", NULL, Format_Integer, "####0", "1", "65535" }
+    { Setting_WebSocketPort, Group_Networking, "Websocket port", NULL, Format_Integer, "####0", "1", "65535", Setting_NonCoreFn, wifi_set_int, wifi_get_int, NULL }
 #endif
 };
+
+static void wifi_settings_save (void)
+{
+    hal.nvs.memcpy_to_nvs(nvs_address, (uint8_t *)&wifi, sizeof(wifi_settings_t), true);
+}
 
 static setting_details_t details = {
     .groups = ethernet_groups,
     .n_groups = sizeof(ethernet_groups) / sizeof(setting_group_detail_t),
     .settings = ethernet_settings,
-    .n_settings = sizeof(ethernet_settings) / sizeof(setting_detail_t)
+    .n_settings = sizeof(ethernet_settings) / sizeof(setting_detail_t),
+    .save = wifi_settings_save,
+    .load = wifi_settings_load,
+    .restore = wifi_settings_restore
 };
 
-static setting_details_t *on_report_settings (void)
+static setting_details_t *on_get_settings (void)
 {
     return &details;
 }
 
-
-static status_code_t wifi_setting (uint_fast16_t setting, float value, char *svalue)
+static status_code_t wifi_set_int (setting_id_t setting, uint_fast16_t value)
 {
-    status_code_t status = svalue ? Status_OK : Status_Unhandled;
-
-    if(svalue) switch(setting) {
+    switch(setting) {
 
         case Setting_NetworkServices:
-            if(isintf(value) && value >= 0.0f && value < 256.0f) {
+            {
                 network_services_t is_available = {0};
-#if TELNET_ENABLE
+        #if TELNET_ENABLE
                 is_available.telnet = On;
-#endif
-#if HTTP_ENABLE
+        #endif
+        #if HTTP_ENABLE
                 is_available.http = On;
-#endif
-#if WEBSOCKET_ENABLE
+        #endif
+        #if WEBSOCKET_ENABLE
                 is_available.websocket = On;
-#endif
+        #endif
                 wifi.sta.network.services.mask =
                  wifi.ap.network.services.mask = (uint8_t)value & is_available.mask;
                 // TODO: fault if attempt to select services not available?
-            } else
-                status = Status_InvalidStatement; //out of range...
-            break;
-
-        case Setting_WifiMode:
-            if(isintf(value) && value >= 0.0f && value < 4.0f) {
-#if WIFI_SOFTAP
-                wifi.mode = (grbl_wifi_mode_t)(uint8_t)value;
-#else
-                grbl_wifi_mode_t mode = (grbl_wifi_mode_t)(uint8_t)value;
-                if((status = (mode == WiFiMode_AP || mode == WiFiMode_APSTA) ? Status_InvalidStatement : Status_OK) == Status_OK)
-                    wifi.mode = mode;
-#endif
-            } else
-                status = Status_InvalidStatement; //out of range...
-            break;
-
-        case Setting_WiFi_STA_SSID:
-            if(!(is_valid_ssid(svalue) && strlcpy(wifi.sta.ssid, svalue, sizeof(ssid_t)) <= sizeof(ssid_t)))
-                status = Status_InvalidStatement; // too long...
-            break;
-
-        case Setting_WiFi_STA_Password:
-            if(!(strlcpy(wifi.sta.password, svalue, sizeof(password_t)) <= sizeof(password_t)))
-                status = Status_InvalidStatement; // too long...
-            break;
-
-        case Setting_Hostname:
-            if(!(is_valid_hostname(svalue) && strlcpy(wifi.sta.network.hostname, svalue, sizeof(hostname_t)) <= sizeof(hostname_t)))
-                status = Status_InvalidStatement; // too long...
-            break;
-
-#if AUTH_ENABLE
-        case Setting_AdminPassword:
-            if(!(is_valid_password(svalue) && strlcpy(wifi.admin_password, svalue, sizeof(password_t)) <= sizeof(password_t)))
-                status = Status_InvalidStatement; // too long...
-            break;
-
-        case Setting_UserPassword:
-            if(!(is_valid_password(svalue) && strlcpy(wifi.user_password, svalue, sizeof(password_t)) <= sizeof(password_t)))
-                status = Status_InvalidStatement; // too long...
-            break;
-#endif
-
-        case Setting_IpAddress:
-            {
-                ip4_addr_t addr;
-                if(inet_pton(AF_INET, svalue, &addr) == 1) {
-                    set_addr(wifi.sta.network.ip, &addr);
-                } else
-                    status = Status_InvalidStatement;
             }
             break;
-
-        case Setting_Gateway:
-            {
-                ip4_addr_t addr;
-                if(inet_pton(AF_INET, svalue, &addr) == 1) {
-                    set_addr(wifi.sta.network.gateway, &addr);
-                } else
-                    status = Status_InvalidStatement;
-            }
-            break;
-
-        case Setting_NetMask:
-            {
-                ip4_addr_t addr;
-                if(inet_pton(AF_INET, svalue, &addr) == 1) {
-                    set_addr(wifi.sta.network.mask, &addr);
-                } else
-                    status = Status_InvalidStatement;
-            }
-            break;
-
-#if WIFI_SOFTAP
-
-        case Setting_WiFi_AP_SSID:
-            if(!(is_valid_ssid(svalue) && strlcpy(wifi.ap.ssid, svalue, sizeof(ssid_t)) <= sizeof(ssid_t)))
-                status = Status_InvalidStatement; // too long...
-            break;
-
-        case Setting_WiFi_AP_Password:
-            if(!(strlcpy(wifi.ap.password, svalue, sizeof(password_t)) <= sizeof(password_t)))
-                status = Status_InvalidStatement; // too long...
-            break;
-
-        case Setting_Hostname2:
-            if(!(strlcpy(wifi.ap.network.hostname, svalue, sizeof(hostname_t)) <= sizeof(hostname_t)))
-                status = Status_InvalidStatement; // too long...
-            break;
-
-        case Setting_IpAddress2:
-            {
-                ip4_addr_t addr;
-                if(inet_pton(AF_INET, svalue, &addr) == 1) {
-                    set_addr(wifi.ap.network.ip, &addr);
-                } else
-                    status = Status_InvalidStatement;
-            }
-            break;
-
-        case Setting_Gateway2:
-            {
-                ip4_addr_t addr;
-                if(inet_pton(AF_INET, svalue, &addr) == 1) {
-                    set_addr(wifi.ap.network.gateway, &addr);
-                } else
-                    status = Status_InvalidStatement;
-            }
-            break;
-
-        case Setting_NetMask2:
-            {
-                ip4_addr_t addr;
-                if(inet_pton(AF_INET, svalue, &addr) == 1) {
-                    set_addr(wifi.ap.network.mask, &addr);
-                } else
-                    status = Status_InvalidStatement;
-            }
-            break;
-
-#endif // WIFI_SOFTAP
 
 #if TELNET_ENABLE
         case Setting_TelnetPort:
-            if(isintf(value) && is_valid_port((uint16_t)value)) {
-                wifi.sta.network.telnet_port =
-                wifi.ap.network.telnet_port = (uint16_t)value;
-            } else
-                status = Status_InvalidStatement; //out of range...
+            wifi.sta.network.telnet_port = wifi.ap.network.telnet_port = (uint16_t)value;
             break;
 #endif
 
 #if HTTP_ENABLE
         case Setting_HttpPort:
-            if(isintf(value) && is_valid_port((uint16_t)value)) {
-                wifi.sta.network.http_port =
-                wifi.ap.network.http_port = (uint16_t)value;
-            } else
-                status = Status_InvalidStatement; //out of range...
+            wifi.sta.network.http_port = wifi.ap.network.http_port = (uint16_t)value;
             break;
 #endif
 
 #if WEBSOCKET_ENABLE
         case Setting_WebSocketPort:
-            if(isintf(value) && is_valid_port((uint16_t)value)) {
-                wifi.sta.network.websocket_port =
-                wifi.ap.network.websocket_port = (uint16_t)value;
-            } else
-                status = Status_InvalidStatement; //out of range...
+            wifi.sta.network.websocket_port = wifi.ap.network.websocket_port = (uint16_t)value;
             break;
 #endif
+        default:
+            break;
+    }
+
+    return Status_OK;
+}
+
+static uint_fast16_t wifi_get_int (setting_id_t setting)
+{
+    uint_fast16_t value = 0;
+
+    switch(setting) {
+
+        case Setting_NetworkServices:
+            value = wifi.sta.network.services.mask;
+            break;
+
+#if TELNET_ENABLE
+        case Setting_TelnetPort:
+            value = wifi.sta.network.telnet_port;
+            break;
+#endif
+
+#if HTTP_ENABLE
+        case Setting_HttpPort:
+            value = wifi.sta.network.http_port;
+            break;
+#endif
+
+#if WEBSOCKET_ENABLE
+        case Setting_WebSocketPort:
+            value = wifi.sta.network.websocket_port;
+            break;
+#endif
+        default:
+            break;
+    }
+
+    return value;
+}
+
+static status_code_t wifi_set_ip (setting_id_t setting, char *value)
+{
+    ip4_addr_t addr;
+
+    if(inet_pton(AF_INET, value, &addr) != 1)
+        return Status_InvalidStatement;
+
+    status_code_t status = Status_OK;
+
+    switch(setting) {
+
+        case Setting_IpAddress:
+            set_addr(wifi.sta.network.ip, &addr);
+            break;
+
+        case Setting_Gateway:
+            set_addr(wifi.sta.network.gateway, &addr);
+            break;
+
+        case Setting_NetMask:
+            set_addr(wifi.sta.network.mask, &addr);
+            break;
+
+#if WIFI_SOFTAP
+
+        case Setting_IpAddress2:
+            set_addr(wifi.ap.network.ip, &addr);
+            break;
+
+        case Setting_Gateway2:
+            set_addr(wifi.ap.network.gateway, &addr);
+            break;
+
+        case Setting_NetMask2:
+            set_addr(wifi.ap.network.mask, &addr);
+            break;
+
+#endif
+
         default:
             status = Status_Unhandled;
             break;
     }
 
-    if(status == Status_OK)
-        hal.nvs.memcpy_to_nvs(driver_settings.nvs_address, (uint8_t *)&wifi, sizeof(wifi_settings_t), true);
-
-    return status == Status_Unhandled && driver_settings.set ? driver_settings.set(setting, value, svalue) : status;
+    return status;
 }
 
-static void wifi_settings_report (setting_id_t setting)
+static char *wifi_get_ip (setting_id_t setting)
 {
-    bool reported = true;
+    static char ip[INET6_ADDRSTRLEN];
 
     switch(setting) {
 
-        case Setting_NetworkServices:
-            report_uint_setting(setting, wifi.sta.network.services.mask);
-            break;
-
-        case Setting_WifiMode:
-            report_uint_setting(setting, wifi.mode);
-            break;
-
-        case Setting_WiFi_STA_SSID:
-// TODO:?           if(wifi.mode == WiFiMode_STA && wifi.mode == WiFiMode_APSTA)
-            report_string_setting(setting, wifi.sta.ssid);
-            break;
-
-        case Setting_WiFi_STA_Password:
-            report_string_setting(setting, wifi.sta.password);
-            break;
-
-        case Setting_Hostname:
-            report_string_setting(setting, wifi.sta.network.hostname);
-            break;
-
         case Setting_IpAddress:
-            if(wifi.sta.network.ip_mode != IpMode_DHCP) {
-                char ip[INET6_ADDRSTRLEN];
-                report_string_setting(setting, inet_ntop(AF_INET, &wifi.sta.network.ip, ip, INET6_ADDRSTRLEN));
-            }
+            inet_ntop(AF_INET, &wifi.sta.network.ip, ip, INET6_ADDRSTRLEN);
             break;
 
         case Setting_Gateway:
-            if(wifi.sta.network.ip_mode != IpMode_DHCP) {
-                char ip[INET6_ADDRSTRLEN];
-                report_string_setting(setting, inet_ntop(AF_INET, &wifi.sta.network.gateway, ip, INET6_ADDRSTRLEN));
-            }
+            inet_ntop(AF_INET, &wifi.sta.network.gateway, ip, INET6_ADDRSTRLEN);
             break;
 
         case Setting_NetMask:
-            if(wifi.sta.network.ip_mode != IpMode_DHCP) {
-                char ip[INET6_ADDRSTRLEN];
-                report_string_setting(setting, inet_ntop(AF_INET, &wifi.sta.network.mask, ip, INET6_ADDRSTRLEN));
-            }
+            inet_ntop(AF_INET, &wifi.sta.network.mask, ip, INET6_ADDRSTRLEN);
             break;
 
 #if WIFI_SOFTAP
 
-        case Setting_WiFi_AP_SSID:
-            report_string_setting(setting, wifi.ap.ssid);
-            break;
-
-        case Setting_WiFi_AP_Password:
-            report_string_setting(setting, wifi.ap.password);
-            break;
-
-        case Setting_Hostname2:
-            report_string_setting(setting, wifi.ap.network.hostname);
-            break;
-
         case Setting_IpAddress2:
-            {
-                char ip[INET6_ADDRSTRLEN];
-                report_string_setting(setting, inet_ntop(AF_INET, &wifi.ap.network.ip, ip, INET6_ADDRSTRLEN));
-            }
+            inet_ntop(AF_INET, &wifi.ap.network.ip, ip, INET6_ADDRSTRLEN);
             break;
 
         case Setting_Gateway2:
-            {
-                char ip[INET6_ADDRSTRLEN];
-                report_string_setting(setting, inet_ntop(AF_INET, &wifi.ap.network.gateway, ip, INET6_ADDRSTRLEN));
-            }
+            inet_ntop(AF_INET, &wifi.ap.network.gateway, ip, INET6_ADDRSTRLEN);
             break;
 
         case Setting_NetMask2:
-            {
-                char ip[INET6_ADDRSTRLEN];
-                report_string_setting(setting, inet_ntop(AF_INET, &wifi.ap.network.mask, ip, INET6_ADDRSTRLEN));
-            }
+            inet_ntop(AF_INET, &wifi.ap.network.mask, ip, INET6_ADDRSTRLEN);
             break;
 
-#endif // WIFI_SOFTAP
-
-#if TELNET_ENABLE
-        case Setting_TelnetPort:
-            report_uint_setting(setting, wifi.sta.network.telnet_port);
-            break;
-#endif
-
-#if HTTP_ENABLE
-        case Setting_HttpPort:
-            report_uint_setting(setting, wifi.sta.network.http_port);
-            break;
-#endif
-
-#if WEBSOCKET_ENABLE
-        case Setting_WebSocketPort:
-            report_uint_setting(setting, wifi.sta.network.websocket_port);
-            break;
-#endif
-
-#if AUTH_ENABLE
-        case Setting_AdminPassword:
-            report_string_setting(setting, hal.stream.type == StreamType_Serial ? wifi.admin_password : HIDDEN_PASSWORD);
-            break;
-
-        case Setting_UserPassword:
-            report_string_setting(setting, hal.stream.type == StreamType_Serial ? wifi.user_password : HIDDEN_PASSWORD);
-            break;
-#endif
+            #endif
 
         default:
-            reported = false;
+            *ip = '\0';
             break;
     }
 
-    if(!reported && driver_settings.report)
-        driver_settings.report(setting);
+    return ip;
 }
 
 static void wifi_settings_restore (void)
@@ -958,38 +835,27 @@ static void wifi_settings_restore (void)
     wifi.ap.network.services.websocket = On;
 #endif
 
-    hal.nvs.memcpy_to_nvs(driver_settings.nvs_address, (uint8_t *)&wifi, sizeof(wifi_settings_t), true);
-
-    if(driver_settings.restore)
-        driver_settings.restore();
+    hal.nvs.memcpy_to_nvs(nvs_address, (uint8_t *)&wifi, sizeof(wifi_settings_t), true);
 }
 
 static void wifi_settings_load (void)
 {
-    if(hal.nvs.memcpy_from_nvs((uint8_t *)&wifi, driver_settings.nvs_address, sizeof(wifi_settings_t), true) != NVS_TransferResult_OK)
+    if(hal.nvs.memcpy_from_nvs((uint8_t *)&wifi, nvs_address, sizeof(wifi_settings_t), true) != NVS_TransferResult_OK)
         wifi_settings_restore();
-
-    if(driver_settings.load)
-        driver_settings.load();
 }
 
 bool wifi_init (void)
 {
-    if((hal.driver_settings.nvs_address = nvs_alloc(sizeof(wifi_settings_t)))) {
-        memcpy(&driver_settings, &hal.driver_settings, sizeof(driver_setting_ptrs_t));
-        hal.driver_settings.set = wifi_setting;
-        hal.driver_settings.report = wifi_settings_report;
-        hal.driver_settings.load = wifi_settings_load;
-        hal.driver_settings.restore = wifi_settings_restore;
+    if((nvs_address = nvs_alloc(sizeof(wifi_settings_t)))) {
 
         on_report_options = grbl.on_report_options;
         grbl.on_report_options = reportIP;
 
-        details.on_report_settings = grbl.on_report_settings;
-        grbl.on_report_settings = on_report_settings;
+        details.on_get_settings = grbl.on_get_settings;
+        grbl.on_get_settings = on_get_settings;
     }
 
-    return driver_settings.nvs_address != 0;
+    return nvs_address != 0;
 }
 
 #endif // WIFI_ENABLE

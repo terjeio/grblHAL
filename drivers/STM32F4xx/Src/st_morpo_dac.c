@@ -1,7 +1,7 @@
 /*
   st_morpho_dac.c - driver code for STM32F4xx ARM processors
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 
@@ -333,8 +333,8 @@ void board_init (void)
 //    hal.driver_settings.load = aux_settings_load;
 //    hal.driver_settings.restore = aux_settings_restore;
 
-    details.on_report_settings = grbl.on_report_settings;
-    grbl.on_report_settings = onReportSettings;
+    details.on_get_settings = grbl.on_get_settings;
+    grbl.on_get_settings = onReportSettings;
 
     settings_changed = hal.settings_changed;
     hal.settings_changed = onSettingsChanged;

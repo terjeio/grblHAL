@@ -1,7 +1,7 @@
 /*
   my_machine.h - configuration for IMXRT1062 processor (on Teensy 4.x board)
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 

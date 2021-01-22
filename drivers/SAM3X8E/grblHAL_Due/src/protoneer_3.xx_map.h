@@ -1,7 +1,7 @@
 /*
   protoneer_3.xx_map.h - driver code for Atmel SAM3X8E ARM processor, pin mappings compatible with Protoneer 3.xx boards
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2019 Terje Io
 

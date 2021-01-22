@@ -1,11 +1,9 @@
 /*
-  sdcard.h - An embedded CNC Controller with rs274/ngc (g-code) support
+  sdcard.h - SDCard plugin for FatFs
 
-  Driver code for Texas Instruments Tiva C (TM4C123GH6PM) ARM processor
+  Part of grblHAL
 
-  Part of GrblHAL
-
-  Copyright (c) 2018-2020 Terje Io
+  Copyright (c) 2018-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by

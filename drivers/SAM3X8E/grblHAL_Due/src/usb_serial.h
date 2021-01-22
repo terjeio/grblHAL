@@ -2,7 +2,7 @@
 
   usb_serial.h - USB serial port wrapper for Arduino MKRZERO
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2018-2020 Terje Io
 

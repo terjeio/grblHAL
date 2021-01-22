@@ -2,7 +2,7 @@
 
   main.c - startup for Atmel SAM3X8E ARM processor (Arduino Due version)
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2018-2020 Terje Io
 

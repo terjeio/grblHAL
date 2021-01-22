@@ -1,6 +1,8 @@
 ## grblHAL changelog
 
-2021-01-12:
+2021-01-22:
+* More settings susbsystem changes and refactored $-system commands parser.  
+There are some API changes related to this that may affect user defined plugins.
 * Added $7 setting for option "Spindle off with zero speed".
 * Added `|FW:grblHAL` element to full real-time report requested by sending `0x87`. 
 * Simplified settings handling.

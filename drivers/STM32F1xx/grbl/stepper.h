@@ -1,7 +1,7 @@
 /*
   stepper.h - stepper motor driver: executes motion plans of planner.c using the stepper motors
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2019-2020 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC

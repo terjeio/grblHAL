@@ -4,7 +4,7 @@
 
   - on Texas Instruments MSP432P401R LaunchPad
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017-2020 Terje Io
 

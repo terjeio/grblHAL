@@ -1,7 +1,7 @@
 /*
   generic_map.h - river code for Atmel SAM3X8E ARM processor
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2019-2020 Terje Io
 

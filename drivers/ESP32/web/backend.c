@@ -62,11 +62,8 @@
 #endif
 
 static int setting = -1;
-static char sbuf[100];
 static httpd_handle_t httpdaemon = NULL;
 static cJSON *json_settings;
-
-static stream_write_ptr org_stream;
 
 #define MAX_APs 20
 
@@ -496,27 +493,10 @@ static bool add_setting (int id, char *value)
     return ok;
 }
 
-// Used for trapping settings report and generating a JSON array
-static void backendWriteS (const char *data)
+static void report_setting (const setting_detail_t *psetting, uint_fast16_t offset)
 {
-    strcat(sbuf, data);
-
-    uint32_t len = strlen(sbuf);
-
-    if(sbuf[len - 2] == '\r')
-    {
-        sbuf[len - 2] = '\0';
-        char *eq = strchr(sbuf, '=');
-        if(eq) {
-            *eq = '\0';
-            uint_fast8_t counter = 1;
-            float parameter;
-            read_float(sbuf, &counter, &parameter);
-            if(setting == -1 || (int)parameter == setting)
-                add_setting((int)parameter, eq + 1);
-        }
-        sbuf[0] = '\0';
-    }
+    if(setting == -1 || psetting->id == setting)
+        add_setting(psetting->id, setting_get_value(psetting, offset));
 }
 
 static esp_err_t settings_get_handler(httpd_req_t *req)
@@ -531,13 +511,12 @@ static esp_err_t settings_get_handler(httpd_req_t *req)
 
     if((ok = (root && (json_settings = cJSON_AddArrayToObject(root, "settings"))))) {
 
-        org_stream = hal.stream.write;
-
-        hal.stream.write = backendWriteS;
+        setting_ptr org_ptr = grbl.report.setting;
+        grbl.report.setting = report_setting;
 
         report_grbl_settings(false);
 
-        hal.stream.write = org_stream;
+        grbl.report.setting = org_ptr;
 
         char *resp = cJSON_PrintUnformatted(root);
 
@@ -578,7 +557,7 @@ static esp_err_t settings_set_handler(httpd_req_t *req)
                 cJSON *id = cJSON_GetObjectItemCaseSensitive(setting, "id");
                 cJSON *value = cJSON_GetObjectItemCaseSensitive(setting, "value");
 
-                if((status = settings_store_global_setting ((setting_id_t)((int)id->valuedouble), value->valuestring)) != Status_OK)
+                if((status = settings_store_setting ((setting_id_t)((int)id->valuedouble), value->valuestring)) != Status_OK)
                     break;
             }
             cJSON_Delete(root);

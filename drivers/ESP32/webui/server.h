@@ -3,7 +3,7 @@
 
   WebUI backend for https://github.com/luc-github/ESP3D-webui
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2019 Terje Io
 

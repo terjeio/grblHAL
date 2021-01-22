@@ -190,7 +190,7 @@ static void nvs_warning (sys_state_t state)
 // Try to allocate RAM from heap for buffer/emulation.
 bool nvs_buffer_alloc (void)
 {
-    assert(NVS_SIZE > GRBL_NVS_SIZE);
+    assert(NVS_SIZE >= GRBL_NVS_SIZE);
 
     nvsbuffer = malloc(NVS_SIZE);
 
@@ -243,11 +243,11 @@ bool nvs_buffer_init (void)
 
 // Allocate NVS block for driver settings.
 // NOTE: allocation has to be done before content is copied from physical storage.
-uint32_t nvs_alloc (size_t size)
+nvs_address_t nvs_alloc (size_t size)
 {
     static uint8_t *mem_address;
 
-    uint32_t addr = 0;
+    nvs_address_t addr = 0;
 
     // Check if already switched to emulation or buffer allocation failed, return NULL if so.
     if(hal.nvs.type == NVS_Emulated || nvsbuffer == NULL)

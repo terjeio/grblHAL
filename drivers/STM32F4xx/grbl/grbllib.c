@@ -195,7 +195,7 @@ int grbl_enter (void)
 #endif
 
     if(!driver_ok) {
-        hal.stream.write("GrblHAL: incompatible driver" ASCII_EOL);
+        hal.stream.write("grblHAL: incompatible driver" ASCII_EOL);
         while(true);
     }
 

@@ -3,7 +3,7 @@
 
   NOTE: only in use if not compiling with cmake (idf.py)
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 

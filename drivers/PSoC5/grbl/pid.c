@@ -5,7 +5,7 @@
 
   NOTE: not referenced in the core grbl code
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 

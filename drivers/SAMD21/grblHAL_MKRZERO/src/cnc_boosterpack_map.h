@@ -1,7 +1,7 @@
 /*
   cnc_boosterpack_map.h - driver code for SAMD21 processor (on MKRZERO board)
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 

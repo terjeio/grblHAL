@@ -1,7 +1,7 @@
 /*
   grblHAL_Teensy4.h - Arduino library wrapper (Teensy4.x version)
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2019-2020 Terje Io
 

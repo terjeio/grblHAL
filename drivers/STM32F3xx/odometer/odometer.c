@@ -54,7 +54,6 @@ static uint32_t odometers_address, odometers_address_prv;
 static odometer_data_t odometers, odometers_prv;
 static nvs_io_t nvs;
 static stepper_pulse_start_ptr stepper_pulse_start;
-static on_unknown_sys_command_ptr on_unknown_sys_command;
 static on_state_change_ptr on_state_change;
 static spindle_set_state_ptr spindle_set_state_;
 static settings_changed_ptr settings_changed;
@@ -96,7 +95,7 @@ void onStateChanged (sys_state_t state)
 {
     static uint32_t ms = 0;
 
-    if(state & (STATE_CYCLE|STATE_JOG|STATE_HOMING))
+    if(state & (STATE_CYCLE|STATE_JOG|STATE_HOMING|STATE_SAFETY_DOOR))
         ms = hal.get_elapsed_ticks();
 
     else if(odometer_changed) {
@@ -189,18 +188,18 @@ static void odometers_report (odometer_data_t *odometers)
     }
 }
 
-static status_code_t commandExecute (sys_state_t state, char *line, char *lcline)
+static status_code_t odometer_command (sys_state_t state, char *args)
 {
     status_code_t retval = Status_Unhandled;
 
-    if(line[1] == 'O') {
+    if(args == NULL) {
+        odometers_report(&odometers);
+        retval = Status_OK;
+    } else {
 
-        if(!strcmp(&line[1], "ODOMETERS")) {
-            odometers_report(&odometers);
-            retval = Status_OK;
-        }
+        strcaps(args);
 
-        if(!strcmp(&line[1], "ODOMETERS=PREV")) {
+        if(!strcmp(args, "PREV")) {
             if(nvs.memcpy_from_nvs((uint8_t *)&odometers_prv, odometers_address_prv, sizeof(odometer_data_t), true) == NVS_TransferResult_OK)
                 odometers_report(&odometers_prv);
             else
@@ -208,13 +207,27 @@ static status_code_t commandExecute (sys_state_t state, char *line, char *lcline
             retval = Status_OK;
         }
 
-        if(!strcmp(&line[1], "ODOMETERS=RST")) {
+        if(!strcmp(args, "RST")) {
             odometer_data_reset(true);
             retval = Status_OK;
         }
     }
 
-    return retval == Status_Unhandled && on_unknown_sys_command ? on_unknown_sys_command(state, line, lcline) : retval;
+    return retval;
+}
+
+const sys_command_t odometer_command_list[] = {
+    {"ODOMETERS", false, odometer_command},
+};
+
+static sys_commands_t odometer_commands = {
+    .n_commands = sizeof(odometer_command_list) / sizeof(sys_command_t),
+    .commands = odometer_command_list
+};
+
+sys_commands_t *odometer_get_commands()
+{
+    return &odometer_commands;
 }
 
 static void onReportCommandHelp (void)
@@ -265,8 +278,8 @@ void odometer_init()
 
         hal.driver_cap.odometers = On;
 
-        on_unknown_sys_command = grbl.on_unknown_sys_command;
-        grbl.on_unknown_sys_command = commandExecute;
+        odometer_commands.on_get_commands = grbl.on_get_commands;
+        grbl.on_get_commands = odometer_get_commands;
 
         on_state_change = grbl.on_state_change;
         grbl.on_state_change = onStateChanged;

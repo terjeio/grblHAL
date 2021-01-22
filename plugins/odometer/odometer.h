@@ -2,7 +2,7 @@
 
   odometer.h - axis odometers including run time
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 

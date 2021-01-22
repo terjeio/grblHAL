@@ -57,9 +57,9 @@ typedef struct {
 static machine_t machine = {0};
 
 uint_fast8_t selected_motor = A_MOTOR;
-
+maslow_settings_t maslow;
 maslow_hal_t maslow_hal = {0};
-static driver_setting_ptrs_t driver_settings;
+static nvs_address_t nvs_address;
 
 static const maslow_settings_t maslow_defaults = {
     .pid[A_MOTOR].Kp = MASLOW_A_KP,
@@ -96,181 +96,131 @@ static const maslow_settings_t maslow_defaults = {
     .YcorrScaling = MASLOW_BCORRSCALING
 };
 
-static status_code_t maslow_settings_set (setting_id_t setting, float value, char *svalue)
+static status_code_t set_axis_setting (setting_id_t setting, float value);
+static float get_axis_setting (setting_id_t setting);
+static void maslow_settings_load (void);
+static void maslow_settings_restore (void);
+
+static const setting_detail_t maslow_settings[] = {
+#if maslow_MIXED_DRIVERS
+    { Setting_maslowDriver, Group_MotorDriver, "maslow driver", NULL, Format_AxisMask, NULL, NULL, NULL, Setting_NonCore, &maslow.driver_enable.mask },
+#endif
+    { (setting_id_t)Maslow_ChainOverSprocket, Group_MotorDriver, "Chain over sprocket", NULL, Format_Integer, NULL, NULL, NULL, Setting_NonCore, &maslow.chainOverSprocket, NULL },
+    { (setting_id_t)Maslow_MachineWidth, Group_MotorDriver, "Machine width", "mm", Format_Decimal, "###0.0", NULL, NULL, Setting_NonCore, &maslow.machineWidth, NULL },
+    { (setting_id_t)Maslow_MachineHeight, Group_MotorDriver, "Machine height", "mm", Format_Decimal, "###0.0", NULL, NULL, Setting_NonCore, &maslow.machineHeight, NULL },
+    { (setting_id_t)Maslow_DistBetweenMotors, Group_MotorDriver, "Distance between motors", "mm", Format_Decimal, NULL, NULL, NULL, Setting_NonCore, &maslow.distBetweenMotors, NULL },
+    { (setting_id_t)Maslow_MotorOffsetY, Group_MotorDriver, "Motor offset Y", "mm", Format_Decimal, "###0.0", NULL, NULL, Setting_NonCore, &maslow.motorOffsetY, NULL },
+    { (setting_id_t)Maslow_AcorrScaling, Group_MotorDriver, "Acorr Scaling", NULL, Format_Decimal, "###0.0", NULL, NULL, Setting_NonCore, &maslow.XcorrScaling, NULL },
+    { (setting_id_t)Maslow_BcorrScaling, Group_MotorDriver, "BcorrScaling", NULL, Format_Decimal, "###0.0", NULL, NULL, Setting_NonCore, &maslow.XcorrScaling, NULL },
+    { (setting_id_t)AxisSetting_MaslowKP, Group_Axis0, "?-axis KP", NULL, Format_Decimal, "###0.0", NULL, NULL, Setting_NonCoreFn, set_axis_setting, get_axis_setting },
+    { (setting_id_t)AxisSetting_MaslowKI, Group_Axis0, "?-axis KI", NULL, Format_Decimal, "###0.0", NULL, NULL, Setting_NonCoreFn, set_axis_setting, get_axis_setting },
+    { (setting_id_t)AxisSetting_MaslowKD, Group_Axis0, "?-axis KIt", NULL, Format_Decimal, "###0.0", NULL, NULL, Setting_NonCoreFn, set_axis_setting, get_axis_setting },
+    { (setting_id_t)AxisSetting_MaslowIMax, Group_Axis0, "?-axis I Max", "ma", Format_Decimal, "###0.0", NULL, NULL, Setting_NonCoreFn, set_axis_setting, get_axis_setting }
+};
+
+static void maslow_settings_save (void)
 {
-    status_code_t status = Status_Unhandled;
+    hal.nvs.memcpy_to_nvs(nvs_address, (uint8_t *)&maslow, sizeof(maslow_settings_t), true);
+}
 
-    // TODO: PID settings should be moved to axis settings range...
+static setting_details_t details = {
+    .settings = maslow_settings,
+    .n_settings = sizeof(maslow_settings) / sizeof(setting_detail_t),
+    .load = maslow_settings_load,
+    .save = maslow_settings_save,
+    .restore = maslow_settings_restore
+};
 
-    if((setting_id_t)setting >= Setting_AxisSettingsBase2 && (setting_id_t)setting < Setting_AxisSettingsBase + AxisSetting_MaslowMaxSetting * AXIS_SETTINGS_INCREMENT) {
-        uint_fast16_t base_idx = (uint_fast16_t)setting - (uint_fast16_t)Setting_AxisSettingsBase2;
+static setting_details_t *on_get_settings (void)
+{
+    return &details;
+}
+
+static status_code_t set_axis_setting (setting_id_t setting, float value)
+{
+    status_code_t status = Status_OK;
+
+    if((setting_id_t)setting >= Setting_AxisSettingsBase && (setting_id_t)setting <= Setting_AxisSettingsMax) {
+
+        uint_fast16_t base_idx = (uint_fast16_t)setting - (uint_fast16_t)Setting_AxisSettingsBase;
         uint_fast8_t axis_idx = base_idx % AXIS_SETTINGS_INCREMENT;
 
-        if(axis_idx < N_AXIS) switch((base_idx - axis_idx) / AXIS_SETTINGS_INCREMENT + AXIS_SETTINGS_INCREMENT) {
+        if(axis_idx < N_AXIS) switch((base_idx - axis_idx) / AXIS_SETTINGS_INCREMENT) {
 
             case AxisSetting_MaslowKP:
                 status = Status_OK;
-                maslow_hal.settings.pid[axis_idx].Kp = value;
+                maslow.pid[axis_idx].Kp = value;
                 break;
 
             case AxisSetting_MaslowKI:
                 status = Status_OK;
-                maslow_hal.settings.pid[axis_idx].Ki = value;
+                maslow.pid[axis_idx].Ki = value;
                 break;
 
             case AxisSetting_MaslowKD:
                 status = Status_OK;
-                maslow_hal.settings.pid[axis_idx].Kd = value;
+                maslow.pid[axis_idx].Kd = value;
                 break;
 
             case AxisSetting_MaslowIMax:
                 status = Status_OK;
-                maslow_hal.settings.pid[axis_idx].Imax = value;
-
-        }
-    } else {
-
-        switch((maslow_setting_t)setting) {
-
-            case Maslow_ChainOverSprocket:
-                status = Status_OK;
-                maslow_hal.settings.chainOverSprocket = value;
-                break;
-
-            case Maslow_MachineWidth:
-                status = Status_OK;
-                maslow_hal.settings.machineWidth = value;
-                break;   /* Maslow specific settings */
-
-            case Maslow_MachineHeight:
-                status = Status_OK;
-                maslow_hal.settings.machineHeight = value;
-                break;
-
-            case Maslow_DistBetweenMotors:
-                status = Status_OK;
-                maslow_hal.settings.distBetweenMotors = value;
-                break;
-
-            case Maslow_MotorOffsetY:
-                status = Status_OK;
-                maslow_hal.settings.motorOffsetY = value;
-                break;
-
-            case Maslow_AcorrScaling:
-                status = Status_OK;
-                maslow_hal.settings.XcorrScaling = value;
-                break;
-
-            case Maslow_BcorrScaling:
-                status = Status_OK;
-                maslow_hal.settings.YcorrScaling = value;
-                break;
+                maslow.pid[axis_idx].Imax = value;
 
             default:
+                status = Status_Unhandled;
                 break;
         }
     }
-
-    if(status == Status_OK)
-        hal.nvs.memcpy_to_nvs(hal.nvs.driver_area.address, (uint8_t *)&maslow_hal.settings, sizeof(maslow_settings_t), true);
 
     return status;
 }
 
-static void maslow_settings_report (setting_id_t setting)
+static float get_axis_setting (setting_id_t setting)
 {
-    bool reported = true;
+    float value = 0;
 
-    switch(setting) {
+    if (setting >= Setting_AxisSettingsBase && setting <= Setting_AxisSettingsMax) {
 
-        case (setting_id_t)Maslow_ChainOverSprocket:
-            report_uint_setting(setting, maslow_hal.settings.chainOverSprocket);
-            break;
+        uint_fast16_t base_idx = (uint_fast16_t)setting - (uint_fast16_t)Setting_AxisSettingsBase;
+        uint_fast8_t axis_idx = base_idx % AXIS_SETTINGS_INCREMENT;
 
-        case (setting_id_t)Maslow_MachineWidth:
-            report_float_setting(setting, maslow_hal.settings.machineWidth, N_DECIMAL_SETTINGVALUE);
-            break;
+        if(axis_idx < N_AXIS) switch((base_idx - axis_idx) / AXIS_SETTINGS_INCREMENT) {
 
-        case (setting_id_t)Maslow_MachineHeight:
-            report_float_setting(setting, maslow_hal.settings.machineHeight, N_DECIMAL_SETTINGVALUE);
-            break;
+            case AxisSetting_MaslowKP:
+                value = maslow.pid[axis_idx].Kp;
+                break;
 
-        case (setting_id_t)Maslow_DistBetweenMotors:
-            report_float_setting(setting, maslow_hal.settings.distBetweenMotors, N_DECIMAL_SETTINGVALUE);
-            break;
+            case AxisSetting_MaslowKI:
+                value = maslow.pid[axis_idx].Ki;
+                break;
 
-        case (setting_id_t)Maslow_MotorOffsetY:
-            report_float_setting(setting, maslow_hal.settings.motorOffsetY, N_DECIMAL_SETTINGVALUE);
-            break;
+            case AxisSetting_MaslowKD:
+                value = maslow.pid[axis_idx].Kd;
+                break;
 
-        case (setting_id_t)Maslow_AcorrScaling:
-            report_float_setting(setting, maslow_hal.settings.XcorrScaling, N_DECIMAL_SETTINGVALUE);
-            break;
-
-        case (setting_id_t)Maslow_BcorrScaling:
-            report_float_setting(setting, maslow_hal.settings.YcorrScaling, N_DECIMAL_SETTINGVALUE);
-            break;
-
-        default:
-            reported = false;
-            break;
+            case AxisSetting_MaslowIMax:
+                value = maslow.pid[axis_idx].Imax;
+                break;
+        }
     }
 
-    if(!reported && driver_settings.report)
-        driver_settings.report(setting);
-}
-
-static void maslow_axis_settings_report (axis_setting_id_t setting, uint8_t axis_idx)
-{
-    bool reported = true;
-
-    uint16_t basetype = Setting_AxisSettingsBase + setting * AXIS_SETTINGS_INCREMENT;
-
-    switch((maslow_axis_setting_t)setting) {
-
-        case AxisSetting_MaslowKP:
-            report_float_setting((setting_id_t)(basetype + axis_idx), maslow_hal.settings.pid[axis_idx].Kp, 3);
-            break;
-
-        case AxisSetting_MaslowKI:
-            report_float_setting((setting_id_t)(basetype + axis_idx), maslow_hal.settings.pid[axis_idx].Ki, 3);
-            break;
-
-        case AxisSetting_MaslowKD:
-            report_float_setting((setting_id_t)(basetype + axis_idx), maslow_hal.settings.pid[axis_idx].Kd, 3);
-            break;
-
-        case AxisSetting_MaslowIMax:
-            report_float_setting((setting_id_t)(basetype + axis_idx), maslow_hal.settings.pid[axis_idx].Imax, 3);
-            break;
-
-        default:
-            reported = false;
-            break;
-    }
-
-    if(!reported && driver_settings.axis_report)
-        driver_settings.axis_report(setting, axis_idx);
+    return value;
 }
 
 static void maslow_settings_restore (void)
 {
-    memcpy(&maslow_hal.settings, &maslow_defaults, sizeof(maslow_settings_t));
-    hal.nvs.memcpy_to_nvs(hal.nvs.driver_area.address, (uint8_t *)&maslow_hal.settings, sizeof(maslow_settings_t), true);
+    memcpy(&maslow, &maslow_defaults, sizeof(maslow_settings_t));
 
-    if(driver_settings.restore)
-        driver_settings.restore();
+    hal.nvs.memcpy_to_nvs(hal.nvs.driver_area.address, (uint8_t *)&maslow, sizeof(maslow_settings_t), true);
 }
 
 static void maslow_settings_load (void)
 {
-    if(hal.nvs.memcpy_from_nvs((uint8_t *)&maslow_hal.settings, driver_settings.nvs_address, sizeof(maslow_settings_t), true) != NVS_TransferResult_OK)
+    if(hal.nvs.memcpy_from_nvs((uint8_t *)&maslow, nvs_address, sizeof(maslow_settings_t), true) != NVS_TransferResult_OK)
         maslow_settings_restore();
-
-    if(driver_settings.load)
-        driver_settings.load();
 }
+
+/** End settings handling **/
 
 void recomputeGeometry()
 {
@@ -278,10 +228,10 @@ void recomputeGeometry()
     Some variables are computed on initialization for the geometry of the machine to reduce overhead,
     calling this function regenerates those values.
     */
-    machine.halfWidth = (maslow_hal.settings.machineWidth / 2.0f);
-    machine.halfHeight = (maslow_hal.settings.machineHeight / 2.0f);
-    machine.xCordOfMotor = (maslow_hal.settings.distBetweenMotors / 2.0f);
-    machine.yCordOfMotor = (machine.halfHeight + maslow_hal.settings.motorOffsetY);
+    machine.halfWidth = (maslow.machineWidth / 2.0f);
+    machine.halfHeight = (maslow.machineHeight / 2.0f);
+    machine.xCordOfMotor = (maslow.distBetweenMotors / 2.0f);
+    machine.yCordOfMotor = (machine.halfHeight + maslow.motorOffsetY);
     machine.xCordOfMotor_x4 = machine.xCordOfMotor * 4.0f;
     machine.xCordOfMotor_x2_pow = powf((machine.xCordOfMotor * 2.0f), 2.0f);
 }
@@ -307,13 +257,13 @@ static void maslow_convert_array_steps_to_mpos (float *position, int32_t *steps)
 
     a_len = (machine.xCordOfMotor_x2_pow - powf(b_len, 2.0f) + powf(a_len, 2.0f)) / machine.xCordOfMotor_x4;
     position[X_AXIS] = a_len - machine.xCordOfMotor;
-    a_len = maslow_hal.settings.distBetweenMotors - a_len;
+    a_len = maslow.distBetweenMotors - a_len;
     position[Y_AXIS] = machine.yCordOfMotor - sqrtf(powf(b_len, 2.0f) - powf(a_len, 2.0f));
     position[Z_AXIS] = steps[Z_AXIS] / settings.axis[Z_AXIS].steps_per_mm;
 
 // back out any correction factor
-   position[X_AXIS] /= maslow_hal.settings.XcorrScaling;
-   position[Y_AXIS] /= maslow_hal.settings.YcorrScaling;
+   position[X_AXIS] /= maslow.XcorrScaling;
+   position[Y_AXIS] /= maslow.YcorrScaling;
 //
 }
 
@@ -325,8 +275,8 @@ inline static void triangularInverse (int32_t *target_steps, float *target)
 //    verifyValidTarget(&xTarget, &yTarget);
 
     // scale target (absolute position) by any correction factor
-    double xxx = (double)target[A_MOTOR] * (double)maslow_hal.settings.XcorrScaling;
-    double yyy = (double)target[B_MOTOR] * (double)maslow_hal.settings.YcorrScaling;
+    double xxx = (double)target[A_MOTOR] * (double)maslow.XcorrScaling;
+    double yyy = (double)target[B_MOTOR] * (double)maslow.YcorrScaling;
     double yyp = pow((double)machine.yCordOfMotor - yyy, 2.0);
 
     //Calculate motor axes length to the bit
@@ -507,7 +457,7 @@ static void maslow_limits_set_machine_positions (axes_signals_t cycle)
 }
 
 // TODO: format output in grbl fashion: [...]
-status_code_t maslow_tuning (sys_state_t state, char *line, char *lcline)
+status_code_t maslow_tuning (sys_state_t state, char *line)
 {
     status_code_t retval = Status_OK;
 
@@ -577,31 +527,31 @@ status_code_t maslow_tuning (sys_state_t state, char *line, char *lcline)
                 else switch(line[2]) {
 
                     case 'P':
-                        maslow_hal.settings.pid[selected_motor].Kp = parameter;
+                        maslow.pid[selected_motor].Kp = parameter;
                         hal.stream.write("Kp == ");
-                        hal.stream.write(ftoa(maslow_hal.settings.pid[selected_motor].Kp, 3));
+                        hal.stream.write(ftoa(maslow.pid[selected_motor].Kp, 3));
                         hal.stream.write(ASCII_EOL);
                         break;
 
                     case 'D':
-                        maslow_hal.settings.pid[selected_motor].Kd = parameter;
+                        maslow.pid[selected_motor].Kd = parameter;
                         hal.stream.write("Kd == ");
-                        hal.stream.write(ftoa(maslow_hal.settings.pid[selected_motor].Kd, 3));
+                        hal.stream.write(ftoa(maslow.pid[selected_motor].Kd, 3));
                         hal.stream.write(ASCII_EOL);
                         break;
 
                     case 'I':
-                        maslow_hal.settings.pid[selected_motor].Ki = parameter;
+                        maslow.pid[selected_motor].Ki = parameter;
                         hal.stream.write("Ki == ");
-                        hal.stream.write(ftoa(maslow_hal.settings.pid[selected_motor].Ki, 3));
+                        hal.stream.write(ftoa(maslow.pid[selected_motor].Ki, 3));
                         hal.stream.write(ASCII_EOL);
                         maslow_hal.pid_settings_changed(selected_motor);
                         break;
 
                     case 'M':
-                        maslow_hal.settings.pid[selected_motor].Imax = parameter;
+                        maslow.pid[selected_motor].Imax = parameter;
                         hal.stream.write("Imax == ");
-                        hal.stream.write(ftoa(maslow_hal.settings.pid[selected_motor].Imax, 3));
+                        hal.stream.write(ftoa(maslow.pid[selected_motor].Imax, 3));
                         hal.stream.write(ASCII_EOL);
                         maslow_hal.pid_settings_changed(selected_motor);
                         break;
@@ -661,13 +611,13 @@ status_code_t maslow_tuning (sys_state_t state, char *line, char *lcline)
                hal.stream.write("[AXISPID:");
                hal.stream.write(axis_letter[selected_motor]);
                hal.stream.write(": Kp = ");
-               hal.stream.write(ftoa(maslow_hal.settings.pid[selected_motor].Kp, 3));
+               hal.stream.write(ftoa(maslow.pid[selected_motor].Kp, 3));
                hal.stream.write(" Ki = ");
-               hal.stream.write(ftoa(maslow_hal.settings.pid[selected_motor].Ki, 3));
+               hal.stream.write(ftoa(maslow.pid[selected_motor].Ki, 3));
                hal.stream.write(" Kd = ");
-               hal.stream.write(ftoa(maslow_hal.settings.pid[selected_motor].Kd, 3));
+               hal.stream.write(ftoa(maslow.pid[selected_motor].Kd, 3));
                hal.stream.write(" Imax = ");
-               hal.stream.write(ftoa(maslow_hal.settings.pid[selected_motor].Imax, 3));
+               hal.stream.write(ftoa(maslow.pid[selected_motor].Imax, 3));
 
                hal.stream.write("]\r\n[PIDDATA:err=");
                hal.stream.write(ftoa(debug->Error, 0));
@@ -699,14 +649,10 @@ bool maslow_init (void)
 {
     float xy[2] = {0.0f, 0.0f};
 
-    if((hal.driver_settings.nvs_address = nvs_alloc(sizeof(maslow_settings_t)))) {
-        memcpy(&driver_settings, &hal.driver_settings, sizeof(driver_setting_ptrs_t));
-        hal.driver_settings.set = maslow_settings_set;
-        hal.driver_settings.report = maslow_settings_report;
-        hal.driver_settings.axis_report = maslow_axis_settings_report;
-        hal.driver_settings.load = maslow_settings_load;
-        hal.driver_settings.restore = maslow_settings_restore;
-        hal.driver_axis_settings = AxisSetting_MaslowMaxSetting - AXIS_SETTINGS_INCREMENT;
+    if((nvs_address = nvs_alloc(sizeof(maslow_settings_t)))) {
+
+        details.on_get_settings = grbl.on_get_settings;
+        grbl.on_get_settings = on_get_settings;
 
         recomputeGeometry();
         triangularInverse(sys.position, xy);
@@ -723,7 +669,7 @@ bool maslow_init (void)
         grbl.on_unknown_sys_command = maslow_tuning;
     }
 
-    return driver_settings.nvs_address != 0;
+    return nvs_address != 0;
 }
 
 #endif

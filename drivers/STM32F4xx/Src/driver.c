@@ -77,7 +77,6 @@ static bool pwmEnabled = false, IOInitDone = false;
 static axes_signals_t next_step_outbits;
 static spindle_pwm_t spindle_pwm;
 static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
-static status_code_t (*on_unknown_sys_command)(uint_fast16_t state, char *line, char *lcline);
 static debounce_t debounce;
 static probe_state_t probe = {
     .connected = On
@@ -699,20 +698,22 @@ static void spindlePulseOn (uint_fast16_t pulse_length)
 static spindle_data_t spindleGetData (spindle_data_request_t request)
 {
     bool stopped;
-    uint32_t pulse_length = spindle_encoder.timer.pulse_length / spindle_encoder.counter.tics_per_irq;
 
-    uint32_t rpm_timer_delta = RPM_TIMER->CNT - spindle_encoder.timer.last_pulse;
+    __disable_irq();
+    uint32_t pulse_length = spindle_encoder.timer.pulse_length / spindle_encoder.counter.tics_per_irq;
+    uint32_t rpm_timer_delta = (uint16_t)((uint16_t)RPM_TIMER->CNT - (uint16_t)spindle_encoder.timer.last_pulse);
+    __enable_irq();
 
     // If no (4) spindle pulses during last 250 ms assume RPM is 0
     if((stopped = ((pulse_length == 0) || (rpm_timer_delta > spindle_encoder.maximum_tt)))) {
         spindle_data.rpm = 0.0f;
-        rpm_timer_delta = ((uint16_t)RPM_COUNTER->CNT - (uint16_t)spindle_encoder.counter.last_count) * pulse_length;
+        rpm_timer_delta = (uint16_t)(((uint16_t)RPM_COUNTER->CNT - (uint16_t)spindle_encoder.counter.last_count)) * pulse_length;
     }
 
     switch(request) {
 
         case SpindleData_Counters:
-            spindle_data.pulse_count += (uint16_t)RPM_COUNTER->CNT - (uint16_t)spindle_encoder.counter.last_count;
+            spindle_data.pulse_count += (uint16_t)(((uint16_t)RPM_COUNTER->CNT - (uint16_t)spindle_encoder.counter.last_count));
             break;
 
         case SpindleData_RPM:
@@ -1130,17 +1131,6 @@ void settings_changed (settings_t *settings)
     }
 }
 
-static status_code_t jtag_enable (uint_fast16_t state, char *line, char *lcline)
-{
-    if(!strcmp(line, "$PGM")) {
-        //__HAL_AFIO_REMAP_SWJ_ENABLE();
-        on_unknown_sys_command = NULL;
-        return Status_OK;
-    }
-
-    return on_unknown_sys_command ? on_unknown_sys_command(state, line, lcline) : Status_Unhandled;
-}
-
 // Initializes MCU peripherals for Grbl use
 static bool driver_setup (settings_t *settings)
 {
@@ -1285,9 +1275,6 @@ static bool driver_setup (settings_t *settings)
 
 #endif
 
-    on_unknown_sys_command = grbl.on_unknown_sys_command;
-    grbl.on_unknown_sys_command = jtag_enable;
-
 #if PPI_ENABLE
 
     // Single-shot 1 us per tick
@@ -1354,7 +1341,7 @@ bool driver_init (void)
 #else
     hal.info = "STM32F401CC";
 #endif
-    hal.driver_version = "210111";
+    hal.driver_version = "210120";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1586,13 +1573,15 @@ void PPI_TIMER_IRQHandler (void)
 
 void RPM_COUNTER_IRQHandler (void)
 {
+    __disable_irq();
     uint32_t tval = RPM_TIMER->CNT;
     uint16_t cval = RPM_COUNTER->CNT;
+    __enable_irq();
 
     RPM_COUNTER->SR = ~TIM_SR_CC1IF;
-    RPM_COUNTER->CCR1 += spindle_encoder.counter.tics_per_irq;
+    RPM_COUNTER->CCR1 = (uint16_t)(RPM_COUNTER->CCR1 + spindle_encoder.counter.tics_per_irq);
 
-    spindle_data.pulse_count += cval - (uint16_t)spindle_encoder.counter.last_count;
+    spindle_data.pulse_count += (uint16_t)(cval - (uint16_t)spindle_encoder.counter.last_count);
 
     spindle_encoder.counter.last_count = cval;
     spindle_encoder.timer.pulse_length = tval - spindle_encoder.timer.last_pulse;

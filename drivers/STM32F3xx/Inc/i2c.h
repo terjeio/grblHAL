@@ -1,7 +1,7 @@
 /*
   i2c.h - I2C support for EEPROM, keypad and Trinamic plugins
 
-  Part of GrblHAL driver for STM32F4xx
+  Part of grblHAL driver for STM32F4xx
 
   Copyright (c) 2018-2020 Terje Io
 

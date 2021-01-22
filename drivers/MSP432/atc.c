@@ -4,7 +4,7 @@
   Driver code for my Mini Mill ATC, 8 tools arranged in a circle
   A motorized socket wrench is mounted in the center, used for opening/closing the spindle nut
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2018-2020 Terje Io
 

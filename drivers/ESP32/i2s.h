@@ -4,7 +4,7 @@
 
   "hack" defines for Michiyasu Odakis I2S stepper implementation for ESP32
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 

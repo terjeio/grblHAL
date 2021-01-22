@@ -3,7 +3,7 @@
 
   Startup entry point for MSP432 (Texas Instruments MSP432 LaunchPad)
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017 Terje Io
 

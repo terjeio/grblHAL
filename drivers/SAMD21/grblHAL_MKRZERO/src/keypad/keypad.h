@@ -1,7 +1,7 @@
 /*
   keypad.h - I2C keypad plugin
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017-2020 Terje Io
 

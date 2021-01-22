@@ -75,7 +75,7 @@ static bool pwmEnabled = false, IOInitDone = false;
 static axes_signals_t next_step_outbits;
 static spindle_pwm_t spindle_pwm;
 static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
-static status_code_t (*on_unknown_sys_command)(uint_fast16_t state, char *line, char *lcline);
+static on_unknown_sys_command_ptr on_unknown_sys_command;
 static debounce_t debounce;
 static probe_state_t probe = {
     .connected = On
@@ -679,10 +679,12 @@ void settings_changed (settings_t *settings)
         GPIO_Init.Pull = settings->control_disable_pullup.cycle_start ? GPIO_NOPULL : GPIO_PULLUP;
         HAL_GPIO_Init(CONTROL_PORT, &GPIO_Init);
 
+#ifdef CONTROL_SAFETY_DOOR_BIT
         GPIO_Init.Pin = CONTROL_SAFETY_DOOR_BIT;
         GPIO_Init.Mode = control_ire.safety_door_ajar ? GPIO_MODE_IT_RISING : GPIO_MODE_IT_FALLING;
         GPIO_Init.Pull = settings->control_disable_pullup.safety_door_ajar ? GPIO_NOPULL : GPIO_PULLUP;
         HAL_GPIO_Init(CONTROL_PORT, &GPIO_Init);
+#endif
 
         /***********************
          *  Limit pins config  *
@@ -788,7 +790,7 @@ void settings_changed (settings_t *settings)
     }
 }
 
-static status_code_t jtag_enable (uint_fast16_t state, char *line, char *lcline)
+static status_code_t jtag_enable (uint_fast16_t state, char *line)
 {
     if(!strcmp(line, "$PGM")) {
         __HAL_AFIO_REMAP_SWJ_ENABLE();
@@ -796,7 +798,7 @@ static status_code_t jtag_enable (uint_fast16_t state, char *line, char *lcline)
         return Status_OK;
     }
 
-    return on_unknown_sys_command ? on_unknown_sys_command(state, line, lcline) : Status_Unhandled;
+    return on_unknown_sys_command ? on_unknown_sys_command(state, line) : Status_Unhandled;
 }
 
 // Initializes MCU peripherals for Grbl use
@@ -939,7 +941,7 @@ bool driver_init (void)
     __HAL_AFIO_REMAP_SWJ_NOJTAG();
 
     hal.info = "STM32F103C8";
-    hal.driver_version = "210111";
+    hal.driver_version = "210117";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif

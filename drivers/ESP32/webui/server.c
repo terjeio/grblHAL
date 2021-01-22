@@ -3,7 +3,7 @@
 
   WebUI backend for https://github.com/luc-github/ESP3D-webui
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 
@@ -422,7 +422,7 @@ esp_err_t webui_sdcard_upload_handler (httpd_req_t *req)
     char *scratch = ((file_server_data_t *)req->user_ctx)->scratch;
     file_upload_t *upload = (file_upload_t *)req->sess_ctx;
 
-    *path == '\0';
+    *path = '\0';
 
     if (ok) do { // Process received data
 
@@ -929,7 +929,7 @@ esp_err_t webui_login_handler (httpd_req_t *req)
                         switch(strlookup(user, "user,admin", ',')) {
 
                             case 0:
-                                if(hal.driver_settings.set(Setting_UserPassword, NAN, password) != Status_OK) {
+                                if(settings_store_setting(Setting_UserPassword, password) != Status_OK) {
                                     status = 401;
                                     strcpy(msg, "Error: Cannot apply changes");
                                 }
@@ -938,7 +938,7 @@ esp_err_t webui_login_handler (httpd_req_t *req)
                             case 1:
                                 ESP_LOGI("newp", "admin");
 
-                                if(hal.driver_settings.set(Setting_AdminPassword, NAN, password) != Status_OK) {
+                                if(settings_store_setting(Setting_AdminPassword, password) != Status_OK) {
                                     ESP_LOGI("newp", "admin failed");
                                     status = 401;
                                     strcpy(msg, "Error: Cannot apply changes");

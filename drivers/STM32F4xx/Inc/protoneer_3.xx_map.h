@@ -1,7 +1,7 @@
 /*
   protoneer_3.xx_map.h - driver code for STM32F411 ARM processor on a Nucleo-F411RE board
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 

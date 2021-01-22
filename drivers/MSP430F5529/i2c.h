@@ -3,7 +3,7 @@
 
   Driver code for Texas Instruments MSP430F5529 processor
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 

@@ -1,7 +1,7 @@
 /*
   stream.h - some ASCII control character definitions and optional structures for stream buffers
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2019-2020 Terje Io
 

@@ -144,7 +144,7 @@ bool protocol_main_loop (void)
         }
 #endif
         // All systems go!
-        system_execute_startup(line); // Execute startup script.
+        system_execute_startup(); // Execute startup script.
     }
 
     // Ensure spindle and coolant is switched off on a cold start

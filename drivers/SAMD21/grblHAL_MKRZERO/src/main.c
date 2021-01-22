@@ -2,7 +2,7 @@
 
   main.c - startup for Atmel SAMD21 ARM processor (Arduino MKRZERO version)
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2018-2020 Terje Io
 

@@ -78,7 +78,10 @@ static uint8_t override_counter = 0; // Tracks when to add override data to stat
 static uint8_t wco_counter = 0;      // Tracks when to add work coordinate offset data to status reports.
 static const char vbar[2] = { '|', '\0' };
 
+static bool report_setting (const setting_detail_t *setting, uint_fast16_t offset, void *data);
+
 static const report_t report_fns = {
+    .setting = report_setting,
     .status_message = report_status_message,
     .feedback_message = report_feedback_message
 };
@@ -439,7 +442,7 @@ status_code_t report_help (char *args, char *lcargs)
             hal.stream.write("$HELP <arg> - help" ASCII_EOL);
             hal.stream.write("$RST=* - restore/reset all" ASCII_EOL);
             hal.stream.write("$RST=$ - restore default settings" ASCII_EOL);
-            if(hal.driver_settings.restore)
+            if(settings_info->on_get_settings)
                 hal.stream.write("$RST=& - restore driver and plugin default settings" ASCII_EOL);
 #ifdef N_TOOLS
             hal.stream.write("$RST=# - reset offsets and tool data" ASCII_EOL);
@@ -458,15 +461,15 @@ status_code_t report_help (char *args, char *lcargs)
 
             report_group_settings(settings_info->groups, settings_info->n_groups, lcargs);
 
-            if(grbl.on_report_settings) {
+            if(grbl.on_get_settings) {
 
-                on_report_settings_ptr on_report_settings = grbl.on_report_settings;
+                on_get_settings_ptr on_get_settings = grbl.on_get_settings;
 
-                while(on_report_settings) {
-                    settings_info = on_report_settings();
+                while(on_get_settings) {
+                    settings_info = on_get_settings();
                     if(settings_info->groups)
                         report_group_settings(settings_info->groups, settings_info->n_groups, lcargs);
-                    on_report_settings = settings_info->on_report_settings;
+                    on_get_settings = settings_info->on_get_settings;
                 }
             }
         }
@@ -478,112 +481,61 @@ status_code_t report_help (char *args, char *lcargs)
 
 // Grbl settings print out.
 
-void report_uint_setting (setting_id_t n, uint32_t val)
-{
-    hal.stream.write(appendbuf(3, "$", uitoa((uint32_t)n), "="));
-    hal.stream.write(appendbuf(2, uitoa(val), ASCII_EOL));
-}
-
-void report_float_setting (setting_id_t n, float val, uint8_t n_decimal)
-{
-    hal.stream.write(appendbuf(3, "$", uitoa((uint32_t)n), "="));
-    hal.stream.write(appendbuf(2, ftoa(val, n_decimal), ASCII_EOL));
-}
-
-void report_string_setting (setting_id_t n, char *val)
-{
-    hal.stream.write(appendbuf(3, "$", uitoa((uint32_t)n), "="));
-    hal.stream.write(appendbuf(2, val, ASCII_EOL));
-}
-
 static int cmp_settings (const void *a, const void *b)
 {
   return (*(setting_detail_t **)(a))->id - (*(setting_detail_t **)(b))->id;
 }
 
-inline static uint8_t get_decimal_places (const char *format)
+static bool report_setting (const setting_detail_t *setting, uint_fast16_t offset, void *data)
 {
-    char *dp = format == NULL ? NULL : strchr(format, '.');
+    appendbuf(3, "$", uitoa(setting->id + offset), "=");
 
-    return dp ? strchr(format, '\0') - dp - 1 : 1;
-}
+    char *value = setting_get_value(setting, offset);
 
-static void report_setting (const setting_detail_t *setting, uint_fast16_t offset)
-{
-    setting_id_t id = (setting_id_t)(setting->id + offset);
-
-    switch(setting->type) {
-
-        case Setting_NonCore:
-        case Setting_IsExtended:
-        case Setting_IsLegacy:
-        case Setting_IsExpanded:
-            switch(setting->datatype) {
-
-                case Format_Decimal:
-                    report_float_setting(id, *((float *)(setting->value)), get_decimal_places(setting->format));
-                    break;
-
-                case Format_Int8:
-                case Format_Bool:
-                case Format_Bitfield:
-                case Format_XBitfield:
-                case Format_AxisMask:
-                case Format_RadioButtons:
-                    report_uint_setting(id, *((uint8_t *)(setting->value)));
-                    break;
-
-                case Format_Int16:
-                    report_uint_setting(id, *((uint16_t *)(setting->value)));
-                    break;
-
-                case Format_Integer:
-                    report_uint_setting(id, *((uint32_t *)(setting->value)));
-                    break;
-
-                case Format_String:
-                case Format_Password:
-                case Format_IPv4:
-                    report_string_setting(id, ((char *)(setting->value)));
-                    break;
-
-                default:
-                    break;
-            }
-            break;
-
-        case Setting_NonCoreFn:
-        case Setting_IsExtendedFn:
-        case Setting_IsLegacyFn:
-        case Setting_IsExpandedFn:
-            switch(setting->datatype) {
-
-                case Format_Decimal:
-                    report_float_setting(id, ((setting_get_float_ptr)(setting->get_value))(id), get_decimal_places(setting->format));
-                    break;
-
-                case Format_String:
-                case Format_Password:
-                case Format_IPv4:
-                    report_string_setting(id, ((setting_get_string_ptr)(setting->get_value))(id));
-                    break;
-
-                default:
-                    report_uint_setting(id, ((setting_get_int_ptr)(setting->get_value))(id));
-                    break;
-            }
-            break;
+    if(value) {
+        hal.stream.write(buf);
+        hal.stream.write(value);
+        hal.stream.write(ASCII_EOL);
     }
+
+    return true;
 }
 
-void report_grbl_settings (bool all)
+status_code_t report_grbl_setting (setting_id_t id, void *data)
+{
+    status_code_t status = Status_OK;
+
+    const setting_detail_t *setting = setting_get_details(id, NULL);
+
+    if(setting)
+        grbl.report.setting(setting, id - setting->id, data);
+    else
+        status = Status_SettingDisabled;
+
+    return status;
+}
+
+static bool print_setting (const setting_detail_t *setting, uint_fast16_t offset, void *data)
+{
+    if(setting->value != NULL)
+        grbl.report.setting(setting, offset, data);
+    else {
+        hal.stream.write("$");
+        hal.stream.write(uitoa(setting->id));
+        hal.stream.write("=N/A" ASCII_EOL);
+    }
+
+    return true;
+}
+
+void report_grbl_settings (bool all, void *data)
 {
     setting_details_t *details = settings_get_details();
     uint16_t n_settings = details->n_settings;
     const setting_detail_t *setting;
 
-    while(details->on_report_settings) {
-        details = details->on_report_settings();
+    while(details->on_get_settings) {
+        details = details->on_get_settings();
         n_settings += details->n_settings;
     }
 
@@ -600,17 +552,17 @@ void report_grbl_settings (bool all)
         for(idx = 0; idx < details->n_settings; idx++) {
             setting = &details->settings[idx];
             if((all || setting->type == Setting_IsLegacy || setting->type == Setting_IsLegacyFn) &&
-                  settings_is_setting_available(setting->id, setting->group)) {
+                  (setting->is_available == NULL ||setting->is_available(setting))) {
                 *psetting++ = (setting_detail_t *)setting;
                 n_settings++;
             }
         }
 
-        if(all) while(details->on_report_settings) {
-            details = details->on_report_settings();
+        if(all) while(details->on_get_settings) {
+            details = details->on_get_settings();
             for(idx = 0; idx < details->n_settings; idx++) {
                 setting = &details->settings[idx];
-                if(settings_is_setting_available(setting->id, setting->group)) {
+                if(setting->is_available == NULL ||setting->is_available(setting)) {
                     *psetting++ = (setting_detail_t *)setting;
                     n_settings++;
                 }
@@ -619,58 +571,8 @@ void report_grbl_settings (bool all)
 
         qsort(all_settings, n_settings, sizeof(setting_detail_t *), cmp_settings);
 
-        for(idx = 0; idx < n_settings; idx++) {
-
-            setting = all_settings[idx];
-
-            switch(setting->id) {
-
-                case Setting_AxisStepsPerMMBase:
-                case Setting_AxisMaxRateBase:
-                case Setting_AxisAccelerationBase:
-                case Setting_AxisMaxTravelBase:
-                case Setting_AxisStepperCurrentBase:
-                case Setting_AxisMicroStepsBase:
-                case Setting_AxisBacklashBase:
-                case Setting_AxisAutoSquareOffsetBase:
-//                case Setting_DriverAxisStepsPerMMBase:
-                    {
-                        uint_fast8_t axis_idx = 0;
-                        for(axis_idx = 0; axis_idx < N_AXIS; axis_idx++) {
-                            if(setting->value != NULL)
-                                report_setting(setting, axis_idx);
-                            else if(hal.driver_settings.axis_report)
-                                hal.driver_settings.axis_report((axis_setting_id_t)((setting->id - Setting_AxisSettingsBase) / AXIS_SETTINGS_INCREMENT), axis_idx);
-                        }
-                    }
-                    break;
-
-                case Setting_EncoderModeBase:
-                case Setting_EncoderCPRBase:
-                case Setting_EncoderCPDBase:
-                case Setting_EncoderDblClickWindowBase:
-                    {
-                        uint_fast8_t encoder_idx = 0, n_encoders = hal.encoder.get_n_encoders();
-                        for(encoder_idx = 0; encoder_idx < n_encoders; encoder_idx++) {
-                            if(hal.driver_settings.report)
-                                hal.driver_settings.report(setting->id + encoder_idx * ENCODER_SETTINGS_INCREMENT);
-                        }
-                    }
-                    break;
-
-                default:
-                    if(setting->value != NULL)
-                        report_setting(setting, 0);
-                    else if(hal.driver_settings.report)
-                        hal.driver_settings.report(setting->id);
-                    else {
-                        hal.stream.write("$");
-                        hal.stream.write(uitoa(setting->id));
-                        hal.stream.write("=N/A" ASCII_EOL);
-                    }
-                    break;
-            }
-        }
+        for(idx = 0; idx < n_settings; idx++)
+            settings_iterator(all_settings[idx], print_setting, data);
 
         free(all_settings);
     }
@@ -1321,7 +1223,7 @@ void report_realtime_status (void)
                 if (ctrl_pin_state.e_stop)
                     *append++ = 'E';
                 if (ctrl_pin_state.block_delete && sys.flags.block_delete_enabled)
-                    *append++ = 'B';
+                    *append++ = 'L';
                 if (hal.driver_cap.program_stop ? ctrl_pin_state.stop_disable : sys.flags.optional_stop_disable)
                     *append++ = 'T';
                 if (ctrl_pin_state.motor_warning)
@@ -1506,22 +1408,22 @@ static void report_bitfield (const char *format, bool bitmap)
     }
 }
 
-void report_settings_detail (bool human_readable, setting_id_t id, const setting_detail_t *setting_detail, uint_fast8_t group_offset)
+static void report_settings_detail (bool human_readable, const setting_detail_t *setting, uint_fast8_t offset)
 {
     if(human_readable)
         hal.stream.write("$");
     else
         hal.stream.write("[SETTING:");
 
-    hal.stream.write(uitoa(id));
+    hal.stream.write(uitoa(setting->id + offset));
 
     if(human_readable) {
         hal.stream.write(": ");
-        if(setting_detail->group == Group_Axis0)
-            hal.stream.write(axis_letter[group_offset]);
-        hal.stream.write(setting_detail->name[0] == '?' ? &setting_detail->name[1] : setting_detail->name); // temporary hack for ? prefix...
+        if(setting->group == Group_Axis0)
+            hal.stream.write(axis_letter[offset]);
+        hal.stream.write(setting->name[0] == '?' ? &setting->name[1] : setting->name); // temporary hack for ? prefix...
 
-        switch(setting_datatype_to_external(setting_detail->datatype)) {
+        switch(setting_datatype_to_external(setting->datatype)) {
 
             case Format_AxisMask:
                 hal.stream.write(" as axismask");
@@ -1533,17 +1435,17 @@ void report_settings_detail (bool human_readable, setting_id_t id, const setting
 
             case Format_Bitfield:
                 hal.stream.write(" as bitfield:");
-                report_bitfield(setting_detail->format, true);
+                report_bitfield(setting->format, true);
                 break;
 
             case Format_XBitfield:
                 hal.stream.write(" as bitfield where setting bit 0 enables the rest:");
-                report_bitfield(setting_detail->format, true);
+                report_bitfield(setting->format, true);
                 break;
 
             case Format_RadioButtons:
                 hal.stream.write(":");
-                report_bitfield(setting_detail->format, false);
+                report_bitfield(setting->format, false);
                 break;
 
             case Format_IPv4:
@@ -1551,49 +1453,49 @@ void report_settings_detail (bool human_readable, setting_id_t id, const setting
                 break;
 
             default:
-                if(setting_detail->unit) {
+                if(setting->unit) {
                     hal.stream.write(" in ");
-                    hal.stream.write(setting_detail->unit);
+                    hal.stream.write(setting->unit);
                 }
                 break;
         }
 
-        if(setting_detail->min_value && setting_detail->max_value) {
+        if(setting->min_value && setting->max_value) {
             hal.stream.write(", range: ");
-            hal.stream.write(setting_detail->min_value);
+            hal.stream.write(setting->min_value);
             hal.stream.write(" - ");
-            hal.stream.write(setting_detail->max_value);
+            hal.stream.write(setting->max_value);
         } else {
-            if(setting_detail->min_value) {
+            if(setting->min_value) {
                 hal.stream.write(", min: ");
-                hal.stream.write(setting_detail->min_value);
+                hal.stream.write(setting->min_value);
             }
-            if(setting_detail->max_value) {
+            if(setting->max_value) {
                 hal.stream.write(", max: ");
-                hal.stream.write(setting_detail->max_value);
+                hal.stream.write(setting->max_value);
             }
         }
     } else {
         hal.stream.write(vbar);
-        hal.stream.write(uitoa(setting_detail->group + group_offset));
+        hal.stream.write(uitoa(setting->group + (setting->group == Group_Axis0 ? offset : 0)));
         hal.stream.write(vbar);
-        if(setting_detail->group == Group_Axis0)
-            hal.stream.write(axis_letter[group_offset]);
-        hal.stream.write(setting_detail->name[0] == '?' ? &setting_detail->name[1] : setting_detail->name); // temporary hack for ? prefix...
+        if(setting->group == Group_Axis0)
+            hal.stream.write(axis_letter[offset]);
+        hal.stream.write(setting->name[0] == '?' ? &setting->name[1] : setting->name); // temporary hack for ? prefix...
         hal.stream.write(vbar);
-        if(setting_detail->unit)
-            hal.stream.write(setting_detail->unit);
+        if(setting->unit)
+            hal.stream.write(setting->unit);
         hal.stream.write(vbar);
-        hal.stream.write(uitoa(setting_datatype_to_external(setting_detail->datatype)));
+        hal.stream.write(uitoa(setting_datatype_to_external(setting->datatype)));
         hal.stream.write(vbar);
-        if(setting_detail->format)
-            hal.stream.write(setting_detail->format);
+        if(setting->format)
+            hal.stream.write(setting->format);
         hal.stream.write(vbar);
-        if(setting_detail->min_value)
-            hal.stream.write(setting_detail->min_value);
+        if(setting->min_value)
+            hal.stream.write(setting->min_value);
         hal.stream.write(vbar);
-        if(setting_detail->max_value)
-            hal.stream.write(setting_detail->max_value);
+        if(setting->max_value)
+            hal.stream.write(setting->max_value);
     }
 
     if(!human_readable)
@@ -1602,19 +1504,18 @@ void report_settings_detail (bool human_readable, setting_id_t id, const setting
     hal.stream.write(ASCII_EOL);
 }
 
-setting_group_t get_parent_group (setting_group_t group)
+typedef struct {
+    bool human_readable;
+    setting_group_t group;
+    uint_fast16_t offset;
+} report_args_t;
+
+static bool print_sorted (const setting_detail_t *setting, uint_fast16_t offset, void *args)
 {
-    uint_fast16_t idx;
-    setting_details_t *settings = settings_get_details();
+    if(!(((report_args_t *)args)->group == setting->group && ((report_args_t *)args)->offset != offset))
+        report_settings_detail (((report_args_t *)args)->human_readable, setting, offset);
 
-    for(idx = 0; idx < settings->n_groups; idx++) {
-        if(settings->groups[idx].id == group) {
-            group = settings->groups[idx].parent;
-            break;
-        }
-    }
-
-    return group;
+    return true;
 }
 
 static status_code_t sort_settings_details (bool human_readable, setting_group_t group)
@@ -1624,9 +1525,14 @@ static status_code_t sort_settings_details (bool human_readable, setting_group_t
     setting_details_t *details = settings_get_details();
     uint16_t n_settings = details->n_settings;
     const setting_detail_t *setting;
+    report_args_t args;
 
-    while(details->on_report_settings) {
-        details = details->on_report_settings();
+    args.group = settings_normalize_group(group);
+    args.offset = group - args.group;
+    args.human_readable = human_readable;
+
+    while(details->on_get_settings) {
+        details = details->on_get_settings();
         n_settings += details->n_settings;
     }
 
@@ -1643,17 +1549,17 @@ static status_code_t sort_settings_details (bool human_readable, setting_group_t
 
         for(idx = 0; idx < details->n_settings; idx++) {
             setting = &details->settings[idx];
-            if((group == Group_All || setting->group == group) && settings_is_setting_available(setting->id, setting->group)) {
+            if((group == Group_All || setting->group == args.group) && (setting->is_available == NULL ||setting->is_available(setting))) {
                 *psetting++ = (setting_detail_t *)setting;
                 n_settings++;
             }
         }
 
-        while(details->on_report_settings) {
-            details = details->on_report_settings();
+        while(details->on_get_settings) {
+            details = details->on_get_settings();
             for(idx = 0; idx < details->n_settings; idx++) {
                 setting = &details->settings[idx];
-                if((group == Group_All || setting->group == group) && settings_is_setting_available(setting->id, setting->group)) {
+                if((group == Group_All || setting->group == args.group) && (setting->is_available == NULL ||setting->is_available(setting))) {
                     *psetting++ = (setting_detail_t *)setting;
                     n_settings++;
                 }
@@ -1663,44 +1569,8 @@ static status_code_t sort_settings_details (bool human_readable, setting_group_t
         qsort(all_settings, n_settings, sizeof(setting_detail_t *), cmp_settings);
 
         for(idx = 0; idx < n_settings; idx++) {
-
-            setting = all_settings[idx];
-
-            switch(setting->id) {
-
-                case Setting_AxisStepsPerMMBase:
-                case Setting_AxisMaxRateBase:
-                case Setting_AxisAccelerationBase:
-                case Setting_AxisMaxTravelBase:
-                case Setting_AxisStepperCurrentBase:
-                case Setting_AxisMicroStepsBase:
-                case Setting_AxisBacklashBase:
-                case Setting_AxisAutoSquareOffsetBase:
-//                case Setting_DriverAxisStepsPerMMBase:
-                    {
-                        uint_fast8_t axis_idx = 0;
-                        reported = true;
-                        for(axis_idx = 0; axis_idx < N_AXIS; axis_idx++)
-                            report_settings_detail(human_readable, (setting_id_t)(setting->id + axis_idx), setting, axis_idx);
-                    }
-                    break;
-
-                case Setting_EncoderModeBase:
-                case Setting_EncoderCPRBase:
-                case Setting_EncoderCPDBase:
-                case Setting_EncoderDblClickWindowBase:
-                    {
-                        uint_fast8_t encoder_idx = 0, n_encoders = hal.encoder.get_n_encoders();
-                        for(encoder_idx = 0; encoder_idx < n_encoders; encoder_idx++)
-                            report_settings_detail(human_readable, (setting_id_t)(setting->id + encoder_idx * ENCODER_SETTINGS_INCREMENT), setting, encoder_idx);
-                    }
-                    break;
-
-                default:
-                    reported = true;
-                    report_settings_detail(human_readable, setting->id, setting, 0);
-                    break;
-            }
+            if(settings_iterator(all_settings[idx], print_sorted, &args))
+                reported = true;
         }
 
         free(all_settings);
@@ -1709,104 +1579,66 @@ static status_code_t sort_settings_details (bool human_readable, setting_group_t
     return all_settings == NULL ? Status_Unhandled : (reported ? Status_OK : Status_SettingDisabled);
 }
 
-static status_code_t print_settings_details (bool human_readable, setting_id_t id, setting_group_t group, uint_fast16_t axis_rpt)
+static bool print_unsorted (const setting_detail_t *setting, uint_fast16_t offset, void *args)
+{
+    if(!(((report_args_t *)args)->group == setting->group && ((report_args_t *)args)->offset != offset) &&
+       (setting->is_available == NULL ||setting->is_available(setting)))
+        report_settings_detail(((report_args_t *)args)->human_readable, setting, offset);
+
+    return true;
+}
+
+static status_code_t print_settings_details (bool human_readable, setting_group_t group, uint_fast16_t axis_rpt)
 {
     status_code_t status;
 
-    if(id == Setting_SettingsAll && (status = sort_settings_details(human_readable, group)) != Status_Unhandled)
+    if((status = sort_settings_details(human_readable, group)) != Status_Unhandled)
         return status;
 
-    bool reported = id == Setting_SettingsAll && group == Group_All;
+    bool reported = group == Group_All;
     uint_fast16_t idx;
     const setting_detail_t *setting;
     setting_details_t *settings = settings_get_details();
+    report_args_t args;
 
-    if(group == Group_All && id >= Setting_AxisSettingsBase && id < Setting_AxisSettingsBase + (AxisSetting_NumSettings + 1) * AXIS_SETTINGS_INCREMENT) {
-        axis_rpt = id % AXIS_SETTINGS_INCREMENT;
-        setting -= axis_rpt;
-    }
+    args.group = settings_normalize_group(group);
+    args.offset = group - args.group;
+    args.human_readable = human_readable;
 
     do {
-
         for(idx = 0; idx < settings->n_settings; idx++) {
 
             setting = &settings->settings[idx];
 
-            if(id != Setting_SettingsAll && setting->id != id)
-                continue;
-
-            if(group != Group_All && setting->group != group)
-                continue;
-
-            switch(settings->settings[idx].id) {
-
-                case Setting_AxisStepsPerMMBase:
-                case Setting_AxisMaxRateBase:
-                case Setting_AxisAccelerationBase:
-                case Setting_AxisMaxTravelBase:
-                case Setting_AxisStepperCurrentBase:
-                case Setting_AxisMicroStepsBase:
-                case Setting_AxisBacklashBase:
-                case Setting_AxisAutoSquareOffsetBase:
-                    if(settings_is_setting_available(setting->id, setting->group)) {
-                        uint_fast8_t axis_idx = 0;
-                        for(axis_idx = 0; axis_idx < N_AXIS; axis_idx++) {
-                            if(id == Setting_SettingsAll || axis_idx == axis_rpt) {
-                                reported = true;
-                                report_settings_detail(human_readable, (setting_id_t)(setting->id + axis_idx), setting, axis_idx);
-                            }
-                        }
-                    }
-                    break;
-
-                case Setting_EncoderModeBase:
-                case Setting_EncoderCPRBase:
-                case Setting_EncoderCPDBase:
-                case Setting_EncoderDblClickWindowBase:
-                    if(settings_is_setting_available(settings->settings[idx].id, settings->settings[idx].group)) {
-                        uint_fast8_t encoder_idx = 0, n_encoders = hal.encoder.get_n_encoders();
-                        for(encoder_idx = 0; encoder_idx < n_encoders; encoder_idx++) {
-                            reported = true;
-                            report_settings_detail(human_readable, (setting_id_t)(setting->id + encoder_idx * ENCODER_SETTINGS_INCREMENT), setting, 0);
-                        }
-                    }
-                    break;
-
-                default:
-                    if(settings_is_setting_available(setting->id, setting->group)) {
-                        reported = true;
-                        report_settings_detail(human_readable, setting->id, setting, 0);
-                    }
-                    break;
+            if(group == Group_All || setting->group == args.group) {
+                if(settings_iterator(setting, print_unsorted, &args))
+                    reported = true;
             }
         }
-
-        settings = settings->on_report_settings ? settings->on_report_settings() : NULL;
-
+        settings = settings->on_get_settings ? settings->on_get_settings() : NULL;
     } while(settings);
 
     return reported ? Status_OK : Status_SettingDisabled;
 }
 
-status_code_t report_settings_details (bool human_readable, setting_id_t setting, setting_group_t group)
+status_code_t report_settings_details (bool human_readable, setting_id_t id, setting_group_t group)
 {
     uint_fast16_t axis_rpt = 0;
 
-    if(group >= Group_XAxis && group < Group_XAxis + N_AXIS) {
+    if(id != Setting_SettingsAll) {
+        status_code_t status = Status_OK;
 
-        axis_rpt = group - Group_XAxis;
-        group = get_parent_group(group);
-        setting = Setting_AxisSettingsBase;
+        const setting_detail_t *setting = setting_get_details(id, NULL);
 
-        do {
-            print_settings_details(human_readable, setting, group, axis_rpt);
-            setting += AXIS_SETTINGS_INCREMENT;
-        } while(setting < Setting_AxisSettingsBase + (AxisSetting_NumSettings + 1) * AXIS_SETTINGS_INCREMENT);
+        if(setting)
+            report_settings_detail(human_readable, setting, id - setting->id);
+        else
+            status = Status_SettingDisabled;
 
-        return Status_OK;
+        return status;
     }
 
-    return print_settings_details(human_readable, setting, group, axis_rpt);
+    return print_settings_details(human_readable, group, axis_rpt);
 }
 
 status_code_t report_alarm_details (void)
@@ -1883,8 +1715,8 @@ static status_code_t sort_setting_group_details (bool by_id, char *prefix)
     setting_details_t *details = settings_get_details();
     uint8_t n_groups = details->n_groups;
 
-    while(details->on_report_settings) {
-        details = details->on_report_settings();
+    while(details->on_get_settings) {
+        details = details->on_get_settings();
         n_groups += details->n_groups;
     }
 
@@ -1900,7 +1732,7 @@ static status_code_t sort_setting_group_details (bool by_id, char *prefix)
         do {
             for(idx = 0; idx < details->n_groups; idx++)
                 *group++ = (setting_group_detail_t *)&details->groups[idx];
-            details = details->on_report_settings ? details->on_report_settings() : NULL;
+            details = details->on_get_settings ? details->on_get_settings() : NULL;
         } while(details);
 
         qsort(all_groups, n_groups, sizeof(setting_group_detail_t *), by_id ? cmp_setting_group_id : cmp_setting_group_name);
@@ -1925,7 +1757,7 @@ status_code_t report_setting_group_details (bool by_id, char *prefix)
     do {
         for(idx = 0; idx < details->n_groups; idx++)
             print_setting_group(&details->groups[idx], prefix);
-        details = details->on_report_settings ? details->on_report_settings() : NULL;
+        details = details->on_get_settings ? details->on_get_settings() : NULL;
     } while(details);
 
     return Status_OK;

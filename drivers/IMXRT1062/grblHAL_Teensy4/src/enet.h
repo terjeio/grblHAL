@@ -1,7 +1,7 @@
 /*
   enet.h - lwIP driver glue code for IMXRT1062 processor (on Teensy 4.1 board)
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 

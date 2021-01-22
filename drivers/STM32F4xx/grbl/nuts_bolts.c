@@ -1,9 +1,9 @@
 /*
   nuts_bolts.c - Shared functions
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2017-2020 Terje Io
+  Copyright (c) 2017-2021 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -270,6 +270,23 @@ uint8_t calc_checksum (uint8_t *data, uint32_t size) {
 
     return checksum;
 }
+
+// Remove spaces from and convert string to uppercase (in situ)
+char *strcaps (char *s)
+{
+    char c, *s1 = s, *s2 = s;
+
+    do {
+        c = *s1++;
+        if(c != ' ')
+            *s2++ = CAPS(c);
+    } while(c);
+
+    *s2 = '\0';
+
+    return s;
+}
+
 
 void dummy_handler (void)
 {

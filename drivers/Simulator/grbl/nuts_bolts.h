@@ -1,9 +1,9 @@
 /*
   nuts_bolts.h - Header file for shared definitions, variables, and functions
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2017-2019 Terje Io
+  Copyright (c) 2017-2021 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -158,6 +158,8 @@ float convert_delta_vector_to_unit_vector(float *vector);
 
 // calculate checksum byte for data
 uint8_t calc_checksum (uint8_t *data, uint32_t size);
+
+char *strcaps (char *s);
 
 void dummy_handler (void);
 

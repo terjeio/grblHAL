@@ -3,7 +3,7 @@
 
   Startup entry point for ESP32
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2018-2020 Terje Io
 

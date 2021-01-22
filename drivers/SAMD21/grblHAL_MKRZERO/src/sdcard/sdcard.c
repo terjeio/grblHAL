@@ -115,7 +115,6 @@ static file_t file = {
 static bool frewind = false;
 static io_stream_t active_stream;
 static driver_reset_ptr driver_reset;
-static on_unknown_sys_command_ptr on_unknown_sys_command;
 static on_report_command_help_ptr on_report_command_help;
 static on_realtime_report_ptr on_realtime_report;
 static on_state_change_ptr state_change_requested;
@@ -331,11 +330,11 @@ static bool sdcard_mount (void)
 #endif
 }
 
-static status_code_t sdcard_ls (char *buf)
+static status_code_t sdcard_ls (void)
 {
-    char path[MAX_PATHLEN] = ""; // NB! also used as work area when recursing directories
+    char path[MAX_PATHLEN] = "", name[80]; // NB! also used as work area when recursing directories
 
-    return scan_dir(path, 10, buf) == FR_OK ? Status_OK : Status_SDFailedOpenDir;
+    return scan_dir(path, 10, name) == FR_OK ? Status_OK : Status_SDFailedOpenDir;
 }
 
 static void sdcard_end_job (void)
@@ -491,80 +490,80 @@ static bool sdcard_suspend (bool suspend)
 }
 #endif
 
-static status_code_t commandExecute (sys_state_t state, char *line, char *lcline)
+static status_code_t sd_cmd_file (sys_state_t state, char *args)
 {
     status_code_t retval = Status_Unhandled;
 
-    if(line[1] == 'F') switch(line[2]) {
-
-        case '\0':
-            frewind = false;
-            retval = sdcard_ls(line); // (re)use line buffer for reporting filenames
-            break;
-
-        case 'M':
-            frewind = false;
-            retval = sdcard_mount() ? Status_OK : Status_SDMountError;
-            break;
-
-        case 'R':
-            frewind = true;
-            retval = Status_OK;
-            break;
-
-        case '<':
-            if (!(state == STATE_IDLE || state == STATE_CHECK_MODE))
-                retval = Status_SystemGClock;
-            else {
-                if(file_open(&lcline[3])) {
-                    int16_t c;
-                    char buf[2] = {0};
-                    while((c = file_read()) != -1) {
-                        buf[0] = (char)c;
-                        hal.stream.write(buf);
-                    }
-                    file_close();
-                    retval = Status_OK;
-                } else
-                    retval = Status_SDReadError;
-            }
-            break;
-
-        case '=':
-            if (!(state == STATE_IDLE || state == STATE_CHECK_MODE))
-                retval = Status_SystemGClock;
-            else {
-                if(file_open(&lcline[3])) {
-                    gc_state.last_error = Status_OK;                            // Start with no errors
-                    grbl.report.status_message(Status_OK);                      // and confirm command to originator
-                    memcpy(&active_stream, &hal.stream, sizeof(io_stream_t));   // Save current stream pointers
-                    hal.stream.type = StreamType_SDCard;                        // then redirect to read from SD card instead
-                    hal.stream.read = sdcard_read;                              // ...
-                    hal.stream.enqueue_realtime_command = drop_input_stream;    // Drop input from current stream except realtime commands
+    if(args) {
+        if (!(state == STATE_IDLE || state == STATE_CHECK_MODE))
+            retval = Status_SystemGClock;
+        else {
+            if(file_open(args)) {
+                gc_state.last_error = Status_OK;                            // Start with no errors
+                grbl.report.status_message(Status_OK);                      // and confirm command to originator
+                memcpy(&active_stream, &hal.stream, sizeof(io_stream_t));   // Save current stream pointers
+                hal.stream.type = StreamType_SDCard;                        // then redirect to read from SD card instead
+                hal.stream.read = sdcard_read;                              // ...
+                hal.stream.enqueue_realtime_command = drop_input_stream;    // Drop input from current stream except realtime commands
 #if M6_ENABLE
-                    hal.stream.suspend_read = sdcard_suspend;                   // ...
+                hal.stream.suspend_read = sdcard_suspend;                   // ...
 #else
-                    hal.stream.suspend_read = NULL;                             // ...
+                hal.stream.suspend_read = NULL;                             // ...
 #endif
-                    on_realtime_report = grbl.on_realtime_report;
-                    grbl.on_realtime_report = sdcard_report;                     // Add percent complete to real time report
+                on_realtime_report = grbl.on_realtime_report;
+                grbl.on_realtime_report = sdcard_report;                     // Add percent complete to real time report
 
-                    on_program_completed = grbl.on_program_completed;
-                    grbl.on_program_completed = sdcard_on_program_completed;
+                on_program_completed = grbl.on_program_completed;
+                grbl.on_program_completed = sdcard_on_program_completed;
 
-                    grbl.report.status_message = trap_status_report;             // Redirect status message reports here
-                    retval = Status_OK;
-                } else
-                    retval = Status_SDReadError;
-            }
-            break;
-
-        default:
-            retval = Status_InvalidStatement;
-            break;
+                grbl.report.status_message = trap_status_report;             // Redirect status message reports here
+                retval = Status_OK;
+            } else
+                retval = Status_SDReadError;
+        }
+    } else {
+        frewind = false;
+        retval = sdcard_ls(); // (re)use line buffer for reporting filenames
     }
 
-    return retval == Status_Unhandled && on_unknown_sys_command ? on_unknown_sys_command(state, line, lcline) : retval;
+    return retval;
+}
+
+static status_code_t sd_cmd_mount (sys_state_t state, char *args)
+{
+    frewind = false;
+
+    return sdcard_mount() ? Status_OK : Status_SDMountError;
+}
+
+static status_code_t sd_cmd_rewind (sys_state_t state, char *args)
+{
+    frewind = true;
+
+    return Status_OK;
+}
+
+static status_code_t sd_cmd_to_output (sys_state_t state, char *args)
+{
+    status_code_t retval = Status_Unhandled;
+
+    if (!(state == STATE_IDLE || state == STATE_CHECK_MODE))
+        retval = Status_SystemGClock;
+    else if(args) {
+        if(file_open(args)) {
+            int16_t c;
+            char buf[2] = {0};
+            while((c = file_read()) != -1) {
+                buf[0] = (char)c;
+                hal.stream.write(buf);
+            }
+            file_close();
+            retval = Status_OK;
+        } else
+            retval = Status_SDReadError;
+    }
+
+    return retval;
 }
 
 static void sdcard_reset (void)
@@ -603,13 +602,30 @@ static void onReportOptions (bool newopt)
         hal.stream.write("[PLUGIN:SDCARD v1.00]" ASCII_EOL);
 }
 
+const sys_command_t sdcard_command_list[] = {
+    {"F", false, sd_cmd_file},
+    {"FM", true, sd_cmd_mount},
+    {"FR", true, sd_cmd_rewind},
+    {"F<", false, sd_cmd_to_output},
+};
+
+static sys_commands_t sdcard_commands = {
+    .n_commands = sizeof(sdcard_command_list) / sizeof(sys_command_t),
+    .commands = sdcard_command_list
+};
+
+sys_commands_t *sdcard_get_commands()
+{
+    return &sdcard_commands;
+}
+
 void sdcard_init (void)
 {
     driver_reset = hal.driver_reset;
     hal.driver_reset = sdcard_reset;
 
-    on_unknown_sys_command = grbl.on_unknown_sys_command;
-    grbl.on_unknown_sys_command = commandExecute;
+    sdcard_commands.on_get_commands = grbl.on_get_commands;
+    grbl.on_get_commands = sdcard_get_commands;
 
     on_report_command_help = grbl.on_report_command_help;
     grbl.on_report_command_help = onReportCommandHelp;

@@ -2,7 +2,7 @@
 
   driver.h - configuration file for Texas Instruments MSP432 ARM processor
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017-2020 Terje Io
 

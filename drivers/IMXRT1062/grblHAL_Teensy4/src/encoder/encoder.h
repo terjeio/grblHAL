@@ -1,7 +1,7 @@
 /*
   encoder.h - quadrature encoder plugin
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 

@@ -1,7 +1,7 @@
 /*
   nvs.h - non-volative storage data structures
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017-2020 Terje Io
   Copyright (c) 2009-2011 Simen Svale Skogsrud

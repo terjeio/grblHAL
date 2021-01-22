@@ -33,6 +33,46 @@
 #include "kinematics.h"
 #endif
 
+static status_code_t jog (sys_state_t state, char *args);
+static status_code_t enumerate_alarms (sys_state_t state, char *args);
+static status_code_t enumerate_errors (sys_state_t state, char *args);
+static status_code_t enumerate_groups (sys_state_t state, char *args);
+static status_code_t enumerate_settings (sys_state_t state, char *args);
+static status_code_t enumerate_all (sys_state_t state, char *args);
+static status_code_t output_settings (sys_state_t state, char *args);
+static status_code_t output_all_settings (sys_state_t state, char *args);
+static status_code_t output_parser_state (sys_state_t state, char *args);
+static status_code_t toggle_block_delete (sys_state_t state, char *args);
+static status_code_t check_mode (sys_state_t state, char *args);
+static status_code_t disable_lock (sys_state_t state, char *args);
+static status_code_t output_help (sys_state_t state, char *args);
+static status_code_t home (sys_state_t state, char *args);
+static status_code_t home_x (sys_state_t state, char *args);
+static status_code_t home_y (sys_state_t state, char *args);
+static status_code_t home_z (sys_state_t state, char *args);
+#ifdef A_AXIS
+static status_code_t home_a (sys_state_t state, char *args);
+#endif
+#ifdef B_AXIS
+static status_code_t home_b (sys_state_t state, char *args);
+#endif
+#ifdef C_AXIS
+static status_code_t home_c (sys_state_t state, char *args);
+#endif
+static status_code_t enter_sleep (sys_state_t state, char *args);
+static status_code_t set_tool_reference (sys_state_t state, char *args);
+static status_code_t tool_probe_workpiece (sys_state_t state, char *args);
+static status_code_t output_ngc_parameters (sys_state_t state, char *args);
+static status_code_t build_info (sys_state_t state, char *args);
+static status_code_t output_all_build_info (sys_state_t state, char *args);
+static status_code_t settings_reset (sys_state_t state, char *args);
+static status_code_t output_startup_lines (sys_state_t state, char *args);
+static status_code_t set_startup_line0 (sys_state_t state, char *args);
+static status_code_t set_startup_line1 (sys_state_t state, char *args);
+#ifdef DEBUGOUT
+static status_code_t output_memmap (sys_state_t state, char *args);
+#endif
+
 // Pin change interrupt for pin-out commands, i.e. cycle start, feed hold, and reset. Sets
 // only the realtime command execute variable to have the main program execute these when
 // its ready. This works exactly like the character-based realtime commands when picked off
@@ -81,16 +121,17 @@ ISR_CODE void control_interrupt_handler (control_signals_t signals)
 
 
 // Executes user startup script, if stored.
-void system_execute_startup (char *line)
+void system_execute_startup (void)
 {
     if(hal.nvs.type != NVS_None) {
 
+        char line[sizeof(stored_line_t)];
         uint_fast8_t n;
 
         for (n = 0; n < N_STARTUP_LINE; n++) {
             if (!settings_read_startup_line(n, line))
                 report_execute_startup_message(line, Status_SettingReadFail);
-            else if (line[0] != '\0')
+            else if (*line != '\0')
                 report_execute_startup_message(line, gc_execute_block(line, NULL));
         }
     }
@@ -111,6 +152,48 @@ status_code_t read_int (char *s, int32_t *value)
     return Status_OK;
 }
 
+const sys_command_t sys_commands[] = {
+    {"G", true, output_parser_state},
+    {"J", false, jog},
+    {"#", true, output_ngc_parameters},
+    {"$", false, output_settings},
+    {"+", false, output_all_settings},
+    {"B", true, toggle_block_delete},
+    {"C", true, check_mode},
+    {"X", false, disable_lock},
+    {"H", false, home},
+    {"HX", false, home_x},
+    {"HY", false, home_y},
+    {"HZ", false, home_z},
+#ifdef A_AXIS
+    {"HA", false, home_a},
+#endif
+#ifdef B_AXIS
+    {"HB", false, home_b},
+#endif
+#ifdef C_AXIS
+    {"HC", false, home_c},
+#endif
+    {"HELP", false, output_help},
+    {"SLP", true, enter_sleep},
+    {"TLR", true, set_tool_reference},
+    {"TPW", true, tool_probe_workpiece},
+    {"I", false, build_info},
+    {"I+", true, output_all_build_info},
+    {"RST", false, settings_reset},
+    {"N", true, output_startup_lines},
+    {"N0", false, set_startup_line0},
+    {"N1", false, set_startup_line1},
+    {"EA", true, enumerate_alarms},
+    {"EE", true, enumerate_errors},
+    {"EG", true, enumerate_groups},
+    {"ES", true, enumerate_settings},
+    {"E*", true, enumerate_all},
+    {"RST", false, settings_reset},
+#ifdef DEBUGOUT
+    {"Q", true, output_memmap},
+#endif
+};
 
 // Directs and executes one line of formatted input from protocol_process. While mostly
 // incoming streaming g-code blocks, this also executes Grbl internal commands, such as
@@ -122,14 +205,24 @@ status_code_t read_int (char *s, int32_t *value)
 // be an issue, since these commands are not typically used during a cycle.
 
 // NOTE: Code calling system_execute_line() needs to provide a line buffer of at least LINE_BUFFER_SIZE
-
 status_code_t system_execute_line (char *line)
 {
-    status_code_t retval = Status_OK;
-    char c, *org = line, *ucline = line, *lcline = line + (LINE_BUFFER_SIZE / 2);
+    if(line[1] == '\0') {
+        report_grbl_help();
+        return Status_OK;
+    }
 
     if(strlen(line) >= ((LINE_BUFFER_SIZE / 2) - 1))
         return Status_Overflow;
+
+    sys_commands_t base = {
+        .n_commands = sizeof(sys_commands) / sizeof(sys_command_t),
+        .commands = sys_commands,
+        .on_get_commands = grbl.on_get_commands
+    };
+
+    status_code_t retval = Status_Unhandled;
+    char c, *org = line, *ucline = line, *lcline = line + (LINE_BUFFER_SIZE / 2);
 
     // Uppercase original and copy original out in the buffer
     // TODO: create a common function for stripping down uppercase version?
@@ -142,384 +235,487 @@ status_code_t system_execute_line (char *line)
 
     lcline = line + (LINE_BUFFER_SIZE / 2);
 
-    switch (line[1]) {
+    if(!strncmp(&line[1], "HELP", 4))
+        return report_help(&line[5], &lcline[5]);
 
-        case '\0':
-            report_grbl_help();
-            break;
+    char *args = strchr(line, '='), *lcargs = strchr(lcline, '=');
 
-        case 'J': // Jogging, execute only if in IDLE, JOG or TOOL_CHANGE states.
-            if (!(state_get() == STATE_IDLE || (state_get() & (STATE_JOG|STATE_TOOL_CHANGE))))
-                retval = Status_IdleError;
-            else
-                retval = line[2] != '=' ? Status_InvalidStatement : gc_execute_block(line, NULL); // NOTE: $J= is ignored inside g-code parser and used to detect jog motions.
-            break;
+    if(args) {
+        *args++ = '\0';
+        *lcargs++ = '\0';
+    }
 
-        case 'E': // Enumerate and print setting, error and alarm codes with details
-            if(line[3] == '\0') switch(line[2]) {
+    uint_fast8_t idx;
+    sys_commands_t *cmd = &base;
 
-                case 'A':
-                    retval = report_alarm_details();
-                    break;
-
-                case 'E':
-                    retval = report_error_details();
-                    break;
-
-                case 'G':
-                    retval = report_setting_group_details(true, NULL);
-                    break;
-
-                case 'S':
-                    retval = report_settings_details(false, Setting_SettingsAll, Group_All);
-                    break;
-
-                case '*':
-                    report_alarm_details();
-                    report_error_details();
-                    report_setting_group_details(true, NULL);
-                    retval = report_settings_details(false, Setting_SettingsAll, Group_All);
-                    break;
-            }
-            break;
-
-        case '$': // Prints Grbl settings
-        case '+':
-            if (line[2] != '\0') {
-                int32_t id;
-                retval = read_int(&line[2], &id);
-                if(retval == Status_OK && id >= 0)
-                    retval = report_settings_details(true, (setting_id_t)id, Group_All);
-            } else if (state_get() & (STATE_CYCLE|STATE_HOLD))
-                retval =  Status_IdleError; // Block during cycle. Takes too long to print.
-            else
-#if COMPATIBILITY_LEVEL <= 1
-            report_grbl_settings(true);
-#else
-            report_grbl_settings(line[1] == '+');
-#endif
-            break;
-
-        case 'G': // Prints gcode parser state
-            if (line[2] != '\0' )
-                retval = Status_InvalidStatement;
-            else {
-                report_gcode_modes();
-                sys.report.homed = On; // Report homed state on next realtime report
-            }
-            break;
-
-        case 'B': // Toggle block delete mode
-            if (line[2] != '\0')
-                retval = Status_InvalidStatement;
-            else {
-                sys.flags.block_delete_enabled = !sys.flags.block_delete_enabled;
-                grbl.report.feedback_message(sys.flags.block_delete_enabled ? Message_Enabled : Message_Disabled);
-            }
-            break;
-
-        case 'C': // Set check g-code mode [IDLE/CHECK]
-            if (line[2] != '\0')
-                retval = Status_InvalidStatement;
-            else if (state_get() == STATE_CHECK_MODE) {
-                // Perform reset when toggling off. Check g-code mode should only work if Grbl
-                // is idle and ready, regardless of alarm locks. This is mainly to keep things
-                // simple and consistent.
-                mc_reset();
-                grbl.report.feedback_message(Message_Disabled);
-            } else if (state_get() == STATE_IDLE) { // Requires idle mode.
-                state_set(STATE_CHECK_MODE);
-                grbl.report.feedback_message(Message_Enabled);
-            } else
-                retval = Status_IdleError;
-            break;
-
-        case 'X': // Disable alarm lock [ALARM]
-            if (line[2] != '\0')
-                retval = Status_InvalidStatement;
-            else if (state_get() & (STATE_ALARM|STATE_ESTOP)) {
-
-                control_signals_t control_signals = hal.control.get_state();
-
-                // Block if self-test failed
-                if(sys.alarm == Alarm_SelftestFailed)
-                    retval = Status_SelfTestFailed;
-                // Block if e-stop is active.
-                else if (control_signals.e_stop)
-                    retval = Status_EStop;
-                // Block if safety door is ajar.
-                else if (control_signals.safety_door_ajar)
-                    retval = Status_CheckDoor;
-                // Block if safety reset is active.
-                else if(control_signals.reset)
-                    retval = Status_Reset;
-                else if(settings.limits.flags.hard_enabled && settings.limits.flags.check_at_init && hal.limits.get_state().value)
-                    retval = Status_LimitsEngaged;
-                else if(limits_homing_required())
-                    retval = Status_HomingRequired;
-                else {
-                    grbl.report.feedback_message(Message_AlarmUnlock);
-                    state_set(STATE_IDLE);
-                }
-                // Don't run startup script. Prevents stored moves in startup from causing accidents.
-            } // Otherwise, no effect.
-            break;
-
-        case 'H': // Perform homing cycle [IDLE/ALARM] or report help
-
-            if(!strncmp(&line[2], "ELP", 3)) {
-                retval = report_help(&line[5], &lcline[5]);
-                return retval;
-            }
-
-            if(!(state_get() == STATE_IDLE || (state_get() & (STATE_ALARM|STATE_ESTOP))))
-                retval = Status_IdleError;
-            else {
-                control_signals_t control_signals = hal.control.get_state();
-
-                // Block if self-test failed
-                if(sys.alarm == Alarm_SelftestFailed)
-                    retval = Status_SelfTestFailed;
-                // Block if e-stop is active.
-                else if (control_signals.e_stop)
-                    retval = Status_EStop;
-                else if(control_signals.motor_fault)
-                    retval = Status_MotorFault;
-                else if (!(settings.homing.flags.enabled && (sys.homing.mask || settings.homing.flags.single_axis_commands || settings.homing.flags.manual)))
-                    retval = Status_HomingDisabled;
-                // Block if safety door is ajar.
-                else if (control_signals.safety_door_ajar && !settings.flags.safety_door_ignore_when_idle)
-                    retval = Status_CheckDoor;
-                // Block if safety reset is active.
-                else if(control_signals.reset)
-                    retval = Status_Reset;
-            }
-
-            if(retval == Status_OK) {
-
-                if (line[2] == '\0')
-                    retval = mc_homing_cycle((axes_signals_t){0}); // Home axes according to configuration
-
-                else if (settings.homing.flags.single_axis_commands && line[3] == '\0') {
-
-                    switch (line[2]) {
-                        case 'X':
-                            retval = mc_homing_cycle((axes_signals_t){X_AXIS_BIT});
-                            break;
-                        case 'Y':
-                            retval = mc_homing_cycle((axes_signals_t){Y_AXIS_BIT});
-                            break;
-                        case 'Z':
-                            retval = mc_homing_cycle((axes_signals_t){Z_AXIS_BIT});
-                            break;
-                      #ifdef A_AXIS
-                        case 'A':
-                            retval = mc_homing_cycle((axes_signals_t){A_AXIS_BIT});
-                            break;
-                      #endif
-                      #ifdef B_AXIS
-                        case 'B':
-                            retval = mc_homing_cycle((axes_signals_t){B_AXIS_BIT});
-                            break;
-                      #endif
-                      #ifdef C_AXIS
-                        case 'C':
-                            retval = mc_homing_cycle((axes_signals_t){C_AXIS_BIT});
-                            break;
-                      #endif
-                      default:
-                          retval = Status_InvalidStatement;
-                          break;
-                    }
-                } else
-                    retval = Status_InvalidStatement;
-            }
-
-            if (retval == Status_OK && !sys.abort) {
-                state_set(STATE_IDLE);  // Set to IDLE when complete.
-                st_go_idle();           // Set steppers to the settings idle state before returning.
-                // Execute startup scripts after successful homing.
-                if (sys.homing.mask && (sys.homing.mask & sys.homed.mask) == sys.homing.mask)
-                    system_execute_startup(line);
-                else if(limits_homing_required()) { // Keep alarm state active if homing is required and not all axes homed.
-                    sys.alarm = Alarm_HomingRequried;
-                    state_set(STATE_ALARM);
-                }
-            }
-
-            if(retval == Status_Unhandled)
-                retval = Status_OK;
-            break;
-
-        case 'S': // Puts Grbl to sleep [IDLE/ALARM]
-            if(!settings.flags.sleep_enable || !(line[2] == 'L' && line[3] == 'P' && line[4] == '\0'))
-                retval = Status_InvalidStatement;
-            else if(!(state_get() == STATE_IDLE || state_get() == STATE_ALARM))
-                retval = Status_IdleError;
-            else
-                system_set_exec_state_flag(EXEC_SLEEP); // Set to execute sleep mode immediately
-            break;
-
-        case 'T':
-            if(line[2] == 'L' && line[3] == 'R') {
-#ifdef TOOL_LENGTH_OFFSET_AXIS
-                if(sys.flags.probe_succeeded) {
-                    sys.tlo_reference_set.mask = bit(TOOL_LENGTH_OFFSET_AXIS);
-                    sys.tlo_reference[TOOL_LENGTH_OFFSET_AXIS] = sys.probe_position[TOOL_LENGTH_OFFSET_AXIS]; // - gc_state.tool_length_offset[Z_AXIS]));
-                } else
-                    sys.tlo_reference_set.mask = 0;
-#else
-                plane_t plane;
-                gc_get_plane_data(&plane, gc_state.modal.plane_select);
-                if(sys.flags.probe_succeeded) {
-                    sys.tlo_reference_set.mask |= bit(plane.axis_linear);
-                    sys.tlo_reference[plane.axis_linear] = sys.probe_position[plane.axis_linear];
-//                    - lroundf(gc_state.tool_length_offset[plane.axis_linear] * settings.axis[plane.axis_linear].steps_per_mm);
-                } else
-                    sys.tlo_reference_set.mask = 0;
-#endif
-                sys.report.tlo_reference = On;
-                retval = Status_OK;
-            } else if(sys.tlo_reference_set.mask && line[2] == 'P' && line[3] == 'W')
-                retval = tc_probe_workpiece();
-            else
-                retval = Status_InvalidStatement;
-            break;
-
-        case '#': // Print Grbl NGC parameters
-            if (line[2] != '\0')
-                retval = Status_InvalidStatement;
-            else if (!(state_get() == STATE_IDLE || (state_get() & (STATE_ALARM|STATE_ESTOP|STATE_CHECK_MODE))))
-                retval = Status_IdleError;
-            else
-                report_ngc_parameters();
-            break;
-
-        case 'I': // Print or store build info. [IDLE/ALARM]
-            if (!(state_get() == STATE_IDLE || (state_get() & (STATE_ALARM|STATE_ESTOP|STATE_CHECK_MODE))))
-                retval = Status_IdleError;
-            else if (line[2] == '\0' || (line[2] == '+' && line[3] == '\0')) {
-                bool extended = line[2] == '+';
-                settings_read_build_info(line);
-                report_build_info(line, extended);
-            }
-          #ifndef DISABLE_BUILD_INFO_WRITE_COMMAND
-            else if (line[2] == '=' && strlen(&line[3]) < (sizeof(stored_line_t) - 1))
-                settings_write_build_info(&lcline[3]);
-          #endif
-            else
-                retval = Status_InvalidStatement;
-            break;
-
-        case 'R': // Restore defaults [IDLE/ALARM]
-            {
-                settings_restore_t restore = {0};
-                if (!(line[2] == 'S' && line[3] == 'T' && line[4] == '=' && line[6] == '\0'))
-                    retval = Status_InvalidStatement;
-                else if (!(state_get() == STATE_IDLE || (state_get() & (STATE_ALARM|STATE_ESTOP))))
-                    retval = Status_IdleError;
-                else switch (line[5]) {
-
-                  #ifndef DISABLE_RESTORE_NVS_DEFAULT_SETTINGS
-                    case '$':
-                        restore.defaults = On;
-                        break;
-                  #endif
-
-                  #ifndef DISABLE_RESTORE_NVS_CLEAR_PARAMETERS
-                    case '#':
-                        restore.parameters = On;
-                        break;
-                  #endif
-
-                  #ifndef DISABLE_RESTORE_NVS_WIPE_ALL
-                    case '*':
-                        restore.mask = settings_all.mask;
-                        break;
-                  #endif
-
-                  #ifndef DISABLE_RESTORE_DRIVER_PARAMETERS
-                    case '&':
-                        restore.driver_parameters = On;
-                        break;
-                  #endif
-
-                    default:
-                        retval = Status_InvalidStatement;
+    do {
+        for(idx = 0; idx < cmd->n_commands; idx++) {
+            if(!strcmp(&line[1], cmd->commands[idx].command)) {
+                if(!cmd->commands[idx].noargs || lcargs == NULL) {
+                    if((retval = cmd->commands[idx].execute(state_get(), lcargs)) != Status_Unhandled)
                         break;
                 }
-                if(retval == Status_OK && restore.mask) {
-                    settings_restore(restore);
-                    grbl.report.feedback_message(Message_RestoreDefaults);
-                    mc_reset(); // Force reset to ensure settings are initialized correctly.
-                }
             }
-            break;
+        }
+        cmd = retval == Status_Unhandled && cmd->on_get_commands ? cmd->on_get_commands() : NULL;
+    } while(cmd);
 
-        case 'N': // Startup lines. [IDLE/ALARM]
-            if (!(state_get() == STATE_IDLE || (state_get() & (STATE_ALARM|STATE_ESTOP|STATE_CHECK_MODE))))
-                retval = Status_IdleError;
-            else if (line[2] == '\0') { // Print startup lines
-                uint_fast8_t counter;
-                for (counter = 0; counter < N_STARTUP_LINE; counter++) {
-                    if (!(settings_read_startup_line(counter, line)))
-                        grbl.report.status_message(Status_SettingReadFail);
-                    else
-                        report_startup_line(counter, line);
-                }
-                break;
-            } else if (state_get() == STATE_IDLE) { // Store startup line [IDLE Only] Prevents motion during ALARM.
+    // Let user code have a peek at system commands before check for global setting
+    if(retval == Status_Unhandled && grbl.on_unknown_sys_command) {
+        if(lcargs)
+            *(--lcargs) = '=';
 
-                uint_fast8_t counter = 2;
-                float parameter;
-                if(!read_float(line, &counter, &parameter))
-                    retval = Status_BadNumberFormat;
-                else if(line[counter++] != '=' || parameter - truncf(parameter) != 0.0f)
-                    retval = Status_InvalidStatement;
-                else if(parameter > (float)N_STARTUP_LINE)
-                    retval = Status_InvalidStatement;
-                else {
-                    line = &line[counter];
-                    if(strlen(line) >= (sizeof(stored_line_t) - 1))
-                        retval = Status_Overflow;
-                    else if ((retval = gc_execute_block(line, NULL)) == Status_OK) // Execute gcode block to ensure block is valid.
-                        settings_write_startup_line((uint8_t)parameter, line);
-                }
-            } else
-                retval = Status_IdleError;
-            break;
+        retval = grbl.on_unknown_sys_command(state_get(), lcline);
 
-#ifdef DEBUGOUT
-        case 'Q':
-            nvs_memmap();
-            break;
-#endif
+        if(lcargs)
+            *lcargs++ = '\0';
+    }
 
-        default:
-            retval = Status_Unhandled;
-
-            // Let user code have a peek at system commands before check for global setting
-            if(grbl.on_unknown_sys_command)
-                retval = grbl.on_unknown_sys_command(state_get(), line, lcline);
-
-            if (retval == Status_Unhandled) {
-                // Check for global setting, store if so
-                if(state_get() == STATE_IDLE || (state_get() & (STATE_ALARM|STATE_ESTOP|STATE_CHECK_MODE))) {
-                    uint_fast8_t counter = 1;
-                    float parameter;
-                    if(!read_float(line, &counter, &parameter))
-                        retval = Status_BadNumberFormat;
-                    else if(!(isintf(parameter) && line[counter++] == '='))
-                        retval = Status_InvalidStatement;
-                    else
-                        retval = settings_store_global_setting((setting_id_t)parameter, &lcline[counter]);
-                } else
-                    retval = Status_IdleError;
-            }
+    if (retval == Status_Unhandled) {
+        // Check for global setting, store if so
+        if(state_get() == STATE_IDLE || (state_get() & (STATE_ALARM|STATE_ESTOP|STATE_CHECK_MODE))) {
+            uint_fast8_t counter = 1;
+            float parameter;
+            if(!read_float(line, &counter, &parameter))
+                retval = Status_BadNumberFormat;
+            else if(!isintf(parameter))
+                retval = Status_InvalidStatement;
+            else if(args)
+                retval = settings_store_setting((setting_id_t)parameter, lcargs);
+            else
+                retval = report_grbl_setting((setting_id_t)parameter, NULL);
+        } else
+            retval = Status_IdleError;
     }
 
     return retval;
 }
+
+// System commands
+
+static status_code_t jog (sys_state_t state, char *args)
+{
+    if(!(state == STATE_IDLE || (state & (STATE_JOG|STATE_TOOL_CHANGE))))
+         return Status_IdleError;
+
+    if(args != NULL) {
+        *(--args) = '=';
+        args -= 2;
+    }
+
+    return args == NULL ? Status_InvalidStatement : gc_execute_block(strcaps(args), NULL); // NOTE: $J= is ignored inside g-code parser and used to detect jog motions.
+}
+
+static status_code_t enumerate_alarms (sys_state_t state, char *args)
+{
+    return report_alarm_details();
+}
+
+static status_code_t enumerate_errors (sys_state_t state, char *args)
+{
+    return report_error_details();
+}
+
+static status_code_t enumerate_groups (sys_state_t state, char *args)
+{
+    return report_setting_group_details(true, NULL);
+}
+
+static status_code_t enumerate_settings (sys_state_t state, char *args)
+{
+    return report_settings_details(false, Setting_SettingsAll, Group_All);
+}
+
+static status_code_t enumerate_all (sys_state_t state, char *args)
+{
+    report_alarm_details();
+    report_error_details();
+    report_setting_group_details(true, NULL);
+    return report_settings_details(false, Setting_SettingsAll, Group_All);
+}
+
+static status_code_t output_settings (sys_state_t state, char *args)
+{
+    status_code_t retval = Status_OK;
+
+    if(args) {
+        int32_t id;
+        retval = read_int(args, &id);
+        if(retval == Status_OK && id >= 0)
+            retval = report_settings_details(true, (setting_id_t)id, Group_All);
+    } else if (state & (STATE_CYCLE|STATE_HOLD))
+        retval = Status_IdleError; // Block during cycle. Takes too long to print.
+    else
+#if COMPATIBILITY_LEVEL <= 1
+    report_grbl_settings(true, NULL);
+#else
+    report_grbl_settings(false, NULL);
+#endif
+
+    return retval;
+}
+
+static status_code_t output_all_settings (sys_state_t state, char *args)
+{
+    status_code_t retval = Status_OK;
+
+    if(args) {
+        int32_t id;
+        retval = read_int(args, &id);
+        if(retval == Status_OK && id >= 0)
+            retval = report_settings_details(true, (setting_id_t)id, Group_All);
+    } else if (state & (STATE_CYCLE|STATE_HOLD))
+        retval = Status_IdleError; // Block during cycle. Takes too long to print.
+    else
+        report_grbl_settings(true, NULL);
+
+    return retval;
+}
+
+static status_code_t output_parser_state (sys_state_t state, char *args)
+{
+    report_gcode_modes();
+    sys.report.homed = On; // Report homed state on next realtime report
+
+    return Status_OK;
+}
+
+static status_code_t toggle_block_delete (sys_state_t state, char *args)
+{
+    sys.flags.block_delete_enabled = !sys.flags.block_delete_enabled;
+    grbl.report.feedback_message(sys.flags.block_delete_enabled ? Message_Enabled : Message_Disabled);
+
+    return Status_OK;
+}
+
+static status_code_t check_mode (sys_state_t state, char *args)
+{
+    if (state == STATE_CHECK_MODE) {
+        // Perform reset when toggling off. Check g-code mode should only work if Grbl
+        // is idle and ready, regardless of alarm locks. This is mainly to keep things
+        // simple and consistent.
+        mc_reset();
+        grbl.report.feedback_message(Message_Disabled);
+    } else if (state == STATE_IDLE) { // Requires idle mode.
+        state_set(STATE_CHECK_MODE);
+        grbl.report.feedback_message(Message_Enabled);
+    } else
+        return Status_IdleError;
+
+    return Status_OK;
+}
+
+static status_code_t disable_lock (sys_state_t state, char *args)
+{
+    status_code_t retval = Status_OK;
+
+    if(state & (STATE_ALARM|STATE_ESTOP)) {
+
+        control_signals_t control_signals = hal.control.get_state();
+
+        // Block if self-test failed
+        if(sys.alarm == Alarm_SelftestFailed)
+            retval = Status_SelfTestFailed;
+        // Block if e-stop is active.
+        else if (control_signals.e_stop)
+            retval = Status_EStop;
+        // Block if safety door is ajar.
+        else if (control_signals.safety_door_ajar)
+            retval = Status_CheckDoor;
+        // Block if safety reset is active.
+        else if(control_signals.reset)
+            retval = Status_Reset;
+        else if(settings.limits.flags.hard_enabled && settings.limits.flags.check_at_init && hal.limits.get_state().value)
+            retval = Status_LimitsEngaged;
+        else if(limits_homing_required())
+            retval = Status_HomingRequired;
+        else {
+            grbl.report.feedback_message(Message_AlarmUnlock);
+            state_set(STATE_IDLE);
+        }
+        // Don't run startup script. Prevents stored moves in startup from causing accidents.
+    } // Otherwise, no effect.
+
+    return retval;
+}
+
+static status_code_t output_help (sys_state_t state, char *args)
+{
+    return report_help(args, args);
+}
+
+static status_code_t go_home (sys_state_t state, axes_signals_t axes)
+{
+    if(!(state_get() == STATE_IDLE || (state_get() & (STATE_ALARM|STATE_ESTOP))))
+        return Status_IdleError;
+
+    status_code_t retval = Status_OK;
+
+    control_signals_t control_signals = hal.control.get_state();
+
+    // Block if self-test failed
+    if(sys.alarm == Alarm_SelftestFailed)
+        retval = Status_SelfTestFailed;
+    // Block if e-stop is active.
+    else if (control_signals.e_stop)
+        retval = Status_EStop;
+    else if(control_signals.motor_fault)
+        retval = Status_MotorFault;
+    else if (!(settings.homing.flags.enabled && (sys.homing.mask || settings.homing.flags.single_axis_commands || settings.homing.flags.manual)))
+        retval = Status_HomingDisabled;
+    // Block if safety door is ajar.
+    else if (control_signals.safety_door_ajar && !settings.flags.safety_door_ignore_when_idle)
+        retval = Status_CheckDoor;
+    // Block if safety reset is active.
+    else if(control_signals.reset)
+        retval = Status_Reset;
+
+    if(retval == Status_OK)
+        retval = mc_homing_cycle(axes); // Home axes according to configuration
+
+    if (retval == Status_OK && !sys.abort) {
+        state_set(STATE_IDLE);  // Set to IDLE when complete.
+        st_go_idle();           // Set steppers to the settings idle state before returning.
+        report_feedback_message(Message_None);
+        // Execute startup scripts after successful homing.
+        if (sys.homing.mask && (sys.homing.mask & sys.homed.mask) == sys.homing.mask)
+            system_execute_startup();
+        else if(limits_homing_required()) { // Keep alarm state active if homing is required and not all axes homed.
+            sys.alarm = Alarm_HomingRequried;
+            state_set(STATE_ALARM);
+        }
+    }
+
+    return retval == Status_Unhandled ? Status_OK : retval;
+}
+
+static status_code_t home (sys_state_t state, char *args)
+{
+    return go_home(state, (axes_signals_t){0});
+}
+
+static status_code_t home_x (sys_state_t state, char *args)
+{
+    return go_home(state, (axes_signals_t){X_AXIS_BIT});
+}
+
+static status_code_t home_y (sys_state_t state, char *args)
+{
+    return go_home(state, (axes_signals_t){Y_AXIS_BIT});
+}
+
+static status_code_t home_z (sys_state_t state, char *args)
+{
+    return go_home(state, (axes_signals_t){Z_AXIS_BIT});
+}
+
+#ifdef A_AXIS
+static status_code_t home_a (sys_state_t state, char *args)
+{
+    return go_home(state, (axes_signals_t){A_AXIS_BIT});
+}
+#endif
+
+#ifdef B_AXIS
+static status_code_t home_b (sys_state_t state, char *args)
+{
+    return go_home(state, (axes_signals_t){B_AXIS_BIT});
+}
+#endif
+
+#ifdef C_AXIS
+static status_code_t home_c (sys_state_t state, char *args)
+{
+    return go_home(state, (axes_signals_t){C_AXIS_BIT});
+}
+#endif
+
+static status_code_t enter_sleep (sys_state_t state, char *args)
+{
+    if(!settings.flags.sleep_enable)
+        return Status_InvalidStatement;
+    else if(!(state == STATE_IDLE || state == STATE_ALARM))
+        return Status_IdleError;
+    else
+        system_set_exec_state_flag(EXEC_SLEEP); // Set to execute enter_sleep mode immediately
+
+    return Status_OK;
+}
+
+static status_code_t set_tool_reference (sys_state_t state, char *args)
+{
+#ifdef TOOL_LENGTH_OFFSET_AXIS
+    if(sys.flags.probe_succeeded) {
+        sys.tlo_reference_set.mask = bit(TOOL_LENGTH_OFFSET_AXIS);
+        sys.tlo_reference[TOOL_LENGTH_OFFSET_AXIS] = sys.probe_position[TOOL_LENGTH_OFFSET_AXIS]; // - gc_state.tool_length_offset[Z_AXIS]));
+    } else
+        sys.tlo_reference_set.mask = 0;
+#else
+    plane_t plane;
+    gc_get_plane_data(&plane, gc_state.modal.plane_select);
+    if(sys.flags.probe_succeeded) {
+        sys.tlo_reference_set.mask |= bit(plane.axis_linear);
+        sys.tlo_reference[plane.axis_linear] = sys.probe_position[plane.axis_linear];
+//                    - lroundf(gc_state.tool_length_offset[plane.axis_linear] * settings.axis[plane.axis_linear].steps_per_mm);
+    } else
+        sys.tlo_reference_set.mask = 0;
+#endif
+    sys.report.tlo_reference = On;
+
+    return Status_OK;
+}
+
+static status_code_t tool_probe_workpiece (sys_state_t state, char *args)
+{
+    return tc_probe_workpiece();
+}
+
+static status_code_t output_ngc_parameters (sys_state_t state, char *args)
+{
+    report_ngc_parameters();
+
+    return Status_OK;
+}
+
+static status_code_t build_info (sys_state_t state, char *args)
+{
+    if (!(state == STATE_IDLE || (state & (STATE_ALARM|STATE_ESTOP|STATE_CHECK_MODE))))
+        return Status_IdleError;
+
+    if (args == NULL) {
+        char info[sizeof(stored_line_t)];
+        settings_read_build_info(info);
+        report_build_info(info, false);
+    }
+  #ifndef DISABLE_BUILD_INFO_WRITE_COMMAND
+    else if (strlen(args) < (sizeof(stored_line_t) - 1))
+        settings_write_build_info(args);
+  #endif
+    else
+        return Status_InvalidStatement;
+
+    return Status_OK;
+}
+
+static status_code_t output_all_build_info (sys_state_t state, char *args)
+{
+    char info[sizeof(stored_line_t)];
+
+    settings_read_build_info(info);
+    report_build_info(info, false);
+
+    return Status_OK;
+}
+
+static status_code_t settings_reset (sys_state_t state, char *args)
+{
+    settings_restore_t restore = {0};
+    status_code_t retval = Status_OK;
+
+    if (!(state == STATE_IDLE || (state & (STATE_ALARM|STATE_ESTOP))))
+        retval = Status_IdleError;
+
+    else switch (*args) {
+
+      #ifndef DISABLE_RESTORE_NVS_DEFAULT_SETTINGS
+        case '$':
+            restore.defaults = On;
+            break;
+      #endif
+
+      #ifndef DISABLE_RESTORE_NVS_CLEAR_PARAMETERS
+        case '#':
+            restore.parameters = On;
+            break;
+      #endif
+
+      #ifndef DISABLE_RESTORE_NVS_WIPE_ALL
+        case '*':
+            restore.mask = settings_all.mask;
+            break;
+      #endif
+
+      #ifndef DISABLE_RESTORE_DRIVER_PARAMETERS
+        case '&':
+            restore.driver_parameters = On;
+            break;
+      #endif
+
+        default:
+            retval = Status_InvalidStatement;
+            break;
+    }
+
+    if(retval == Status_OK && restore.mask) {
+        settings_restore(restore);
+        grbl.report.feedback_message(Message_RestoreDefaults);
+        mc_reset(); // Force reset to ensure settings are initialized correctly.
+    }
+
+    return retval;
+}
+
+static status_code_t output_startup_lines (sys_state_t state, char *args)
+{
+    if (!(state == STATE_IDLE || (state & (STATE_ALARM|STATE_ESTOP|STATE_CHECK_MODE))))
+        return Status_IdleError;
+
+    // Print startup lines
+
+    uint_fast8_t counter;
+    char line[sizeof(stored_line_t)];
+
+    for (counter = 0; counter < N_STARTUP_LINE; counter++) {
+        if (!(settings_read_startup_line(counter, line)))
+            grbl.report.status_message(Status_SettingReadFail);
+        else
+            report_startup_line(counter, line);
+    }
+
+    return Status_OK;
+}
+
+static status_code_t set_startup_line (sys_state_t state, char *args, uint_fast8_t lnr)
+{
+    // Store startup line [IDLE Only] Prevents motion during ALARM.
+    if (!(state == STATE_IDLE || (state & (STATE_ALARM|STATE_ESTOP|STATE_CHECK_MODE))))
+        return Status_IdleError;
+
+    if(args == NULL)
+        return Status_InvalidStatement;
+
+    status_code_t retval = Status_OK;
+
+    strcaps(args);
+
+    if(strlen(args) >= (sizeof(stored_line_t) - 1))
+        retval = Status_Overflow;
+    else if ((retval = gc_execute_block(args, NULL)) == Status_OK) // Execute gcode block to ensure block is valid.
+        settings_write_startup_line(lnr, args);
+
+    return retval;
+}
+
+static status_code_t set_startup_line0 (sys_state_t state, char *args)
+{
+    return set_startup_line(state, args, 0);
+}
+
+static status_code_t set_startup_line1 (sys_state_t state, char *args)
+{
+    return set_startup_line(state, args, 1);
+}
+
+#ifdef DEBUGOUT
+static status_code_t output_memmap (sys_state_t state, char *args)
+{
+    nvs_output_memmap();
+
+    return Status_OK;
+}
+#endif
+
+// End system commands
 
 void system_flag_wco_change (void)
 {

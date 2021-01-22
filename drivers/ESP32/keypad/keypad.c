@@ -58,115 +58,23 @@ static bool jogging = false, keyreleased = true;
 static jogmode_t jogMode = JogMode_Fast;
 static jog_settings_t jog;
 static keybuffer_t keybuf = {0};
-static driver_setting_ptrs_t driver_settings;
+static uint32_t nvs_address;
 static on_report_options_ptr on_report_options;
 
 keypad_t keypad = {0};
-/*
-static const setting_group_detail_t keypad_groups [] = {
-    { Group_Root, Group_Jogging, "Jogging"}
-};
-*/
+
 static const setting_detail_t keypad_settings[] = {
-    { Setting_JogStepSpeed, Group_Jogging, "Step jog speed", "mm/min", Format_Decimal, "###0.0", NULL, NULL },
-    { Setting_JogSlowSpeed, Group_Jogging, "Slow jog speed", "mm/min", Format_Decimal, "###0.0", NULL, NULL },
-    { Setting_JogFastSpeed, Group_Jogging, "Fast jog speed", "mm/min", Format_Decimal, "###0.0", NULL, NULL },
-    { Setting_JogStepDistance, Group_Jogging, "Step jog distance", "mm", Format_Decimal, "#0.000", NULL, NULL },
-    { Setting_JogSlowDistance, Group_Jogging, "Slow jog distance", "mm", Format_Decimal, "###0.0", NULL, NULL },
-    { Setting_JogFastDistance, Group_Jogging, "Fast jog distance", "mm", Format_Decimal, "###0.0", NULL, NULL }
+    { Setting_JogStepSpeed, Group_Jogging, "Step jog speed", "mm/min", Format_Decimal, "###0.0", NULL, NULL, Setting_NonCore, &jog.step_speed, NULL, NULL },
+    { Setting_JogSlowSpeed, Group_Jogging, "Slow jog speed", "mm/min", Format_Decimal, "###0.0", NULL, NULL, Setting_NonCore, &jog.slow_speed, NULL, NULL },
+    { Setting_JogFastSpeed, Group_Jogging, "Fast jog speed", "mm/min", Format_Decimal, "###0.0", NULL, NULL, Setting_NonCore, &jog.fast_speed, NULL, NULL },
+    { Setting_JogStepDistance, Group_Jogging, "Step jog distance", "mm", Format_Decimal, "#0.000", NULL, NULL, Setting_NonCore, &jog.step_distance, NULL, NULL },
+    { Setting_JogSlowDistance, Group_Jogging, "Slow jog distance", "mm", Format_Decimal, "###0.0", NULL, NULL, Setting_NonCore, &jog.slow_distance, NULL, NULL },
+    { Setting_JogFastDistance, Group_Jogging, "Fast jog distance", "mm", Format_Decimal, "###0.0", NULL, NULL, Setting_NonCore, &jog.fast_distance, NULL, NULL }
 };
 
-static setting_details_t details = {
-//    .groups = keypad_groups,
-//    .n_groups = sizeof(keypad_groups) / sizeof(setting_group_detail_t),
-    .settings = keypad_settings,
-    .n_settings = sizeof(keypad_settings) / sizeof(setting_detail_t)
-};
-
-static setting_details_t *onReportSettings (void)
+static void keypad_settings_save (void)
 {
-    return &details;
-}
-
-static status_code_t keypad_settings_set (setting_id_t setting, float value, char *svalue)
-{
-    status_code_t status = Status_OK;
-
-    switch(setting) {
-
-        case Setting_JogStepSpeed:
-            jog.step_speed = value;
-            break;
-
-        case Setting_JogSlowSpeed:
-            jog.slow_speed = value;
-            break;
-
-        case Setting_JogFastSpeed:
-            jog.fast_speed = value;
-            break;
-
-        case Setting_JogStepDistance:
-            jog.step_distance = value;
-            break;
-
-        case Setting_JogSlowDistance:
-            jog.slow_distance = value;
-           break;
-
-        case Setting_JogFastDistance:
-            jog.fast_distance = value;
-            break;
-
-        default:
-            status = Status_Unhandled;
-            break;
-    }
-
-
-    if(status == Status_OK)
-        hal.nvs.memcpy_to_nvs(driver_settings.nvs_address, (uint8_t *)&jog, sizeof(jog_settings_t), true);
-
-    return status == Status_Unhandled && driver_settings.set ? driver_settings.set(setting, value, svalue) : status;
-}
-
-static void keypad_settings_report (setting_id_t setting)
-{
-    bool reported = true;
-
-    switch(setting) {
-
-        case Setting_JogStepSpeed:
-            report_float_setting(setting, jog.step_speed, 0);
-            break;
-
-        case Setting_JogSlowSpeed:
-            report_float_setting(setting, jog.slow_speed, 0);
-            break;
-
-        case Setting_JogFastSpeed:
-            report_float_setting(setting, jog.fast_speed, 0);
-            break;
-
-        case Setting_JogStepDistance:
-            report_float_setting(setting, jog.step_distance, N_DECIMAL_SETTINGVALUE);
-            break;
-
-        case Setting_JogSlowDistance:
-            report_float_setting(setting, jog.slow_distance, 0);
-            break;
-
-        case Setting_JogFastDistance:
-            report_float_setting(setting, jog.fast_distance, 0);
-            break;
-
-        default:
-            reported = false;
-            break;
-    }
-
-    if(!reported && driver_settings.report)
-        driver_settings.report(setting);
+    hal.nvs.memcpy_to_nvs(nvs_address, (uint8_t *)&jog, sizeof(jog_settings_t), true);
 }
 
 static void keypad_settings_restore (void)
@@ -178,19 +86,26 @@ static void keypad_settings_restore (void)
     jog.slow_distance = 500.0f;
     jog.fast_distance = 3000.0f;
 
-    hal.nvs.memcpy_to_nvs(driver_settings.nvs_address, (uint8_t *)&jog, sizeof(jog_settings_t), true);
-
-    if(driver_settings.restore)
-        driver_settings.restore();
+    hal.nvs.memcpy_to_nvs(nvs_address, (uint8_t *)&jog, sizeof(jog_settings_t), true);
 }
 
 static void keypad_settings_load (void)
 {
-    if(hal.nvs.memcpy_from_nvs((uint8_t *)&jog, driver_settings.nvs_address, sizeof(jog_settings_t), true) != NVS_TransferResult_OK)
+    if(hal.nvs.memcpy_from_nvs((uint8_t *)&jog, nvs_address, sizeof(jog_settings_t), true) != NVS_TransferResult_OK)
         keypad_settings_restore();
+}
 
-    if(driver_settings.load)
-        driver_settings.load();
+static setting_details_t details = {
+    .settings = keypad_settings,
+    .n_settings = sizeof(keypad_settings) / sizeof(setting_detail_t),
+    .load = keypad_settings_load,
+    .restore = keypad_settings_restore,
+    .save = keypad_settings_save
+};
+
+static setting_details_t *onReportSettings (void)
+{
+    return &details;
 }
 
 // Returns 0 if no keycode enqueued
@@ -366,24 +281,19 @@ static void onReportOptions (bool newopt)
 
 bool keypad_init (void)
 {
-    if((hal.driver_settings.nvs_address = nvs_alloc(sizeof(jog_settings_t)))) {
-        memcpy(&driver_settings, &hal.driver_settings, sizeof(driver_setting_ptrs_t));
-        hal.driver_settings.set = keypad_settings_set;
-        hal.driver_settings.report = keypad_settings_report;
-        hal.driver_settings.load = keypad_settings_load;
-        hal.driver_settings.restore = keypad_settings_restore;
+    if((nvs_address = nvs_alloc(sizeof(jog_settings_t)))) {
 
         on_report_options = grbl.on_report_options;
         grbl.on_report_options = onReportOptions;
 
-        details.on_report_settings = grbl.on_report_settings;
-        grbl.on_report_settings = onReportSettings;
+        details.on_get_settings = grbl.on_get_settings;
+        grbl.on_get_settings = onReportSettings;
 
         if(keypad.on_jogmode_changed)
             keypad.on_jogmode_changed(jogMode);
     }
 
-    return driver_settings.nvs_address != 0;
+    return nvs_address != 0;
 }
 
 ISR_CODE void keypad_enqueue_keycode (char c)
@@ -394,7 +304,7 @@ ISR_CODE void keypad_enqueue_keycode (char c)
         keybuf.buf[keybuf.head] = c;    // add data to buffer
         keybuf.head = bptr;             // and update pointer
         // Tell foreground process to process keycode
-        if(hal.driver_settings.nvs_address != 0)
+        if(nvs_address != 0)
             protocol_enqueue_rt_command(keypad_process_keypress);
     }
 }

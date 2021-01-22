@@ -1,7 +1,7 @@
 /*
   my_machine.h - configuration for Texas Instruments MSP430F5529 16-bit processor
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 

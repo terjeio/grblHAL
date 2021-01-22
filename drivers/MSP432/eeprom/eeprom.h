@@ -2,7 +2,7 @@
 
   eeprom.h - plugin for for I2C EEPROM or FRAM
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017-2020 Terje Io
 

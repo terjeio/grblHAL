@@ -34,6 +34,7 @@
 #include "nvs.h"
 #include "grbl/protocol.h"
 #include "esp_log.h"
+#include "grbl_esp32_if/grbl_esp32_if.h"
 
 #ifdef USE_I2S_OUT
 #include "i2s_out.h"
@@ -1313,7 +1314,6 @@ static void settings_changed (settings_t *settings)
             // Delay mode enable a bit so grbl can finish startup and MPG controller can check ready status
             hal.delay_ms(50, modeEnable);
 #endif
-
     }
 }
 
@@ -1361,24 +1361,24 @@ static bool driver_setup (settings_t *settings)
     for(idx = 0; idx < N_AXIS; idx++)
         rmt_set_source_clk(idx, RMT_BASECLK_APB);
 
+    uint32_t mask = 0; // this is insane...
+    idx = sizeof(outputpin) / sizeof(gpio_num_t);
+    do {
+        mask |= (1ULL << outputpin[--idx]);
+    } while(idx);
+
     gpio_config_t gpioConfig = {
-        .pin_bit_mask = 0,
+        .pin_bit_mask = mask,
         .mode = GPIO_MODE_OUTPUT,
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type = GPIO_INTR_DISABLE
     };
 
-    idx = sizeof(outputpin) / sizeof(gpio_num_t);
-
-    do {
-        gpioConfig.pin_bit_mask |= (1ULL << outputpin[--idx]);
-    } while(idx);
-
     gpio_config(&gpioConfig);
 
 #if MPG_MODE_ENABLE
-
+ccc
     /************************
      *  MPG mode (pre)init  *
      ************************/
@@ -1420,6 +1420,8 @@ static bool driver_setup (settings_t *settings)
     /**/
 
 #endif
+
+
 
 #if SDCARD_ENABLE
 
@@ -1615,6 +1617,7 @@ bool driver_init (void)
     keypad_init();
 #endif
 
+//    grbl_esp32_if_init();
 
     my_plugin_init();
 
