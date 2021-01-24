@@ -346,12 +346,12 @@ static status_code_t init_sync_motion (plan_line_data_t *pl_data, float pitch)
     pl_data->overrides.feed_rate_disable = sys.override.control.feed_rate_disable = On;
     sys.override.spindle_rpm = DEFAULT_SPINDLE_RPM_OVERRIDE;
     // TODO: need for gc_state.distance_per_rev to be reset on modal change?
-    float feed_rate = pl_data->feed_rate * hal.spindle.get_data(SpindleData_RPM).rpm;
+    float feed_rate = pl_data->feed_rate * hal.spindle.get_data(SpindleData_RPM)->rpm;
 
     if(feed_rate == 0.0f)
         FAIL(Status_GcodeSpindleNotRunning); // [Spindle not running]
 
-    if(feed_rate > settings.axis[Z_AXIS].max_rate)
+    if(feed_rate > settings.axis[Z_AXIS].max_rate * 0.9f)
         FAIL(Status_GcodeMaxFeedRateExceeded); // [Feed rate too high]
 
     return Status_OK;

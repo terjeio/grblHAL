@@ -268,7 +268,7 @@ static const setting_group_detail_t setting_group_detail [] = {
     { Group_Root, Group_Toolchange, "Tool change"},
     { Group_Root, Group_Homing, "Homing"},
     { Group_Root, Group_Probing, "Probing"},
-    { Group_Root, Group_Parking, "Parking"},
+    { Group_Root, Group_SafetyDoor, "Safety door"},
     { Group_Root, Group_Jogging, "Jogging"},
     { Group_Root, Group_Stepper, "Stepper"},
     { Group_Root, Group_MotorDriver, "Stepper driver"},
@@ -301,15 +301,17 @@ static status_code_t set_homing_enable (setting_id_t id, uint_fast16_t int_value
 static status_code_t set_enable_legacy_rt_commands (setting_id_t id, uint_fast16_t int_value);
 static status_code_t set_homing_cycle (setting_id_t id, uint_fast16_t int_value);
 static status_code_t set_mode (setting_id_t id, uint_fast16_t int_value);
-static status_code_t set_parking_enable (setting_id_t id, uint_fast16_t int_value);
-static status_code_t set_restore_overrides (setting_id_t id, uint_fast16_t int_value);
-static status_code_t set_ignore_door_when_idle (setting_id_t id, uint_fast16_t int_value);
 static status_code_t set_sleep_enable (setting_id_t id, uint_fast16_t int_value);
 static status_code_t set_hold_actions (setting_id_t id, uint_fast16_t int_value);
 static status_code_t set_force_initialization_alarm (setting_id_t id, uint_fast16_t int_value);
 static status_code_t set_probe_allow_feed_override (setting_id_t id, uint_fast16_t int_value);
 static status_code_t set_tool_change_mode (setting_id_t id, uint_fast16_t int_value);
 static status_code_t set_tool_change_probing_distance (setting_id_t id, float value);
+#ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
+static status_code_t set_parking_enable (setting_id_t id, uint_fast16_t int_value);
+static status_code_t set_restore_overrides (setting_id_t id, uint_fast16_t int_value);
+static status_code_t set_door_options (setting_id_t id, uint_fast16_t int_value);
+#endif
 #ifdef ENABLE_SPINDLE_LINEARIZATION
 static status_code_t set_linear_piece (setting_id_t id, char *svalue);
 static char *get_linear_piece (setting_id_t id);
@@ -372,8 +374,10 @@ static const setting_detail_t setting_detail[] = {
     { Setting_SpindlePPR, Group_Spindle, "Spindle pulses per revolution (PPR)", NULL, Format_Int16, "###0", NULL, NULL, Setting_IsExtended, &settings.spindle.ppr, NULL, is_setting_available },
     { Setting_EnableLegacyRTCommands, Group_General, "Enable legacy RT commands", NULL, Format_Bool, NULL, NULL, NULL, Setting_IsExtendedFn, set_enable_legacy_rt_commands, get_int, NULL },
     { Setting_JogSoftLimited, Group_Jogging, "Limit jog commands", NULL, Format_Bool, NULL, NULL, NULL, Setting_IsExtendedFn, set_jog_soft_limited, get_int, NULL },
-    { Setting_ParkingEnable, Group_Parking, "Parking cycle", NULL, Format_XBitfield, "Enable,Enable parking override control,Deactivate upon init", NULL, NULL, Setting_IsExtendedFn, set_parking_enable, get_int, NULL },
-    { Setting_ParkingAxis, Group_Parking, "Parking axis", NULL, Format_RadioButtons, "X,Y,Z", NULL, NULL, Setting_IsExtended, &settings.parking.axis, NULL, NULL },
+#ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
+    { Setting_ParkingEnable, Group_SafetyDoor, "Parking cycle", NULL, Format_XBitfield, "Enable,Enable parking override control,Deactivate upon init", NULL, NULL, Setting_IsExtendedFn, set_parking_enable, get_int, NULL },
+    { Setting_ParkingAxis, Group_SafetyDoor, "Parking axis", NULL, Format_RadioButtons, "X,Y,Z", NULL, NULL, Setting_IsExtended, &settings.parking.axis, NULL, NULL },
+#endif
     { Setting_HomingLocateCycles, Group_Homing, "Homing passes", NULL, Format_Int8, "##0", "1", "128", Setting_IsExtended, &settings.homing.locate_cycles, NULL, NULL },
     { Setting_HomingCycle_1, Group_Homing, "Axes homing, first pass", NULL, Format_AxisMask, NULL, NULL, NULL, Setting_IsExtendedFn, set_homing_cycle, get_int, NULL },
     { Setting_HomingCycle_2, Group_Homing, "Axes homing, second pass", NULL, Format_AxisMask, NULL, NULL, NULL, Setting_IsExtendedFn, set_homing_cycle, get_int, NULL },
@@ -387,12 +391,14 @@ static const setting_detail_t setting_detail[] = {
 #ifdef C_AXIS
     { Setting_HomingCycle_6, Group_Homing, "Axes homing, sixth pass", NULL, Format_AxisMask, NULL, NULL, NULL, Setting_IsExtendedFn, set_homing_cycle, get_int, NULL },
 #endif
-    { Setting_ParkingPulloutIncrement, Group_Parking, "Parking pull-out distance", "mm", Format_Decimal, "###0.0", NULL, NULL, Setting_IsExtended, &settings.parking.pullout_increment, NULL, NULL },
-    { Setting_ParkingPulloutRate, Group_Parking, "Parking pull-out rate", "mm/min", Format_Decimal, "###0.0", NULL, NULL, Setting_IsExtended, &settings.parking.pullout_rate, NULL, NULL },
-    { Setting_ParkingTarget, Group_Parking, "Parking target", "mm", Format_Decimal, "-###0.0", "-100000", NULL, Setting_IsExtended, &settings.parking.target, NULL, NULL },
-    { Setting_ParkingFastRate, Group_Parking, "Parking fast rate", "mm/min", Format_Decimal, "###0.0", NULL, NULL, Setting_IsExtended, &settings.parking.rate, NULL, NULL },
+#ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
+    { Setting_ParkingPulloutIncrement, Group_SafetyDoor, "Parking pull-out distance", "mm", Format_Decimal, "###0.0", NULL, NULL, Setting_IsExtended, &settings.parking.pullout_increment, NULL, NULL },
+    { Setting_ParkingPulloutRate, Group_SafetyDoor, "Parking pull-out rate", "mm/min", Format_Decimal, "###0.0", NULL, NULL, Setting_IsExtended, &settings.parking.pullout_rate, NULL, NULL },
+    { Setting_ParkingTarget, Group_SafetyDoor, "Parking target", "mm", Format_Decimal, "-###0.0", "-100000", NULL, Setting_IsExtended, &settings.parking.target, NULL, NULL },
+    { Setting_ParkingFastRate, Group_SafetyDoor, "Parking fast rate", "mm/min", Format_Decimal, "###0.0", NULL, NULL, Setting_IsExtended, &settings.parking.rate, NULL, NULL },
     { Setting_RestoreOverrides, Group_General, "Restore overrides", NULL, Format_Bool, NULL, NULL, NULL, Setting_IsExtendedFn, set_restore_overrides, get_int, NULL },
-    { Setting_IgnoreDoorWhenIdle, Group_Parking, "Ignore door when idle", NULL, Format_Bool, NULL, NULL, NULL, Setting_IsExtendedFn, set_ignore_door_when_idle, get_int, NULL },
+    { Setting_DoorOptions, Group_SafetyDoor, "Safety door options", NULL, Format_Bitfield, "Ignore when idle,Keep coolant state on open", NULL, NULL, Setting_IsExtendedFn, set_door_options, get_int, NULL },
+#endif
     { Setting_SleepEnable, Group_General, "Sleep enable", NULL, Format_Bool, NULL, NULL, NULL, Setting_IsExtendedFn, set_sleep_enable, get_int, NULL },
     { Setting_HoldActions, Group_General, "Feed hold actions", NULL, Format_Bitfield, "Disable laser during hold,Restore spindle and coolant state on resume", NULL, NULL, Setting_IsExtendedFn, set_hold_actions, get_int, NULL },
     { Setting_ForceInitAlarm, Group_General, "Force init alarm", NULL, Format_Bool, NULL, NULL, NULL, Setting_IsExtendedFn, set_force_initialization_alarm, get_int, NULL },
@@ -420,8 +426,6 @@ static const setting_detail_t setting_detail[] = {
     { Setting_AxisBacklash, Group_Axis0, "?-axis backlash compensation", "mm", Format_Decimal, "#####0.000", NULL, NULL, Setting_IsExtendedFn, set_axis_setting, get_float, NULL, NULL },
 #endif
     { Setting_AxisAutoSquareOffset, Group_Axis0, "?-axis dual axis offset", "mm", Format_Decimal, "-0.000", "-2", "2", Setting_IsExtendedFn, set_axis_setting, get_float, is_setting_available },
-/*    { Setting_AdminPassword, Group_General, "Admin Password", NULL, Format_Password, "x(32)", NULL, "32" },
-    { Setting_UserPassword, Group_General, "User Password", NULL, Format_Password, "x(32)", NULL, "32" }, */
     { Setting_SpindleAtSpeedTolerance, Group_Spindle, "Spindle at speed tolerance", "percent", Format_Decimal, "##0.0", NULL, NULL, Setting_IsExtended, &settings.spindle.at_speed_tolerance, NULL, is_setting_available },
     { Setting_ToolChangeMode, Group_Toolchange, "Tool change mode", NULL, Format_RadioButtons, "Normal,Manual touch off,Manual touch off @ G59.3,Automatic touch off @ G59.3,Ignore M6", NULL, NULL, Setting_IsExtendedFn, set_tool_change_mode, get_int, NULL },
     { Setting_ToolChangeProbingDistance, Group_Toolchange, "Tool change probing distance", "mm", Format_Decimal, "#####0.0", NULL, NULL, Setting_IsExtendedFn, set_tool_change_probing_distance, get_float, NULL },
@@ -618,6 +622,8 @@ static status_code_t set_mode (setting_id_t id, uint_fast16_t int_value)
     return Status_OK;
 }
 
+#ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
+
 static status_code_t set_parking_enable (setting_id_t id, uint_fast16_t int_value)
 {
     settings.parking.flags.value = bit_istrue(int_value, bit(0)) ? (int_value & 0x07) : 0;
@@ -632,12 +638,15 @@ static status_code_t set_restore_overrides (setting_id_t id, uint_fast16_t int_v
     return Status_OK;
 }
 
-static status_code_t set_ignore_door_when_idle (setting_id_t id, uint_fast16_t int_value)
+static status_code_t set_door_options (setting_id_t id, uint_fast16_t int_value)
 {
-    settings.flags.safety_door_ignore_when_idle = int_value != 0;
+    settings.flags.safety_door_ignore_when_idle = bit_istrue(int_value, bit(0));
+    settings.flags.keep_coolant_state_on_door_open = bit_istrue(int_value, bit(1));
 
     return Status_OK;
 }
+
+#endif
 
 static status_code_t set_sleep_enable (setting_id_t id, uint_fast16_t int_value)
 {
@@ -934,8 +943,8 @@ static uint32_t get_int (setting_id_t id)
             value = settings.flags.restore_overrides;
             break;
 
-        case Setting_IgnoreDoorWhenIdle:
-            value = settings.flags.safety_door_ignore_when_idle;
+        case Setting_DoorOptions:
+            value = settings.flags.safety_door_ignore_when_idle | (settings.flags.keep_coolant_state_on_door_open << 1) ;
             break;
 
         case Setting_SleepEnable:
@@ -1270,6 +1279,11 @@ void settings_restore (settings_restore_t restore)
     nvs_buffer_sync_physical();
 }
 
+inline static bool is_available (const setting_detail_t *setting)
+{
+    return setting->is_available == NULL || setting->is_available(setting);
+}
+
 bool settings_is_group_available (setting_group_t group)
 {
     bool available = false;
@@ -1326,8 +1340,10 @@ bool settings_is_group_available (setting_group_t group)
                 do {
                     if(details->settings) {
                         for(idx = 0; idx < details->n_settings; idx++) {
-                            if(details->settings[idx].group != group)
+                            if(details->settings[idx].group == group && is_available(&details->settings[idx])) {
                                 available = true;
+                                break;
+                            }
                         }
                     }
                     details = !available && details->on_get_settings ? details->on_get_settings() : NULL;
@@ -1341,7 +1357,7 @@ bool settings_is_group_available (setting_group_t group)
 
 setting_group_t settings_normalize_group (setting_group_t group)
 {
-    return (group >= Group_Axis0 && group < Group_Axis0 + N_AXIS) ? Group_Axis0 : group;
+    return (group > Group_Axis0 && group < Group_Axis0 + N_AXIS) ? Group_Axis0 : group;
 }
 
 /*
@@ -1424,7 +1440,7 @@ const setting_detail_t *setting_get_details (setting_id_t id, setting_details_t 
 
     do {
         for(idx = 0; idx < details->n_settings; idx++) {
-            if(details->settings[idx].id == id) {
+            if(details->settings[idx].id == id && is_available(&details->settings[idx])) {
                 if(offset && offset >= (details->settings[idx].group == Group_Encoder0 ? hal.encoder.get_n_encoders() : N_AXIS))
                     return NULL;
                 if(set)
@@ -1577,23 +1593,22 @@ status_code_t settings_store_setting (setting_id_t id, char *svalue)
     setting_details_t *set;
     const setting_detail_t *setting = setting_get_details(id, &set);
 
+    if(setting == NULL)
+        return Status_SettingDisabled;
+
     // Trim leading spaces
     while(*svalue == ' ')
         svalue++;
 
-    if(setting) {
-        if(!setting_is_string(setting->datatype) && !read_float(svalue, &set_idx, &value) && setting_is_core(setting->type))
-            return Status_BadNumberFormat;
+    if(!setting_is_string(setting->datatype) && !read_float(svalue, &set_idx, &value) && setting_is_core(setting->type))
+        return Status_BadNumberFormat;
 
-        if((status = setting_validate_me(setting, value, svalue)) != Status_OK) {
-            if(setting == Setting_PulseMicroseconds && status == Status_SettingValueOutOfRange)
-                status =  Status_SettingStepPulseMin;
+    if((status = setting_validate_me(setting, value, svalue)) != Status_OK) {
+        if(setting == Setting_PulseMicroseconds && status == Status_SettingValueOutOfRange)
+            status =  Status_SettingStepPulseMin;
 
-            return status;
-        }
+        return status;
     }
-
-    uint_fast16_t int_value = (uint_fast16_t)truncf(value);
 
     switch(setting->type) {
 
@@ -1601,7 +1616,6 @@ status_code_t settings_store_setting (setting_id_t id, char *svalue)
         case Setting_IsExtended:
         case Setting_IsLegacy:
         case Setting_IsExpanded:
-            status = Status_OK;
             switch(setting->datatype) {
 
                 case Format_Decimal:
@@ -1614,22 +1628,23 @@ status_code_t settings_store_setting (setting_id_t id, char *svalue)
                     break;
 
                 case Format_AxisMask:
-                    int_value &= AXES_BITMASK;
-                    // no break
+                    *((uint8_t *)(setting->value)) = (uint8_t)truncf(value) & AXES_BITMASK;
+                    break;
+
                 case Format_Int8:
                 case Format_Bool:
                 case Format_Bitfield:
                 case Format_XBitfield:
                 case Format_RadioButtons:
-                    *((uint8_t *)(setting->value)) = int_value;
+                    *((uint8_t *)(setting->value)) = (uint8_t)truncf(value);
                     break;
 
                 case Format_Int16:
-                    *((uint16_t *)(setting->value)) = int_value;
+                    *((uint16_t *)(setting->value)) = (uint16_t)truncf(value);
                     break;
 
                 case Format_Integer:
-                    *((uint32_t *)(setting->value)) = int_value;
+                    *((uint32_t *)(setting->value)) = (uint32_t)truncf(value);
                     break;
 
                 default:
@@ -1655,7 +1670,7 @@ status_code_t settings_store_setting (setting_id_t id, char *svalue)
                     break;
 
                 default:
-                    status = ((setting_set_int_ptr)(setting->value))(id, int_value);
+                    status = ((setting_set_int_ptr)(setting->value))(id, (uint_fast16_t)truncf(value));
                     break;
             }
             break;

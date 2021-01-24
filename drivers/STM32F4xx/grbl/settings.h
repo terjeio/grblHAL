@@ -104,7 +104,7 @@ typedef enum {
     Setting_ParkingFastRate = 59,
 
     Setting_RestoreOverrides = 60,
-    Setting_IgnoreDoorWhenIdle = 61,
+    Setting_DoorOptions = 61,
     Setting_SleepEnable = 62,
     Setting_HoldActions = 63,
     Setting_ForceInitAlarm = 64,
@@ -294,15 +294,16 @@ typedef char stored_line_t[MAX_STORED_LINE_LENGTH];
 typedef union {
     uint16_t value;
     struct {
-        uint16_t report_inches                :1,
-                 restore_overrides            :1,
-                 safety_door_ignore_when_idle :1,
-                 sleep_enable                 :1,
-                 disable_laser_during_hold    :1,
-                 force_initialization_alarm   :1,
-                 legacy_rt_commands           :1,
-                 restore_after_feed_hold      :1,
-                 unassigned                   :8;
+        uint16_t report_inches                   :1,
+                 restore_overrides               :1,
+                 safety_door_ignore_when_idle    :1,
+                 sleep_enable                    :1,
+                 disable_laser_during_hold       :1,
+                 force_initialization_alarm      :1,
+                 legacy_rt_commands              :1,
+                 restore_after_feed_hold         :1,
+                 keep_coolant_state_on_door_open :1,
+                 unassigned                      :7;
     };
 } settingflags_t;
 
@@ -557,7 +558,7 @@ typedef enum {
     Group_Plasma,
     Group_Homing,
     Group_Probing,
-    Group_Parking,
+    Group_SafetyDoor,
     Group_Jogging,
     Group_Networking,
     Group_Networking_Wifi,

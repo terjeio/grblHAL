@@ -92,14 +92,14 @@ static modbus_stream_t modbus_stream = {0};
 
 static spindle_data_t spindle_data;
 static spindle_encoder_t spindle_encoder = {
-    .counter.tics_per_irq = 4
+    .tics_per_irq = 4
 };
 static spindle_sync_t spindle_tracker;
 static volatile bool spindleLock = false;
 
 static void stepperPulseStartSynchronized (stepper_t *stepper);
 static void spindleDataReset (void);
-static spindle_data_t spindleGetData (spindle_data_request_t request);
+static spindle_data_t *spindleGetData (spindle_data_request_t request);
 
 #endif
 
@@ -394,7 +394,7 @@ static void stepperPulseStartSynchronized (stepper_t *stepper)
         spindle_tracker.steps_per_mm = stepper->exec_block->steps_per_mm;
         spindle_tracker.segment_id = 0;
         spindle_tracker.prev_pos = 0.0f;
-        block_start = spindleGetData(SpindleData_AngularPosition).angular_position * spindle_tracker.programmed_rate;
+        block_start = spindleGetData(SpindleData_AngularPosition)->angular_position * spindle_tracker.programmed_rate;
         pidf_reset(&spindle_tracker.pid);
 #ifdef PID_LOG
         sys.pid_log.idx = 0;
@@ -419,7 +419,7 @@ static void stepperPulseStartSynchronized (stepper_t *stepper)
             if(stepper->exec_segment->cruising) {
 
                 float dt = (float)hal.f_step_timer / (float)(stepper->exec_segment->cycles_per_tick * stepper->exec_segment->n_step);
-                actual_pos = spindleGetData(SpindleData_AngularPosition).angular_position * spindle_tracker.programmed_rate;
+                actual_pos = spindleGetData(SpindleData_AngularPosition)->angular_position * spindle_tracker.programmed_rate;
 
                 if(sync) {
                     spindle_tracker.pid.sample_rate_prev = dt;
@@ -430,15 +430,13 @@ static void stepperPulseStartSynchronized (stepper_t *stepper)
 
                 actual_pos -= block_start;
                 int32_t step_delta = (int32_t)(pidf(&spindle_tracker.pid, spindle_tracker.prev_pos, actual_pos, dt) * spindle_tracker.steps_per_mm);
-
-
                 int32_t ticks = (((int32_t)stepper->step_count + step_delta) * (int32_t)stepper->exec_segment->cycles_per_tick) / (int32_t)stepper->step_count;
 
-                stepper->exec_segment->cycles_per_tick = (uint32_t)max(ticks, spindle_tracker.min_cycles_per_tick);
+                stepper->exec_segment->cycles_per_tick = (uint32_t)max(ticks, spindle_tracker.min_cycles_per_tick >> stepper->exec_segment->amass_level);
 
                 stepperCyclesPerTick(stepper->exec_segment->cycles_per_tick);
            } else
-               actual_pos = spindle_tracker.prev_pos;
+                actual_pos = spindle_tracker.prev_pos;
 
 #ifdef PID_LOG
             if(sys.pid_log.idx < PID_LOG) {
@@ -673,7 +671,7 @@ static spindle_state_t spindleGetState (void)
     state.value ^= settings.spindle.invert.mask;
 
 #ifdef SPINDLE_SYNC_ENABLE
-    float rpm = spindleGetData(SpindleData_RPM).rpm;
+    float rpm = spindleGetData(SpindleData_RPM)->rpm;
     state.at_speed = settings.spindle.at_speed_tolerance <= 0.0f || (rpm >= spindle_data.rpm_low_limit && rpm <= spindle_data.rpm_high_limit);
     state.encoder_error = spindle_encoder.error_count > 0;
 #endif
@@ -695,25 +693,33 @@ static void spindlePulseOn (uint_fast16_t pulse_length)
 
 #ifdef SPINDLE_SYNC_ENABLE
 
-static spindle_data_t spindleGetData (spindle_data_request_t request)
+static spindle_data_t *spindleGetData (spindle_data_request_t request)
 {
     bool stopped;
+    spindle_encoder_counter_t encoder;
+
+//    while(spindle_encoder.spin_lock);
 
     __disable_irq();
-    uint32_t pulse_length = spindle_encoder.timer.pulse_length / spindle_encoder.counter.tics_per_irq;
-    uint32_t rpm_timer_delta = (uint16_t)((uint16_t)RPM_TIMER->CNT - (uint16_t)spindle_encoder.timer.last_pulse);
+
+    memcpy(&encoder, &spindle_encoder.counter, sizeof(spindle_encoder_counter_t));
+
+    uint32_t pulse_length = spindle_encoder.timer.pulse_length / spindle_encoder.tics_per_irq;
+    uint32_t rpm_timer_delta = RPM_TIMER->CNT - spindle_encoder.timer.last_pulse;
+
     __enable_irq();
 
-    // If no (4) spindle pulses during last 250 ms assume RPM is 0
+    // If no spindle pulses during last 250 ms assume RPM is 0
     if((stopped = ((pulse_length == 0) || (rpm_timer_delta > spindle_encoder.maximum_tt)))) {
         spindle_data.rpm = 0.0f;
-        rpm_timer_delta = (uint16_t)(((uint16_t)RPM_COUNTER->CNT - (uint16_t)spindle_encoder.counter.last_count)) * pulse_length;
+        rpm_timer_delta = (uint16_t)(((uint16_t)RPM_COUNTER->CNT - (uint16_t)encoder.last_count)) * pulse_length;
     }
 
     switch(request) {
 
         case SpindleData_Counters:
-            spindle_data.pulse_count += (uint16_t)(((uint16_t)RPM_COUNTER->CNT - (uint16_t)spindle_encoder.counter.last_count));
+            spindle_data.index_count = encoder.index_count;
+            spindle_data.pulse_count = encoder.pulse_count + (uint32_t)((uint16_t)RPM_COUNTER->CNT - (uint16_t)encoder.last_count);
             break;
 
         case SpindleData_RPM:
@@ -722,14 +728,14 @@ static spindle_data_t spindleGetData (spindle_data_request_t request)
             break;
 
         case SpindleData_AngularPosition:
-            spindle_data.angular_position = (float)spindle_data.index_count +
-                    ((float)((uint16_t)spindle_encoder.counter.last_count - (uint16_t)spindle_encoder.counter.last_index) +
+            spindle_data.angular_position = (float) encoder.index_count +
+                    ((float)((uint16_t)encoder.last_count - (uint16_t)encoder.last_index) +
                               (pulse_length == 0 ? 0.0f : (float)rpm_timer_delta / (float)pulse_length)) *
                                 spindle_encoder.pulse_distance;
             break;
     }
 
-    return spindle_data;
+    return &spindle_data;
 }
 
 static void spindleDataReset (void)
@@ -738,10 +744,10 @@ static void spindleDataReset (void)
 
     uint32_t timeout = uwTick + 1000; // 1 second
 
-    uint32_t index_count = spindle_data.index_count + 2;
-    if(spindleGetData(SpindleData_RPM).rpm > 0.0f) { // wait for index pulse if running
+    uint32_t index_count = spindle_encoder.counter.index_count + 2;
+    if(spindleGetData(SpindleData_RPM)->rpm > 0.0f) { // wait for index pulse if running
 
-        while(index_count != spindle_data.index_count && uwTick <= timeout);
+        while(index_count != spindle_encoder.counter.index_count && uwTick <= timeout);
 
 //        if(uwTick > timeout)
 //            alarm?
@@ -756,11 +762,11 @@ static void spindleDataReset (void)
     spindle_encoder.counter.last_index = 0;
     spindle_encoder.error_count = 0;
 
-    spindle_data.pulse_count = 0;
-    spindle_data.index_count = 0;
+    spindle_encoder.counter.pulse_count = 0;
+    spindle_encoder.counter.index_count = 0;
 
     RPM_COUNTER->EGR |= TIM_EGR_UG;
-    RPM_COUNTER->CCR1 = spindle_encoder.counter.tics_per_irq;
+    RPM_COUNTER->CCR1 = spindle_encoder.tics_per_irq;
     RPM_COUNTER->CR1 |= TIM_CR1_CEN;
 }
 
@@ -914,7 +920,8 @@ void settings_changed (settings_t *settings)
 
 #ifdef SPINDLE_SYNC_ENABLE
 
-        if((hal.spindle.get_data = hal.driver_cap.spindle_at_speed ? spindleGetData : NULL) && spindle_encoder.ppr != settings->spindle.ppr) {
+        if((hal.spindle.get_data = hal.driver_cap.spindle_at_speed ? spindleGetData : NULL) &&
+             (spindle_encoder.ppr != settings->spindle.ppr || pidf_config_changed(&spindle_tracker.pid, &settings->position.pid))) {
 
             hal.spindle.reset_data = spindleDataReset;
             hal.spindle.set_state((spindle_state_t){0}, 0.0f);
@@ -923,14 +930,13 @@ void settings_changed (settings_t *settings)
 
             float timer_resolution = 1.0f / 1000000.0f; // 1 us resolution
 
-            spindle_tracker.min_cycles_per_tick = (int32_t)ceilf(settings->steppers.pulse_microseconds * 2.0f + settings->steppers.pulse_delay_microseconds);
+            spindle_tracker.min_cycles_per_tick = hal.f_step_timer / (uint32_t)(settings->axis[Z_AXIS].max_rate * settings->axis[Z_AXIS].steps_per_mm / 60.0f);
             spindle_encoder.ppr = settings->spindle.ppr;
-            spindle_encoder.counter.tics_per_irq = 4;
+            spindle_encoder.tics_per_irq = max(1, spindle_encoder.ppr / 32);
             spindle_encoder.pulse_distance = 1.0f / spindle_encoder.ppr;
-            spindle_encoder.maximum_tt = (uint32_t)(0.25f / timer_resolution) * spindle_encoder.counter.tics_per_irq; // 250 mS
+            spindle_encoder.maximum_tt = (uint32_t)(2.0f / timer_resolution) / spindle_encoder.tics_per_irq;
             spindle_encoder.rpm_factor = 60.0f / ((timer_resolution * (float)spindle_encoder.ppr));
             spindleDataReset();
-            //        spindle_data.rpm = 60.0f / ((float)(spindle_encoder.tpp * spindle_encoder.ppr) * spindle_encoder.timer_resolution); // TODO: get rid of division
         }
 
 #endif
@@ -1341,7 +1347,7 @@ bool driver_init (void)
 #else
     hal.info = "STM32F401CC";
 #endif
-    hal.driver_version = "210120";
+    hal.driver_version = "210124";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1573,19 +1579,22 @@ void PPI_TIMER_IRQHandler (void)
 
 void RPM_COUNTER_IRQHandler (void)
 {
+    spindle_encoder.spin_lock = true;
+
     __disable_irq();
     uint32_t tval = RPM_TIMER->CNT;
     uint16_t cval = RPM_COUNTER->CNT;
     __enable_irq();
 
     RPM_COUNTER->SR = ~TIM_SR_CC1IF;
-    RPM_COUNTER->CCR1 = (uint16_t)(RPM_COUNTER->CCR1 + spindle_encoder.counter.tics_per_irq);
+    RPM_COUNTER->CCR1 = (uint16_t)(RPM_COUNTER->CCR1 + spindle_encoder.tics_per_irq);
 
-    spindle_data.pulse_count += (uint16_t)(cval - (uint16_t)spindle_encoder.counter.last_count);
-
+    spindle_encoder.counter.pulse_count += (uint16_t)(cval - (uint16_t)spindle_encoder.counter.last_count);
     spindle_encoder.counter.last_count = cval;
     spindle_encoder.timer.pulse_length = tval - spindle_encoder.timer.last_pulse;
     spindle_encoder.timer.last_pulse = tval;
+
+    spindle_encoder.spin_lock = false;
 }
 
 #endif
@@ -1790,12 +1799,12 @@ void EXTI15_10_IRQHandler(void)
 #ifdef SPINDLE_INDEX_PORT
         if(ifg & SPINDLE_INDEX_BIT) {
 
-            if(spindle_data.index_count && (uint16_t)(RPM_COUNTER->CNT - (uint16_t)spindle_encoder.counter.last_index) != spindle_encoder.ppr)
+            if(spindle_encoder.counter.index_count && (uint16_t)(RPM_COUNTER->CNT - (uint16_t)spindle_encoder.counter.last_index) != spindle_encoder.ppr)
                 spindle_encoder.error_count++;
 
             spindle_encoder.counter.last_index = RPM_COUNTER->CNT;
             spindle_encoder.timer.last_index = RPM_TIMER->CNT;
-            spindle_data.index_count++;
+            spindle_encoder.counter.index_count++;
         }
 #endif
 #if CONTROL_MASK & 0xFC00

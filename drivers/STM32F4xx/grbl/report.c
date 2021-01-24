@@ -1186,7 +1186,7 @@ void report_realtime_status (void)
             hal.stream.write_all(appendbuf(2, "|FS:", get_rate_value(st_get_realtime_rate())));
             hal.stream.write_all(appendbuf(2, ",", uitoa(sp_state.on ? lroundf(sys.spindle_rpm) : 0)));
             if(hal.spindle.get_data /* && sys.mpg_mode */)
-                hal.stream.write_all(appendbuf(2, ",", uitoa(lroundf(hal.spindle.get_data(SpindleData_RPM).rpm))));
+                hal.stream.write_all(appendbuf(2, ",", uitoa(lroundf(hal.spindle.get_data(SpindleData_RPM)->rpm))));
         } else
             hal.stream.write_all(appendbuf(2, "|F:", get_rate_value(st_get_realtime_rate())));
     }
@@ -1761,6 +1761,29 @@ status_code_t report_setting_group_details (bool by_id, char *prefix)
     } while(details);
 
     return Status_OK;
+}
+
+status_code_t report_spindle_data (sys_state_t state, char *args)
+{
+    if(hal.spindle.get_data) {
+
+        float apos = hal.spindle.get_data(SpindleData_AngularPosition)->angular_position;
+        spindle_data_t *spindle = hal.spindle.get_data(SpindleData_Counters);
+
+        hal.stream.write("[SPINDLE:");
+        hal.stream.write(uitoa(spindle->index_count));
+        hal.stream.write(",");
+        hal.stream.write(uitoa(spindle->pulse_count));
+//        hal.stream.write(",");
+//        hal.stream.write(ftoa((float)spindle->pulse_count / (float)settings.spindle.ppr, 3));
+        hal.stream.write(",");
+        hal.stream.write(ftoa(apos, 3));
+        hal.stream.write("]" ASCII_EOL);
+
+//        hal.spindle.reset_data();
+    }
+
+    return hal.spindle.get_data ? Status_OK : Status_InvalidStatement;
 }
 
 void report_pid_log (void)

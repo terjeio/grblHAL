@@ -115,7 +115,7 @@ typedef void (*spindle_update_pwm_ptr)(uint_fast16_t pwm);
 #else
 typedef void (*spindle_update_rpm_ptr)(float rpm);
 #endif
-typedef spindle_data_t (*spindle_get_data_ptr)(spindle_data_request_t request);
+typedef spindle_data_t *(*spindle_get_data_ptr)(spindle_data_request_t request);
 typedef void (*spindle_reset_data_ptr)(void);
 typedef void (*spindle_pulse_on_ptr)(uint_fast16_t pulse_length);
 
