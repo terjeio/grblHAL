@@ -138,7 +138,7 @@ bool serialPutC (const char c)
     txbuffer.data[txbuffer.head] = c;                           // Add data to buffer
     txbuffer.head = next_head;                                  // and update head pointer
 
-    uart_set_irq_enables(UART_PORT, true, true);
+    hw_set_bits(UART->imsc, UART_UARTIMSC_TXIM_BITS);
 
     return true;
 }
@@ -205,10 +205,10 @@ static void uart_interrupt_handler (void)
         txbuffer.tail = bptr;                                       //  Update tail pinter
 
         if(bptr == txbuffer.head)									// Disable TX interrups
-			UART->imsc &= ~UART_UARTIMSC_TXIM_BITS;
+			hw_clear_bits(UART->imsc, UART_UARTIMSC_TXIM_BITS);
     }
 
-    if (ctrl & UART_UARTMIS_TXMIS_BITS) {
+    if (ctrl & UART_UARTMIS_RXMIS_BITS) {
 
         while (uart_is_readable(UART_PORT)) {
 
