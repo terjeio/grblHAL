@@ -508,7 +508,7 @@ static void spindle_set_speed (uint_fast16_t pwm_value)
 {
     if (pwm_value == spindle_pwm.off_value) {
         pwmEnabled = false;
-        if(settings.spindle.disable_with_zero_speed)
+        if(settings.spindle.flags.pwm_action == SpindleAction_DisableWithZeroSPeed)
             spindle_off();
         if(spindle_pwm.always_on) {
 //            SPINDLE_PWM_TIMER->CCR1 = spindle_pwm.off_value;
@@ -1133,7 +1133,7 @@ bool driver_init (void)
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
 
 #ifdef CONTROL_SAFETY_DOOR_PIN
-    hal.driver_cap.safety_door = On;
+    hal.signals_cap.safety_door_ajar = On;
 #endif
     hal.driver_cap.spindle_dir = On;
 #ifdef SPINDLE_PWM_PIN

@@ -128,17 +128,17 @@ bool serialPutC (const char c)
         return true;
     }
 
-    next_head = (txbuffer.head + 1) & (TX_BUFFER_SIZE - 1);     // Get and update head pointer
+    next_head = (txbuffer.head + 1) & (TX_BUFFER_SIZE - 1); // Get and update head pointer
 
-    while(txbuffer.tail == next_head) {                         // Buffer full, block until space is available...
+    while(txbuffer.tail == next_head) {                     // Buffer full, block until space is available...
         if(!hal.stream_blocking_callback())
             return false;
     }
 
-    txbuffer.data[txbuffer.head] = c;                           // Add data to buffer
-    txbuffer.head = next_head;                                  // and update head pointer
+    txbuffer.data[txbuffer.head] = c;                       // Add data to buffer
+    txbuffer.head = next_head;                              // and update head pointer
 
-    hw_set_bits(UART->imsc, UART_UARTIMSC_TXIM_BITS);
+    hw_set_bits(UART->imsc, UART_UARTIMSC_TXIM_BITS);       // Enable transmit interrupt      
 
     return true;
 }
