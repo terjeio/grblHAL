@@ -1,13 +1,11 @@
 /*
-  pid.h - An embedded CNC Controller with rs274/ngc (g-code) support
+  crossbar.h - signal crossbar definitions
 
-  PID algorithm for closed loop control
-
-  NOTE: not referenced in the core grbl code
+  Not used by the core.
 
   Part of grblHAL
 
-  Copyright (c) 2020-2021 Terje Io
+  Copyright (c) 2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,26 +21,22 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef _PID_H_
-#define _PID_H_
+#ifndef _CROSSBAR_H_
+#define _CROSSBAR_H_
 
-#include <stdbool.h>
-
-#include "settings.h"
+typedef bool (*xbar_get_value_ptr)(void);
+typedef void (*xbar_set_value_ptr)(bool on);
+typedef void (*xbar_event_ptr)(bool on);
+typedef void (*xbar_config_ptr)(void *cfg_data);
 
 typedef struct {
-    pid_values_t cfg;
-    float deadband;
-    float i_error;
-    float d_error;
-    float sample_rate_prev;
-    float error;
-    float max_error;
-} pidf_t;
-
-void pidf_reset (pidf_t *pid);
-void pidf_init(pidf_t *pid, pid_values_t *config);
-bool pidf_config_changed (pidf_t *pid, pid_values_t *config);
-float pidf (pidf_t *pid, float command, float actual, float sample_rate);
+    uint32_t function;
+    void *port;
+    uint8_t bit;
+    xbar_config_ptr config;
+    xbar_get_value_ptr get_value;
+    xbar_set_value_ptr set_value;
+    xbar_event_ptr on_event;
+} xbar_t;
 
 #endif

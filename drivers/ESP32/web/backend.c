@@ -61,9 +61,7 @@
 #include "esp_vfs_fat.h"
 #endif
 
-static int setting = -1;
 static httpd_handle_t httpdaemon = NULL;
-static cJSON *json_settings;
 
 #define MAX_APs 20
 
@@ -476,27 +474,21 @@ static esp_err_t get_handler(httpd_req_t *req)
 }
 
 // add setting to the JSON response array
-static bool add_setting (int id, char *value)
+static bool report_setting (const setting_detail_t *setting, uint_fast16_t offset, void *data)
 {
     bool ok = true;
 
-    cJSON *setting;
+    cJSON *settingobj;
 
-    if((ok = (setting = cJSON_CreateObject()) != NULL))
+    if((ok = (settingobj = cJSON_CreateObject()) != NULL))
     {
-        ok = cJSON_AddNumberToObject(setting, "id", (double)id) != NULL;
-        ok &= cJSON_AddStringToObject(setting, "value", value) != NULL;
+        ok = !!cJSON_AddNumberToObject(settingobj, "id", (double)(setting->id + offset));
+        ok &= !!cJSON_AddStringToObject(settingobj, "value", setting_get_value(setting, offset));
         if(ok)
-            cJSON_AddItemToArray(json_settings, setting);
+            cJSON_AddItemToArray((cJSON *)data, settingobj);
     }
 
     return ok;
-}
-
-static void report_setting (const setting_detail_t *psetting, uint_fast16_t offset)
-{
-    if(setting == -1 || psetting->id == setting)
-        add_setting(psetting->id, setting_get_value(psetting, offset));
 }
 
 static esp_err_t settings_get_handler(httpd_req_t *req)
@@ -505,16 +497,19 @@ static esp_err_t settings_get_handler(httpd_req_t *req)
 
 //  size_t ql = httpd_req_get_url_query_len(req);
 
-    setting = strlen(req->uri) > 9 ? atoi(&req->uri[10]) : -1;
+    int setting = strlen(req->uri) > 9 ? atoi(&req->uri[10]) : -1;
 
-    cJSON *root = cJSON_CreateObject();
+    cJSON *json_settings, *root = cJSON_CreateObject();
 
     if((ok = (root && (json_settings = cJSON_AddArrayToObject(root, "settings"))))) {
 
-        setting_ptr org_ptr = grbl.report.setting;
+        setting_output_ptr org_ptr = grbl.report.setting;
         grbl.report.setting = report_setting;
 
-        report_grbl_settings(false);
+        if(setting == -1)
+            report_grbl_settings(false, &json_settings);
+        else
+            report_grbl_setting((setting_id_t)setting, &json_settings);
 
         grbl.report.setting = org_ptr;
 

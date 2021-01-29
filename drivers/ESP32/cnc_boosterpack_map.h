@@ -82,7 +82,9 @@
 #define RESET_PIN       GPIO_NUM_35
 #define FEED_HOLD_PIN   GPIO_NUM_39
 #define CYCLE_START_PIN GPIO_NUM_36
+#ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
 #define SAFETY_DOOR_PIN GPIO_NUM_34
+#endif
 
 // Define probe switch input pin.
 #define PROBE_PIN   GPIO_NUM_13

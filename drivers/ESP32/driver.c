@@ -1477,7 +1477,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "ESP32";
-    hal.driver_version = "210111";
+    hal.driver_version = "210125";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1576,7 +1576,7 @@ bool driver_init (void)
     hal.driver_cap.limits_pull_up = On;
     hal.driver_cap.probe_pull_up = On;
 #ifdef SAFETY_DOOR_PIN
-    hal.driver_cap.safety_door = On;
+    hal.signals_cap.safety_door_ajar = On;
 #endif
 #if MPG_MODE_ENABLE
     hal.driver_cap.mpg_mode = On;
@@ -1622,7 +1622,7 @@ bool driver_init (void)
     my_plugin_init();
 
     // no need to move version check before init - compiler will fail any mismatch for existing entries
-    return hal.version == 7;
+    return hal.version == 8;
 }
 
 /* interrupt handlers */
