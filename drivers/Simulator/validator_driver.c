@@ -1,9 +1,9 @@
 /*
   validator_driver.c - driver code for simulator MCU
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -173,7 +173,7 @@ uint16_t serial_get_rx_buffer_available()
 bool driver_init ()
 {
     hal.info = "Validator";
-    hal.driver_version = "201208";
+    hal.driver_version = "210131";
     hal.driver_setup = driver_setup;
     hal.rx_buffer_size = RX_BUFFER_SIZE;
     hal.f_step_timer = F_CPU;
@@ -215,6 +215,8 @@ bool driver_init ()
 
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
 
+    hal.signals_cap.safety_door_ajar = On;
+
     hal.driver_cap.amass_level = 3;
     hal.driver_cap.spindle_dir = On;
 
@@ -226,7 +228,6 @@ bool driver_init ()
     hal.driver_cap.spindle_pwm_linearization = On;
     hal.driver_cap.mist_control = On;
 
-    hal.driver_cap.safety_door = On;
     hal.driver_cap.control_pull_up = On;
     hal.driver_cap.limits_pull_up = On;
     hal.driver_cap.probe_pull_up = On;

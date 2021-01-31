@@ -225,7 +225,9 @@ state_signal_t inputpin[] = {
     {CONTROL_PORT_RST, RESET_PIN, false, false, false},
     {CONTROL_PORT_FH_CS, FEED_HOLD_PIN, false, false, false},
     {CONTROL_PORT_FH_CS, CYCLE_START_PIN, false, false, false},
+#ifdef SAFETY_DOOR_PIN
     {CONTROL_PORT_SD, SAFETY_DOOR_PIN, false, false, false},
+#endif
     {PROBE_PORT, PROBE_PIN, false, false, false},
     {LIMIT_PORT_X, X_LIMIT_PIN, false, false, false},
     {LIMIT_PORT_YZ, Y_LIMIT_PIN, false, false, false},
@@ -1646,7 +1648,7 @@ bool driver_init (void)
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
-    hal.driver_version = "210111";
+    hal.driver_version = "210125";
     hal.driver_setup = driver_setup;
 #if !USE_32BIT_TIMER
     hal.f_step_timer = hal.f_step_timer / (STEPPER_DRIVER_PRESCALER + 1);
@@ -1708,7 +1710,7 @@ bool driver_init (void)
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
 
 #ifdef SAFETY_DOOR_PIN
-    hal.driver_cap.safety_door = On;
+    hal.signals_cap.safety_door_ajar = On;
 #endif
     hal.driver_cap.spindle_dir = On;
     hal.driver_cap.variable_spindle = On;
@@ -1746,7 +1748,7 @@ bool driver_init (void)
     my_plugin_init();
 
     // no need to move version check before init - compiler will fail any signature mismatch for existing entries
-    return hal.version == 7;
+    return hal.version == 8;
 }
 
 /* interrupt handlers */
@@ -2064,8 +2066,10 @@ static void control_isr_sd (void)
             hal.limits.interrupt_callback(limitsGetState());
     }
 #endif
+#ifdef SAFETY_DOOR_PIN
     if(iflags & SAFETY_DOOR_PIN)
         hal.control.interrupt_callback(systemGetState());
+#endif
 }
 
 #ifndef FreeRTOS

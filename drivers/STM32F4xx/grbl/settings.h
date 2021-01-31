@@ -625,6 +625,11 @@ typedef enum {
     Setting_IsExpandedFn
 } setting_type_t;
 
+typedef union {
+    uint32_t ivalue;
+    float fvalue;
+} setting_limit_t;
+
 typedef struct setting_detail {
     setting_id_t id;
     setting_group_t group;
@@ -711,5 +716,6 @@ setting_datatype_t setting_datatype_to_external (setting_datatype_t datatype);
 setting_group_t settings_normalize_group (setting_group_t group);
 char *setting_get_value (const setting_detail_t *setting, uint_fast16_t offset);
 setting_id_t settings_get_axis_base (setting_id_t id, uint_fast8_t *idx);
+bool setting_is_list (const setting_detail_t *setting);
 
 #endif

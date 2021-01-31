@@ -904,7 +904,7 @@ void report_build_info (char *line, bool extended)
     if(!settings.homing.flags.init_lock)
         *append++ = 'L';
 
-    if(hal.driver_cap.safety_door)
+    if(hal.signals_cap.safety_door_ajar)
         *append++ = '+';
 
   #ifdef DISABLE_RESTORE_NVS_WIPE_ALL // NOTE: Shown when disabled.
@@ -961,16 +961,16 @@ void report_build_info (char *line, bool extended)
 
         if(!hal.probe.get_state)
             strcat(buf, "NOPROBE,");
-        else if(hal.driver_cap.probe_connected)
+        else if(hal.signals_cap.probe_disconnected)
             strcat(buf, "PC,");
 
-        if(hal.driver_cap.program_stop)
+        if(hal.signals_cap.stop_disable)
             strcat(buf, "OS,");
 
-        if(hal.driver_cap.block_delete)
+        if(hal.signals_cap.block_delete)
             strcat(buf, "BD,");
 
-        if(hal.driver_cap.e_stop)
+        if(hal.signals_cap.e_stop)
             strcat(buf, "ES,");
 
         if(hal.driver_cap.mpg_mode)
@@ -1212,7 +1212,7 @@ void report_realtime_status (void)
                 append = axis_signals_tostring(append, lim_pin_state);
 
             if (ctrl_pin_state.value) {
-                if (ctrl_pin_state.safety_door_ajar && hal.driver_cap.safety_door)
+                if (ctrl_pin_state.safety_door_ajar && hal.signals_cap.safety_door_ajar)
                     *append++ = 'D';
                 if (ctrl_pin_state.reset)
                     *append++ = 'R';
@@ -1224,7 +1224,7 @@ void report_realtime_status (void)
                     *append++ = 'E';
                 if (ctrl_pin_state.block_delete && sys.flags.block_delete_enabled)
                     *append++ = 'L';
-                if (hal.driver_cap.program_stop ? ctrl_pin_state.stop_disable : sys.flags.optional_stop_disable)
+                if (hal.signals_cap.stop_disable ? ctrl_pin_state.stop_disable : sys.flags.optional_stop_disable)
                     *append++ = 'T';
                 if (ctrl_pin_state.motor_warning)
                     *append++ = 'W';
@@ -1465,7 +1465,7 @@ static void report_settings_detail (bool human_readable, const setting_detail_t 
             hal.stream.write(setting->min_value);
             hal.stream.write(" - ");
             hal.stream.write(setting->max_value);
-        } else {
+        } else if(!setting_is_list(setting)) {
             if(setting->min_value) {
                 hal.stream.write(", min: ");
                 hal.stream.write(setting->min_value);
@@ -1491,7 +1491,7 @@ static void report_settings_detail (bool human_readable, const setting_detail_t 
         if(setting->format)
             hal.stream.write(setting->format);
         hal.stream.write(vbar);
-        if(setting->min_value)
+        if(setting->min_value && !setting_is_list(setting))
             hal.stream.write(setting->min_value);
         hal.stream.write(vbar);
         if(setting->max_value)
@@ -1763,6 +1763,7 @@ status_code_t report_setting_group_details (bool by_id, char *prefix)
     return Status_OK;
 }
 
+// Prints spindle data (encoder pulse and index count, angular position).
 status_code_t report_spindle_data (sys_state_t state, char *args)
 {
     if(hal.spindle.get_data) {
@@ -1774,13 +1775,11 @@ status_code_t report_spindle_data (sys_state_t state, char *args)
         hal.stream.write(uitoa(spindle->index_count));
         hal.stream.write(",");
         hal.stream.write(uitoa(spindle->pulse_count));
-//        hal.stream.write(",");
-//        hal.stream.write(ftoa((float)spindle->pulse_count / (float)settings.spindle.ppr, 3));
+        hal.stream.write(",");
+        hal.stream.write(uitoa(spindle->error_count));
         hal.stream.write(",");
         hal.stream.write(ftoa(apos, 3));
         hal.stream.write("]" ASCII_EOL);
-
-//        hal.spindle.reset_data();
     }
 
     return hal.spindle.get_data ? Status_OK : Status_InvalidStatement;

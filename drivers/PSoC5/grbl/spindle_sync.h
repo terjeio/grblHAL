@@ -7,7 +7,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -45,7 +45,8 @@ typedef struct {
 typedef struct {
     volatile uint32_t last_count;   // Counter value at last encoder pulse interrupt
     volatile uint32_t last_index;   // Counter value at last encoder index interrupt
-    uint32_t tics_per_irq;          // Counts per interrupt generated (prescaler value)
+    volatile uint32_t index_count;
+    volatile uint32_t pulse_count;
 } spindle_encoder_counter_t;
 
 typedef struct {
@@ -56,6 +57,8 @@ typedef struct {
     spindle_encoder_timer_t timer;      // Event timestamps
     spindle_encoder_counter_t counter;  // Encoder event counts
     uint32_t error_count;               // Incremented when actual PPR count differs from ppr setting
+    uint32_t tics_per_irq;              // Counts per interrupt generated (prescaler value)
+    volatile bool spin_lock;
 } spindle_encoder_t;
 
 typedef struct {

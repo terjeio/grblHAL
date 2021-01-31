@@ -696,6 +696,7 @@ static void spindlePulseOn (uint_fast16_t pulse_length)
 static spindle_data_t *spindleGetData (spindle_data_request_t request)
 {
     bool stopped;
+    uint32_t pulse_length, rpm_timer_delta;
     spindle_encoder_counter_t encoder;
 
 //    while(spindle_encoder.spin_lock);
@@ -704,8 +705,8 @@ static spindle_data_t *spindleGetData (spindle_data_request_t request)
 
     memcpy(&encoder, &spindle_encoder.counter, sizeof(spindle_encoder_counter_t));
 
-    uint32_t pulse_length = spindle_encoder.timer.pulse_length / spindle_encoder.tics_per_irq;
-    uint32_t rpm_timer_delta = RPM_TIMER->CNT - spindle_encoder.timer.last_pulse;
+    pulse_length = spindle_encoder.timer.pulse_length / spindle_encoder.tics_per_irq;
+    rpm_timer_delta = RPM_TIMER->CNT - spindle_encoder.timer.last_pulse;
 
     __enable_irq();
 
@@ -720,6 +721,7 @@ static spindle_data_t *spindleGetData (spindle_data_request_t request)
         case SpindleData_Counters:
             spindle_data.index_count = encoder.index_count;
             spindle_data.pulse_count = encoder.pulse_count + (uint32_t)((uint16_t)RPM_COUNTER->CNT - (uint16_t)encoder.last_count);
+            spindle_data.error_count = spindle_encoder.error_count;
             break;
 
         case SpindleData_RPM:
@@ -728,7 +730,7 @@ static spindle_data_t *spindleGetData (spindle_data_request_t request)
             break;
 
         case SpindleData_AngularPosition:
-            spindle_data.angular_position = (float) encoder.index_count +
+            spindle_data.angular_position = (float)encoder.index_count +
                     ((float)((uint16_t)encoder.last_count - (uint16_t)encoder.last_index) +
                               (pulse_length == 0 ? 0.0f : (float)rpm_timer_delta / (float)pulse_length)) *
                                 spindle_encoder.pulse_distance;
@@ -756,14 +758,15 @@ static void spindleDataReset (void)
     RPM_TIMER->EGR |= TIM_EGR_UG; // Reload RPM timer
     RPM_COUNTER->CR1 &= ~TIM_CR1_CEN;
 
+    spindle_encoder.timer.last_index =
     spindle_encoder.timer.last_index = RPM_TIMER->CNT;
-    spindle_encoder.timer.pulse_length = 0;
-    spindle_encoder.counter.last_count = 0;
-    spindle_encoder.counter.last_index = 0;
-    spindle_encoder.error_count = 0;
 
-    spindle_encoder.counter.pulse_count = 0;
-    spindle_encoder.counter.index_count = 0;
+    spindle_encoder.timer.pulse_length =
+    spindle_encoder.counter.last_count =
+    spindle_encoder.counter.last_index =
+    spindle_encoder.counter.pulse_count =
+    spindle_encoder.counter.index_count =
+    spindle_encoder.error_count = 0;
 
     RPM_COUNTER->EGR |= TIM_EGR_UG;
     RPM_COUNTER->CCR1 = spindle_encoder.tics_per_irq;
@@ -1347,7 +1350,7 @@ bool driver_init (void)
 #else
     hal.info = "STM32F401CC";
 #endif
-    hal.driver_version = "210124";
+    hal.driver_version = "210130";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1434,7 +1437,7 @@ bool driver_init (void)
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
 
 #ifdef CONTROL_SAFETY_DOOR_PIN
-    hal.driver_cap.safety_door = On;
+    hal.signals_cap.safety_door_ajar = On;
 #endif
     hal.driver_cap.spindle_dir = On;
 #ifdef SPINDLE_PWM_PIN
@@ -1496,7 +1499,7 @@ bool driver_init (void)
 
     // No need to move version check before init.
     // Compiler will fail any signature mismatch for existing entries.
-    return hal.version == 7;
+    return hal.version == 8;
 }
 
 /* interrupt handlers */

@@ -725,12 +725,13 @@ static void settings_changed (settings_t *settings)
         GPIOPadConfigSet(CONTROL_PORT, CYCLE_START_PIN, GPIO_STRENGTH_2MA, settings->control_disable_pullup.cycle_start ? GPIO_PIN_TYPE_STD_WPD : GPIO_PIN_TYPE_STD_WPU);
         GPIOPadConfigSet(CONTROL_PORT, FEED_HOLD_PIN, GPIO_STRENGTH_2MA, settings->control_disable_pullup.feed_hold ? GPIO_PIN_TYPE_STD_WPD : GPIO_PIN_TYPE_STD_WPU);
         GPIOPadConfigSet(CONTROL_PORT, RESET_PIN, GPIO_STRENGTH_2MA, settings->control_disable_pullup.reset ? GPIO_PIN_TYPE_STD_WPD : GPIO_PIN_TYPE_STD_WPU);
-        GPIOPadConfigSet(CONTROL_PORT, SAFETY_DOOR_PIN, GPIO_STRENGTH_2MA, settings->control_disable_pullup.safety_door_ajar ? GPIO_PIN_TYPE_STD_WPD : GPIO_PIN_TYPE_STD_WPU);
-
         GPIOIntTypeSet(CONTROL_PORT, CYCLE_START_PIN, control_fei.cycle_start ? GPIO_FALLING_EDGE : GPIO_RISING_EDGE);
         GPIOIntTypeSet(CONTROL_PORT, FEED_HOLD_PIN, control_fei.feed_hold ? GPIO_FALLING_EDGE : GPIO_RISING_EDGE);
         GPIOIntTypeSet(CONTROL_PORT, RESET_PIN, control_fei.reset ? GPIO_FALLING_EDGE : GPIO_RISING_EDGE);
+#ifdef SAFETY_DOOR_PIN
+        GPIOPadConfigSet(CONTROL_PORT, SAFETY_DOOR_PIN, GPIO_STRENGTH_2MA, settings->control_disable_pullup.safety_door_ajar ? GPIO_PIN_TYPE_STD_WPD : GPIO_PIN_TYPE_STD_WPU);
         GPIOIntTypeSet(CONTROL_PORT, SAFETY_DOOR_PIN, control_fei.safety_door_ajar ? GPIO_FALLING_EDGE : GPIO_RISING_EDGE);
+#endif
 
         GPIOIntClear(CONTROL_PORT, HWCONTROL_MASK);     // Clear any pending interrupt
         GPIOIntEnable(CONTROL_PORT, HWCONTROL_MASK);    // and enable pin change interrupt
@@ -877,12 +878,13 @@ static bool driver_setup (settings_t *settings)
     GPIOPadConfigSet(CONTROL_PORT, CYCLE_START_PIN, GPIO_STRENGTH_2MA, settings->control_disable_pullup.cycle_start ? GPIO_PIN_TYPE_STD_WPD : GPIO_PIN_TYPE_STD_WPU);
     GPIOPadConfigSet(CONTROL_PORT, FEED_HOLD_PIN, GPIO_STRENGTH_2MA, settings->control_disable_pullup.feed_hold ? GPIO_PIN_TYPE_STD_WPD : GPIO_PIN_TYPE_STD_WPU);
     GPIOPadConfigSet(CONTROL_PORT, RESET_PIN, GPIO_STRENGTH_2MA, settings->control_disable_pullup.reset ? GPIO_PIN_TYPE_STD_WPD : GPIO_PIN_TYPE_STD_WPU);
-    GPIOPadConfigSet(CONTROL_PORT, SAFETY_DOOR_PIN, GPIO_STRENGTH_2MA, settings->control_disable_pullup.safety_door_ajar ? GPIO_PIN_TYPE_STD_WPD : GPIO_PIN_TYPE_STD_WPU);
-
     GPIOIntTypeSet(CONTROL_PORT, CYCLE_START_PIN, settings->control_invert.cycle_start ? GPIO_FALLING_EDGE : GPIO_RISING_EDGE);
     GPIOIntTypeSet(CONTROL_PORT, FEED_HOLD_PIN, settings->control_invert.feed_hold ? GPIO_FALLING_EDGE : GPIO_RISING_EDGE);
     GPIOIntTypeSet(CONTROL_PORT, RESET_PIN, settings->control_invert.reset ? GPIO_FALLING_EDGE : GPIO_RISING_EDGE);
+#ifdef SAFETY_DOOR_PIN
+    GPIOPadConfigSet(CONTROL_PORT, SAFETY_DOOR_PIN, GPIO_STRENGTH_2MA, settings->control_disable_pullup.safety_door_ajar ? GPIO_PIN_TYPE_STD_WPD : GPIO_PIN_TYPE_STD_WPU);
     GPIOIntTypeSet(CONTROL_PORT, SAFETY_DOOR_PIN, settings->control_invert.safety_door_ajar ? GPIO_FALLING_EDGE : GPIO_RISING_EDGE);
+#endif
 
     GPIOIntClear(CONTROL_PORT, HWCONTROL_MASK);     // Clear any pending interrupt
     GPIOIntEnable(CONTROL_PORT, HWCONTROL_MASK);    // and enable pin change interrupt
@@ -1031,7 +1033,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "TM4C123HP6PM";
-    hal.driver_version = "210111";
+    hal.driver_version = "210125";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1097,7 +1099,7 @@ bool driver_init (void)
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
 
 #ifdef SAFETY_DOOR_PIN
-    hal.driver_cap.safety_door = On;
+    hal.signals_cap.safety_door_ajar = On;
 #endif
     hal.driver_cap.spindle_dir = On;
     hal.driver_cap.variable_spindle = On;
@@ -1129,7 +1131,7 @@ bool driver_init (void)
 
     // No need to move version check before init.
     // Compiler will fail any signature mismatch for existing entries.
-    return hal.version == 7;
+    return hal.version == 8;
 }
 
 /* interrupt handlers */

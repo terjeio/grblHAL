@@ -108,16 +108,23 @@
     #define RESET_PIN           GPIO_PIN_7
     #define FEED_HOLD_PIN       GPIO_PIN_5
     #define CYCLE_START_PIN     GPIO_PIN_6
+#ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
     #define SAFETY_DOOR_PIN     GPIO_PIN_4
-    #define HWCONTROL_MASK      (RESET_PIN|FEED_HOLD_PIN|CYCLE_START_PIN|SAFETY_DOOR_PIN)
+#endif
   #endif
 #else
 #define CONTROL_PORT        GPIO_PORTC_BASE
 #define RESET_PIN           GPIO_PIN_7
 #define FEED_HOLD_PIN       GPIO_PIN_6
 #define CYCLE_START_PIN     GPIO_PIN_5
+#ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
 #define SAFETY_DOOR_PIN     GPIO_PIN_4
+#endif
+#endif
+#ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
 #define HWCONTROL_MASK      (RESET_PIN|FEED_HOLD_PIN|CYCLE_START_PIN|SAFETY_DOOR_PIN)
+#else
+#define HWCONTROL_MASK      (RESET_PIN|FEED_HOLD_PIN|CYCLE_START_PIN)
 #endif
 
 // Define probe switch input pin.

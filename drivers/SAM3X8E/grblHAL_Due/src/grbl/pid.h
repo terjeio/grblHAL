@@ -7,7 +7,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -42,6 +42,7 @@ typedef struct {
 
 void pidf_reset (pidf_t *pid);
 void pidf_init(pidf_t *pid, pid_values_t *config);
+bool pidf_config_changed (pidf_t *pid, pid_values_t *config);
 float pidf (pidf_t *pid, float command, float actual, float sample_rate);
 
 #endif

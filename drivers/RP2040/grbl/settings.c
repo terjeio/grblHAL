@@ -1525,7 +1525,9 @@ static char *remove_element (char *s, uint_fast8_t entry)
 
     if(entry == 0) {
         char *s2 = s + 1;
-        while(*s2 && *s2 != ',')
+        if(*s2 == ',')
+            s2++;
+        else while(*s2 && *s2 != ',')
             s2++;
         while(*s2)
             *s++ = *s2++;
@@ -1555,7 +1557,22 @@ inline static bool setting_is_core (setting_type_t  type)
 {
     return !(type == Setting_NonCore || type == Setting_NonCoreFn);
 }
+/*
+static uint32_t get_mask (const char *bits)
+{
+    uint32_t mask = 0;
+    uint_fast8_t set_idx = 0;
+    float value;
 
+    while(read_float((char *)bits, &set_idx, &value)) {
+        mask |= (1 << (uint8_t)value);
+        if(bits[set_idx] == ',')
+            set_idx++;
+    }
+
+    return mask;
+}
+*/
 status_code_t setting_validate_me (const setting_detail_t *setting, float value, char *svalue)
 {
     status_code_t status = Status_OK;
@@ -1568,8 +1585,10 @@ status_code_t setting_validate_me (const setting_detail_t *setting, float value,
             break;
 
         case Format_Bitfield:
-        case Format_XBitfield:
-            if(!(isintf(value) && (uint32_t)value < (1UL << strnumentries(setting->format, ','))))
+        case Format_XBitfield:;
+            if(!(isintf(value) && /* (setting->min_value
+                                   ? (((uint32_t)value & ~get_mask(setting->min_value)) == 0)
+                                   : */ ((uint32_t)value < (1UL << strnumentries(setting->format, ','))))) //)
                 status = Status_SettingValueOutOfRange;
             break;
 
@@ -1773,6 +1792,7 @@ void settings_init (void)
     if(!hal.signals_cap.safety_door_ajar)
         setting_remove_element(Setting_ControlInvertMask, 3);
 */
+
     setting_details_t *details = settings_get_details();
 
     while(details->on_get_settings) {

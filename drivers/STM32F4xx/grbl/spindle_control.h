@@ -68,6 +68,7 @@ typedef struct {
     float rpm_programmed;
     uint32_t index_count;
     uint32_t pulse_count;
+    uint32_t error_count;
     spindle_state_t state_programmed;
 } spindle_data_t;
 

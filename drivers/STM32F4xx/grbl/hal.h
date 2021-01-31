@@ -35,7 +35,7 @@
 #include "settings.h"
 #include "report.h"
 
-#define HAL_VERSION 7
+#define HAL_VERSION 8
 
 // driver capabilities, to be set by driver in driver_init(), flags may be cleared after to switch off option
 typedef union {
@@ -43,7 +43,6 @@ typedef union {
     struct {
         uint32_t mist_control              :1,
                  variable_spindle          :1,
-                 safety_door               :1,
                  spindle_dir               :1,
                  software_debounce         :1,
                  step_pulse_delay          :1,
@@ -51,9 +50,6 @@ typedef union {
                  control_pull_up           :1,
                  probe_pull_up             :1,
                  amass_level               :2, // 0...3
-                 program_stop              :1,
-                 block_delete              :1,
-                 e_stop                    :1,
                  spindle_at_speed          :1,
                  laser_ppi_mode            :1,
                  spindle_sync              :1,
@@ -65,13 +61,11 @@ typedef union {
                  spindle_pid               :1,
                  mpg_mode                  :1,
                  spindle_pwm_linearization :1,
-                 probe_connected           :1,
                  atc                       :1,
                  no_gcode_message_handling :1,
                  dual_spindle              :1,
-                 limits_override           :1,
                  odometers                 :1,
-                 unassigned                :1;
+                 unassigned                :7;
     };
 } driver_cap_t;
 
@@ -297,6 +291,7 @@ typedef struct {
 
     // driver capabilities flags
     driver_cap_t driver_cap;
+    control_signals_t signals_cap;
 
 } grbl_hal_t;
 

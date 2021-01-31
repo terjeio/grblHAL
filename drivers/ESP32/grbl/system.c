@@ -138,6 +138,15 @@ void system_execute_startup (void)
     }
 }
 
+// Reset spindle encoder data
+status_code_t spindle_reset_data (sys_state_t state, char *args)
+{
+    if(hal.spindle.reset_data)
+        hal.spindle.reset_data();
+
+    return hal.spindle.reset_data ? Status_OK : Status_InvalidStatement;
+}
+
 status_code_t read_int (char *s, int32_t *value)
 {
     uint_fast8_t counter = 0;
@@ -192,6 +201,7 @@ const sys_command_t sys_commands[] = {
     {"E*", true, enumerate_all},
     {"RST", false, settings_reset},
     {"SD", false, report_spindle_data},
+    {"SR", false, spindle_reset_data},
 #ifdef DEBUGOUT
     {"Q", true, output_memmap},
 #endif

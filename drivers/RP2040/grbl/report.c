@@ -1763,6 +1763,7 @@ status_code_t report_setting_group_details (bool by_id, char *prefix)
     return Status_OK;
 }
 
+// Prints spindle data (encoder pulse and index count, angular position).
 status_code_t report_spindle_data (sys_state_t state, char *args)
 {
     if(hal.spindle.get_data) {
@@ -1774,13 +1775,11 @@ status_code_t report_spindle_data (sys_state_t state, char *args)
         hal.stream.write(uitoa(spindle->index_count));
         hal.stream.write(",");
         hal.stream.write(uitoa(spindle->pulse_count));
-//        hal.stream.write(",");
-//        hal.stream.write(ftoa((float)spindle->pulse_count / (float)settings.spindle.ppr, 3));
+        hal.stream.write(",");
+        hal.stream.write(uitoa(spindle->error_count));
         hal.stream.write(",");
         hal.stream.write(ftoa(apos, 3));
         hal.stream.write("]" ASCII_EOL);
-
-//        hal.spindle.reset_data();
     }
 
     return hal.spindle.get_data ? Status_OK : Status_InvalidStatement;

@@ -167,9 +167,9 @@ void state_set (uint_fast16_t new_state)
                             if(hal.spindle.reset_data)
                                 hal.spindle.reset_data();
 
-                            uint32_t index = hal.spindle.get_data(SpindleData_Counters).index_count + 2;
+                            uint32_t index = hal.spindle.get_data(SpindleData_Counters)->index_count + 2;
 
-                            while(index != hal.spindle.get_data(SpindleData_Counters).index_count); // check for abort in this loop?
+                            while(index != hal.spindle.get_data(SpindleData_Counters)->index_count); // check for abort in this loop?
 
                         }
                         st_wake_up();
@@ -374,7 +374,7 @@ static void state_await_hold (uint_fast16_t rt_exec)
                 // Ensure any prior spindle stop override is disabled at start of safety door routine.
                 sys.override.spindle_stop.value = 0;
 
-                // Parking requires parking axis homed, the current location not exceeding the
+                // Parking requires parking axis homed, the current location not exceeding the???
                 // parking target location, and laser mode disabled.
                 if(settings.parking.flags.enabled && !sys.override.control.parking_disable && settings.mode != Mode_Laser) {
 
@@ -412,12 +412,14 @@ static void state_await_hold (uint_fast16_t rt_exec)
                         // Parking motion not possible. Just disable the spindle and coolant.
                         // NOTE: Laser mode does not start a parking motion to ensure the laser stops immediately.
                         hal.spindle.set_state((spindle_state_t){0}, 0.0f); // De-energize
-                        hal.coolant.set_state((coolant_state_t){0});     // De-energize
+                        if(!settings.flags.keep_coolant_state_on_door_open)
+                            hal.coolant.set_state((coolant_state_t){0});     // De-energize
                         sys.parking_state = Parking_DoorAjar;
                     }
                 } else {
                     hal.spindle.set_state((spindle_state_t){0}, 0.0f); // De-energize
-                    hal.coolant.set_state((coolant_state_t){0}); // De-energize
+                    if(!settings.flags.keep_coolant_state_on_door_open)
+                        hal.coolant.set_state((coolant_state_t){0}); // De-energize
                     sys.parking_state = Parking_DoorAjar;
                 }
                 break;
@@ -591,8 +593,10 @@ static void state_await_waypoint_retract (uint_fast16_t rt_exec)
         park.plan_data.spindle.rpm = 0.0f;
         hal.spindle.set_state(park.plan_data.condition.spindle, 0.0f); // De-energize
 
-        park.plan_data.condition.coolant.value = 0;
-        hal.coolant.set_state(park.plan_data.condition.coolant); // De-energize
+        if(!settings.flags.keep_coolant_state_on_door_open) {
+            park.plan_data.condition.coolant.value = 0;
+            hal.coolant.set_state(park.plan_data.condition.coolant); // De-energize
+        }
 
         stateHandler = state_await_resume;
 

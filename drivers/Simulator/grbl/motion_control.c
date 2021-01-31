@@ -623,7 +623,7 @@ void mc_thread (plan_line_data_t *pl_data, float *position, gc_thread_data *thre
 
     // TODO: Add to initial move to compensate for acceleration distance?
     /*
-    float acc_distance = pl_data->feed_rate * hal.spindle.get_data(SpindleData_RPM).rpm / settings.acceleration[Z_AXIS];
+    float acc_distance = pl_data->feed_rate * hal.spindle.get_data(SpindleData_RPM)->rpm / settings.acceleration[Z_AXIS];
     acc_distance = acc_distance * acc_distance * settings.acceleration[Z_AXIS] * 0.5f;
      */
 

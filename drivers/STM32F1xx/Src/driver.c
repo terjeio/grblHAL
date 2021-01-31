@@ -941,7 +941,7 @@ bool driver_init (void)
     __HAL_AFIO_REMAP_SWJ_NOJTAG();
 
     hal.info = "STM32F103C8";
-    hal.driver_version = "210117";
+    hal.driver_version = "210125";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1015,7 +1015,7 @@ bool driver_init (void)
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
 
 #ifdef CONTROL_SAFETY_DOOR_PIN
-    hal.driver_cap.safety_door = On;
+    hal.signals_cap.safety_door_ajar = On;
 #endif
     hal.driver_cap.spindle_dir = On;
     hal.driver_cap.variable_spindle = On;
@@ -1044,7 +1044,7 @@ bool driver_init (void)
 
     // No need to move version check before init.
     // Compiler will fail any signature mismatch for existing entries.
-    return hal.version == 7;
+    return hal.version == 8;
 }
 
 /* interrupt handlers */

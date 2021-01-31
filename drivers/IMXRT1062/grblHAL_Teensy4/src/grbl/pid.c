@@ -7,7 +7,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -31,10 +31,15 @@
 
 // Float version
 
-void pidf_init(pidf_t *pid, pid_values_t *config)
+void pidf_init (pidf_t *pid, pid_values_t *config)
 {
     pidf_reset(pid);
     memcpy(&pid->cfg, config, sizeof(pid_values_t));
+}
+
+bool pidf_config_changed (pidf_t *pid, pid_values_t *config)
+{
+    return memcmp(&pid->cfg, config, sizeof(pid_values_t));
 }
 
 void pidf_reset (pidf_t *pid)

@@ -135,6 +135,11 @@ inline static float hypot_f (float x, float y)
     return sqrtf(x*x + y*y);
 }
 
+inline static bool motion_is_lasercut (motion_mode_t motion)
+{
+    return motion == MotionMode_Linear || motion == MotionMode_CwArc || motion == MotionMode_CcwArc || motion == MotionMode_CubicSpline;
+}
+
 static void set_scaling (float factor)
 {
     uint_fast8_t idx = N_AXIS;
@@ -346,12 +351,12 @@ static status_code_t init_sync_motion (plan_line_data_t *pl_data, float pitch)
     pl_data->overrides.feed_rate_disable = sys.override.control.feed_rate_disable = On;
     sys.override.spindle_rpm = DEFAULT_SPINDLE_RPM_OVERRIDE;
     // TODO: need for gc_state.distance_per_rev to be reset on modal change?
-    float feed_rate = pl_data->feed_rate * hal.spindle.get_data(SpindleData_RPM).rpm;
+    float feed_rate = pl_data->feed_rate * hal.spindle.get_data(SpindleData_RPM)->rpm;
 
     if(feed_rate == 0.0f)
         FAIL(Status_GcodeSpindleNotRunning); // [Spindle not running]
 
-    if(feed_rate > settings.axis[Z_AXIS].max_rate)
+    if(feed_rate > settings.axis[Z_AXIS].max_rate * 0.9f)
         FAIL(Status_GcodeMaxFeedRateExceeded); // [Feed rate too high]
 
     return Status_OK;
@@ -722,7 +727,7 @@ status_code_t gc_execute_block(char *block, char *message)
                                 break;
 
                             case 1: // M1 - program pause
-                                if(hal.driver_cap.program_stop ? !hal.control.get_state().stop_disable : !sys.flags.optional_stop_disable)
+                                if(hal.signals_cap.stop_disable ? !hal.control.get_state().stop_disable : !sys.flags.optional_stop_disable)
                                     gc_block.modal.program_flow = ProgramFlow_OptionalStop;
                                 break;
 
@@ -2185,23 +2190,23 @@ status_code_t gc_execute_block(char *block, char *message)
     }
 
     // If in laser mode, setup laser power based on current and past parser conditions.
-    if (settings.mode == Mode_Laser) {
+    if(settings.mode == Mode_Laser) {
 
-        if (!((gc_block.modal.motion == MotionMode_Linear) || (gc_block.modal.motion == MotionMode_CwArc) || (gc_block.modal.motion == MotionMode_CcwArc)))
-          gc_parser_flags.laser_disable = On;
+        if(!motion_is_lasercut(gc_block.modal.motion))
+            gc_parser_flags.laser_disable = On;
 
         // Any motion mode with axis words is allowed to be passed from a spindle speed update.
         // NOTE: G1 and G0 without axis words sets axis_command to none. G28/30 are intentionally omitted.
         // TODO: Check sync conditions for M3 enabled motions that don't enter the planner. (zero length).
-        if (axis_words.mask && (axis_command == AxisCommand_MotionMode))
+        if(axis_words.mask && (axis_command == AxisCommand_MotionMode))
             gc_parser_flags.laser_is_motion = On;
-        else if (gc_state.modal.spindle.on && !gc_state.modal.spindle.ccw) {
+        else if(gc_state.modal.spindle.on && !gc_state.modal.spindle.ccw) {
             // M3 constant power laser requires planner syncs to update the laser when changing between
             // a G1/2/3 motion mode state and vice versa when there is no motion in the line.
-            if ((gc_state.modal.motion == MotionMode_Linear) || (gc_state.modal.motion == MotionMode_CwArc) || (gc_state.modal.motion == MotionMode_CcwArc)) {
-                if (gc_parser_flags.laser_disable)
+            if(motion_is_lasercut(gc_state.modal.motion)) {
+                if(gc_parser_flags.laser_disable)
                     gc_parser_flags.spindle_force_sync = On; // Change from G1/2/3 motion mode.
-            } else if (!gc_parser_flags.laser_disable) // When changing to a G1 motion mode without axis words from a non-G1/2/3 motion mode.
+            } else if(!gc_parser_flags.laser_disable) // When changing to a G1 motion mode without axis words from a non-G1/2/3 motion mode.
                 gc_parser_flags.spindle_force_sync = On;
         }
 
@@ -2246,7 +2251,6 @@ status_code_t gc_execute_block(char *block, char *message)
             gc_block.values.s = sys.spindle_rpm; // Keep current RPM
         }
     }
-
 
     if ((gc_state.spindle.rpm != gc_block.values.s) || gc_parser_flags.spindle_force_sync) {
         if (gc_state.modal.spindle.on && !gc_parser_flags.laser_is_motion)

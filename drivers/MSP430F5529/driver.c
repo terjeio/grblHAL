@@ -662,7 +662,7 @@ bool driver_init (void)
     serialInit();
 
     hal.info = "MSP430F5529";
-    hal.driver_version = "210112";
+    hal.driver_version = "210125";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = 24000000;
     hal.rx_buffer_size = RX_BUFFER_SIZE;
@@ -720,7 +720,7 @@ bool driver_init (void)
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
 
 #ifdef SAFETY_DOOR_PIN
-    hal.driver_cap.safety_door = On;
+    hal.signals_cap.safety_door_ajar = On;
 #endif
     hal.driver_cap.spindle_dir = On;
     hal.driver_cap.variable_spindle = On;
@@ -738,7 +738,7 @@ bool driver_init (void)
     my_plugin_init();
 
     // no need to move version check before init - compiler will fail any signature mismatch for existing entries
-    return hal.version == 7;
+    return hal.version == 8;
 }
 
 /* interrupt handlers */
