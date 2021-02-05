@@ -40,14 +40,17 @@
 
 #ifndef RX_BUFFER_SIZE
 #define RX_BUFFER_SIZE 1024 // must be a power of 2
+#define RX_BUFFER_MODULO RX_BUFFER_SIZE - 1
 #endif
 
 #ifndef TX_BUFFER_SIZE
 #define TX_BUFFER_SIZE 512  // must be a power of 2
+#define TX_BUFFER_MODULO TX_BUFFER_SIZE - 1
 #endif
 
 #ifndef BLOCK_TX_BUFFER_SIZE
 #define BLOCK_TX_BUFFER_SIZE 256
+#define BLOCK_TX_BUFFER_MODULO BLOCK_TX_BUFFER_SIZE - 1
 #endif
 
 // Serial baud rate
@@ -61,6 +64,7 @@
 #endif
 
 #define BUFCOUNT(head, tail, size) ((head >= tail) ? (head - tail) : (size - tail + head))
+#define bufferIncPointer(ptr, size) ((ptr + 1) & size)
 
 #include <stddef.h>
 #include <stdint.h>
