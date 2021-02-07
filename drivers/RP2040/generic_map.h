@@ -24,10 +24,10 @@
 #endif
 
 // Define step pulse output pins.
-#define STEP_PORT       GPIOA
+#define STEP_PORT       GPIO_OUT
 #define X_STEP_PIN      0
 #define Y_STEP_PIN      1
-#define Z_STEP_PIN      3
+#define Z_STEP_PIN      2
 #define X_STEP_BIT      (1<<X_STEP_PIN)
 #define Y_STEP_BIT      (1<<Y_STEP_PIN)
 #define Z_STEP_BIT      (1<<Z_STEP_PIN)
@@ -38,10 +38,10 @@
 #else
 #define STEP_MASK       (X_STEP_BIT|Y_STEP_BIT|Z_STEP_BIT) // All step bits
 #endif
-#define STEP_OUTMODE GPIO_MAP
+#define STEP_OUTMODE    GPIO_OE
 
 // Define step direction output pins.
-#define DIRECTION_PORT      GPIOA
+#define DIRECTION_PORT      GPIO_OUT
 #define X_DIRECTION_PIN     4
 #define Y_DIRECTION_PIN     5
 #define Z_DIRECTION_PIN     6
@@ -55,59 +55,59 @@
 #else
 #define DIRECTION_MASK      (X_DIRECTION_BIT|Y_DIRECTION_BIT|Z_DIRECTION_BIT) // All direction bits
 #endif
-#define DIRECTION_OUTMODE   GPIO_MAP
+#define DIRECTION_OUTMODE   GPIO_OE
 
 // Define stepper driver enable/disable output pin.
-#define STEPPERS_DISABLE_PORT   GPIOA
-#define STEPPERS_DISABLE_PIN    15
+#define STEPPERS_DISABLE_PORT   GPIO_OUT
+#define STEPPERS_DISABLE_PIN    8
 #define STEPPERS_DISABLE_BIT    (1<<STEPPERS_DISABLE_PIN)
 #define STEPPERS_DISABLE_MASK   STEPPERS_DISABLE_BIT
 
 // Define homing/hard limit switch input pins.
-#define LIMIT_PORT       GPIOB
-#define X_LIMIT_PIN      12
-#define Y_LIMIT_PIN      13
-#define Z_LIMIT_PIN      14
+#define LIMIT_PORT       GPIO_IN
+#define X_LIMIT_PIN      9
+#define Y_LIMIT_PIN      10
+#define Z_LIMIT_PIN      11
 #define X_LIMIT_BIT      (1<<X_LIMIT_PIN)
 #define Y_LIMIT_BIT      (1<<Y_LIMIT_PIN)
 #define Z_LIMIT_BIT      (1<<Z_LIMIT_PIN)
 #if N_AXIS > 3
-#define A_LIMIT_PIN      15
+#define A_LIMIT_PIN      12
 #define A_LIMIT_BIT      (1<<A_LIMIT_PIN)
 #define LIMIT_MASK       (X_LIMIT_BIT|Y_LIMIT_BIT|Z_LIMIT_BIT|A_LIMIT_BIT) // All limit bits
 #else
 #define LIMIT_MASK       (X_LIMIT_BIT|Y_LIMIT_BIT|Z_LIMIT_BIT) // All limit bits
 #endif
-#define LIMIT_INMODE GPIO_SHIFT12
+#define LIMIT_INMODE GPIO_OE
 
   // Define spindle enable and spindle direction output pins.
-#define SPINDLE_ENABLE_PORT         GPIOB
-#define SPINDLE_ENABLE_PIN          1
+#define SPINDLE_ENABLE_PORT         GPIO_OUT
+#define SPINDLE_ENABLE_PIN          13
 #define SPINDLE_ENABLE_BIT          (1<<SPINDLE_ENABLE_PIN)
-#define SPINDLE_DIRECTION_PORT      GPIOB
-#define SPINDLE_DIRECTION_PIN       0
+#define SPINDLE_DIRECTION_PORT      GPIO_OUT
+#define SPINDLE_DIRECTION_PIN       14
 #define SPINDLE_DIRECTION_BIT       (1<<SPINDLE_DIRECTION_PIN)
 
 // Define spindle PWM output pin.
-#define SPINDLE_PWM_PORT            GPIOA
-#define SPINDLE_PWM_PIN             8
+#define SPINDLE_PWM_PORT            GPIO_OUT
+#define SPINDLE_PWM_PIN             15
 #define SPINDLE_PWM_BIT             (1<<SPINDLE_PWM_PIN)
 
 // Define flood and mist coolant enable output pins.
-#define COOLANT_FLOOD_PORT          GPIOB
-#define COOLANT_FLOOD_PIN           4
+#define COOLANT_FLOOD_PORT          GPIO_OUT
+#define COOLANT_FLOOD_PIN           16
 #define COOLANT_FLOOD_BIT           (1<<COOLANT_FLOOD_PIN)
-#define COOLANT_MIST_PORT           GPIOB
-#define COOLANT_MIST_PIN            3
+#define COOLANT_MIST_PORT           GPIO_OUT
+#define COOLANT_MIST_PIN            17
 #define COOLANT_MIST_BIT            (1<<COOLANT_MIST_PIN)
 
 // Define user-control controls (cycle start, reset, feed hold) input pins.
-#define CONTROL_PORT                GPIOB
-#define CONTROL_RESET_PIN           5
-#define CONTROL_FEED_HOLD_PIN       6
-#define CONTROL_CYCLE_START_PIN     7
-#define CONTROL_SAFETY_DOOR_PIN     8
-#define CONTROL_INMODE GPIO_SHIFT5
+#define CONTROL_PORT                GPIO_IN
+#define CONTROL_RESET_PIN           18
+#define CONTROL_FEED_HOLD_PIN       19
+#define CONTROL_CYCLE_START_PIN     20
+#define CONTROL_SAFETY_DOOR_PIN     21
+#define CONTROL_INMODE              GPIO_OE
 #define CONTROL_RESET_BIT           (1<<CONTROL_RESET_PIN)
 #define CONTROL_FEED_HOLD_BIT       (1<<CONTROL_FEED_HOLD_PIN)
 #define CONTROL_CYCLE_START_BIT     (1<<CONTROL_CYCLE_START_PIN)
@@ -115,8 +115,8 @@
 #define CONTROL_MASK                (CONTROL_RESET_BIT|CONTROL_FEED_HOLD_BIT|CONTROL_CYCLE_START_BIT|CONTROL_SAFETY_DOOR_BIT)
 
 // Define probe switch input pin.
-#define PROBE_PORT                  GPIOA
-#define PROBE_PIN                   7
+#define PROBE_PORT                  GPIO_IN
+#define PROBE_PIN                   22
 #define PROBE_BIT                   (1<<PROBE_PIN)
 
 #if KEYPAD_ENABLE

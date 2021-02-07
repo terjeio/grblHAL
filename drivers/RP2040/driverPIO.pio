@@ -1,0 +1,70 @@
+; RP2040 PIO driver specific program
+
+; stepper_timer program generate an interrupt at a settable period interval 
+.program stepper_timer
+
+    pull                ;Pull timer period from the TX FIFO
+loop:
+    mov x, osr          ;Move the content of the Out Shift Register to the scratch register x
+count:
+    jmp x-- count       ;Decrement x as long as it is not empty
+    irq 0               ;When empty generate an IRQ
+    jmp loop            ;restart the code from loop
+    
+% c-sdk {
+static inline void stepper_timer_program_init(PIO pio, uint sm, uint offset, float div ) {
+    pio_sm_config c = stepper_timer_program_get_default_config(offset);
+
+    // Load our configuration, and jump to the start of the program
+    pio_sm_init(pio, sm, offset, &c);
+    // Set the clock divider
+    pio_sm_set_clkdiv(pio, sm, div);
+}
+
+static inline void stepper_timer_set_period(PIO pio, uint sm, uint32_t period) {
+    pio_sm_set_enabled(pio, sm, false);
+    pio_sm_put(pio, sm, period);
+    pio_sm_restart(pio, sm);
+}
+%}
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+; step pulse program generate a step pulse with a settable delay before the step is generated and a settable pulse length
+.program step_pulse
+
+    pull
+    out x 4
+    out y 14
+delay:
+    jmp y-- delay
+    mov pins, x
+    out y 14
+pulse:
+    jmp y-- pulse
+    set pins 0
+
+% c-sdk {
+static inline void step_pulse_program_init(PIO pio, uint sm, uint offset, uint32_t startPin, uint pinCount) {
+    pio_sm_config c = step_pulse_program_get_default_config(offset); 
+
+    // Map the state machine's OUT pin group to the provided pin in pin count in parameters
+    sm_config_set_out_pins(&c, startPin, pinCount);
+    // Set these pins GPIO function (connect PIO to the pad)
+    for(uint i=0;i<pinCount;i++)
+        pio_gpio_init(pio, startPin+i);
+    // Set the pin direction to output at the PIO
+    pio_sm_set_consecutive_pindirs(pio, sm, startPin, pinCount, true);
+    // Set the set pins group to the same pins as the out pins group to reset the pins when the steps are finished
+    sm_config_set_set_pins(&c, startPin, pinCount);
+
+    // Load our configuration, and jump to the start of the program
+    pio_sm_init(pio, sm, offset, &c);
+    // Set the state machine running
+    pio_sm_set_enabled(pio, sm, true);
+}
+
+static inline void step_pulse_generate(PIO pio, uint sm, uint32_t stepPulse) {
+    pio_sm_put(pio, sm, stepPulse);
+}
+%}

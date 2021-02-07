@@ -29,7 +29,7 @@
 #define RX_BUFFER_HWM 900
 #define RX_BUFFER_LWM 300
 
-void serialInit(void);
+void serialInit(uint32_t baud_rate);
 int16_t serialGetC(void);
 void serialWriteS(const char *s);
 uint16_t serialRxFree(void);

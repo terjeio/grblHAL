@@ -6,6 +6,7 @@ project(grblHAL)
 
 pico_sdk_init()
 
+
 add_executable(grblHAL
  main.c
  driver.c
@@ -32,11 +33,12 @@ add_executable(grblHAL
  grbl/my_plugin.c
 )
 
+pico_generate_pio_header(grblHAL ${CMAKE_CURRENT_LIST_DIR}/driverPIO.pio)
+
+target_sources(grblHAL PRIVATE driver.c)
+
 # Pull in our pico_stdlib which pulls in commonly used features
-target_link_libraries(grblHAL pico_stdlib hardware_uart)
+target_link_libraries(grblHAL PRIVATE pico_stdlib pico_stdio hardware_uart hardware_pio)
 
 # create map/bin/hex file etc.
 pico_add_extra_outputs(grblHAL)
-
-# add url via pico_set_program_url
-#example_auto_set_url(grblHAL)

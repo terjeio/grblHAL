@@ -26,6 +26,7 @@
 
 #include "driver.h"
 #include "serial.h"
+#include "driverPIO.pio.h"
 
 #ifdef I2C_PORT
 #include "i2c.h"
@@ -70,7 +71,7 @@ typedef union {
     };
 } debounce_t;
 
-static uint32_t pulse_length, pulse_delay;
+static uint16_t pulse_length, pulse_delay;
 static bool pwmEnabled = false, IOInitDone = false;
 static axes_signals_t next_step_outbits;
 static spindle_pwm_t spindle_pwm;
@@ -1048,7 +1049,7 @@ bool driver_init (void)
 #if USB_SERIAL_CDC
     usbInit();
 #else
-    serialInit();
+    serialInit(115200);
 #endif
 
 #ifdef I2C_PORT
