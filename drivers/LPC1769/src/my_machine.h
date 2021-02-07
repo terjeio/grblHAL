@@ -26,6 +26,7 @@
 //#define BOARD_BTT_SKR_13
 //#define BOARD_BTT_SKR_14_TURBO
 //#define BOARD_MKS_SBASE_13
+//#define BOARD_MY_MACHINE // Add my_machine_map.h before enabling this!
 
 // Configuration
 // Uncomment to enable, for some a value > 1 may be assigned, if so the default value is shown.

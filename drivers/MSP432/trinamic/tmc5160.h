@@ -39,8 +39,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef _TRINAMIC5160_H_
 #define _TRINAMIC5160_H_
 
-#include <stdint.h>
-#include <stdbool.h>
+#include "common.h"
 
 //#define TMC5160_COMPLETE // comment out for minimum set of registers
 
@@ -145,9 +144,6 @@ typedef enum {
     TMC5160Reg_PWM_SCALE = 0x71,
     TMC5160Reg_PWM_AUTO = 0x72,
     TMC5160Reg_LOST_STEPS = 0x73,
-// Custom registers used by I2C <> SPI bridge
-    TMC_I2CReg_MON_STATE = 0x7D,
-    TMC_I2CReg_ENABLE = 0x7E
 } tmc5160_regaddr_t;
 
 typedef union {
@@ -749,7 +745,7 @@ typedef struct {
 // -- end of datagrams
 
 typedef union {
-    uint32_t value;
+//    uint32_t value;
     uint8_t data[4];
     TMC5160_gconf_reg_t gconf;
     TMC5160_gstat_reg_t gstat;
@@ -812,38 +808,23 @@ typedef struct {
     TMC5160_lost_steps_dgr_t lost_steps;
     TMC5160_status_t driver_status;
 
-    void *cs_pin;    // the CS pin for the stepper driver
-    uint32_t f_clk;
-    tmc5160_microsteps_t microsteps;
-    uint16_t r_sense; // mOhm
-    uint16_t current;  // mA
-    uint8_t hold_current_pct; // percent
-    uint8_t axis; // axis index
-    bool cool_step_enabled;
+    trinamic_motor_t motor;
+    trinamic_config_t config;
 } TMC5160_t;
-
-typedef struct {
-    TMC5160_status_t (*WriteRegister)(TMC5160_t *driver, TMC5160_datagram_t *reg);
-    TMC5160_status_t (*ReadRegister)(TMC5160_t *driver, TMC5160_datagram_t *reg);
-} TMC5160_interface_t;
 
 #pragma pack(pop)
 
-// Generic SPI interface definitions
-typedef TMC5160_t TMC_SPI_driver_t;
-typedef TMC5160_status_t TMC_SPI_status_t;
-typedef TMC5160_datagram_t TMC_SPI_datagram_t;
-#define TMC_SPI_STATUS_REG TMC5160Reg_DRV_STATUS
-
-void TMC5160_InterfaceInit (TMC5160_interface_t *interface);
 bool TMC5160_Init(TMC5160_t *driver);
 void TMC5160_SetDefaults (TMC5160_t *driver);
 void TMC5160_SetCurrent (TMC5160_t *driver, uint16_t mA, uint8_t hold_pct);
 uint16_t TMC5160_GetCurrent (TMC5160_t *driver);
-uint32_t TMC5160_GetTPWMTHRS (TMC5160_t *driver, float stpmm);
+uint32_t TMC5160_GetTPWMTHRS (TMC5160_t *driver, float steps_mm);
 bool TMC5160_MicrostepsIsValid (uint16_t usteps);
 void TMC5160_SetMicrosteps(TMC5160_t *driver, tmc5160_microsteps_t usteps);
-void TMC5160_SetHybridThreshold (TMC5160_t *driver, uint32_t threshold, float steps_mm);
+void TMC5160_SetHybridThreshold (TMC5160_t *driver, float mm_sec, float steps_mm);
+void TMC5160_SetTHIGH (TMC5160_t *driver, float mm_sec, float steps_mm);
+void TMC5160_SetTCOOLTHRS (TMC5160_t *driver, float mm_sec, float steps_mm);
+
 void TMC5160_SetConstantOffTimeChopper(TMC5160_t *driver, uint8_t constant_off_time, uint8_t blank_time, uint8_t fast_decay_time, int8_t sine_wave_offset, bool use_current_comparator);
 TMC5160_datagram_t *TMC5160_GetRegPtr (TMC5160_t *driver, tmc5160_regaddr_t reg);
 TMC5160_status_t TMC5160_WriteRegister (TMC5160_t *driver, TMC5160_datagram_t *reg);

@@ -28,6 +28,8 @@
 #include "driver.h"
 #include "serial.h"
 
+#include "grbl/limits.h"
+
 #ifdef I2C_PORT
 #include "i2c.h"
 #endif
@@ -478,31 +480,31 @@ static void limitsEnable (bool on, bool homing)
 
 // Returns limit state as an axes_signals_t variable.
 // Each bitfield bit indicates an axis limit, where triggered is 1 and not triggered is 0.
-inline static axes_signals_t limitsGetState()
+inline static limit_signals_t limitsGetState()
 {
-    axes_signals_t signals;
+    limit_signals_t signals = {0};
 
 #if LIMIT_INMODE == GPIO_BITBAND
-    signals.x = BITBAND_PERI(X_LIMIT_PORT->IDR, X_LIMIT_PIN);
-    signals.y = BITBAND_PERI(Y_LIMIT_PORT->IDR, Y_LIMIT_PIN);
-    signals.z = BITBAND_PERI(Z_LIMIT_PORT->IDR, Z_LIMIT_PIN);
+    signals.min.x = BITBAND_PERI(X_LIMIT_PORT->IDR, X_LIMIT_PIN);
+    signals.max.y = BITBAND_PERI(Y_LIMIT_PORT->IDR, Y_LIMIT_PIN);
+    signals.min.z = BITBAND_PERI(Z_LIMIT_PORT->IDR, Z_LIMIT_PIN);
   #ifdef A_LIMIT_PIN
-    signals.a = BITBAND_PERI(A_LIMIT_PORT->IDR, A_LIMIT_PIN);
+    signals.min.a = BITBAND_PERI(A_LIMIT_PORT->IDR, A_LIMIT_PIN);
   #endif
 #elif LIMIT_INMODE == GPIO_MAP
     uint32_t bits = LIMIT_PORT->IDR;
-    signals.x = (bits & X_LIMIT_BIT) != 0;
-    signals.y = (bits & Y_LIMIT_BIT) != 0;
-    signals.z = (bits & Z_LIMIT_BIT) != 0;
+    signals.min.x = (bits & X_LIMIT_BIT) != 0;
+    signals.min.y = (bits & Y_LIMIT_BIT) != 0;
+    signals.min.z = (bits & Z_LIMIT_BIT) != 0;
   #ifdef A_LIMIT_PIN
-    signals.a = (bits & A_LIMIT_BIT) != 0;
+    signals.min.a = (bits & A_LIMIT_BIT) != 0;
   #endif
 #else
-    signals.value = (uint8_t)((LIMIT_PORT->IDR & LIMIT_MASK) >> LIMIT_INMODE);
+    signals.min.value = (uint8_t)((LIMIT_PORT->IDR & LIMIT_MASK) >> LIMIT_INMODE);
 #endif
 
     if (settings.limits.invert.mask)
-        signals.value ^= settings.limits.invert.mask;
+        signals.min.value ^= settings.limits.invert.mask;
 
     return signals;
 }
@@ -1350,7 +1352,7 @@ bool driver_init (void)
 #else
     hal.info = "STM32F401CC";
 #endif
-    hal.driver_version = "210130";
+    hal.driver_version = "210206";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1391,10 +1393,12 @@ bool driver_init (void)
 
     hal.control.get_state = systemGetState;
 
-    hal.get_elapsed_ticks = getElapsedTicks;
+    hal.irq_enable = __enable_irq;
+    hal.irq_disable = __disable_irq;
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
+    hal.get_elapsed_ticks = getElapsedTicks;
 
 #if USB_SERIAL_CDC
     hal.stream.read = usbGetC;
@@ -1553,14 +1557,14 @@ void DEBOUNCE_TIMER_IRQHandler (void)
 
     if(debounce.limits) {
         debounce.limits = Off;
-        axes_signals_t state = (axes_signals_t)limitsGetState();
-        if(state.value) //TODO: add check for limit switches having same state as when limit_isr were invoked?
+        limit_signals_t state = limitsGetState();
+        if(limit_signals_merge(state).value) //TODO: add check for limit switches having same state as when limit_isr were invoked?
             hal.limits.interrupt_callback(state);
     }
 
     if(debounce.door) {
         debounce.door = Off;
-        control_signals_t state = (control_signals_t)systemGetState();
+        control_signals_t state = systemGetState();
         if(state.safety_door_ajar)
             hal.control.interrupt_callback(state);
     }

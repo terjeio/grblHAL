@@ -1,5 +1,8 @@
 ## SAMD21 Driver
 
+__IMPORTANT:__ Arduino version 1.8.11 has breaking changes in the library code that causes compilation to fail. Use an earlier version or select another driver for your project.  
+See issue #224 for more information. Also note that I am __*not*__ going to make a workaround for this since the compilation error is in the shared grblHAL core code.
+
 A GrblHAL driver for the Atmel SAMD21 processor on a [Arduino MKR ZERO board](https://store.arduino.cc/arduino-mkrzero).
 
 See the Wiki-page for [compiling grblHAL](https://github.com/terjeio/grblHAL/wiki/Compiling-GrblHAL) for instructions for how to import the project, configure the driver and compile.
@@ -66,4 +69,4 @@ Numbers in round brackets are the Arduino pin assignments, in square brackets th
 **NOTE:** Only tested on my bench with an oscilloscope, some switches and LEDs.
 
 ---
-2020-08-23
+2021-02-07

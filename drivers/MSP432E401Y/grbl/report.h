@@ -91,6 +91,8 @@ status_code_t report_error_details (void);
 status_code_t report_setting_group_details (bool by_id, char *prefix);
 status_code_t report_settings_details (bool human_readable, setting_id_t setting, setting_group_t group);
 
+status_code_t report_last_signals_event (sys_state_t state, char *args);
+
 // Prints spindle data (encoder pulse and index count, angular position).
 status_code_t report_spindle_data (sys_state_t state, char *args);
 

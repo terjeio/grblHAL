@@ -29,6 +29,8 @@
 #include <stdbool.h>
 #include <string.h>
 
+#include "grbl/limits.h"
+
 #include "driver.h"
 #include "esp32-hal-uart.h"
 #include "nvs.h"
@@ -77,7 +79,7 @@
 #include "eeprom/eeprom.h"
 #endif
 
-#ifdef I2C_PORT
+#if I2C_ENABLE
 #include "i2c.h"
 #endif
 
@@ -522,7 +524,7 @@ static void stepperEnable (axes_signals_t enable)
 {
     enable.mask ^= settings.steppers.enable_invert.mask;
 
-#if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
+#if TRINAMIC_ENABLE && TRINAMIC_I2C
     axes_signals_t tmc_enable = trinamic_stepper_enable(enable);
  #if !CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
   #if IOEXPAND_ENABLE
@@ -735,32 +737,32 @@ static void limitsEnable (bool on, bool homing)
             gpio_set_intr_type(inputpin[i].pin, on ? (inputpin[i].invert ? GPIO_INTR_NEGEDGE : GPIO_INTR_POSEDGE) : GPIO_INTR_DISABLE);
     } while(i);
 
-#if TRINAMIC_ENABLE == 2130
+#if TRINAMIC_ENABLE
     trinamic_homing(homing);
 #endif
 }
 
 // Returns limit state as an axes_signals_t variable.
 // Each bitfield bit indicates an axis limit, where triggered is 1 and not triggered is 0.
-inline IRAM_ATTR static axes_signals_t limitsGetState()
+inline IRAM_ATTR static limit_signals_t limitsGetState()
 {
-    axes_signals_t signals;
+    limit_signals_t signals = {0};
 
-    signals.x = gpio_get_level(X_LIMIT_PIN);
-    signals.y = gpio_get_level(Y_LIMIT_PIN);
-    signals.z = gpio_get_level(Z_LIMIT_PIN);
+    signals.min.x = gpio_get_level(X_LIMIT_PIN);
+    signals.min.y = gpio_get_level(Y_LIMIT_PIN);
+    signals.min.z = gpio_get_level(Z_LIMIT_PIN);
 #ifdef A_LIMIT_PIN
-    signals.a = gpio_get_level(A_LIMIT_PIN);
+    signals.min.a = gpio_get_level(A_LIMIT_PIN);
 #endif
 #ifdef B_LIMIT_PIN
-    signals.b = gpio_get_level(B_LIMIT_PIN);
+    signals.min.b = gpio_get_level(B_LIMIT_PIN);
 #endif
 #ifdef C_LIMIT_PIN
-    signals.c = gpio_get_level(C_LIMIT_PIN);
+    signals.min.c = gpio_get_level(C_LIMIT_PIN);
 #endif
 
     if (settings.limits.invert.value)
-        signals.value ^= settings.limits.invert.value;
+        signals.min.value ^= settings.limits.invert.value;
 
     return signals;
 }
@@ -1037,6 +1039,16 @@ IRAM_ATTR static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint
     *ptr = value;
     portEXIT_CRITICAL(&mux);
     return prev;
+}
+
+static void enable_irq (void)
+{
+    portEXIT_CRITICAL(&mux);
+}
+
+static void disable_irq (void)
+{
+    portENTER_CRITICAL(&mux);
 }
 
 #if MPG_MODE_ENABLE
@@ -1331,10 +1343,6 @@ static void reportConnection (bool newopt)
 // Initializes MCU peripherals for Grbl use
 static bool driver_setup (settings_t *settings)
 {
-#if TRINAMIC_ENABLE == 2130 && BOARD_BDRING_V3P5 // Trinamic BoosterPack does not support mixed drivers
-    driver_settings.trinamic.driver_enable.mask = AXES_BITMASK;
-#endif
-
     /******************
      *  Stepper init  *
      ******************/
@@ -1421,8 +1429,6 @@ ccc
 
 #endif
 
-
-
 #if SDCARD_ENABLE
 
     sdmmc_host_t host = SDSPI_HOST_DEFAULT();
@@ -1472,12 +1478,8 @@ bool driver_init (void)
 
     serialInit();
 
-#ifdef I2C_PORT
-    I2CInit();
-#endif
-
     hal.info = "ESP32";
-    hal.driver_version = "210125";
+    hal.driver_version = "210207";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1529,6 +1531,10 @@ bool driver_init (void)
 
     selectStream(StreamType_Serial);
 
+#if I2C_ENABLE
+    I2CInit();
+#endif
+
 #if EEPROM_ENABLE
     i2c_eeprom_init();
 #else
@@ -1541,6 +1547,8 @@ bool driver_init (void)
 #endif
 
 //    hal.reboot = esp_restart; crashes the MCU...
+    hal.irq_enable = enable_irq;
+    hal.irq_disable = disable_irq;
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
@@ -1609,7 +1617,7 @@ bool driver_init (void)
     bluetooth_init();
 #endif
 
-#if TRINAMIC_ENABLE == 2130
+#if TRINAMIC_ENABLE
     trinamic_init();
 #endif
 

@@ -378,33 +378,33 @@ static void limitsEnable (bool on, bool homing)
 #endif
 }
 
-// Returns limit state as an axes_signals_t variable.
+// Returns limit state as an limit_signals_t variable.
 // Each bitfield bit indicates an axis limit, where triggered is 1 and not triggered is 0.
-inline static axes_signals_t limitsGetState()
+inline static limit_signals_t limitsGetState()
 {
-    axes_signals_t signals;
+    limit_signals_t signals = {0};
 
 #if LIMIT_INMODE == GPIO_BITBAND
-//    signals.x = BITBAND_PERI(X_LIMIT_PORT->IDR, X_LIMIT_PIN);
-//    signals.y = BITBAND_PERI(Y_LIMIT_PORT->IDR, Y_LIMIT_PIN);
-//    signals.z = BITBAND_PERI(Z_LIMIT_PORT->IDR, Z_LIMIT_PIN);
+//    signals.min.x = BITBAND_PERI(X_LIMIT_PORT->IDR, X_LIMIT_PIN);
+//    signals.min.y = BITBAND_PERI(Y_LIMIT_PORT->IDR, Y_LIMIT_PIN);
+//    signals.min.z = BITBAND_PERI(Z_LIMIT_PORT->IDR, Z_LIMIT_PIN);
   #ifdef A_LIMIT_PIN
 //    signals.a = BITBAND_PERI(A_LIMIT_PORT->IDR, A_LIMIT_PIN);
   #endif
 #elif LIMIT_INMODE == GPIO_MAP
 //    uint32_t bits = LIMIT_PORT->IDR;
-//    signals.x = (bits & X_LIMIT_BIT) != 0;
-//    signals.y = (bits & Y_LIMIT_BIT) != 0;
-//    signals.z = (bits & Z_LIMIT_BIT) != 0;
+//    signals.min.x = (bits & X_LIMIT_BIT) != 0;
+//    signals.min.y = (bits & Y_LIMIT_BIT) != 0;
+//    signals.min.z = (bits & Z_LIMIT_BIT) != 0;
   #ifdef A_LIMIT_PIN
-//    signals.a = (bits & A_LIMIT_BIT) != 0;
+//    signals.min.a = (bits & A_LIMIT_BIT) != 0;
   #endif
 #else
-//    signals.value = (uint8_t)((LIMIT_PORT->IDR & LIMIT_MASK) >> LIMIT_INMODE);
+//    signals.min.value = (uint8_t)((LIMIT_PORT->IDR & LIMIT_MASK) >> LIMIT_INMODE);
 #endif
 
     if (settings.limits.invert.mask)
-        signals.value ^= settings.limits.invert.mask;
+        signals.min.value ^= settings.limits.invert.mask;
 
     return signals;
 }

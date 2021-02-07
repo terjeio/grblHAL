@@ -154,9 +154,9 @@ int grbl_enter (void)
 #endif
 
 #ifndef ENABLE_SAFETY_DOOR_INPUT_PIN
-    hal.signals_cap.safety_door_ajar = false;
+    hal.signals_cap.safety_door_ajar = Off;
 #else
-    driver_ok &= hal.signals.safety_door_ajar;
+    driver_ok &= hal.signals_cap.safety_door_ajar;
 #endif
 
   #ifdef BUFFER_NVSDATA

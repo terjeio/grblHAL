@@ -1,6 +1,16 @@
 ## grblHAL changelog
 
-2021-01-22:
+2021-02-07:
+
+* Added `#define BOARD_MY_MACHINE` option in _my_machine.h_ for building using _my_machine-map.c_, this for simpler handling of user defined pin mappings.  
+_my_machine-map.c_ is __*not*__ part of the distributed source and must by added to the project by the user before enabled, typically by copying an existing map file.
+* Added HAL layer on top of Trinamic driver low-level code. Unified Triniamic plugins into single plugin.  
+This is still work in progress, testers wanted.
+* Added core support for up to four limit switches per axis.  
+Added `$LEV` command for outputting report containing which limit or control switch(es) caused the last event.  
+Report format:  
+`[LASTEVENTS:<control signals>,<min>,<max>,<min2>,<max2)]`  
+Where `<control signals>` field may contain controls signal letters (`H`, `S` etc.) and the rest axis letters for the corresponding limit switches inputs.
 * More settings susbsystem changes and refactored $-system commands parser.  
 There are some API changes related to this that may affect user defined plugins.
 * Added $7 setting for option "Spindle off with zero speed".
@@ -28,7 +38,6 @@ Untested and none of the current board maps has the needed pins defined.
 If POS fails only $-commands are accepted.
 * Work in good progress for Trinamic TMC2209 driver support \(UART mode\).  
 Processor/board specific driver code has to be added for this, currently testing with STM32F446 and Nucleo-64 breakout board.
-* Some bug fixes.
 * Renumbered setting groups for more logical sorting (by id).
 * Harmonized probing code across drivers for planned future extensions.
 * Added additional I/O support for the [Teensy 4.1 T41U5XBB board](https://github.com/phil-barrett/grbl-teensy-4) \(iMXRT1062 driver\), 3 outputs and 4 inputs available via `M62` - `M66`.  
@@ -46,10 +55,8 @@ __NOTE:__ A override will _not_ affect handling of homing and limit switch event
 * Updated _[my_plugin.c](templates/my_plugin.c)_ [template](templates/README.md) with settings details for `$HELP` and `$ES`/`$EG` enumerations.
 * Settings/setting groups handling enhanced, moved some to plugins and added sorting (requres enough heap).
 * Removed external dependecies by adding driver source/USB blob to LPC176x driver.
-* Some bug fixes.
 * Enhanced and improved ModBus support code for VFD spindle, added settings for baud rate and receive timeout.
 * Added support for enumeration of and help for driver and plugin provided settings and setting groups.
-* Some bug fixes.
 * Moved board selection etc. to [CMakeLists.txt](drivers/ESP32/CMakeLists.txt) for [ESP32 driver](drivers/ESP32/README.md) for simpler configuration.
 * Fixed regression for VFD spindle code, should now be able to run tests.
 * Added build configurations for processor variants and Nucleo-64 boards for the [STM32F4xx driver](drivers/STM32F4xx/README.md).

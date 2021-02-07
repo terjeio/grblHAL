@@ -29,6 +29,8 @@
 #include "eeprom.h"
 #include "serial.h"
 
+#include "grbl/limits.h"
+
 #if KEYPAD_ENABLE
 #include "keypad/keypad.h"
 static void keyclick_int_handler (void);
@@ -41,7 +43,7 @@ static void trinamic_diag1_isr (void);
 #endif
 #endif
 
-#if KEYPAD_ENABLE || TRINAMIC_I2C
+#if I2C_ENABLE
 #include "i2c.h"
 #endif
 
@@ -96,6 +98,7 @@ static void stepperPulseStartSyncronized (stepper_t *stepper);
 
 static bool pwmEnabled = false, IOInitDone = false;
 static uint32_t pulse_length, pulse_delay;
+static volatile uint32_t elapsed_tics = 0;
 static axes_signals_t next_step_outbits;
 static spindle_pwm_t spindle_pwm = {0};
 static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
@@ -379,17 +382,17 @@ static void limitsEnable (bool on, bool homing)
 
 // Returns limit state as an axes_signals_t variable.
 // Each bitfield bit indicates an axis limit, where triggered is 1 and not triggered is 0.
-inline static axes_signals_t limitsGetState()
+inline static limit_signals_t limitsGetState()
 {
+    limit_signals_t signals = {0};
     uint32_t flags = GPIOPinRead(LIMIT_PORT, HWLIMIT_MASK);
-    axes_signals_t signals;
 
-    signals.x = (flags & X_LIMIT_PIN) != 0;
-    signals.y = (flags & Y_LIMIT_PIN) != 0;
-    signals.z = (flags & Z_LIMIT_PIN) != 0;
+    signals.min.x = (flags & X_LIMIT_PIN) != 0;
+    signals.min.y = (flags & Y_LIMIT_PIN) != 0;
+    signals.min.z = (flags & Z_LIMIT_PIN) != 0;
 
     if (settings.limits.invert.value)
-        signals.value ^= settings.limits.invert.value;
+        signals.min.value ^= settings.limits.invert.value;
 
     return signals;
 }
@@ -658,6 +661,7 @@ static uint_fast16_t bitsClearAtomic (volatile uint_fast16_t *ptr, uint_fast16_t
     uint_fast16_t prev = *ptr;
     *ptr &= ~bits;
     IntMasterEnable();
+
     return prev;
 }
 
@@ -667,7 +671,23 @@ static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t 
     uint_fast16_t prev = *ptr;
     *ptr = value;
     IntMasterEnable();
+
     return prev;
+}
+
+static void enable_irq (void)
+{
+    IntMasterEnable();
+}
+
+static void disable_irq (void)
+{
+    IntMasterDisable();
+}
+
+uint32_t getElapsedTicks (void)
+{
+    return elapsed_tics;
 }
 
 // Configures perhipherals when settings are initialized or changed
@@ -1028,12 +1048,12 @@ bool driver_init (void)
 
     serialInit();
 
-#if KEYPAD_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
+#if I2C_ENABLE
     I2CInit();
 #endif
 
     hal.info = "TM4C123HP6PM";
-    hal.driver_version = "210125";
+    hal.driver_version = "210206";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1083,9 +1103,12 @@ bool driver_init (void)
 
     eeprom_init();
 
+    hal.irq_enable = enable_irq;
+    hal.irq_disable = disable_irq;
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
+    hal.get_elapsed_ticks = getElapsedTicks;
 
 #ifdef _ATC_H_
     hal.tool_select = atc_tool_selected;
@@ -1176,9 +1199,8 @@ static void software_debounce_isr (void)
 {
     TimerIntClear(DEBOUNCE_TIMER_BASE, TIMER_TIMA_TIMEOUT); // clear interrupt flag
 
-    axes_signals_t state = limitsGetState();
-
-    if(state.value) //TODO: add check for limit swicthes having same state as when limit_isr were invoked?
+    limit_signals_t state = limitsGetState();
+    if(limit_signals_merge(state).value) //TODO: add check for limit switches having same state as when limit_isr were invoked?
         hal.limits.interrupt_callback(state);
 }
 
@@ -1275,6 +1297,8 @@ static void trinamic_diag1_isr (void)
 #if PWM_RAMPED
 static void systick_isr (void)
 {
+    elapsed_tics++;
+
     if(pwm_ramp.ms_cfg) {
         if(++pwm_ramp.delay_ms == pwm_ramp.ms_cfg) {
 
@@ -1317,12 +1341,11 @@ static void systick_isr (void)
 #else
 static void systick_isr (void)
 {
-    if(!(--delay.ms)) {
-        SysTickDisable();
-        if(delay.callback) {
-            delay.callback();
-            delay.callback = NULL;
-        }
+    elapsed_tics++;
+
+    if(delay.ms && !(--delay.ms) && delay.callback) {
+        delay.callback();
+        delay.callback = NULL;
     }
 }
 #endif

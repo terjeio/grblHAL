@@ -28,6 +28,8 @@
 #include "serial.h"
 #include "grbl-lpc/pwm_driver.h"
 
+#include "grbl/limits.h"
+
 #if SDCARD_ENABLE
 #include "sdcard/sdcard.h"
 #include "ff.h"
@@ -115,6 +117,7 @@ typedef struct {
 
 static bool limits_debounce = false;
 static uint32_t limits_invert;
+static volatile uint32_t elapsed_tics = 0;
 static debounce_queue_t debounce_queue = {0};
 static input_signal_t gpio0_signals[10] = {0}, gpio1_signals[10] = {0}, gpio2_signals[10] = {0};
 
@@ -268,6 +271,7 @@ uint32_t cpt;
 static void driver_delay (uint32_t ms, void (*callback)(void))
 {
     if((delay.ms = ms) > 0) {
+        SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
         SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
         if(!(delay.callback = callback))
             while(delay.ms);
@@ -424,46 +428,47 @@ static void limitsEnable (bool on, bool homing)
 
 // Returns limit state as an axes_signals_t variable.
 // Each bitfield bit indicates an axis limit, where triggered is 1 and not triggered is 0.
-inline static axes_signals_t limitsGetState()
+inline static limit_signals_t limitsGetState()
 {
-    axes_signals_t signals;
+    limit_signals_t signals = {0};
 
 #if LIMIT_INMODE == LIMIT_SHIFT
     signals.value = (uint32_t)(LIMIT_PORT->PIN & LIMIT_MASK) >> LIMIT_SHIFT;
 #elif LIMIT_INMODE == GPIO_BITBAND
-    signals.x = BITBAND_GPIO(X_LIMIT_PORT->PIN, X_LIMIT_PIN);
-    signals.y = BITBAND_GPIO(Y_LIMIT_PORT->PIN, Y_LIMIT_PIN);
-    signals.z = BITBAND_GPIO(Z_LIMIT_PORT->PIN, Z_LIMIT_PIN);
+    signals.min.x = BITBAND_GPIO(X_LIMIT_PORT->PIN, X_LIMIT_PIN);
+    signals.min.y = BITBAND_GPIO(Y_LIMIT_PORT->PIN, Y_LIMIT_PIN);
+    signals.min.z = BITBAND_GPIO(Z_LIMIT_PORT->PIN, Z_LIMIT_PIN);
 #else
     uint32_t bits = LIMIT_PORT->PIN;
-    signals.x = (bits & X_LIMIT_BIT) != 0;
-    signals.y = (bits & Y_LIMIT_BIT) != 0;
-    signals.z = (bits & Z_LIMIT_BIT) != 0;
+    signals.min.x = (bits & X_LIMIT_BIT) != 0;
+    signals.min.y = (bits & Y_LIMIT_BIT) != 0;
+    signals.min.z = (bits & Z_LIMIT_BIT) != 0;
 #endif
 
     if (settings.limits.invert.mask)
-        signals.value ^= settings.limits.invert.mask;
+        signals.min.value ^= settings.limits.invert.mask;
 
 #ifdef HAS_MAX_LIMIT_INPUTS
 
-    axes_signals_t signals_max;
+    signals.max.value = settings.limits.invert.mask;
 
 #ifdef X_LIMIT_PORT_MAX
-    signals_max.x = BITBAND_GPIO(X_LIMIT_PORT_MAX->PIN, X_LIMIT_PIN_MAX);
+    signals.max.x = BITBAND_GPIO(X_LIMIT_PORT_MAX->PIN, X_LIMIT_PIN_MAX);
 #else
-    signals_max.x = (bits & X_LIMIT_BIT_MAX) != 0;
+    signals.max.x = (bits & X_LIMIT_BIT_MAX) != 0;
 #endif
 #ifdef Y_LIMIT_PORT_MAX
-    signals_max.y = BITBAND_GPIO(Y_LIMIT_PORT_MAX->PIN, Y_LIMIT_PIN_MAX);
+    signals.max.y = BITBAND_GPIO(Y_LIMIT_PORT_MAX->PIN, Y_LIMIT_PIN_MAX);
 #else
-    signals_max.y = (bits & Y_LIMIT_BIT_MAX) != 0;
+    signals.max.y = (bits & Y_LIMIT_BIT_MAX) != 0;
 #endif
 #ifdef Z_LIMIT_PORT_MAX
-    signals_max.z = BITBAND_GPIO(Z_LIMIT_PORT_MAX->PIN, Z_LIMIT_PIN_MAX);
+    signals.max.z = BITBAND_GPIO(Z_LIMIT_PORT_MAX->PIN, Z_LIMIT_PIN_MAX);
 #else
-    signals_max.z = (bits & Z_LIMIT_BIT_MAX) != 0;
+    signals.max.z = (bits & Z_LIMIT_BIT_MAX) != 0;
 #endif
-    signals.value |= (signals_max.value ^ settings.limits.invert.mask);
+    if (settings.limits.invert.mask)
+        signals.max.value ^= settings.limits.invert.mask;
 #endif
 
     return signals;
@@ -741,6 +746,11 @@ static void gpio2_int_enable (uint32_t bit, gpio_intr_t intr_type)
             LPC_GPIOINT->IO2.ENF &= ~bit;
             break;
     }
+}
+
+uint32_t getElapsedTicks (void)
+{
+    return elapsed_tics;
 }
 
 // Configures peripherals when settings are initialized or changed
@@ -1170,7 +1180,7 @@ bool driver_init (void) {
 #endif
 
     hal.info = "LCP1769";
-    hal.driver_version = "210125";
+    hal.driver_version = "210207";
     hal.driver_setup = driver_setup;
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
@@ -1236,9 +1246,12 @@ bool driver_init (void) {
     hal.nvs.type = NVS_None;
 #endif
 
+    hal.irq_enable = __enable_irq;
+    hal.irq_disable = __disable_irq;
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
+    hal.get_elapsed_ticks = getElapsedTicks;
 
 #ifdef HAS_KEYPAD
     hal.execute_realtime = process_keypress;
@@ -1438,6 +1451,8 @@ void GPIO_IRQHandler (void)
 // Interrupt handler for 1 ms interval timer
 void SysTick_Handler (void)
 {
+    elapsed_tics++;
+
 #ifdef LIMITS_POLL_PORT // Poll limit pins when hard limits enabled
     static uint32_t limits_state = 0, limits = 0;
     if(settings.limits.flags.hard_enabled) {
@@ -1468,28 +1483,8 @@ void SysTick_Handler (void)
     }
 #endif
 
-#if SDCARD_ENABLE || LIMIT_PN == 1
-
-  #if SDCARD_ENABLE
-    static uint32_t fatfs_ticks = 10;
-    if(!(--fatfs_ticks)) {
-        disk_timerproc();
-        fatfs_ticks = 10;
+    if(delay.ms && !(--delay.ms) && delay.callback) {
+        delay.callback();
+        delay.callback = NULL;
     }
-  #endif
-    if(delay.ms && !(--delay.ms)) {
-        if(delay.callback) {
-            delay.callback();
-            delay.callback = NULL;
-        }
-    }
-#else
-    if(!(--delay.ms)) {
-        SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
-        if(delay.callback) {
-            delay.callback();
-            delay.callback = NULL;
-        }
-    }
-#endif
 }

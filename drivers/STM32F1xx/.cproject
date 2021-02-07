@@ -130,9 +130,9 @@
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="eeprom"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="grbl"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="keypad"/>
+						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="motors"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="odometer"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="sdcard"/>
-						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="tmc2130"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="trinamic"/>
 					</sourceEntries>
 				</configuration>
@@ -256,15 +256,16 @@
 					</folderInfo>
 					<sourceEntries>
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="Drivers"/>
+						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="FatFS"/>
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="Middlewares"/>
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="Src"/>
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="Startup"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="eeprom"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="grbl"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="keypad"/>
+						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="motors"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="odometer"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="sdcard"/>
-						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="tmc2130"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="trinamic"/>
 					</sourceEntries>
 				</configuration>

@@ -138,24 +138,8 @@
 #define PPI_TIMER_IRQn              timerINT(PPI_TIMER_N)
 #define PPI_TIMER_IRQHandler        timerHANDLER(PPI_TIMER_N)
 
-#ifdef BOARD_CNC_BOOSTERPACK
-  #if N_AXIS > 3
-    #error Max number of axes is 3!
-  #endif
-  #include "cnc_boosterpack_map.h"
-#elif defined(BOARD_CNC3040)
-  #if EEPROM_ENABLE
-    #error EEPROM plugin not supported!
-  #endif
-  #include "cnc3040_map.h"
-#elif defined(BOARD_PROTONEER_3XX)
-  #include "protoneer_3.xx_map.h"
-#elif defined(BOARD_GENERIC_UNO)
-  #include "uno_map.h"
-#elif defined(BOARD_MORPHO_CNC)
-  #include "st_morpho_map.h"
-#elif defined(BOARD_MORPHO_DAC_CNC)
-  #include "st_morpho_dac_map.h"
+#if defined(BOARD_MY_MACHINE)
+  #include "my_machine_map.h"
 #else // default board
   #include "generic_map.h"
 #endif

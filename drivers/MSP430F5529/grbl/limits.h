@@ -39,6 +39,8 @@ bool limits_homing_required (void);
 void limits_set_homing_axes (void);
 void limits_set_machine_positions (axes_signals_t cycle, bool add_pulloff);
 
-void limit_interrupt_handler (axes_signals_t state);
+void limit_interrupt_handler (limit_signals_t state);
+
+axes_signals_t limit_signals_merge (limit_signals_t signals);
 
 #endif

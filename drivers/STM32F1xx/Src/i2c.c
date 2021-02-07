@@ -31,12 +31,8 @@
 #include "keypad/keypad.h"
 #endif
 
-#if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
-
-#include "tmc2130\trinamic.h"
-
+#if TRINAMIC_ENABLE && TRINAMIC_I2C
 #define I2C_ADR_I2CBRIDGE 0x47
-
 #endif
 
 static I2C_HandleTypeDef i2c_port = {
@@ -130,20 +126,24 @@ void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *hi2c)
 
 #if TRINAMIC_ENABLE && TRINAMIC_I2C
 
-static const uint8_t tmc_addr = I2C_ADR_I2CBRIDGE << 1;
+static uint16_t axis = 0xFF;
+static const uint16_t tmc_addr = I2C_ADR_I2CBRIDGE << 1;
 
-static TMC2130_status_t TMC_I2C_ReadRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
+TMC_spi_status_t tmc_spi_read (trinamic_motor_t driver, TMC_spi_datagram_t *reg)
 {
-    uint8_t tmc_reg, buffer[5] = {0};
-    TMC2130_status_t status = {0};
+    uint8_t buffer[5] = {0};
+    TMC_spi_status_t status = 0;
 
-    if((tmc_reg = TMCI2C_GetMapAddress((uint8_t)(driver ? (uint32_t)driver->cs_pin : 0), reg->addr).value) == 0xFF) {
-        return status; // unsupported register
+    if(driver.axis != axis) {
+        buffer[0] = driver.axis | 0x80;
+        HAL_I2C_Mem_Write(&i2c_port, tmc_addr, axis, I2C_MEMADD_SIZE_8BIT, buffer, 1, 100);
+
+        axis = driver.axis;
     }
 
-    HAL_I2C_Mem_Read(&i2c_port, tmc_addr, tmc_reg, I2C_MEMADD_SIZE_8BIT, buffer, 5, 100);
+    HAL_I2C_Mem_Read(&i2c_port, tmc_addr, (uint16_t)reg->addr.idx, I2C_MEMADD_SIZE_8BIT, buffer, 5, 100);
 
-    status.value = buffer[0];
+    status = buffer[0];
     reg->payload.value = buffer[4];
     reg->payload.value |= buffer[3] << 8;
     reg->payload.value |= buffer[2] << 16;
@@ -152,24 +152,26 @@ static TMC2130_status_t TMC_I2C_ReadRegister (TMC2130_t *driver, TMC2130_datagra
     return status;
 }
 
-static TMC2130_status_t TMC_I2C_WriteRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
+TMC_spi_status_t tmc_spi_write (trinamic_motor_t driver, TMC_spi_datagram_t *reg)
 {
-    uint8_t tmc_reg, buffer[4];
-    TMC2130_status_t status = {0};
+    uint8_t buffer[5] = {0};;
+    TMC_spi_status_t status = 0;
+
+    if(driver.axis != axis) {
+        buffer[0] = driver.axis | 0x80;
+        HAL_I2C_Mem_Write(&i2c_port, tmc_addr, axis, I2C_MEMADD_SIZE_8BIT, buffer, 1, 100);
+
+        axis = driver.axis;
+    }
+
+    buffer[0] = (reg->payload.value >> 24) & 0xFF;
+    buffer[1] = (reg->payload.value >> 16) & 0xFF;
+    buffer[2] = (reg->payload.value >> 8) & 0xFF;
+    buffer[3] = reg->payload.value & 0xFF;
 
     reg->addr.write = 1;
-    tmc_reg = TMCI2C_GetMapAddress((uint8_t)(driver ? (uint32_t)driver->cs_pin : 0), reg->addr).value;
+    HAL_I2C_Mem_Write(&i2c_port, tmc_addr, (uint16_t)reg->addr.value, I2C_MEMADD_SIZE_8BIT, buffer, 4, 100);
     reg->addr.write = 0;
-
-    if(tmc_reg != 0xFF) {
-
-        buffer[0] = (reg->payload.value >> 24) & 0xFF;
-        buffer[1] = (reg->payload.value >> 16) & 0xFF;
-        buffer[2] = (reg->payload.value >> 8) & 0xFF;
-        buffer[3] = reg->payload.value & 0xFF;
-
-        HAL_I2C_Mem_Write(&i2c_port, tmc_addr, tmc_reg, I2C_MEMADD_SIZE_8BIT, buffer, 4, 100);
-    }
 
     return status;
 }
@@ -193,17 +195,6 @@ void i2c_init (void)
 
     HAL_NVIC_EnableIRQ(I2C2_EV_IRQn);
     HAL_NVIC_EnableIRQ(I2C2_ER_IRQn);
-
-#if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
-
-    trinamic_driver_if_t driver = {
-        .interface.WriteRegister = TMC_I2C_WriteRegister,
-        .interface.ReadRegister = TMC_I2C_ReadRegister
-    };
-
-    trinamic_if_init(&driver);
-
-#endif
 }
 
 #endif

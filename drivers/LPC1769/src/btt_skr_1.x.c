@@ -27,6 +27,8 @@
 
 #if TRINAMIC_ENABLE == 2130 || TRINAMIC_ENABLE == 5160
 
+#include "trinamic/common.h"
+
 #define spi_get_byte() sw_spi_xfer(0)
 #define spi_put_byte(d) sw_spi_xfer(d)
 
@@ -51,47 +53,49 @@ static uint8_t sw_spi_xfer (uint8_t byte)
     return (uint8_t)res;
 }
 
-static TMC_SPI_status_t TMC_SPI_ReadRegister (TMC_SPI_driver_t *driver, TMC_SPI_datagram_t *reg)
+TMC_spi_status_t tmc_spi_read (trinamic_motor_t driver, TMC_spi_datagram_t *datagram)
 {
-    static TMC_SPI_status_t status = {0};
+    TMC_spi_status_t status;
 
-    BITBAND_GPIO(TRINAMIC_CS_PORT->PIN, cs_pin[driver->axis]) = 0;
+    BITBAND_GPIO(TRINAMIC_CS_PORT->PIN, cs_pin[driver.axis]) = 0;
 
-    reg->addr.write = 0;
-    spi_put_byte(reg->addr.value);
+    datagram->payload.value = 0;
+
+    datagram->addr.write = 0;
+    spi_put_byte(datagram->addr.value);
     spi_put_byte(0);
     spi_put_byte(0);
     spi_put_byte(0);
     spi_put_byte(0);
 
-    BITBAND_GPIO(TRINAMIC_CS_PORT->PIN, cs_pin[driver->axis]) = 1;
-    BITBAND_GPIO(TRINAMIC_CS_PORT->PIN, cs_pin[driver->axis]) = 0;
+    BITBAND_GPIO(TRINAMIC_CS_PORT->PIN, cs_pin[driver.axis]) = 1;
+    BITBAND_GPIO(TRINAMIC_CS_PORT->PIN, cs_pin[driver.axis]) = 0;
 
-    status.value = spi_put_byte(reg->addr.value);
-    reg->payload.data[3] = spi_get_byte();
-    reg->payload.data[2] = spi_get_byte();
-    reg->payload.data[1] = spi_get_byte();
-    reg->payload.data[0] = spi_get_byte();
+    status = spi_put_byte(datagram->addr.value);
+    datagram->payload.data[3] = spi_get_byte();
+    datagram->payload.data[2] = spi_get_byte();
+    datagram->payload.data[1] = spi_get_byte();
+    datagram->payload.data[0] = spi_get_byte();
 
-    BITBAND_GPIO(TRINAMIC_CS_PORT->PIN, cs_pin[driver->axis]) = 1;
+    BITBAND_GPIO(TRINAMIC_CS_PORT->PIN, cs_pin[driver.axis]) = 1;
 
     return status;
 }
 
-static TMC_SPI_status_t TMC_SPI_WriteRegister (TMC_SPI_driver_t *driver, TMC_SPI_datagram_t *reg)
+TMC_spi_status_t tmc_spi_write (trinamic_motor_t driver, TMC_spi_datagram_t *datagram)
 {
-    static TMC_SPI_status_t status = {0};
+    TMC_spi_status_t status;
 
-    BITBAND_GPIO(TRINAMIC_CS_PORT->PIN, cs_pin[driver->axis]) = 0;
+    BITBAND_GPIO(TRINAMIC_CS_PORT->PIN, cs_pin[driver.axis]) = 0;
 
-    reg->addr.write = 1;
-    status.value = spi_put_byte(reg->addr.value);
-    spi_put_byte(reg->payload.data[3]);
-    spi_put_byte(reg->payload.data[2]);
-    spi_put_byte(reg->payload.data[1]);
-    spi_put_byte(reg->payload.data[0]);
+    datagram->addr.write = 1;
+    status = spi_put_byte(datagram->addr.value);
+    spi_put_byte(datagram->payload.data[3]);
+    spi_put_byte(datagram->payload.data[2]);
+    spi_put_byte(datagram->payload.data[1]);
+    spi_put_byte(datagram->payload.data[0]);
 
-    BITBAND_GPIO(TRINAMIC_CS_PORT->PIN, cs_pin[driver->axis]) = 1;
+    BITBAND_GPIO(TRINAMIC_CS_PORT->PIN, cs_pin[driver.axis]) = 1;
 
     return status;
 }
@@ -101,13 +105,6 @@ static TMC_SPI_status_t TMC_SPI_WriteRegister (TMC_SPI_driver_t *driver, TMC_SPI
 void board_init (void)
 {
 #if TRINAMIC_ENABLE == 2130 || TRINAMIC_ENABLE == 5160
-
-    trinamic_driver_if_t driver = {
-        .interface.WriteRegister = TMC_SPI_WriteRegister,
-        .interface.ReadRegister = TMC_SPI_ReadRegister
-    };
-
-    trinamic_if_init(&driver);
 
     Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, TRINAMIC_MOSI_PN, TRINAMIC_MOSI_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
     Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, TRINAMIC_MISO_PN, TRINAMIC_MISO_PIN, IOCON_MODE_PULLUP, IOCON_FUNC0);

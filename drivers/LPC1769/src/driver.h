@@ -75,17 +75,19 @@
 // P0.29, P0.30 must have same direction as used for USB operation.
 
 #ifdef SMOOTHIEBOARD
-    #include "smoothieboard_map.h"
+  #include "smoothieboard_map.h"
 #elif defined(BOARD_RAMPS_16)
-    #include "ramps_1.6_map.h"
+  #include "ramps_1.6_map.h"
 #elif defined(BOARD_BTT_SKR_13)
-    #include "btt_skr_1.3_map.h"
+  #include "btt_skr_1.3_map.h"
 #elif defined(BOARD_BTT_SKR_14_TURBO)
-    #include "btt_skr_1.4_turbo_map.h"
+  #include "btt_skr_1.4_turbo_map.h"
 #elif defined(BOARD_MKS_SBASE_13)
-#include "mks_sbase_map.h"
+  #include "mks_sbase_map.h"
+#elif defined(BOARD_MY_MACHINE)
+  #include "my_machine_map.h"
 #else
-    #include "generic_map.h"
+  #include "generic_map.h"
 #endif
 
 // Adjust STEP_PULSE_LATENCY to get accurate step pulse length when required, e.g if using high step rates.
@@ -109,18 +111,11 @@
 #define I2C_ENABLE 0
 #endif
 
-#if TRINAMIC_ENABLE == 2130
+#if TRINAMIC_ENABLE
 #ifndef TRINAMIC_MIXED_DRIVERS
 #define TRINAMIC_MIXED_DRIVERS 1
 #endif
-#include "tmc2130/trinamic.h"
-#endif
-
-#if TRINAMIC_ENABLE == 5160
-#ifndef TRINAMIC_MIXED_DRIVERS
-#define TRINAMIC_MIXED_DRIVERS 1
-#endif
-#include "tmc5160/trinamic.h"
+#include "motors/trinamic.h"
 #endif
 
 #ifndef X_STEP_PORT

@@ -207,9 +207,15 @@ static void limitsEnable (bool on, bool homing)
 // Returns limit state as a bit-wise uint8 variable. Each bit indicates an axis limit, where
 // triggered is 1 and not triggered is 0. Invert mask is applied. Axes are defined by their
 // number in bit position, i.e. Z_AXIS is (1<<2) or bit 2, and Y_AXIS is (1<<1) or bit 1.
-inline static axes_signals_t limitsGetState()
+inline static limit_signals_t limitsGetState()
 {
-    return (axes_signals_t)HomingSignals_Read();
+    limit_signals_t signals;
+    
+    memset(&signals, 0, sizeof(limit_signals_t));
+
+	signals.min.mask = HomingSignals_Read();
+
+    return signals;
 }
 
 static control_signals_t systemGetState (void)
@@ -300,6 +306,7 @@ static uint_fast16_t bitsClearAtomic (volatile uint_fast16_t *ptr, uint_fast16_t
     uint_fast16_t prev = *ptr;
     *ptr &= ~bits;
     CyGlobalIntEnable;
+
     return prev;
 }
 
@@ -309,7 +316,18 @@ static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t 
     uint_fast16_t prev = *ptr;
     *ptr = value;
     CyGlobalIntEnable;
+
     return prev;
+}
+
+static void enable_irq (void)
+{
+    CyGlobalIntEnable;
+}
+
+static void disable_irq (void)
+{
+    CyGlobalIntDisable;
 }
 
 // Callback to inform settings has been changed, called by settings_store_global_setting()
@@ -423,7 +441,7 @@ bool driver_init (void)
     EEPROM_Start();
 
     hal.info = "PSoC 5";
-    hal.driver_version = "210125";
+    hal.driver_version = "210202";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = 24000000UL;
     hal.rx_buffer_size = RX_BUFFER_SIZE;
@@ -473,6 +491,8 @@ bool driver_init (void)
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
+    hal.irq_enable = enable_irq;
+    hal.irq_disable = disable_irq;
 
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
 
@@ -524,7 +544,7 @@ static void stepper_pulse_isr (void)
 */
 static void limit_isr (void)
 {
-    hal.limits.interrupt_callback((axes_signals_t)HomingSignals_Read());
+    hal.limits.interrupt_callback(limitsGetState());
 }
 
 static void control_isr (void)

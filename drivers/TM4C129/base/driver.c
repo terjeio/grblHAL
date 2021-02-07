@@ -30,6 +30,7 @@
 #include "eeprom.h"
 #include "serial.h"
 
+#include "grbl/limits.h"
 #include "grbl/protocol.h"
 #include "grbl/state_machine.h"
 
@@ -48,7 +49,7 @@ static void keyclick_int_handler (void);
 static void trinamic_diag1_isr (void);
 #endif
 
-#ifdef USE_I2C
+#ifdef I2C_ENABLE
 #include "i2c.h"
 #endif
 
@@ -241,6 +242,9 @@ state_signal_t inputpin[] = {
 
 static bool pwmEnabled = false, IOInitDone = false;
 static uint32_t pulse_length, pulse_delay;
+#ifndef FreeRTOS
+static volatile uint32_t elapsed_tics = 0;
+#endif
 static axes_signals_t next_step_outbits;
 static spindle_pwm_t spindle_pwm = {0};
 static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
@@ -785,35 +789,35 @@ static void limitsEnable (bool on, bool homing)
 
 // Returns limit state as an axes_signals_t variable.
 // Each bitfield bit indicates an axis limit, where triggered is 1 and not triggered is 0.
-inline static axes_signals_t limitsGetState()
+inline static limit_signals_t limitsGetState()
 {
 #if CNC_BOOSTERPACK // Change to bit-band read to avoid call overhead!
-    axes_signals_t signals = {0};
+    limit_signals_t signals = {0};
     uint32_t flags = GPIOPinRead(LIMIT_PORT_YZ, HWLIMIT_MASK_YZ);
 
-    signals.x = GPIOPinRead(LIMIT_PORT_X, X_LIMIT_PIN) != 0;
-    signals.y = (flags & Y_LIMIT_PIN) != 0;
-    signals.z = (flags & Z_LIMIT_PIN) != 0;
+    signals.min.x = GPIOPinRead(LIMIT_PORT_X, X_LIMIT_PIN) != 0;
+    signals.min.y = (flags & Y_LIMIT_PIN) != 0;
+    signals.min.z = (flags & Z_LIMIT_PIN) != 0;
 #ifdef A_AXIS
-    signals.a = GPIOPinRead(LIMIT_PORT_A, A_LIMIT_PIN) != 0;
+    signals.min.a = GPIOPinRead(LIMIT_PORT_A, A_LIMIT_PIN) != 0;
 #endif
 #ifdef B_AXIS
-    signals.b = GPIOPinRead(LIMIT_PORT_B, B_LIMIT_PIN) != 0;
+    signals.min.b = GPIOPinRead(LIMIT_PORT_B, B_LIMIT_PIN) != 0;
 #endif
 #ifdef C_AXIS
-    signals.c = GPIOPinRead(LIMIT_PORT_C, C_LIMIT_PIN) != 0;
+    signals.min.c = GPIOPinRead(LIMIT_PORT_C, C_LIMIT_PIN) != 0;
 #endif
 #else
     uint32_t flags = GPIOPinRead(LIMIT_PORT, HWLIMIT_MASK);
     axes_signals_t signals;
 
-    signals.x = (flags & X_LIMIT_PIN) != 0;
-    signals.y = (flags & Y_LIMIT_PIN) != 0;
-    signals.z = (flags & Z_LIMIT_PIN) != 0;
+    signals.min.x = (flags & X_LIMIT_PIN) != 0;
+    signals.min.y = (flags & Y_LIMIT_PIN) != 0;
+    signals.min.z = (flags & Z_LIMIT_PIN) != 0;
 #endif
 
     if (settings.limits.invert.value)
-        signals.value ^= settings.limits.invert.value;
+        signals.min.value ^= settings.limits.invert.value;
 
     return signals;
 }
@@ -1088,6 +1092,7 @@ static uint_fast16_t bitsClearAtomic (volatile uint_fast16_t *ptr, uint_fast16_t
     uint_fast16_t prev = *ptr;
     *ptr &= ~bits;
     IntMasterEnable();
+
     return prev;
 }
 
@@ -1097,7 +1102,18 @@ static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t 
     uint_fast16_t prev = *ptr;
     *ptr = value;
     IntMasterEnable();
+
     return prev;
+}
+
+static void enable_irq (void)
+{
+    IntMasterEnable();
+}
+
+static void disable_irq (void)
+{
+    IntMasterDisable();
 }
 
 static void modeSelect (bool mpg_mode)
@@ -1135,6 +1151,15 @@ static void modechange (void)
     modeSelect(GPIOPinRead(MODE_PORT, MODE_SWITCH_PIN) == 0);
     GPIOIntEnable(MODE_PORT, MODE_SWITCH_PIN);
 }
+
+#ifndef FreeRTOS
+
+uint32_t getElapsedTicks (void)
+{
+    return elapsed_tics;
+}
+
+#endif
 
 // Configures perhipherals when settings are initialized or changed
 static void settings_changed (settings_t *settings)
@@ -1628,7 +1653,7 @@ bool driver_init (void)
 
     serialInit();
 
-#ifdef USE_I2C
+#if I2C_ENABLE
     I2CInit();
 #endif
 
@@ -1648,7 +1673,7 @@ bool driver_init (void)
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
-    hal.driver_version = "210125";
+    hal.driver_version = "210206";
     hal.driver_setup = driver_setup;
 #if !USE_32BIT_TIMER
     hal.f_step_timer = hal.f_step_timer / (STEPPER_DRIVER_PRESCALER + 1);
@@ -1693,10 +1718,16 @@ bool driver_init (void)
 
     eeprom_init();
 
+    hal.irq_enable = enable_irq;
+    hal.irq_disable = disable_irq;
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
+#ifdef FreeRTOS
     hal.get_elapsed_ticks = xTaskGetTickCountFromISR;
+#else
+    hal.get_elapsed_ticks = getElapsedTicks;
+#endif
 
 #ifdef DEBUGOUT
     hal.debug_out = debug_out;
@@ -1812,9 +1843,8 @@ static void software_debounce_isr (void)
 {
     TimerIntClear(DEBOUNCE_TIMER_BASE, TIMER_TIMA_TIMEOUT); // clear interrupt flag
 
-    axes_signals_t state = limitsGetState();
-
-    if(state.value) //TODO: add check for limit swicthes having same state as when limit_isr were invoked?
+    limit_signals_t state = limitsGetState();
+    if(limit_signals_merge(state).value) //TODO: add check for limit switches having same state as when limit_isr were invoked?
         hal.limits.interrupt_callback(state);
 }
 
@@ -2077,6 +2107,8 @@ static void control_isr_sd (void)
 #if PWM_RAMPED
 static void systick_isr (void)
 {
+    elapsed_tics++;
+    
     if(pwm_ramp.ms_cfg) {
         if(++pwm_ramp.delay_ms == pwm_ramp.ms_cfg) {
 
@@ -2110,21 +2142,17 @@ static void systick_isr (void)
 
     if(delay.ms && !(--delay.ms) && delay.callback) {
         delay.callback();
-        delay.callback = 0;
+        delay.callback = NULL;
     }
-
-    if(!(delay.ms || pwm_ramp.ms_cfg))
-        SysTickDisable();
 }
 #else
 static void systick_isr (void)
 {
-    if(!(--delay.ms)) {
-        SysTickDisable();
-        if(delay.callback) {
-            delay.callback();
-            delay.callback = NULL;
-        }
+    elapsed_tics++;
+
+    if(delay.ms && !(--delay.ms) && delay.callback) {
+        delay.callback();
+        delay.callback = NULL;
     }
 }
 #endif

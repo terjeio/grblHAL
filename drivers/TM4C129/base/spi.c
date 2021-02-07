@@ -1,11 +1,11 @@
 /*
-  spi.c - SPI interface for Trinamic TMC2130 stepper drivers
+  spi.c - SPI interface for Trinamic stepper drivers
 
   For Texas Instruments SimpleLink ARM processors/LaunchPads
 
   Part of grblHAL
 
-  Copyright (c) 2018-2020 Terje Io
+  Copyright (c) 2018-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,7 +23,7 @@
 
 #include "driver.h"
 
-#if TRINAMIC_ENABLE == 2130 && !TRINAMIC_I2C
+#if TRINAMIC_ENABLE && !TRINAMIC_I2C
 
 #include "spi.h"
 
@@ -35,19 +35,19 @@ typedef struct {
 #define F_SPI 4000000
 #define SPI_DELAY _delay_cycles(5)
 
-static TMC2130_status_t SPI_ReadRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
+TMC_spi_status_t tmc_spi_read (trinamic_motor_t driver, TMC_spi_datagram_t *datagram)
 {
     uint32_t data;
-    TMC2130_status_t status;
+    TMC_spi_status_t status;
 
-    chip_select_t *cs = (chip_select_t *)driver->cs_pin;
+    chip_select_t *cs = (chip_select_t *)driver.cs_pin;
 
     GPIOPinWrite(cs->port, cs->pin, 0);
 
     SPI_DELAY;
 
     // dummy write to prepare data
-    SSIDataPut(SPI_BASE, reg->addr.value);
+    SSIDataPut(SPI_BASE, datagram->addr.value);
     SSIDataPut(SPI_BASE, 0);
     SSIDataPut(SPI_BASE, 0);
     SSIDataPut(SPI_BASE, 0);
@@ -67,7 +67,7 @@ static TMC2130_status_t SPI_ReadRegister (TMC2130_t *driver, TMC2130_datagram_t 
 
     SPI_DELAY;
 
-    SSIDataPut(SPI_BASE, reg->addr.value);
+    SSIDataPut(SPI_BASE, datagram->addr.value);
     SSIDataPut(SPI_BASE, 0);
     SSIDataPut(SPI_BASE, 0);
     SSIDataPut(SPI_BASE, 0);
@@ -76,37 +76,37 @@ static TMC2130_status_t SPI_ReadRegister (TMC2130_t *driver, TMC2130_datagram_t 
 
     // Read values from FIFO
     SSIDataGetNonBlocking(SPI_BASE, &data);
-    status.value = (uint8_t)data;
+    status = (uint8_t)data;
     SSIDataGetNonBlocking(SPI_BASE, &data);
-    reg->payload.value = ((uint8_t)data << 24);
+    datagram->payload.value = ((uint8_t)data << 24);
     SSIDataGetNonBlocking(SPI_BASE, &data);
-    reg->payload.value |= ((uint8_t)data << 16);
+    datagram->payload.value |= ((uint8_t)data << 16);
     SSIDataGetNonBlocking(SPI_BASE, &data);
-    reg->payload.value |= ((uint8_t)data << 8);
+    datagram->payload.value |= ((uint8_t)data << 8);
     SSIDataGetNonBlocking(SPI_BASE, &data);
-    reg->payload.value |= (uint8_t)data;
+    datagram->payload.value |= (uint8_t)data;
 
     GPIOPinWrite(cs->port, cs->pin, cs->pin);
 
     return status;
 }
 
-static TMC2130_status_t SPI_WriteRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
+TMC_spi_status_t tmc_spi_write (trinamic_motor_t driver, TMC_spi_datagram_t *datagram)
 {
-    TMC2130_status_t status = {0};
+    TMC_spi_status_t status = 0;
 
-    chip_select_t *cs = (chip_select_t *)driver->cs_pin;
+    chip_select_t *cs = (chip_select_t *)driver.cs_pin;
 
     GPIOPinWrite(cs->port, cs->pin, 0);
 
     // assume FIFO is empty?
-    reg->addr.write = 1;
-    SSIDataPut(SPI_BASE, reg->addr.value);
-    reg->addr.write = 0;
-    SSIDataPut(SPI_BASE, (reg->payload.value >> 24) & 0xFF);
-    SSIDataPut(SPI_BASE, (reg->payload.value >> 16) & 0xFF);
-    SSIDataPut(SPI_BASE, (reg->payload.value >> 8) & 0xFF);
-    SSIDataPut(SPI_BASE, reg->payload.value & 0xFF);
+    datagram->addr.write = 1;
+    SSIDataPut(SPI_BASE, datagram->addr.value);
+    datagram->addr.write = 0;
+    SSIDataPut(SPI_BASE, (datagram->payload.value >> 24) & 0xFF);
+    SSIDataPut(SPI_BASE, (datagram->payload.value >> 16) & 0xFF);
+    SSIDataPut(SPI_BASE, (datagram->payload.value >> 8) & 0xFF);
+    SSIDataPut(SPI_BASE, datagram->payload.value & 0xFF);
     while(SSIBusy(SPI_BASE));
 
     GPIOPinWrite(cs->port, cs->pin, cs->pin);
@@ -133,13 +133,6 @@ void SPI_Init (void)
     SSIClockSourceSet(SPI_BASE, SSI_CLOCK_SYSTEM);
     PREF(SSIConfigSetExpClk(SPI_BASE, 120000000, SSI_FRF_MOTO_MODE_0, SSI_MODE_MASTER, F_SPI, 8));
     PREF(SSIEnable(SPI_BASE));
-
-    trinamic_driver_if_t driver = {
-        .interface.WriteRegister = SPI_WriteRegister,
-        .interface.ReadRegister = SPI_ReadRegister
-    };
-
-    trinamic_if_init(&driver);
 }
 
 #endif

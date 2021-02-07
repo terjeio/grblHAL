@@ -26,6 +26,8 @@
 #include "driver.h"
 #include "serial.h"
 
+#include "grbl/limits.h"
+
 #if USB_SERIAL_CDC
 #include "usb_serial.h"
 #endif
@@ -261,16 +263,16 @@ static void limitsEnable (bool on, bool homing)
 
 // Returns limit state as an axes_signals_t variable.
 // Each bitfield bit indicates an axis limit, where triggered is 1 and not triggered is 0.
-inline static axes_signals_t limitsGetState()
+inline static limit_signals_t limitsGetState()
 {
-    axes_signals_t signals = {0};
+    limit_signals_t signals = {0};
     
-    signals.x = pinIn(X_LIMIT_PIN);
-    signals.y = pinIn(Y_LIMIT_PIN);
-    signals.z = pinIn(Z_LIMIT_PIN);
+    signals.min.x = pinIn(X_LIMIT_PIN);
+    signals.min.y = pinIn(Y_LIMIT_PIN);
+    signals.min.z = pinIn(Z_LIMIT_PIN);
 
     if (settings.limits.invert.mask)
-        signals.value ^= settings.limits.invert.mask;
+        signals.min.value ^= settings.limits.invert.mask;
 
     return signals;
 }
@@ -959,7 +961,7 @@ bool driver_init (void) {
     IRQRegister(SysTick_IRQn, SysTick_IRQHandler);
 
     hal.info = "SAMD21";
-    hal.driver_version = "210125";
+    hal.driver_version = "210206";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1032,6 +1034,8 @@ bool driver_init (void) {
         hal.nvs.type = NVS_None;
 #endif
 
+    hal.irq_enable = __enable_irq;
+    hal.irq_disable = __disable_irq;
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
@@ -1128,9 +1132,8 @@ static void DEBOUNCE_IRQHandler (void)
             hal.limit_interrupt_callback(state);
     }
 #else
-    axes_signals_t state = limitsGetState();
-
-    if(state.mask) //TODO: add check for limit switches having same state as when limit_isr were invoked?
+    limit_signals_t state = limitsGetState();
+    if(limit_signals_merge(state).value) //TODO: add check for limit switches having same state as when limit_isr were invoked?
         hal.limits.interrupt_callback(state);
 #endif
 }
@@ -1173,19 +1176,14 @@ static void SysTick_IRQHandler (void)
         fatfs_ticks = 10;
     }
 
-    if(delay_ms.ms && !(--delay_ms.ms)) {
-        if(delay_ms.callback) {
-            delay_ms.callback();
-            delay_ms.callback = NULL;
-        }
+    if(delay_ms.ms && !(--delay_ms.ms) && delay_ms.callback) {
+        delay_ms.callback();
+        delay_ms.callback = NULL;
     }
 #else
-    if(!(--delay_ms.ms)) {
-        SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
-        if(delay_ms.callback) {
-            delay_ms.callback();
-            delay_ms.callback = NULL;
-        }
+    if(delay_ms.ms && !(--delay_ms.ms) && delay_ms.callback) {
+        delay_ms.callback();
+        delay_ms.callback = NULL;
     }
 #endif
 }

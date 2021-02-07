@@ -141,8 +141,8 @@ typedef struct {
 // Limits
 
 typedef void (*limits_enable_ptr)(bool on, bool homing);
-typedef axes_signals_t (*limits_get_state_ptr)(void);
-typedef void (*limit_interrupt_callback_ptr)(axes_signals_t state);
+typedef limit_signals_t (*limits_get_state_ptr)(void);
+typedef void (*limit_interrupt_callback_ptr)(limit_signals_t state);
 
 typedef struct {
     limits_enable_ptr enable;

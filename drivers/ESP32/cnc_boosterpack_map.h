@@ -5,7 +5,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -22,6 +22,17 @@
 */
 
 #define BOARD_NAME "CNC BoosterPack"
+
+#if TRINAMIC_ENABLE
+#ifdef TRINAMIC_MIXED_DRIVERS
+#undef TRINAMIC_MIXED_DRIVERS
+#endif
+#define TRINAMIC_MIXED_DRIVERS 0
+#ifdef TRINAMIC_I2C
+#undef TRINAMIC_I2C
+#endif
+#define TRINAMIC_I2C 1
+#endif
 
 #if !EEPROM_ENABLE
 #undef EEPROM_ENABLE
@@ -100,7 +111,7 @@
 #define MPG_ENABLE_PIN  GPIO_NUM_25
 #endif
 
-#if IOEXPAND_ENABLE || KEYPAD_ENABLE || EEPROM_ENABLE || (TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C)
+#if I2C_ENABLE
 // Define I2C port/pins
 #define I2C_PORT  I2C_NUM_1
 #define I2C_SDA   GPIO_NUM_21

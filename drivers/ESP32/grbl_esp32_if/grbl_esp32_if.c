@@ -46,11 +46,48 @@ typedef enum {
     ESP32_WA,  // Readable as user and admin, writable as admin
 } grbl_esp32_permissions_t;
 
+typedef enum {
+    ESPCmd_GetSetSTA_SSID = 100,
+    ESPCmd_GetSetSTA_Password = 101,
+    ESPCmd_GetSetSTA_IPMode = 102,
+    ESPCmd_GetSetSTA_IP = 103,
+    ESPCmd_GetSetAP_SSID = 105,
+    ESPCmd_GetSetAP_Password = 106,
+    ESPCmd_GetSetAP_IP = 107,
+    ESPCmd_GetSetAP_Channel = 108,
+    ESPCmd_GetSetRadioMode = 110,
+    ESPCmd_GetCurrentIP = 111,
+    ESPCmd_GetSetHostname = 112,
+    //ESPCmd_GetSetRadioOnOff = 115,
+    ESPCmd_GetSetHTTPOnOff = 120,
+    ESPCmd_GetSetHttpPort = 121,
+    ESPCmd_GetSetTelnetOnOff = 130,
+    ESPCmd_GetSetTelnetPort = 131,
+    ESPCmd_GetSetBluetoothName = 140,
+    ESPCmd_GetSDCardStatus = 200,
+    ESPCmd_GetSDCardContent = 210,
+    //ESPCmd_DeleteSDCardFile = 215,
+    ESPCmd_PrintSD = 220,
+    ESPCmd_GetSettings = 400,
+    ESPCmd_SetEEPROMSetting = 401,
+    ESPCmd_GetAPList = 410,
+    ESPCmd_GetStatus = 420,
+    ESPCmd_Reboot = 444,
+    //ESPCmd_SetUserPassword = 555,
+    //ESPCmd_SendMessage = 600,
+    //ESPCmd_GetSetNotifications = 600,
+    ESPCmd_ReadLocalFile = 700,
+    ESPCmd_FormatFlashFS = 710,
+    ESPCmd_GetFlashFSCapacity = 720,
+    ESPCmd_GetFirmwareSpec = 800
+} esp_cmd_t;
+
 typedef struct grbl_esp32_setting {
     setting_id_t id;
     grbl_esp32_type_t type;
     grbl_esp32_permissions_t permissions;
     const char *name;
+    esp_cmd_t esp_cmd;
     status_code_t (*execute)(const struct grbl_esp32_setting *setting, char *value);
 } grbl_esp32_command_t;
 
@@ -69,87 +106,88 @@ static char cmdbuf[40];
 static on_unknown_sys_command_ptr on_unknown_sys_command;
 static const char *tmap[] = { "B", "B", "B", "B", "I", "I", "B", "S", "B", "A", "I", "I" };
 static const grbl_esp32_command_t grbl_esp32_commands[] = {
-    { Setting_PWMMaxValue, ESP32_GRBL, ESP32_WA, "Spindle/PWM/Max", set_setting },
-    { Setting_PWMMinValue, ESP32_GRBL, ESP32_WA, "Spindle/PWM/Min", set_setting },
-    { Setting_PWMFreq, ESP32_GRBL, ESP32_WA, "Spindle/PWM/Frequency", set_setting },
-    { Setting_SpindleInvertMask, ESP32_GRBL, ESP32_WA, "Spindle/PWM/Invert", set_setting },
+    { Setting_PWMMaxValue, ESP32_GRBL, ESP32_WA, "Spindle/PWM/Max",0 , set_setting },
+    { Setting_PWMMinValue, ESP32_GRBL, ESP32_WA, "Spindle/PWM/Min", 0, set_setting },
+    { Setting_PWMFreq, ESP32_GRBL, ESP32_WA, "Spindle/PWM/Frequency", 0, set_setting },
+    { Setting_SpindleInvertMask, ESP32_GRBL, ESP32_WA, "Spindle/PWM/Invert", 0, set_setting },
 /*    {, "Spindle/Delay/SpinUp" },
     {, "Spindle/Delay/SpinDown" }, */
-    { Setting_SpindlePWMBehaviour, ESP32_GRBL, ESP32_WA, "Spindle/Enable/OffWithSpeed", set_setting },
-    { Setting_SpindleInvertMask, ESP32_GRBL, ESP32_WA, "Spindle/Enable/Invert", set_setting },
-    { Setting_SettingsMax, ESP32_GRBL, ESP32_WA, "GCode/Line0", set_setting },
-    { Setting_SettingsMax, ESP32_GRBL, ESP32_WA, "GCode/Line1", set_setting },
-    { Setting_Mode, ESP32_GRBL, ESP32_WA, "GCode/LaserMode", set_setting },
+    { Setting_SpindlePWMBehaviour, ESP32_GRBL, ESP32_WA, "Spindle/Enable/OffWithSpeed", 0, set_setting },
+    { Setting_SpindleInvertMask, ESP32_GRBL, ESP32_WA, "Spindle/Enable/Invert", 0, set_setting },
+    { Setting_SettingsMax, ESP32_GRBL, ESP32_WA, "GCode/Line0", 0, set_setting },
+    { Setting_SettingsMax, ESP32_GRBL, ESP32_WA, "GCode/Line1", 0, set_setting },
+    { Setting_Mode, ESP32_GRBL, ESP32_WA, "GCode/LaserMode", 0, set_setting },
 /*    {, "Laser/FullPower" }, */
-    { Setting_RpmMin, ESP32_GRBL, ESP32_WA, "GCode/MinS", set_setting },
-    { Setting_RpmMax, ESP32_GRBL, ESP32_WA, "GCode/MaxS", set_setting },
-    { Setting_HomingPulloff, ESP32_GRBL, ESP32_WA, "Homing/Pulloff", set_setting },
-    { Setting_HomingDebounceDelay, ESP32_GRBL, ESP32_WA, "Homing/Debounce", set_setting },
-    { Setting_HomingSeekRate, ESP32_GRBL, ESP32_WA, "Homing/Seek", set_setting },
-    { Setting_HomingFeedRate, ESP32_GRBL, ESP32_WA, "Homing/Feed", set_setting },
+    { Setting_RpmMin, ESP32_GRBL, ESP32_WA, "GCode/MinS", 0, set_setting },
+    { Setting_RpmMax, ESP32_GRBL, ESP32_WA, "GCode/MaxS", 0, set_setting },
+    { Setting_HomingPulloff, ESP32_GRBL, ESP32_WA, "Homing/Pulloff", 0, set_setting },
+    { Setting_HomingDebounceDelay, ESP32_GRBL, ESP32_WA, "Homing/Debounce", 0, set_setting },
+    { Setting_HomingSeekRate, ESP32_GRBL, ESP32_WA, "Homing/Seek", 0, set_setting },
+    { Setting_HomingFeedRate, ESP32_GRBL, ESP32_WA, "Homing/Feed", 0, set_setting },
 /*    {, "Homing/Squared" }, */
-    { Setting_HomingDirMask, ESP32_GRBL, ESP32_WA, "Homing/DirInvert", set_setting },
-    { Setting_HomingEnable, ESP32_GRBL, ESP32_WA, "Homing/Enable", set_setting },
-    { Setting_HardLimitsEnable, ESP32_GRBL, ESP32_WA, "Limits/Hard", set_setting },
-    { Setting_SoftLimitsEnable, ESP32_GRBL, ESP32_WA, "Limits/Soft", set_setting },
+    { Setting_HomingDirMask, ESP32_GRBL, ESP32_WA, "Homing/DirInvert", 0, set_setting },
+    { Setting_HomingEnable, ESP32_GRBL, ESP32_WA, "Homing/Enable", 0, set_setting },
+    { Setting_HardLimitsEnable, ESP32_GRBL, ESP32_WA, "Limits/Hard", 0, set_setting },
+    { Setting_SoftLimitsEnable, ESP32_GRBL, ESP32_WA, "Limits/Soft", 0, set_setting },
 /*    {"Firmware/Build" }, */
-    { Setting_ReportInches, ESP32_GRBL, ESP32_WA, "Report/Inches", set_setting },
-    { Setting_ArcTolerance, ESP32_GRBL, ESP32_WA, "GCode/ArcTolerance", set_setting },
-    { Setting_JunctionDeviation, ESP32_GRBL, ESP32_WA, "GCode/JunctionDeviation", set_setting },
-    { Setting_StatusReportMask, ESP32_GRBL, ESP32_WA, "Report/Status", set_setting },
-    { Setting_InvertProbePin, ESP32_GRBL, ESP32_WA, "Probe/Invert", set_setting },
-    { Setting_LimitPinsInvertMask, ESP32_GRBL, ESP32_WA, "Limits/Invert", set_setting },
-    { Setting_InvertStepperEnable, ESP32_GRBL, ESP32_WA, "Stepper/EnableInvert", set_setting },
-    { Setting_DirInvertMask, ESP32_GRBL, ESP32_WA, "Stepper/DirInvert", set_setting },
-    { Setting_StepInvertMask, ESP32_GRBL, ESP32_WA, "Stepper/StepInvert", set_setting },
-    { Setting_StepperIdleLockTime, ESP32_GRBL, ESP32_WA, "Stepper/IdleTime", set_setting },
-    { Setting_PulseMicroseconds, ESP32_GRBL, ESP32_WA, "Stepper/Pulse", set_setting },
+    { Setting_ReportInches, ESP32_GRBL, ESP32_WA, "Report/Inches", 0, set_setting },
+    { Setting_ArcTolerance, ESP32_GRBL, ESP32_WA, "GCode/ArcTolerance", 0, set_setting },
+    { Setting_JunctionDeviation, ESP32_GRBL, ESP32_WA, "GCode/JunctionDeviation", 0, set_setting },
+    { Setting_StatusReportMask, ESP32_GRBL, ESP32_WA, "Report/Status", 0, set_setting },
+    { Setting_InvertProbePin, ESP32_GRBL, ESP32_WA, "Probe/Invert", 0, set_setting },
+    { Setting_LimitPinsInvertMask, ESP32_GRBL, ESP32_WA, "Limits/Invert", 0, set_setting },
+    { Setting_InvertStepperEnable, ESP32_GRBL, ESP32_WA, "Stepper/EnableInvert", 0, set_setting },
+    { Setting_DirInvertMask, ESP32_GRBL, ESP32_WA, "Stepper/DirInvert", 0, set_setting },
+    { Setting_StepInvertMask, ESP32_GRBL, ESP32_WA, "Stepper/StepInvert", 0, set_setting },
+    { Setting_StepperIdleLockTime, ESP32_GRBL, ESP32_WA, "Stepper/IdleTime", 0, set_setting },
+    { Setting_PulseMicroseconds, ESP32_GRBL, ESP32_WA, "Stepper/Pulse", 0, set_setting },
 /*    {"Report/StallGuard" }, */
-    { Setting_HomingCycle_6, ESP32_GRBL, ESP32_WA, "Homing/Cycle5", set_setting },
-    { Setting_HomingCycle_5, ESP32_GRBL, ESP32_WA, "Homing/Cycle4", set_setting },
-    { Setting_HomingCycle_4, ESP32_GRBL, ESP32_WA, "Homing/Cycle3", set_setting },
-    { Setting_HomingCycle_3, ESP32_GRBL, ESP32_WA, "Homing/Cycle2", set_setting },
-    { Setting_HomingCycle_2, ESP32_GRBL, ESP32_WA, "Homing/Cycle1", set_setting },
-    { Setting_HomingCycle_1, ESP32_GRBL, ESP32_WA, "Homing/Cycle0", set_setting },
+    { Setting_HomingCycle_6, ESP32_GRBL, ESP32_WA, "Homing/Cycle5", 0, set_setting },
+    { Setting_HomingCycle_5, ESP32_GRBL, ESP32_WA, "Homing/Cycle4", 0, set_setting },
+    { Setting_HomingCycle_4, ESP32_GRBL, ESP32_WA, "Homing/Cycle3", 0, set_setting },
+    { Setting_HomingCycle_3, ESP32_GRBL, ESP32_WA, "Homing/Cycle2", 0, set_setting },
+    { Setting_HomingCycle_2, ESP32_GRBL, ESP32_WA, "Homing/Cycle1", 0, set_setting },
+    { Setting_HomingCycle_1, ESP32_GRBL, ESP32_WA, "Homing/Cycle0", 0, set_setting },
 
 #if AUTH_ENABLE
-    { Setting_AdminPassword, ESP32_WEBSET, ESP32_WA, "WebUI/AdminPassword", set_setting },
-    { Setting_UserPassword, ESP32_WEBSET, ESP32_WA, "WebUI/UserPassword", set_setting },
+    { Setting_AdminPassword, ESP32_WEBSET, ESP32_WA, "WebUI/AdminPassword", 0, set_setting },
+    { Setting_UserPassword, ESP32_WEBSET, ESP32_WA, "WebUI/UserPassword", 0, set_setting },
 #endif
-    { Setting_WiFi_STA_SSID, ESP32_WEBSET, ESP32_WA, "Sta/SSID", set_setting },
-    { Setting_WiFi_STA_Password, ESP32_WEBSET, ESP32_WA, "Sta/Password", set_setting },
-    { Setting_NetworkServices, ESP32_WEBSET, ESP32_WA, "Telnet/Enable", set_setting },
-    { Setting_NetworkServices, ESP32_WEBSET, ESP32_WA, "Telnet/Enable", set_setting },
-    { Setting_NetworkServices, ESP32_WEBSET, ESP32_WA, "Http/Enable", set_setting },
-    { Setting_Hostname, ESP32_WEBSET, ESP32_WA, "System/Hostname", set_setting },
-/*    { Setting_IpMode, ESP32_GRBL, ESP32_WA, "Sta/IPMode", set_setting }, */
-    { Setting_IpAddress, ESP32_WEBSET, ESP32_WA, "Sta/IP", set_setting },
-    { Setting_Gateway, ESP32_WEBSET, ESP32_WA, "Sta/Gateway", set_setting },
-    { Setting_NetMask, ESP32_WEBSET, ESP32_WA, "Sta/Netmask", set_setting },
+    { Setting_WiFi_STA_SSID, ESP32_WEBSET, ESP32_WA, "Sta/SSID", ESPCmd_GetSetSTA_SSID, set_setting },
+    { Setting_WiFi_STA_Password, ESP32_WEBSET, ESP32_WA, "Sta/Password", ESPCmd_GetSetSTA_Password, set_setting },
+    { Setting_Hostname, ESP32_WEBSET, ESP32_WA, "System/Hostname", 0, set_setting },
+/*    { Setting_IpMode, ESP32_GRBL, ESP32_WA, "Sta/IPMode", 0, set_setting }, */
+    { Setting_IpAddress, ESP32_WEBSET, ESP32_WA, "Sta/IP", ESPCmd_GetSetSTA_IP, set_setting },
+    { Setting_Gateway, ESP32_WEBSET, ESP32_WA, "Sta/Gateway", 0, set_setting },
+    { Setting_NetMask, ESP32_WEBSET, ESP32_WA, "Sta/Netmask", 0, set_setting },
 #if WIFI_SOFTAP
-    { Setting_WifiMode, ESP32_WEBSET, ESP32_WA, "Radio/Mode", set_setting },
-    { Setting_WiFi_AP_SSID, ESP32_WEBSET, ESP32_WA, "AP/SSID", set_setting },
-    { Setting_WiFi_AP_Password, ESP32_WEBSET, ESP32_WA, "AP/Password", set_setting },
-//    { Setting_Hostname2, ESP32_WEBSET, ESP32_WA, "Homing/Cycle0", set_setting },
-    { Setting_IpAddress2, ESP32_WEBSET, ESP32_WA, "AP/IP", set_setting },
-//    { Setting_Gateway2, ESP32_WEBSET, ESP32_WA, "Homing/Cycle0", set_setting },
-//    { Setting_NetMask2, ESP32_WEBSET, ESP32_WA, "Homing/Cycle0", set_setting },
+    { Setting_WifiMode, ESP32_WEBSET, ESP32_WA, "Radio/Mode", ESPCmd_GetSetRadioMode, set_setting },
+    { Setting_WiFi_AP_SSID, ESP32_WEBSET, ESP32_WA, "AP/SSID", ESPCmd_GetSetAP_SSID, set_setting },
+    { Setting_WiFi_AP_Password, ESP32_WEBSET, ESP32_WA, "AP/Password", ESPCmd_GetSetAP_Password, set_setting },
+//    { Setting_Hostname2, ESP32_WEBSET, ESP32_WA, "Homing/Cycle0", 0, set_setting },
+    { Setting_IpAddress2, ESP32_WEBSET, ESP32_WA, "AP/IP", ESPCmd_GetSetAP_IP, set_setting },
+//    { Setting_Gateway2, ESP32_WEBSET, ESP32_WA, "Homing/Cycle0", 0, set_setting },
+//    { Setting_NetMask2, ESP32_WEBSET, ESP32_WA, "Homing/Cycle0", 0, set_setting },
 #else
-    { Setting_WifiMode, ESP32_WEBSET, ESP32_WA, "Homing/Cycle0", set_setting },
+    { Setting_WifiMode, ESP32_WEBSET, ESP32_WA, "Homing/Cycle0", 0, set_setting },
 #endif
 #if TELNET_ENABLE
-    { Setting_TelnetPort, ESP32_WEBSET, ESP32_WA, "Telnet/Port", set_setting },
+    { Setting_NetworkServices, ESP32_WEBSET, ESP32_WA, "Telnet/Enable", ESPCmd_GetSetTelnetOnOff, set_setting },
+    { Setting_TelnetPort, ESP32_WEBSET, ESP32_WA, "Telnet/Port", ESPCmd_GetSetTelnetPort, set_setting },
 #endif
 #if HTTP_ENABLE
-    { Setting_HttpPort, ESP32_WEBSET, ESP32_WA, "Http/Port", set_setting },
+    { Setting_NetworkServices, ESP32_WEBSET, ESP32_WA, "Http/Enable", ESPCmd_GetSetHTTPOnOff, set_setting },
+    { Setting_HttpPort, ESP32_WEBSET, ESP32_WA, "Http/Port", ESPCmd_GetSetHttpPort, set_setting },
 #endif
 #if WEBSOCKET_ENABLE
-//    { Setting_WebSocketPort, ESP32_WEBSET, ESP32_WA, "Homing/Cycle0", set_setting },
+//    { Setting_WebSocketPort, ESP32_WEBSET, ESP32_WA, "Homing/Cycle0", 0, set_setting },
 #endif
-    { Setting_SettingsMax, ESP32_WEBCMD, ESP32_WA, "WebUI/List", list_settings_webui },
-    { Setting_SettingsMax, ESP32_GRBLCMD, ESP32_WG, "GrblSettings/List", list_settings },
-    { Setting_SettingsMax, ESP32_GRBLCMD, ESP32_WG, "ExtendedSettings/List", list_settings_all }
-//"Bluetooth/Name"
+#if BLUETOOTH_ENABLE
+    { Setting_BlueToothDeviceName, ESP32_WEBSET, ESP32_WA, "Bluetooth/Name", ESPCmd_GetSetBluetoothName, set_setting },
+#endif
+    { Setting_SettingsMax, ESP32_WEBCMD, ESP32_WA, "WebUI/List", ESPCmd_GetSettings, list_settings_webui },
+    { Setting_SettingsMax, ESP32_GRBLCMD, ESP32_WG, "GrblSettings/List", 0, list_settings },
+    { Setting_SettingsMax, ESP32_GRBLCMD, ESP32_WG, "ExtendedSettings/List", 0, list_settings_all }
 };
 
 status_code_t set_setting (const grbl_esp32_command_t *setting, char *value)
@@ -194,7 +232,7 @@ static bool setting_to_json (const setting_detail_t *setting, uint_fast16_t offs
                 break;
 
             default:
-                if(setting->min_value)
+                if(setting->min_value && !setting_is_list(setting))
                     ok &= !!cJSON_AddStringToObject(settingobj, "S", setting->min_value);
                 if(setting->max_value)
                     ok &= !!cJSON_AddStringToObject(settingobj, "M", setting->max_value);

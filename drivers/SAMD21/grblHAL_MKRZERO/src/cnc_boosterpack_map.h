@@ -23,6 +23,17 @@
 
 #define BOARD_NAME "CNC BoosterPack"
 
+#if TRINAMIC_ENABLE
+#ifdef TRINAMIC_MIXED_DRIVERS
+#undef TRINAMIC_MIXED_DRIVERS
+#endif
+#define TRINAMIC_MIXED_DRIVERS 0
+#ifdef TRINAMIC_I2C
+#undef TRINAMIC_I2C
+#endif
+#define TRINAMIC_I2C 1
+#endif
+
 #ifdef EEPROM_ENABLE
 #undef EEPROM_ENABLE
 #endif

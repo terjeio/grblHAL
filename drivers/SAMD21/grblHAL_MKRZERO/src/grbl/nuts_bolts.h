@@ -97,6 +97,17 @@ typedef union {
     };
 } axes_signals_t;
 
+#pragma pack(push, 1)
+
+typedef struct {
+    axes_signals_t min;
+    axes_signals_t max;
+    axes_signals_t min2;
+    axes_signals_t max2;
+} limit_signals_t;
+
+#pragma pack(pop)
+
 typedef enum {
     DelayMode_Dwell = 0,
     DelayMode_SysSuspend

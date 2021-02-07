@@ -3,7 +3,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -21,14 +21,15 @@
 
 // NOTE: Only one board may be enabled!
 #define BOARD_CNC_BOOSTERPACK
+//#define BOARD_MY_MACHINE // Add my_machine_map.h before enabling this!
 
 // Configuration
 // Uncomment to enable.
 
 //#define KEYPAD_ENABLE           1 // I2C keypad for jogging etc.
 //#define TRINAMIC_ENABLE      2130 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
-//#define TRINAMIC_I2C            1 // Trinamic I2C - SPI bridge interface.
-//#define TRINAMIC_DEV            1 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
+//#define TRINAMIC_ENABLE      5160 // Trinamic TMC5160 stepper driver support. NOTE: work in progress.
+//#define TRINAMIC_I2C            0 // Trinamic I2C - SPI bridge interface.
 //#define PWM_RAMPED              1 // Ramped spindle PWM.
 //#define PPI_ENABLE              1 // Laser PPI (Pulses Per Inch) option.
 

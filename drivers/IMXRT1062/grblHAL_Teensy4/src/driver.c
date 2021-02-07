@@ -26,6 +26,7 @@
 #include "uart.h"
 #include "driver.h"
 #include "grbl/protocol.h"
+#include "grbl/limits.h"
 
 #if EEPROM_ENABLE
 #include "eeprom/eeprom.h"
@@ -873,71 +874,75 @@ void stepperOutputStep (axes_signals_t step_outbits, axes_signals_t dir_outbits)
 // Returns limit state as an axes_signals_t variable.
 // Each bitfield bit indicates an axis limit, where triggered is 1 and not triggered is 0.
 // Dual limit switch inputs per axis version. Only one needs to be dual input!
-inline static axes_signals_t limitsGetState()
+inline static limit_signals_t limitsGetState()
 {
-    axes_signals_t signals_min = {settings.limits.invert.mask}, signals_max = {settings.limits.invert.mask};
+    limit_signals_t signals = {0};
 
-    signals_min.x = (LimitX.reg->DR & LimitX.bit) != 0;
+    signals.min.mask = signals.max.mask = settings.limits.invert.mask;
+
+    signals.min.x = (LimitX.reg->DR & LimitX.bit) != 0;
 #ifdef X2_LIMIT_PIN
-    signals_max.x = (LimitX2.reg->DR & LimitX2.bit) != 0;
+    signals.max.x = (LimitX2.reg->DR & LimitX2.bit) != 0;
 #endif
 
-    signals_min.y = (LimitY.reg->DR & LimitY.bit) != 0;
+    signals.min.y = (LimitY.reg->DR & LimitY.bit) != 0;
 #ifdef Y2_LIMIT_PIN
-    signals_max.y = (LimitY2.reg->DR & LimitY2.bit) != 0;
+    signals.max.y = (LimitY2.reg->DR & LimitY2.bit) != 0;
 #endif
 
-    signals_min.z = (LimitZ.reg->DR & LimitZ.bit) != 0;
+    signals.min.z = (LimitZ.reg->DR & LimitZ.bit) != 0;
 #ifdef Z2_LIMIT_PIN
-    signals_max.z = (LimitZ2.reg->DR & LimitZ2.bit) != 0;
+    signals.max.z = (LimitZ2.reg->DR & LimitZ2.bit) != 0;
 #endif
 
 #ifdef A_LIMIT_PIN
-    signals_min.a = (LimitA.reg->DR & LimitA.bit) != 0;
+    signals.min.a = (LimitA.reg->DR & LimitA.bit) != 0;
 #endif
 #ifdef B_LIMIT_PIN
-    signals_min.b = (LimitB.reg->DR & LimitB.bit) != 0;
+    signals.min.b = (LimitB.reg->DR & LimitB.bit) != 0;
 #endif
 #ifdef C_LIMIT_PIN
-    signals_min.c = (LimitC.reg->DR & LimitC.bit) != 0;
+    signals.min.c = (LimitC.reg->DR & LimitC.bit) != 0;
 #endif
 
-    if (settings.limits.invert.mask) {
-        signals_min.value ^= settings.limits.invert.mask;
-        signals_max.value ^= settings.limits.invert.mask;
+    if(settings.limits.invert.mask) {
+        signals.min.value ^= settings.limits.invert.mask;
+        signals.max.value ^= settings.limits.invert.mask;
     }
 
-    signals_min.value |= signals_max.value;
-
-    return signals_min;
+    return signals;
 }
 #else // SINGLE INPUT LIMIT SWITCHES
-    // Returns limit state as an axes_signals_t bitmap variable.
-    // signals.value (or signals.mask) are: bit0 -> X, bit1 -> Y...
-    // Individual signals bits can be accessed by signals.x, signals.y, ...
-    // Each bit indicates a limit signal, where triggered is 1 and not triggered is 0.
-    // axes_signals_t is defined in grbl/nuts_bolts.h.
-    inline static axes_signals_t limitsGetState()
-    {
-        axes_signals_t signals = {settings.limits.invert.mask};
 
-        signals.x = (LimitX.reg->DR & LimitX.bit) != 0;
-        signals.y = (LimitY.reg->DR & LimitY.bit) != 0;
-        signals.z = (LimitZ.reg->DR & LimitZ.bit) != 0;
-    #ifdef A_LIMIT_PIN
-        signals.a = (LimitA.reg->DR & LimitA.bit) != 0;
-    #endif
-    #ifdef B_LIMIT_PIN
-        signals.b = (LimitB.reg->DR & LimitB.bit) != 0;
-    #endif
-    #ifdef C_LIMIT_PIN
-        signals.c = (LimitC.reg->DR & LimitC.bit) != 0;
-    #endif
-        if (settings.limits.invert.mask)
-            signals.value ^= settings.limits.invert.mask;
+// Returns limit state as an axes_signals_t bitmap variable.
+// signals.value (or signals.mask) are: bit0 -> X, bit1 -> Y...
+// Individual signals bits can be accessed by signals.x, signals.y, ...
+// Each bit indicates a limit signal, where triggered is 1 and not triggered is 0.
+// axes_signals_t is defined in grbl/nuts_bolts.h.
+inline static limit_signals_t limitsGetState()
+{
+    limit_signals_t signals = {0};
 
-        return signals;
-    }
+    signals.min.mask = settings.limits.invert.mask;
+
+    signals.min.x = (LimitX.reg->DR & LimitX.bit) != 0;
+    signals.min.y = (LimitY.reg->DR & LimitY.bit) != 0;
+    signals.min.z = (LimitZ.reg->DR & LimitZ.bit) != 0;
+#ifdef A_LIMIT_PIN
+    signals.min.a = (LimitA.reg->DR & LimitA.bit) != 0;
+#endif
+#ifdef B_LIMIT_PIN
+    signals.min.b = (LimitB.reg->DR & LimitB.bit) != 0;
+#endif
+#ifdef C_LIMIT_PIN
+    signals.min.c = (LimitC.reg->DR & LimitC.bit) != 0;
+#endif
+
+    if (settings.limits.invert.mask)
+        signals.min.value ^= settings.limits.invert.mask;
+
+    return signals;
+}
 
 #endif
 
@@ -971,46 +976,45 @@ static void StepperDisableMotors (axes_signals_t axes, squaring_mode_t mode)
 // Each bitfield bit indicates an axis limit, where triggered is 1 and not triggered is 0.
 static axes_signals_t limitsGetHomeState()
 {
-    axes_signals_t signals_min = {0}, signals_max = {0};
+    axes_signals_t signals = {0};
 
     if(motors_1.mask) {
 
-        signals_min.mask = settings.limits.invert.mask;
+        signals.min.mask = settings.limits.invert.mask;
 
         if(motors_1.x)
-            signals_min.x = (LimitX.reg->DR & LimitX.bit) != 0;
+            signals.min.x = (LimitX.reg->DR & LimitX.bit) != 0;
         if(motors_1.y)
-            signals_min.y = (LimitY.reg->DR & LimitY.bit) != 0;
+            signals.min.y = (LimitY.reg->DR & LimitY.bit) != 0;
         if(motors_1.z)
-            signals_min.z = (LimitZ.reg->DR & LimitZ.bit) != 0;
+            signals.min.z = (LimitZ.reg->DR & LimitZ.bit) != 0;
 
         if (settings.limits.invert.mask)
-            signals_min.mask ^= settings.limits.invert.mask;
+            signals.min.mask ^= settings.limits.invert.mask;
     }
 
     if(motors_2.mask) {
 
-       signals_max.mask = settings.limits.invert.mask;
+       signals.max.mask = settings.limits.invert.mask;
 
 #ifdef X2_LIMIT_PIN
         if(motors_2.x)
-            signals_max.x = (LimitX2.reg->DR & LimitX2.bit) != 0;
+            signals.max.x = (LimitX2.reg->DR & LimitX2.bit) != 0;
 #endif
 #ifdef Y2_LIMIT_PIN
         if(motors_2.y)
-            signals_max.y = (LimitY2.reg->DR & LimitY2.bit) != 0;
+            signals.max.y = (LimitY2.reg->DR & LimitY2.bit) != 0;
 #endif
 #ifdef Z2_LIMIT_PIN
         if(motors_2.z)
-            signals_max.z = (LimitZ2.reg->DR & LimitZ2.bit) != 0;
+            signals.max.z = (LimitZ2.reg->DR & LimitZ2.bit) != 0;
 #endif
         if (settings.limits.invert.mask)
-            signals_max.mask ^= settings.limits.invert.mask;
+            signals.max.mask ^= settings.limits.invert.mask;
     }
 
-    signals_min.mask |= signals_max.mask;
 
-    return signals_min;
+    return signals;
 }
 
 #endif
@@ -1218,7 +1222,7 @@ static void spindleSetStateVariable (spindle_state_t state, float rpm)
 // spindle_state_t is defined in grbl/spindle_control.h
 static spindle_state_t spindleGetState (void)
 {
-    spindle_state_t state = {0};
+    spindle_state_t state = {settings.spindle.invert.mask};
 
     state.on = (spindleEnable.reg->DR & spindleEnable.bit) != 0;
 
@@ -1226,10 +1230,9 @@ static spindle_state_t spindleGetState (void)
         state.ccw = (spindleDir.reg->DR & spindleDir.bit) != 0;
  
     state.value ^= settings.spindle.invert.mask;
+
     if(pwmEnabled)
         state.on |= pwmEnabled;
-
-    state.value ^= settings.spindle.invert.mask;
 
 #ifdef SPINDLE_SYNC_ENABLE
     float rpm = spindleGetData(SpindleData_RPM)->rpm;
@@ -1407,6 +1410,16 @@ static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t 
     __enable_irq();
 
     return prev;
+}
+
+static void enable_irq (void)
+{
+    __enable_irq();
+}
+
+static void disable_irq (void)
+{
+    __disable_irq();
 }
 
 // Configures perhipherals when settings are initialized or changed
@@ -2118,7 +2131,7 @@ bool driver_init (void)
         options[strlen(options) - 1] = '\0';
 
     hal.info = "iMXRT1062";
-    hal.driver_version = "200125";
+    hal.driver_version = "210206";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -2191,6 +2204,8 @@ bool driver_init (void)
 #endif
 
     hal.reboot = reboot;
+    hal.irq_enable = enable_irq;
+    hal.irq_disable = disable_irq;
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;

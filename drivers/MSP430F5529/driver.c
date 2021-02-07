@@ -27,10 +27,11 @@
 
 #include "driver.h"
 #include "serial.h"
+
 #include "grbl/hal.h"
 #include "grbl/grbl.h"
+#include "grbl/limits.h"
 #include "grbl/nuts_bolts.h"
-#include "eeprom/eeprom.h"
 
 #ifdef EEPROM_ENABLE
 #include "eeprom/eeprom.h"
@@ -185,17 +186,17 @@ static void limitsEnable (bool on, bool homing)
 
 // Returns limit state as an axes_signals_t variable.
 // Each bitfield bit indicates an axis limit, where triggered is 1 and not triggered is 0.
-inline static axes_signals_t limitsGetState()
+inline static limit_signals_t limitsGetState()
 {
-    axes_signals_t signals = {0};
+    limit_signals_t signals = {0};
     uint8_t flags = LIMIT_PORT_IN;
 
-    signals.x = (flags & X_LIMIT_PIN) == X_LIMIT_PIN;
-    signals.y = (flags & Y_LIMIT_PIN) == Y_LIMIT_PIN;
-    signals.z = (flags & Z_LIMIT_PIN) == Z_LIMIT_PIN;
+    signals.min.x = (flags & X_LIMIT_PIN) == X_LIMIT_PIN;
+    signals.min.y = (flags & Y_LIMIT_PIN) == Y_LIMIT_PIN;
+    signals.min.z = (flags & Z_LIMIT_PIN) == Z_LIMIT_PIN;
 
     if (settings.limits.invert.value)
-        signals.value ^= settings.limits.invert.value;
+        signals.min.value ^= settings.limits.invert.value;
 
     return signals;
 }
@@ -404,6 +405,16 @@ static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t 
     *ptr = value;
     _EINT();
     return prev;
+}
+
+static void enable_irq (void)
+{
+    _EINT();
+}
+
+static void disable_irq (void)
+{
+    _DINT();
 }
 
 // Configures perhipherals when settings are initialized or changed
@@ -662,7 +673,7 @@ bool driver_init (void)
     serialInit();
 
     hal.info = "MSP430F5529";
-    hal.driver_version = "210125";
+    hal.driver_version = "210202";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = 24000000;
     hal.rx_buffer_size = RX_BUFFER_SIZE;
@@ -712,6 +723,8 @@ bool driver_init (void)
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
+    hal.irq_enable = enable_irq;
+    hal.irq_disable = disable_irq;
 
 #ifdef HAS_KEYPAD
     hal.execute_realtime = process_keypress;
@@ -793,8 +806,8 @@ __interrupt void software_debounce_isr (void)
 {
     if(!--debounce_count) {
         SFRIE1 &= ~WDTIE;
-        axes_signals_t state = limitsGetState();
-        if(state.value) //TODO: add check for limit swicthes having same state as when limit_isr were invoked?
+        limit_signals_t state = limitsGetState();
+        if(limit_signals_merge(state).value) //TODO: add check for limit switches having same state as when limit_isr were invoked?
             hal.limits.interrupt_callback(state);
     }
 }

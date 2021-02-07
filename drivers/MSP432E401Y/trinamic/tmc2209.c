@@ -46,15 +46,14 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "tmc2209.h"
 
-static TMC2209_interface_t io = {0};
 
 static const TMC2209_t tmc2209_defaults = {
-    .f_clk = TMC2209_F_CLK,
-    .cool_step_enabled = TMC2209_COOLSTEP_ENABLE,
-    .r_sense = TMC2209_R_SENSE,
-    .current = TMC2209_CURRENT,
-    .hold_current_pct = TMC2209_HOLD_CURRENT_PCT,
-    .microsteps = TMC2209_MICROSTEPS,
+    .config.f_clk = TMC2209_F_CLK,
+    .config.cool_step_enabled = TMC2209_COOLSTEP_ENABLE,
+    .config.r_sense = TMC2209_R_SENSE,
+    .config.current = TMC2209_CURRENT,
+    .config.hold_current_pct = TMC2209_HOLD_CURRENT_PCT,
+    .config.microsteps = TMC2209_MICROSTEPS,
 
     // register adresses
     .gconf.addr.reg = TMC2209Reg_GCONF,
@@ -87,20 +86,6 @@ static const TMC2209_t tmc2209_defaults = {
     .pwm_auto.addr.reg = TMC2209Reg_PWM_AUTO
 };
 
-static uint8_t to_mres (tmc2209_microsteps_t msteps)
-{
-    uint8_t value = 0;
-
-    msteps = msteps == 0 ? TMC2209_Microsteps_1 : msteps;
-
-    while((msteps & 0x01) == 0) {
-      value++;
-      msteps >>= 1;
-    }
-
-    return 8 - (value > 8 ? 8 : value);
-}
-
 static void set_tfd (TMC2209_chopconf_reg_t *chopconf, uint8_t fast_decay_time)
 {
 //!    chopconf->chm = 1;
@@ -112,19 +97,11 @@ void TMC2209_SetDefaults (TMC2209_t *driver)
 {
     memcpy(driver, &tmc2209_defaults, sizeof(TMC2209_t));
 
-    driver->chopconf.reg.mres = to_mres(driver->microsteps);
-}
-
-void TMC2209_InterfaceInit (TMC2209_interface_t *interface)
-{
-    memcpy(&io, interface, sizeof(TMC2209_interface_t));
+    driver->chopconf.reg.mres = tmc_microsteps_to_mres(driver->config.microsteps);
 }
 
 bool TMC2209_Init (TMC2209_t *driver)
 {
-    if(io.WriteRegister == NULL)
-        return false;
-
     // Perform a status register read to clear reset flag and read OTP defaults
     // If no or bad response from driver return with error.
     if(!TMC2209_ReadRegister(driver, (TMC2209_datagram_t *)&driver->stat))
@@ -146,7 +123,7 @@ bool TMC2209_Init (TMC2209_t *driver)
     uint8_t ifcnt = driver->ifcnt.reg.count;
 
     TMC2209_WriteRegister(driver, (TMC2209_datagram_t *)&driver->gconf);
-    driver->chopconf.reg.mres = to_mres(driver->microsteps);
+    driver->chopconf.reg.mres = tmc_microsteps_to_mres(driver->config.microsteps);
     TMC2209_WriteRegister(driver, (TMC2209_datagram_t *)&driver->chopconf);
     driver->ihold_irun.reg.iholddelay = 1; // otp
     TMC2209_WriteRegister(driver, (TMC2209_datagram_t *)&driver->ihold_irun);
@@ -167,16 +144,16 @@ bool TMC2209_Init (TMC2209_t *driver)
 
 uint16_t TMC2209_GetCurrent (TMC2209_t *driver)
 {
-    return (uint16_t)((float)(driver->ihold_irun.reg.irun + 1) / 32.0f * (driver->chopconf.reg.vsense ? 180.0f : 325.0f) / (float)(driver->r_sense + 20) / 1.41421f * 1000.0f);
+    return (uint16_t)((float)(driver->ihold_irun.reg.irun + 1) / 32.0f * (driver->chopconf.reg.vsense ? 180.0f : 325.0f) / (float)(driver->config.r_sense + 20) / 1.41421f * 1000.0f);
 }
 
 // r_sense = mOhm, Vsense = mV, current = mA (RMS)
 void TMC2209_SetCurrent (TMC2209_t *driver, uint16_t mA, uint8_t hold_pct)
 {
-    driver->current = mA;
-    driver->hold_current_pct = hold_pct;
+    driver->config.current = mA;
+    driver->config.hold_current_pct = hold_pct;
 
-    float maxv = (((float)(driver->r_sense + 20)) * (float)(32UL * driver->current)) * 1.41421f / 1000.0f;
+    float maxv = (((float)(driver->config.r_sense + 20)) * (float)(32UL * driver->config.current)) * 1.41421f / 1000.0f;
 
     uint8_t current_scaling = (uint8_t)(maxv / 325.0f) - 1;
 
@@ -185,7 +162,7 @@ void TMC2209_SetCurrent (TMC2209_t *driver, uint16_t mA, uint8_t hold_pct)
         current_scaling = (uint8_t)(maxv / 180.0f) - 1;
 
     driver->ihold_irun.reg.irun = current_scaling > 31 ? 31 : current_scaling;
-    driver->ihold_irun.reg.ihold = (driver->ihold_irun.reg.irun * driver->hold_current_pct) / 100;
+    driver->ihold_irun.reg.ihold = (driver->ihold_irun.reg.irun * driver->config.hold_current_pct) / 100;
 
     TMC2209_WriteRegister(driver, (TMC2209_datagram_t *)&driver->chopconf);
     TMC2209_WriteRegister(driver, (TMC2209_datagram_t *)&driver->ihold_irun);
@@ -193,39 +170,43 @@ void TMC2209_SetCurrent (TMC2209_t *driver, uint16_t mA, uint8_t hold_pct)
 
 uint32_t TMC2209_GetTPWMTHRS (TMC2209_t *driver, float stpmm)
 {
-    return (uint32_t)((driver->microsteps * TMC2209_F_CLK) / (256 * driver->tpwmthrs.reg.tpwmthrs * stpmm));
+    return (uint32_t)((driver->config.microsteps * TMC2209_F_CLK) / (256 * driver->tpwmthrs.reg.tpwmthrs * stpmm));
 }
 
 void TMC2209_SetTPWMTHRS (TMC2209_t *driver, uint32_t velocity, float stpmm)
 {
-    driver->tpwmthrs.reg.tpwmthrs = (uint32_t)((driver->microsteps * TMC2209_F_CLK) / (256 * velocity * stpmm));
+    driver->tpwmthrs.reg.tpwmthrs = (uint32_t)((driver->config.microsteps * TMC2209_F_CLK) / (256 * velocity * stpmm));
 }
 
 // threshold = velocity in mm/s
 void TMC2209_SetHybridThreshold (TMC2209_t *driver, uint32_t threshold, float steps_mm)
 {
-    driver->tpwmthrs.reg.tpwmthrs = threshold == 0.0f ? 0UL : driver->f_clk * driver->microsteps / (256 * (uint32_t)((float)threshold * steps_mm));
+    driver->tpwmthrs.reg.tpwmthrs = threshold == 0.0f ? 0UL : driver->config.f_clk * driver->config.microsteps / (256 * (uint32_t)((float)threshold * steps_mm));
     TMC2209_WriteRegister(driver, (TMC2209_datagram_t *)&driver->tpwmthrs);
+}
+
+void TMC2209_SetTHIGH (TMC2209_t *driver, float mm_sec, float steps_mm) // -> pwm threshold
+{
+//    driver->thigh.reg.thigh = tmc_calc_tstep(driver, mm_sec, steps_mm);
+//    TMC2209_WriteRegister(driver, (TMC2209_datagram_t *)&driver->thigh);
+}
+
+void TMC2209_SetTCOOLTHRS (TMC2209_t *driver, float mm_sec, float steps_mm) // -> pwm threshold
+{
+    driver->tcoolthrs.reg.tcoolthrs = tmc_calc_tstep(&driver->config, mm_sec, steps_mm);
+    TMC2209_WriteRegister(driver, (TMC2209_datagram_t *)&driver->tcoolthrs);
 }
 
 // 1 - 256 in steps of 2^value is valid for TMC2209
 bool TMC2209_MicrostepsIsValid (uint16_t usteps)
 {
-    uint_fast8_t i = 8, count = 0;
-
-    if(usteps <= 256) do {
-        if(usteps & 0x01)
-            count++;
-        usteps >>= 1;
-    } while(i--);
-
-    return count == 1;
+    return tmc_microsteps_validate(usteps);
 }
 
 void TMC2209_SetMicrosteps (TMC2209_t *driver, tmc2209_microsteps_t msteps)
 {
-    driver->chopconf.reg.mres = to_mres(msteps);
-    driver->microsteps = (tmc2209_microsteps_t)(1 << (8 - driver->chopconf.reg.mres));
+    driver->chopconf.reg.mres = tmc_microsteps_to_mres(msteps);
+    driver->config.microsteps = (tmc2209_microsteps_t)(1 << (8 - driver->chopconf.reg.mres));
 // TODO: recalc and set hybrid threshold if enabled?
     TMC2209_WriteRegister(driver, (TMC2209_datagram_t *)&driver->chopconf);
 }
@@ -287,19 +268,19 @@ static void byteswap (uint8_t data[4])
 
 bool TMC2209_WriteRegister (TMC2209_t *driver, TMC2209_datagram_t *reg)
 {
-    TMC2209_write_datagram_t datagram;
+    TMC_uart_write_datagram_t datagram;
 
     datagram.msg.sync = 0x05;
-    datagram.msg.slave = driver->addr;
-    datagram.msg.addr = reg->addr;
+    datagram.msg.slave = driver->config.addr;
+    datagram.msg.addr.value = reg->addr.value;
     datagram.msg.addr.write = 1;
-    datagram.msg.payload = reg->payload;
+    datagram.msg.payload.value = reg->payload.value;
 
     byteswap(datagram.msg.payload.data);
 
-    calcCRC(datagram.data, sizeof(TMC2209_write_datagram_t));
+    calcCRC(datagram.data, sizeof(TMC_uart_write_datagram_t));
 
-    io.WriteRegister(driver, &datagram);
+    tmc_uart_write(driver->motor, &datagram);
 
 // TODO: add check for ok'ed?
 
@@ -310,20 +291,20 @@ bool TMC2209_WriteRegister (TMC2209_t *driver, TMC2209_datagram_t *reg)
 bool TMC2209_ReadRegister (TMC2209_t *driver, TMC2209_datagram_t *reg)
 {
     bool ok = false;
-    TMC2209_read_datagram_t datagram;
-    TMC2209_write_datagram_t *res;
+    TMC_uart_read_datagram_t datagram;
+    TMC_uart_write_datagram_t *res;
 
     datagram.msg.sync = 0x05;
-    datagram.msg.slave = driver->addr;
-    datagram.msg.addr = reg->addr;
+    datagram.msg.slave = driver->config.addr;
+    datagram.msg.addr.value = reg->addr.value;
     datagram.msg.addr.write = 0;
-    calcCRC(datagram.data, sizeof(TMC2209_read_datagram_t));
+    calcCRC(datagram.data, sizeof(TMC_uart_read_datagram_t));
 
-    res = io.ReadRegister(driver, &datagram);
+    res = tmc_uart_read(driver->motor, &datagram);
 
     if(res->msg.slave == 0xFF && res->msg.addr.value == datagram.msg.addr.value) {
         uint8_t crc = res->msg.crc;
-        calcCRC(res->data, sizeof(TMC2209_write_datagram_t));
+        calcCRC(res->data, sizeof(TMC_uart_write_datagram_t));
         if((ok = crc == res->msg.crc)) {
             reg->payload.value = res->msg.payload.value;
             byteswap(reg->payload.data);

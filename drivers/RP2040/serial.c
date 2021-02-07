@@ -37,6 +37,10 @@
 #define UART_IRQ UART0_IRQ
 #endif
 
+#define RX_BUFFER_MODULO RX_BUFFER_SIZE - 1
+#define TX_BUFFER_MODULO TX_BUFFER_SIZE - 1
+#define bufferIncPointer(ptr, size) ((ptr + 1) & size)
+
 static uint16_t tx_fifo_size;
 static stream_tx_buffer_t txbuffer = {0};
 static stream_rx_buffer_t rxbuffer = {0}, rxbackup;
@@ -53,17 +57,12 @@ void serialInit (uint32_t baud_rate)
     uart_set_hw_flow(UART_PORT, false, false);
     uart_set_format(UART_PORT, 8, 1, UART_PARITY_NONE);
     uart_set_baudrate(UART_PORT, 115200);
-
     uart_set_fifo_enabled(UART_PORT, true);
-    // RX timeout interrupt set Mask
-    // Interrupt when there is data in the RX FIFO but not enough to trigger a RX FIFO Level interrupt
-    // See UART register UARTIFLS
-    hw_set_bits(&UART->imsc, UART_UARTIMSC_RTIM_BITS);             
 
     irq_set_exclusive_handler(UART_IRQ, uart_interrupt_handler);
     irq_set_enabled(UART_IRQ, true);
     
-    uart_set_irq_enables(UART_PORT, true, false);
+    hw_set_bits(&UART->imsc, UART_UARTIMSC_RXIM_BITS|UART_UARTIMSC_RTIM_BITS);             
 }
 
 bool serialSetBaudRate (uint32_t baud_rate)

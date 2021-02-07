@@ -1,7 +1,7 @@
 /*
  * tmc5160.c - interface for Trinamic TMC5160 stepper driver
  *
- * v0.0.1 / 2021-01-08 / (c) Io Engineering / Terje
+ * v0.0.2 / 2021-02-04 / (c) Io Engineering / Terje
  */
 
 /*
@@ -46,15 +46,13 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "tmc5160.h"
 
-static TMC5160_interface_t io = {0};
-
 static const TMC5160_t tmc5160_defaults = {
-    .f_clk = TMC5160_F_CLK,
-    .cool_step_enabled = TMC5160_COOLSTEP_ENABLE,
-    .r_sense = TMC5160_R_SENSE,
-    .current = TMC5160_CURRENT,
-    .hold_current_pct = TMC5160_HOLD_CURRENT_PCT,
-    .microsteps = TMC5160_MICROSTEPS,
+    .config.f_clk = TMC5160_F_CLK,
+    .config.cool_step_enabled = TMC5160_COOLSTEP_ENABLE,
+    .config.r_sense = TMC5160_R_SENSE,
+    .config.current = TMC5160_CURRENT,
+    .config.hold_current_pct = TMC5160_HOLD_CURRENT_PCT,
+    .config.microsteps = TMC5160_MICROSTEPS,
 
     // register adresses
     .gconf.addr.reg = TMC5160Reg_GCONF,
@@ -131,20 +129,6 @@ static const TMC5160_t tmc5160_defaults = {
     .tpwmthrs.reg.tpwmthrs = TMC5160_TPWM_THRS
 };
 
-static uint8_t to_mres (tmc5160_microsteps_t msteps)
-{
-    uint8_t value = 0;
-
-    msteps = msteps == 0 ? TMC5160_Microsteps_1 : msteps;
-
-    while((msteps & 0x01) == 0) {
-      value++;
-      msteps >>= 1;
-    }
-
-    return 8 - (value > 8 ? 8 : value);
-}
-
 static void set_tfd (TMC5160_chopconf_reg_t *chopconf, uint8_t fast_decay_time)
 {
     chopconf->chm = 1;
@@ -156,44 +140,36 @@ void TMC5160_SetDefaults (TMC5160_t *driver)
 {
     memcpy(driver, &tmc5160_defaults, sizeof(TMC5160_t));
 
-    driver->chopconf.reg.mres = to_mres(driver->microsteps);
-}
-
-void TMC5160_InterfaceInit (TMC5160_interface_t *interface)
-{
-    memcpy(&io, interface, sizeof(TMC5160_interface_t));
+    driver->chopconf.reg.mres = tmc_microsteps_to_mres(driver->config.microsteps);
 }
 
 bool TMC5160_Init (TMC5160_t *driver)
 {
-    if(io.ReadRegister == NULL)
-        return false;
-
     // Read drv_status to check if driver is online
-    io.ReadRegister(driver, (TMC5160_datagram_t *)&driver->drv_status);
+    tmc_spi_read(driver->motor, (TMC_spi_datagram_t *)&driver->drv_status);
     if(driver->drv_status.reg.value == 0 || driver->drv_status.reg.value == 0xFFFFFFFF)
         return false;
 
     // Perform a status register read to clear reset flag
-    io.ReadRegister(driver, (TMC5160_datagram_t *)&driver->gstat);
+    tmc_spi_read(driver->motor, (TMC_spi_datagram_t *)&driver->gstat);
 
-    driver->chopconf.reg.mres = to_mres(driver->microsteps);
-    io.WriteRegister(driver, (TMC5160_datagram_t *)&driver->gconf);
-    io.WriteRegister(driver, (TMC5160_datagram_t *)&driver->chopconf);
-    io.WriteRegister(driver, (TMC5160_datagram_t *)&driver->coolconf);
-    io.WriteRegister(driver, (TMC5160_datagram_t *)&driver->pwmconf);
-    io.WriteRegister(driver, (TMC5160_datagram_t *)&driver->ihold_irun);
-    io.WriteRegister(driver, (TMC5160_datagram_t *)&driver->tpowerdown);
-    io.WriteRegister(driver, (TMC5160_datagram_t *)&driver->tpwmthrs);
+    driver->chopconf.reg.mres = tmc_microsteps_to_mres(driver->config.microsteps);
+    tmc_spi_write(driver->motor, (TMC_spi_datagram_t *)&driver->gconf);
+    tmc_spi_write(driver->motor, (TMC_spi_datagram_t *)&driver->chopconf);
+    tmc_spi_write(driver->motor, (TMC_spi_datagram_t *)&driver->coolconf);
+    tmc_spi_write(driver->motor, (TMC_spi_datagram_t *)&driver->pwmconf);
+    tmc_spi_write(driver->motor, (TMC_spi_datagram_t *)&driver->ihold_irun);
+    tmc_spi_write(driver->motor, (TMC_spi_datagram_t *)&driver->tpowerdown);
+    tmc_spi_write(driver->motor, (TMC_spi_datagram_t *)&driver->tpwmthrs);
 
-    TMC5160_SetCurrent(driver, driver->current, driver->hold_current_pct);
+    TMC5160_SetCurrent(driver, driver->config.current, driver->config.hold_current_pct);
 
     //set to a conservative start value
-    //TMC5160_SetConstantOffTimeChopper(driver, 5, 24, 13, 12, true); // move to default values
+    //TMC5160_SetConstantOffTimeChopper(driver->motor, 5, 24, 13, 12, true); // move to default values
 
     // Read back chopconf to check if driver is online
     uint32_t chopconf = driver->chopconf.reg.value;
-    io.ReadRegister(driver, (TMC5160_datagram_t *)&driver->chopconf);
+    tmc_spi_read(driver->motor, (TMC_spi_datagram_t *)&driver->chopconf);
 
     return driver->chopconf.reg.value == chopconf;
 }
@@ -204,7 +180,7 @@ uint_fast16_t cs2rms (TMC5160_t *driver, uint8_t CS)
     numerator *= 325;
     numerator >>= (8 + 5); // Divide by 256 and 32
     numerator *= 1000000;
-    uint32_t denominator = driver->r_sense;
+    uint32_t denominator = driver->config.r_sense;
     denominator *= 1414;
 
     return numerator / denominator;
@@ -218,14 +194,14 @@ uint16_t TMC5160_GetCurrent (TMC5160_t *driver)
 // r_sense = mOhm, Vsense = mV, current = mA (RMS)
 void TMC5160_SetCurrent (TMC5160_t *driver, uint16_t mA, uint8_t hold_pct)
 {
-    driver->current = mA;
-    driver->hold_current_pct = hold_pct;
+    driver->config.current = mA;
+    driver->config.hold_current_pct = hold_pct;
 
     const uint32_t V_fs = 325; // 0.325 * 1000
     uint_fast8_t CS = 31;
     uint32_t scaler = 0; // = 256
 
-    uint16_t RS_scaled = ((float)driver->r_sense / 1000.f) * 0xFFFF; // Scale to 16b
+    uint16_t RS_scaled = ((float)driver->config.r_sense / 1000.f) * 0xFFFF; // Scale to 16b
     uint32_t numerator = 11585; // 32 * 256 * sqrt(2)
     numerator *= RS_scaled;
     numerator >>= 8;
@@ -243,49 +219,47 @@ void TMC5160_SetCurrent (TMC5160_t *driver, uint16_t mA, uint8_t hold_pct)
 
     driver->global_scaler.reg.scaler = scaler;
     driver->ihold_irun.reg.irun = CS > 31 ? 31 : CS;
-    driver->ihold_irun.reg.ihold = (driver->ihold_irun.reg.irun * driver->hold_current_pct) / 100;
+    driver->ihold_irun.reg.ihold = (driver->ihold_irun.reg.irun * driver->config.hold_current_pct) / 100;
 
-    io.WriteRegister(driver, (TMC5160_datagram_t *)&driver->global_scaler);
-    io.WriteRegister(driver, (TMC5160_datagram_t *)&driver->ihold_irun);
+    tmc_spi_write(driver->motor, (TMC_spi_datagram_t *)&driver->global_scaler);
+    tmc_spi_write(driver->motor, (TMC_spi_datagram_t *)&driver->ihold_irun);
 }
 
-uint32_t TMC5160_GetTPWMTHRS (TMC5160_t *driver, float stpmm)
+uint32_t TMC5160_GetTPWMTHRS (TMC5160_t *driver, float steps_mm)
 {
-    return (uint32_t)((driver->microsteps * TMC5160_F_CLK) / (256 * driver->tpwmthrs.reg.tpwmthrs * stpmm));
+    return (uint32_t)((driver->config.microsteps * TMC5160_F_CLK) / (256 * driver->tpwmthrs.reg.tpwmthrs * steps_mm));
 }
 
-void TMC5160_SetTPWMTHRS (TMC5160_t *driver, uint32_t velocity, float stpmm)
+void TMC5160_SetHybridThreshold (TMC5160_t *driver, float mm_sec, float steps_mm) // -> pwm threshold
 {
-    driver->tpwmthrs.reg.tpwmthrs = (uint32_t)((driver->microsteps * TMC5160_F_CLK) / (256 * velocity * stpmm));
+    driver->tpwmthrs.reg.tpwmthrs = tmc_calc_tstep(&driver->config, mm_sec, steps_mm);
+    tmc_spi_write(driver->motor, (TMC_spi_datagram_t *)&driver->tpwmthrs);
 }
 
-// threshold = velocity in mm/s
-void TMC5160_SetHybridThreshold (TMC5160_t *driver, uint32_t threshold, float steps_mm)
+void TMC5160_SetTHIGH (TMC5160_t *driver, float mm_sec, float steps_mm) // -> pwm threshold
 {
-    driver->tpwmthrs.reg.tpwmthrs = threshold == 0.0f ? 0UL : driver->f_clk * driver->microsteps / (256 * (uint32_t)((float)threshold * steps_mm));
-    io.WriteRegister(driver, (TMC5160_datagram_t *)&driver->tpwmthrs);
+    driver->thigh.reg.thigh = tmc_calc_tstep(&driver->config, mm_sec, steps_mm);
+    tmc_spi_write(driver->motor, (TMC_spi_datagram_t *)&driver->thigh);
+}
+
+void TMC5160_SetTCOOLTHRS (TMC5160_t *driver, float mm_sec, float steps_mm) // -> pwm threshold
+{
+    driver->tcoolthrs.reg.tcoolthrs = tmc_calc_tstep(&driver->config, mm_sec, steps_mm);
+    tmc_spi_write(driver->motor, (TMC_spi_datagram_t *)&driver->tcoolthrs);
 }
 
 // 1 - 256 in steps of 2^value is valid for TMC5160
 bool TMC5160_MicrostepsIsValid (uint16_t usteps)
 {
-    uint_fast8_t i = 8, count = 0;
-
-    if(usteps <= 256) do {
-        if(usteps & 0x01)
-            count++;
-        usteps >>= 1;
-    } while(i--);
-
-    return count == 1;
+    return tmc_microsteps_validate(usteps);
 }
 
 void TMC5160_SetMicrosteps (TMC5160_t *driver, tmc5160_microsteps_t msteps)
 {
-    driver->chopconf.reg.mres = to_mres(msteps);
-    driver->microsteps = (tmc5160_microsteps_t)(1 << (8 - driver->chopconf.reg.mres));
+    driver->chopconf.reg.mres = tmc_microsteps_to_mres(msteps);
+    driver->config.microsteps = (tmc5160_microsteps_t)(1 << (8 - driver->chopconf.reg.mres));
 // TODO: recalc and set hybrid threshold if enabled?
-    io.WriteRegister(driver, (TMC5160_datagram_t *)&driver->chopconf);
+    tmc_spi_write(driver->motor, (TMC_spi_datagram_t *)&driver->chopconf);
 }
 
 void TMC5160_SetConstantOffTimeChopper (TMC5160_t *driver, uint8_t constant_off_time, uint8_t blank_time, uint8_t fast_decay_time, int8_t sine_wave_offset, bool use_current_comparator)
@@ -309,17 +283,25 @@ void TMC5160_SetConstantOffTimeChopper (TMC5160_t *driver, uint8_t constant_off_
     driver->chopconf.reg.toff = constant_off_time < 2 ? 2 : (constant_off_time > 15 ? 15 : constant_off_time);
     driver->chopconf.reg.hend = (sine_wave_offset < -3 ? -3 : (sine_wave_offset > 12 ? 12 : sine_wave_offset)) + 3;
 
-    io.WriteRegister(driver, (TMC5160_datagram_t *)&driver->chopconf);
+    tmc_spi_write(driver->motor, (TMC_spi_datagram_t *)&driver->chopconf);
 }
 
 TMC5160_status_t TMC5160_WriteRegister (TMC5160_t *driver, TMC5160_datagram_t *reg)
 {
-    return io.WriteRegister(driver, reg);
+    TMC5160_status_t status;
+
+    status.value = tmc_spi_write(driver->motor, (TMC_spi_datagram_t *)reg);
+
+    return status;
 }
 
 TMC5160_status_t TMC5160_ReadRegister (TMC5160_t *driver, TMC5160_datagram_t *reg)
 {
-    return io.ReadRegister(driver, reg);
+    TMC5160_status_t status;
+
+    status.value = tmc_spi_read(driver->motor, (TMC_spi_datagram_t *)reg);
+
+    return status;
 }
 
 // Returns pointer to shadow register or NULL if not found

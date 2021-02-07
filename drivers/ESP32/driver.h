@@ -225,8 +225,18 @@ static const DRAM_ATTR float FZERO = 0.0f;
 
 // End configuration
 
-#if TRINAMIC_ENABLE == 2130
-#include "tmc2130/trinamic.h"
+#if IOEXPAND_ENABLE || KEYPAD_ENABLE || EEPROM_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
+#define I2C_ENABLE 1
+#else
+#define I2C_ENABLE 0
+#endif
+
+#if TRINAMIC_ENABLE
+#ifndef TRINAMIC_MIXED_DRIVERS
+#define TRINAMIC_MIXED_DRIVERS 1
+#endif
+#include "motors/trinamic.h"
+#include "trinamic/common.h"
 #endif
 
 #ifdef SPINDLE_HUANYANG
@@ -260,6 +270,8 @@ typedef struct {
   #include "bdring_i2s_6_axis_map.h"
 #elif defined(BOARD_ESPDUINO32)
   #include "espduino-32_wemos_d1_r32_uno_map.h"
+#elif defined(BOARD_MY_MACHINE)
+  #include "my_machine_map.h"
 #else // default board - NOTE: NOT FINAL VERSION!
   #warning "Compiling for generic board!"
   #include "generic_map.h"
@@ -276,7 +288,7 @@ typedef struct {
 #ifdef I2C_PORT
 extern QueueHandle_t i2cQueue;
 extern SemaphoreHandle_t i2cBusy;
-#elif IOEXPAND_ENABLE || KEYPAD_ENABLE || EEPROM_ENABLE || (TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C)
+#elif I2C_ENABLE == 1
 #error "I2C port not available!"
 #endif
 

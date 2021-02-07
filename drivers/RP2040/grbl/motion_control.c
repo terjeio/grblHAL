@@ -770,7 +770,7 @@ status_code_t mc_homing_cycle (axes_signals_t cycle)
         // Check and abort homing cycle, if hard limits are already enabled. Helps prevent problems
         // with machines with limits wired on both ends of travel to one limit pin.
         // TODO: Move the pin-specific LIMIT_PIN call to limits.c as a function.
-        if (settings.limits.flags.two_switches && hal.homing.get_state == hal.limits.get_state && hal.limits.get_state().value) {
+        if (settings.limits.flags.two_switches && hal.homing.get_state == hal.limits.get_state && limit_signals_merge(hal.limits.get_state()).value) {
             mc_reset(); // Issue system reset and ensure spindle and coolant are shutdown.
             system_set_exec_alarm(Alarm_HardLimit);
             return Status_Unhandled;
@@ -842,7 +842,7 @@ status_code_t mc_homing_cycle (axes_signals_t cycle)
 
     sys.report.homed = On;
 
-    return settings.limits.flags.hard_enabled && settings.limits.flags.check_at_init && hal.limits.get_state().value
+    return settings.limits.flags.hard_enabled && settings.limits.flags.check_at_init && limit_signals_merge(hal.limits.get_state()).value
             ? Status_LimitsEngaged
             : Status_OK;
 }

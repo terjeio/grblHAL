@@ -84,6 +84,8 @@ ISR_CODE void control_interrupt_handler (control_signals_t signals)
 
     if (signals.value) {
 
+        sys.last_event.control.value = signals.value;
+
         if ((signals.reset || signals.e_stop || signals.motor_fault) && state_get() != STATE_ESTOP)
             mc_reset();
         else {
@@ -200,6 +202,7 @@ const sys_command_t sys_commands[] = {
     {"ES", true, enumerate_settings},
     {"E*", true, enumerate_all},
     {"RST", false, settings_reset},
+    {"LEV", true, report_last_signals_event},
     {"SD", false, report_spindle_data},
     {"SR", false, spindle_reset_data},
 #ifdef DEBUGOUT
@@ -437,7 +440,7 @@ static status_code_t disable_lock (sys_state_t state, char *args)
         // Block if safety reset is active.
         else if(control_signals.reset)
             retval = Status_Reset;
-        else if(settings.limits.flags.hard_enabled && settings.limits.flags.check_at_init && hal.limits.get_state().value)
+        else if(settings.limits.flags.hard_enabled && settings.limits.flags.check_at_init && limit_signals_merge(hal.limits.get_state()).value)
             retval = Status_LimitsEngaged;
         else if(limits_homing_required())
             retval = Status_HomingRequired;

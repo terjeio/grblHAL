@@ -27,9 +27,11 @@
 
 #include "driver.h"
 #include "serial.h"
+
+#include "grbl/limits.h"
 #include "grbl/spindle_sync.h"
 
-#ifdef USE_I2C
+#if I2C_ENABLE
 #include "i2c.h"
 #endif
 
@@ -426,39 +428,39 @@ static void limitsEnable (bool on, bool homing)
 
 // Returns limit state as an axes_signals_t variable.
 // Each bitfield bit indicates an axis limit, where triggered is 1 and not triggered is 0.
-inline static axes_signals_t limitsGetState()
+inline static limit_signals_t limitsGetState()
 {
-    axes_signals_t signals = {0};
+    limit_signals_t signals = {0};
 #if CNC_BOOSTERPACK_SHORTS
  #if defined(LIMIT_INMODE) &&LIMIT_INMODE == LIMIT_SHIFT
-    signals.value = (uint8_t)(LIMIT_PORT->IN & LIMIT_MASK) >> LIMIT_SHIFT;
+    signals.min.value = (uint8_t)(LIMIT_PORT->IN & LIMIT_MASK) >> LIMIT_SHIFT;
  #elif LIMIT_INMODE == GPIO_BITBAND
-    signals.x = BITBAND_PERI(LIMIT_PORT, X_LIMIT_PIN);
-    signals.y = BITBAND_PERI(LIMIT_PORT, Y_LIMIT_PIN);
-    signals.z = BITBAND_PERI(LIMIT_PORT, Z_LIMIT_PIN);
+    signals.min.x = BITBAND_PERI(LIMIT_PORT, X_LIMIT_PIN);
+    signals.min.y = BITBAND_PERI(LIMIT_PORT, Y_LIMIT_PIN);
+    signals.min.z = BITBAND_PERI(LIMIT_PORT, Z_LIMIT_PIN);
  #else // masked
     uint8_t bits = LIMIT_PORT->IN;
-    signals.x = (bits & X_LIMIT_BIT) != 0;
-    signals.y = (bits & Y_LIMIT_BIT) != 0;
-    signals.z = (bits & Z_LIMIT_BIT) != 0;
+    signals.min.x = (bits & X_LIMIT_BIT) != 0;
+    signals.min.y = (bits & Y_LIMIT_BIT) != 0;
+    signals.min.z = (bits & Z_LIMIT_BIT) != 0;
  #endif
 #else
  #if LIMIT_INMODE == LIMIT_SHIFT
-    signals.value = (uint8_t)(LIMIT_PORT->IN & LIMIT_MASK) >> LIMIT_SHIFT;
+    signals.min.value = (uint8_t)(LIMIT_PORT->IN & LIMIT_MASK) >> LIMIT_SHIFT;
  #elif LIMIT_INMODE == GPIO_BITBAND
-    signals.x = BITBAND_PERI(LIMIT_PORT_X->IN, X_LIMIT_PIN);
-    signals.y = BITBAND_PERI(LIMIT_PORT_Y->IN, Y_LIMIT_PIN);
-    signals.z = BITBAND_PERI(LIMIT_PORT_Z->IN, Z_LIMIT_PIN);
+    signals.min.x = BITBAND_PERI(LIMIT_PORT_X->IN, X_LIMIT_PIN);
+    signals.min.y = BITBAND_PERI(LIMIT_PORT_Y->IN, Y_LIMIT_PIN);
+    signals.min.z = BITBAND_PERI(LIMIT_PORT_Z->IN, Z_LIMIT_PIN);
  #else
     uint8_t bits = LIMIT_PORT->IN;
-    signals.x = (bits & X_LIMIT_PIN) != 0;
-    signals.y = (bits & Y_LIMIT_PIN) != 0;
-    signals.z = (bits & Z_LIMIT_PIN) != 0;
+    signals.min.x = (bits & X_LIMIT_PIN) != 0;
+    signals.min.y = (bits & Y_LIMIT_PIN) != 0;
+    signals.min.z = (bits & Z_LIMIT_PIN) != 0;
  #endif
 #endif
 
     if (settings.limits.invert.mask)
-        signals.value ^= settings.limits.invert.mask;
+        signals.min.value ^= settings.limits.invert.mask;
 
     return signals;
 }
@@ -1408,7 +1410,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "MSP432";
-    hal.driver_version = "210125";
+    hal.driver_version = "210206";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1455,14 +1457,16 @@ bool driver_init (void)
     hal.stream.write_all = serialWriteS;
     hal.stream.suspend_read = serialSuspendInput;
 
-    hal.get_elapsed_ticks = getElapsedTicks;
+    hal.irq_enable = __enable_irq;
+    hal.irq_disable = __disable_irq;
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
+    hal.get_elapsed_ticks = getElapsedTicks;
 
     serialInit();
 
-#ifdef USE_I2C
+#if I2C_ENABLE
     i2c_init();
 #endif
 
@@ -1598,9 +1602,9 @@ void DEBOUNCE_IRQHandler (void)
     DEBOUNCE_TIMER->CCTL[0] &= ~TIMER_A_CCTLN_CCIFG;            // Clear interrupt flag and
     DEBOUNCE_TIMER->CTL &= ~(TIMER_A_CTL_MC0|TIMER_A_CTL_MC1);  // stop debounce timer
 
-    axes_signals_t state = limitsGetState();
+    limit_signals_t state = limitsGetState();
 
-    if(state.mask)
+    if(limit_signals_merge(state).mask)
         hal.limits.interrupt_callback(state);
 }
 
@@ -1783,7 +1787,7 @@ void TRINAMIC_DIAG_IRQHandler (void)
     TRINAMIC_DIAG_IRQ_PORT->IFG &= ~iflags;
 #endif
 
-#if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
+#if TRINAMIC_ENABLE && TRINAMIC_I2C
     if(iflags & TRINAMIC_DIAG_IRQ_BIT)
         trinamic_fault_handler();
 #endif
@@ -1843,10 +1847,8 @@ void SysTick_Handler (void)
 
 #endif
 
-    if(delay.ms && !(--delay.ms)) {
-        if(delay.callback) {
-            delay.callback();
-            delay.callback = NULL;
-        }
+    if(delay.ms && !(--delay.ms) && delay.callback) {
+        delay.callback();
+        delay.callback = NULL;
     }
 }
