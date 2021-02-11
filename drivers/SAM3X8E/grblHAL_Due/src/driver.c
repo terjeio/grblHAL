@@ -757,7 +757,7 @@ static void spindleSetStateVariable (spindle_state_t state, float rpm)
 // Returns spindle state in a spindle_state_t variable
 static spindle_state_t spindleGetState (void)
 {
-    spindle_state_t state = {0};
+    spindle_state_t state = {settings.spindle.invert.mask};
 
     state.on = BITBAND_PERI(SPINDLE_ENABLE_PORT->PIO_ODSR, SPINDLE_ENABLE_PIN) != 0;
   #ifdef SPINDLE_DIRECTION_PIN
@@ -1256,12 +1256,18 @@ static bool driver_setup (settings_t *settings)
   #endif
 
     SPINDLE_PWM_PORT->PIO_WPMR = PIO_WPMR_WPKEY(0x50494F);
-
     SPINDLE_PWM_PORT->PIO_ABSR |= SPINDLE_PWM_BIT;
     SPINDLE_PWM_PORT->PIO_PDR = SPINDLE_PWM_BIT;
 
+#ifdef SPINDLE_PWM_CHANNEL
+#error "Spindle PWM to be completed for this board!"
+//    PWM->PWM_CLK = ;
+//    PWM->PWM_ENA |= (1 << SPINDLE_PWM_CHANNEL);
+//    PWM->PWM_CH_NUM[SPINDLE_PWM_CHANNEL].PWM_CPRD = ;
+#else
     SPINDLE_PWM_TIMER.TC_CCR = TC_CCR_CLKDIS;
     SPINDLE_PWM_TIMER.TC_CMR = TC_CMR_WAVE|TC_CMR_WAVSEL_UP_RC|TC_CMR_ASWTRG_CLEAR|TC_CMR_ACPA_SET|TC_CMR_ACPC_CLEAR; //|TC_CMR_EEVT_XC0;
+#endif
 
 #endif
 
@@ -1462,7 +1468,7 @@ bool driver_init (void)
     NVIC_EnableIRQ(SysTick_IRQn);
 
     hal.info = "SAM3X8E";
-	hal.driver_version = "210206";
+	hal.driver_version = "210211";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif

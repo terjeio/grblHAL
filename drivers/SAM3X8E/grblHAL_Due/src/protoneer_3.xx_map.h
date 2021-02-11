@@ -3,7 +3,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2019 Terje Io
+  Copyright (c) 2019-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -41,7 +41,7 @@
 #define Y_DIRECTION_BIT     (1<<Y_DIRECTION_PIN)
 #define Z_DIRECTION_PORT    PIOC
 #define Z_DIRECTION_PIN     23
-#define Z_DIRECTION_BIT     (1<<Z_STEP_PIN)
+#define Z_DIRECTION_BIT     (1<<Z_DIRECTION_PIN)
 
 // Define stepper driver enable/disable output pin(s).
 #define X_DISABLE_PORT      PIOC

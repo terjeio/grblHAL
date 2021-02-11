@@ -974,9 +974,9 @@ static void StepperDisableMotors (axes_signals_t axes, squaring_mode_t mode)
 
 // Returns limit state as an axes_signals_t variable.
 // Each bitfield bit indicates an axis limit, where triggered is 1 and not triggered is 0.
-static axes_signals_t limitsGetHomeState()
+static limit_signals_t limitsGetHomeState()
 {
-    axes_signals_t signals = {0};
+    limit_signals_t signals = {0};
 
     if(motors_1.mask) {
 
@@ -1012,7 +1012,6 @@ static axes_signals_t limitsGetHomeState()
         if (settings.limits.invert.mask)
             signals.max.mask ^= settings.limits.invert.mask;
     }
-
 
     return signals;
 }
@@ -2131,7 +2130,7 @@ bool driver_init (void)
         options[strlen(options) - 1] = '\0';
 
     hal.info = "iMXRT1062";
-    hal.driver_version = "210206";
+    hal.driver_version = "210212";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif

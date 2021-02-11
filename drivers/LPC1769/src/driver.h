@@ -4,7 +4,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2018-2020 Terje Io
+  Copyright (c) 2018-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -207,8 +207,6 @@
 #define CYCLE_START_INTENF CONTROL_INTENF
 #define CYCLE_START_INTCLR CONTROL_INTCLR
 #endif
-
-void gpio_pinmode (LPC_GPIO_T *port, uint8_t pin, bool pullup);
 
 // Driver initialization entry point
 
