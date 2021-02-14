@@ -2470,8 +2470,11 @@ static void gpio_isr (void)
         TMR3_CTRL0 |= TMR_CTRL_CM(0b001); 
     }
 
-    if(grp & INPUT_GROUP_LIMIT)
-        hal.limits.interrupt_callback(limitsGetState());
+    if(grp & INPUT_GROUP_LIMIT) {
+        limit_signals_t state = limitsGetState();
+        if(limit_signals_merge(state).value) //TODO: add check for limit switches having same state as when limit_isr were invoked?
+            hal.limits.interrupt_callback(state);
+    }
 
     if(grp & INPUT_GROUP_CONTROL)
         hal.control.interrupt_callback(systemGetState());
