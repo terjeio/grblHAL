@@ -69,9 +69,23 @@ ISR_CODE axes_signals_t limit_signals_merge (limit_signals_t signals)
 }
 
 // Merge (bitwise or) home switch inputs (typically aquired from limits.min and limits.min2).
-ISR_CODE axes_signals_t homing_signals_merge (limit_signals_t signals)
+ISR_CODE static axes_signals_t homing_signals_select (limit_signals_t signals, axes_signals_t auto_square, squaring_mode_t mode)
 {
     axes_signals_t state;
+
+    switch(mode) {
+
+        case SquaringMode_A:
+            signals.min.mask &= ~auto_square.mask;
+            break;
+
+        case SquaringMode_B:
+            signals.min2.mask &= ~auto_square.mask;
+            break;
+
+        default:
+            break;
+    }
 
     state.mask = signals.min.mask | signals.min2.mask;
 
@@ -185,8 +199,8 @@ static bool limits_pull_off (axes_signals_t axis, float distance)
             if (rt_exec & EXEC_SAFETY_DOOR)
                 system_set_exec_alarm(Alarm_HomingFailDoor);
 
-            // Homing failure condition: Homing switch still engaged after pull-off motion
-            if (homing_signals_merge(hal.homing.get_state()).mask & axis.mask)
+            // Homing failure condition: Homing switch(es) still engaged after pull-off motion
+            if (homing_signals_select(hal.homing.get_state(), (axes_signals_t){0}, SquaringMode_Both).mask & axis.mask)
                 system_set_exec_alarm(Alarm_FailPulloff);
 
             if (sys.rt_exec_alarm) {
@@ -227,8 +241,10 @@ static bool limits_homing_cycle (axes_signals_t cycle, axes_signals_t auto_squar
     uint_fast8_t step_pin[N_AXIS], n_active_axis, dual_motor_axis = 0;
     float target[N_AXIS];
     float max_travel = 0.0f, homing_rate = settings.homing.seek_rate;
-    bool approach = true, autosquare_check = false, both_motors = !!auto_square.mask;
+    bool approach = true, autosquare_check = false;
     axes_signals_t axislock, homing_state;
+    limit_signals_t limits_state;
+    squaring_mode_t squaring_mode = SquaringMode_Both;
     plan_line_data_t plan_data;
 
     // Initialize plan data struct for homing motion.
@@ -313,22 +329,16 @@ static bool limits_homing_cycle (axes_signals_t cycle, axes_signals_t auto_squar
             if (approach) {
 
                 // Check homing switches state. Lock out cycle axes when they change.
-                homing_state = homing_signals_merge(hal.homing.get_state());
+                homing_state = homing_signals_select(limits_state = hal.homing.get_state(), auto_square, squaring_mode);
 
                 // Auto squaring check
-                if(both_motors && (homing_state.mask & auto_square.mask)) {
-                    both_motors = false;
-                    homing_state.mask &= ~auto_square.mask;
-                    hal.stepper.disable_motors(auto_square, SquaringMode_A);
-                    if(hal.homing.get_state().min2.mask & auto_square.mask) {
-                        hal.stepper.disable_motors(auto_square, SquaringMode_B);
-                        if(hal.homing.get_state().min.mask & auto_square.mask) {
-                            homing_state.mask |= auto_square.mask;
-                            hal.stepper.disable_motors((axes_signals_t){0}, SquaringMode_Both);
-                        }
-                    }
-                    if((autosquare_check = (homing_state.mask & auto_square.mask) == 0))
+                if((homing_state.mask & auto_square.mask) && squaring_mode == SquaringMode_Both) {
+                    if((autosquare_check = (limits_state.min.mask & auto_square.mask) != (limits_state.min2.mask & auto_square.mask))) {
                         initial_trigger_position = sys.position[dual_motor_axis];
+                        homing_state.mask &= ~auto_square.mask;
+                        squaring_mode = (limits_state.min.mask & auto_square.mask) ? SquaringMode_A : SquaringMode_B;
+                        hal.stepper.disable_motors(auto_square, squaring_mode);
+                    }
                 }
 
                 idx = N_AXIS;
@@ -371,7 +381,7 @@ static bool limits_homing_cycle (axes_signals_t cycle, axes_signals_t auto_squar
                     system_set_exec_alarm(Alarm_HomingFailDoor);
 
                 // Homing failure condition: Homing switch(es) still engaged after pull-off motion
-                if (!approach && (homing_signals_merge(hal.homing.get_state()).mask & cycle.mask))
+                if (!approach && (homing_signals_select(hal.homing.get_state(), (axes_signals_t){0}, SquaringMode_Both).mask & cycle.mask))
                     system_set_exec_alarm(Alarm_FailPulloff);
 
                 // Homing failure condition: Limit switch not found during approach.
@@ -411,8 +421,9 @@ static bool limits_homing_cycle (axes_signals_t cycle, axes_signals_t auto_squar
             homing_rate = settings.homing.seek_rate;
         }
 
-        if((both_motors = !!auto_square.mask)) {
+        if(auto_square.mask) {
             autosquare_check = false;
+            squaring_mode = SquaringMode_Both;
             hal.stepper.disable_motors((axes_signals_t){0}, SquaringMode_Both);
         }
 
@@ -472,7 +483,7 @@ bool limits_go_home (axes_signals_t cycle)
         if(auto_squared.mask != auto_square.mask)
             return false; // Attempt at squaring more than one auto squared axis at the same time.
 
-        if((auto_squared.mask & homing_signals_merge(hal.homing.get_state()).mask) && !limits_pull_off(auto_square, settings.homing.pulloff * HOMING_AXIS_LOCATE_SCALAR))
+        if((auto_squared.mask & homing_signals_select(hal.homing.get_state(), (axes_signals_t){0}, SquaringMode_Both).mask) && !limits_pull_off(auto_square, settings.homing.pulloff * HOMING_AXIS_LOCATE_SCALAR))
             return false; // Auto squaring with limit switch asserted is not allowed.
     }
 

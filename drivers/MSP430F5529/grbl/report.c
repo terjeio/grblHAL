@@ -1775,6 +1775,19 @@ status_code_t report_setting_group_details (bool by_id, char *prefix)
     return Status_OK;
 }
 
+static char *add_limits (char *buf, limit_signals_t limits)
+{
+    buf = axis_signals_tostring(buf, limits.min);
+    *buf++ = ',';
+    buf = axis_signals_tostring(buf, limits.max);
+    *buf++ = ',';
+    buf = axis_signals_tostring(buf, limits.min2);
+    *buf++ = ',';
+    buf = axis_signals_tostring(buf, limits.max2);
+
+    return buf;
+}
+
 status_code_t report_last_signals_event (sys_state_t state, char *args)
 {
     char *append = &buf[12];
@@ -1783,19 +1796,28 @@ status_code_t report_last_signals_event (sys_state_t state, char *args)
 
     append = control_signals_tostring(append, sys.last_event.control);
     *append++ = ',';
-    append = axis_signals_tostring(append, sys.last_event.limits.min);
-    *append++ = ',';
-    append = axis_signals_tostring(append, sys.last_event.limits.max);
-    *append++ = ',';
-    append = axis_signals_tostring(append, sys.last_event.limits.min2);
-    *append++ = ',';
-    append = axis_signals_tostring(append, sys.last_event.limits.max2);
+    append = add_limits(append, sys.last_event.limits);
 
     hal.stream.write(buf);
     hal.stream.write("]" ASCII_EOL);
 
     return Status_OK;
 }
+
+status_code_t report_current_limit_state (sys_state_t state, char *args)
+{
+    char *append = &buf[8];
+
+    strcpy(buf, "[LIMITS:");
+
+    append = add_limits(append, hal.limits.get_state());
+
+    hal.stream.write(buf);
+    hal.stream.write("]" ASCII_EOL);
+
+    return Status_OK;
+}
+
 
 // Prints spindle data (encoder pulse and index count, angular position).
 status_code_t report_spindle_data (sys_state_t state, char *args)

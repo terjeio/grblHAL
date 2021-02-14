@@ -752,6 +752,8 @@ status_code_t mc_homing_cycle (axes_signals_t cycle)
 {
     bool home_all = cycle.mask == 0;
 
+    memset(&sys.last_event.limits, 0, sizeof(limit_signals_t));
+
     if(settings.homing.flags.manual && (home_all ? sys.homing.mask : (cycle.mask & sys.homing.mask)) == 0) {
 
         if(home_all)

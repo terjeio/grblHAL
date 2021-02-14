@@ -203,6 +203,7 @@ const sys_command_t sys_commands[] = {
     {"E*", true, enumerate_all},
     {"RST", false, settings_reset},
     {"LEV", true, report_last_signals_event},
+    {"LIM", true, report_current_limit_state},
     {"SD", false, report_spindle_data},
     {"SR", false, spindle_reset_data},
 #ifdef DEBUGOUT

@@ -254,14 +254,14 @@ TMC_spi_status_t tmc_spi_read (trinamic_motor_t driver, TMC_spi_datagram_t *data
     TMC_spi_status_t status = 0;
 
     if(driver.axis != axis) {
-        i2c.buffer[0] = driver.axis;
+        i2c.buffer[0] = driver.axis | 0x80;
         I2C_Send(I2C_ADR_I2CBRIDGE, 1, true);
 
         axis = driver.axis;
     }
 
     memset(i2c.buffer, 0, sizeof(i2c.buffer));
-
+    i2c.buffer[0] = datagram->addr.idx;
     res = I2C_ReadRegister(I2C_ADR_I2CBRIDGE, 5, true);
 
     status = (uint8_t)*res++;
@@ -280,7 +280,7 @@ TMC_spi_status_t tmc_spi_write (trinamic_motor_t driver, TMC_spi_datagram_t *dat
     while(i2cIsBusy);
 
     if(driver.axis != axis) {
-        i2c.buffer[0] = driver.axis;
+        i2c.buffer[0] = driver.axis | 0x80;
         I2C_Send(I2C_ADR_I2CBRIDGE, 1, true);
 
         while(i2cIsBusy);

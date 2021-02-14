@@ -878,21 +878,21 @@ inline static limit_signals_t limitsGetState()
 {
     limit_signals_t signals = {0};
 
-    signals.min.mask = signals.max.mask = settings.limits.invert.mask;
+    signals.min.mask = signals.min2.mask = settings.limits.invert.mask;
 
     signals.min.x = (LimitX.reg->DR & LimitX.bit) != 0;
 #ifdef X2_LIMIT_PIN
-    signals.max.x = (LimitX2.reg->DR & LimitX2.bit) != 0;
+    signals.min2.x = (LimitX2.reg->DR & LimitX2.bit) != 0;
 #endif
 
     signals.min.y = (LimitY.reg->DR & LimitY.bit) != 0;
 #ifdef Y2_LIMIT_PIN
-    signals.max.y = (LimitY2.reg->DR & LimitY2.bit) != 0;
+    signals.min2.y = (LimitY2.reg->DR & LimitY2.bit) != 0;
 #endif
 
     signals.min.z = (LimitZ.reg->DR & LimitZ.bit) != 0;
 #ifdef Z2_LIMIT_PIN
-    signals.max.z = (LimitZ2.reg->DR & LimitZ2.bit) != 0;
+    signals.min2.z = (LimitZ2.reg->DR & LimitZ2.bit) != 0;
 #endif
 
 #ifdef A_LIMIT_PIN
@@ -907,7 +907,7 @@ inline static limit_signals_t limitsGetState()
 
     if(settings.limits.invert.mask) {
         signals.min.value ^= settings.limits.invert.mask;
-        signals.max.value ^= settings.limits.invert.mask;
+        signals.min2.value ^= settings.limits.invert.mask;
     }
 
     return signals;
@@ -972,50 +972,6 @@ static void StepperDisableMotors (axes_signals_t axes, squaring_mode_t mode)
     motors_2.mask = (mode == SquaringMode_B || mode == SquaringMode_Both ? axes.mask : 0) ^ AXES_BITMASK;
 }
 
-// Returns limit state as an axes_signals_t variable.
-// Each bitfield bit indicates an axis limit, where triggered is 1 and not triggered is 0.
-static limit_signals_t limitsGetHomeState()
-{
-    limit_signals_t signals = {0};
-
-    if(motors_1.mask) {
-
-        signals.min.mask = settings.limits.invert.mask;
-
-        if(motors_1.x)
-            signals.min.x = (LimitX.reg->DR & LimitX.bit) != 0;
-        if(motors_1.y)
-            signals.min.y = (LimitY.reg->DR & LimitY.bit) != 0;
-        if(motors_1.z)
-            signals.min.z = (LimitZ.reg->DR & LimitZ.bit) != 0;
-
-        if (settings.limits.invert.mask)
-            signals.min.mask ^= settings.limits.invert.mask;
-    }
-
-    if(motors_2.mask) {
-
-       signals.max.mask = settings.limits.invert.mask;
-
-#ifdef X2_LIMIT_PIN
-        if(motors_2.x)
-            signals.max.x = (LimitX2.reg->DR & LimitX2.bit) != 0;
-#endif
-#ifdef Y2_LIMIT_PIN
-        if(motors_2.y)
-            signals.max.y = (LimitY2.reg->DR & LimitY2.bit) != 0;
-#endif
-#ifdef Z2_LIMIT_PIN
-        if(motors_2.z)
-            signals.max.z = (LimitZ2.reg->DR & LimitZ2.bit) != 0;
-#endif
-        if (settings.limits.invert.mask)
-            signals.max.mask ^= settings.limits.invert.mask;
-    }
-
-    return signals;
-}
-
 #endif
 
 // Enable/disable limit pins interrupt.
@@ -1036,10 +992,6 @@ static void limitsEnable (bool on, bool homing)
                 inputpin[i].gpio.reg->IMR &= ~inputpin[i].gpio.bit; // Disable interrupt.
         } 
     } while(i);
-
-#ifdef SQUARING_ENABLED
-    hal.homing.get_state = homing ? limitsGetHomeState : limitsGetState;
-#endif
 }
 
 // Returns system state as a control_signals_t bitmap variable.
@@ -2130,7 +2082,7 @@ bool driver_init (void)
         options[strlen(options) - 1] = '\0';
 
     hal.info = "iMXRT1062";
-    hal.driver_version = "210212";
+    hal.driver_version = "210214";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif

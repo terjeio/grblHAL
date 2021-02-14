@@ -441,42 +441,60 @@ inline static limit_signals_t limitsGetState()
     limit_signals_t signals = {0};
 
     signals.min.mask = signals.max.mask = settings.limits.invert.mask;
+#ifdef SQUARING_ENABLED
+    signals.min2.mask = settings.limits.invert.mask;
+#endif
     
     signals.min.x = BITBAND_PERI(X_LIMIT_PORT->PIO_PDSR, X_LIMIT_PIN);
     signals.min.y = BITBAND_PERI(Y_LIMIT_PORT->PIO_PDSR, Y_LIMIT_PIN);
     signals.min.z = BITBAND_PERI(Z_LIMIT_PORT->PIO_PDSR, Z_LIMIT_PIN);
-  #ifdef A_LIMIT_PIN
+#ifdef A_LIMIT_PIN
     signals.min.a = BITBAND_PERI(A_LIMIT_PORT->PIO_PDSR, A_LIMIT_PIN);
-  #endif
-  #ifdef B_LIMIT_PIN
+#endif
+#ifdef B_LIMIT_PIN
     signals.min.b = BITBAND_PERI(B_LIMIT_PORT->PIO_PDSR, B_LIMIT_PIN);
-  #endif
-  #ifdef C_LIMIT_PIN
+#endif
+#ifdef C_LIMIT_PIN
     signals.min.c = BITBAND_PERI(C_LIMIT_PORT->PIO_PDSR, C_LIMIT_PIN);
-  #endif
+#endif
 
-  #ifdef X_LIMIT_PIN_MAX
+#ifdef X_LIMIT_PIN_MAX
+  #if X_AUTO_SQUARE
+    signals.min2.x = BITBAND_PERI(X_LIMIT_PORT_MAX->PIO_PDSR, X_LIMIT_PIN_MAX);
+  #else
     signals.max.x = BITBAND_PERI(X_LIMIT_PORT_MAX->PIO_PDSR, X_LIMIT_PIN_MAX);
   #endif
-  #ifdef Y_LIMIT_PIN_MAX
+#endif
+#ifdef Y_LIMIT_PIN_MAX
+  #if Y_AUTO_SQUARE
+    signals.min2.y = BITBAND_PERI(Y_LIMIT_PORT_MAX->PIO_PDSR, Y_LIMIT_PIN_MAX);
+  #else
     signals.max.y = BITBAND_PERI(Y_LIMIT_PORT_MAX->PIO_PDSR, Y_LIMIT_PIN_MAX);
   #endif
-  #ifdef Z_LIMIT_PIN_MAX
+#endif
+#ifdef Z_LIMIT_PIN_MAX
+  #if Z_AUTO_SQUARE
+    signals.min2.z = BITBAND_PERI(Z_LIMIT_PORT_MAX->PIO_PDSR, Z_LIMIT_PIN_MAX);
+  #else
     signals.max.z = BITBAND_PERI(Z_LIMIT_PORT_MAX->PIO_PDSR, Z_LIMIT_PIN_MAX);
   #endif
-  #ifdef A_LIMIT_PIN_MAX
+#endif
+#ifdef A_LIMIT_PIN_MAX
     signals.max.a = BITBAND_PERI(A_LIMIT_PORT_MAX->PIO_PDSR, A_LIMIT_PIN_MAX);
-  #endif
-  #ifdef B_LIMIT_PIN_MAX
+#endif
+#ifdef B_LIMIT_PIN_MAX
     signals.max.b = BITBAND_PERI(B_LIMIT_PORT_MAX->PIO_PDSR, B_LIMIT_PIN_MAX);
-  #endif
-  #ifdef C_LIMIT_PIN_MAX
+#endif
+#ifdef C_LIMIT_PIN_MAX
     signals.max.c = BITBAND_PERI(C_LIMIT_PORT_MAX->PIO_PDSR, C_LIMIT_PIN_MAX);
-  #endif
+#endif
 
     if (settings.limits.invert.mask) {
         signals.min.value ^= settings.limits.invert.mask;
         signals.max.value ^= settings.limits.invert.mask;
+#ifdef SQUARING_ENABLED
+        signals.min2.mask ^= settings.limits.invert.mask;
+#endif
     }
 
     return signals;
@@ -497,15 +515,15 @@ inline static limit_signals_t limitsGetState()
 
     signals.min.z = BITBAND_PERI(Z_LIMIT_PORT->PIO_PDSR, Z_LIMIT_PIN);
 
-  #ifdef A_LIMIT_PIN
+#ifdef A_LIMIT_PIN
     signals.min.a = BITBAND_PERI(A_LIMIT_PORT->PIO_PDSR, A_LIMIT_PIN);
-  #endif
-  #ifdef B_LIMIT_PIN
+#endif
+#ifdef B_LIMIT_PIN
     signals.min.b = BITBAND_PERI(B_LIMIT_PORT->PIO_PDSR, B_LIMIT_PIN);
-  #endif
-  #ifdef C_LIMIT_PIN
+#endif
+#ifdef C_LIMIT_PIN
     signals.min.c = BITBAND_PERI(C_LIMIT_PORT->PIO_PDSR, C_LIMIT_PIN);
-  #endif
+#endif
 
     if (settings.limits.invert.mask)
         signals.min.value ^= settings.limits.invert.mask;
@@ -541,50 +559,6 @@ static void StepperDisableMotors (axes_signals_t axes, squaring_mode_t mode)
     motors_2.mask = (mode == SquaringMode_B || mode == SquaringMode_Both ? axes.mask : 0) ^ AXES_BITMASK;
 }
 
-// Returns limit state as an axes_signals_t variable.
-// Each bitfield bit indicates an axis limit, where triggered is 1 and not triggered is 0.
-inline static limit_signals_t limitsGetHomeState()
-{
-    limit_signals_t signals = {0};
-    
-    if(motors_1.mask) {
-
-        signals.min.mask = settings.limits.invert.mask;
-
-        if(motors_1.x)
-            signals.min.x = BITBAND_PERI(X_LIMIT_PORT->PIO_PDSR, X_LIMIT_PIN);
-        if(motors_1.y)
-            signals.min.y = BITBAND_PERI(Y_LIMIT_PORT->PIO_PDSR, Y_LIMIT_PIN);
-        if(motors_1.z)
-            signals.min.z = BITBAND_PERI(Z_LIMIT_PORT->PIO_PDSR, Z_LIMIT_PIN);;
-
-        if (settings.limits.invert.mask)
-            signals.min.mask ^= settings.limits.invert.mask;
-    }
-
-    if(motors_2.mask) {
-
-       signals.max.mask = settings.limits.invert.mask;
-
-#ifdef X_LIMIT_PIN_MAX
-        if(motors_2.x)
-            signals.max.x = BITBAND_PERI(X_LIMIT_PORT_MAX->PIO_PDSR, X_LIMIT_PIN_MAX);
-#endif
-#ifdef Y_LIMIT_PIN_MAX
-        if(motors_2.y)
-            signals.max.y = BITBAND_PERI(Y_LIMIT_PORT_MAX->PIO_PDSR, Y_LIMIT_PIN_MAX);
-#endif
-#ifdef Z_LIMIT_PIN_MAX
-        if(motors_2.z)
-            signals.max.z = BITBAND_PERI(Z_LIMIT_PORT_MAX->PIO_PDSR, Z_LIMIT_PIN_MAX);
-#endif
-        if (settings.limits.invert.mask)
-            signals.max.mask ^= settings.limits.invert.mask;
-    }
-
-    return signals;
-}
-
 #endif
 
 // Enable/disable limit pins interrupt
@@ -602,10 +576,6 @@ static void limitsEnable (bool on, bool homing)
                 inputpin[i].port->PIO_IDR = inputpin[i].bit;    
         }
     } while(i);
-
-  #ifdef SQUARING_ENABLED
-    hal.homing.get_state = homing ? limitsGetHomeState : limitsGetState;
-  #endif
 
   #if TRINAMIC_ENABLE == 2130
     trinamic_homing(homing);
@@ -1468,7 +1438,7 @@ bool driver_init (void)
     NVIC_EnableIRQ(SysTick_IRQn);
 
     hal.info = "SAM3X8E";
-	hal.driver_version = "210211";
+	hal.driver_version = "210214";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1490,7 +1460,6 @@ bool driver_init (void)
 
     hal.limits.enable = limitsEnable;
     hal.limits.get_state = limitsGetState;
-    hal.homing.get_state = limitsGetState;
 
     hal.coolant.set_state = coolantSetState;
     hal.coolant.get_state = coolantGetState;

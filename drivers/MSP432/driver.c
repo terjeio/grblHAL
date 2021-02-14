@@ -207,7 +207,7 @@ inline __attribute__((always_inline)) static void set_dir_outputs (axes_signals_
 static void stepperEnable (axes_signals_t enable)
 {
     enable.value ^= settings.steppers.enable_invert.mask;
-#if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
+#if TRINAMIC_ENABLE && TRINAMIC_I2C
     axes_signals_t tmc_enable = trinamic_stepper_enable(enable);
   #if !CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
     if(!tmc_enable.z)
@@ -420,7 +420,7 @@ static void limitsEnable (bool on, bool homing)
     BITBAND_PERI(LIMIT_PORT_Z->IE, Z_LIMIT_PIN) = on;
 #endif
 
-#if TRINAMIC_ENABLE == 2130
+#if TRINAMIC_ENABLE
     trinamic_homing(homing);
 #endif
 }
@@ -1199,7 +1199,7 @@ static bool driver_setup (settings_t *settings)
 
     STEP_PORT->DIR |= STEP_MASK;
     DIRECTION_PORT->DIR |= DIRECTION_MASK;
-#if !(TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C)
+#if !(TRINAMIC_ENABLE && TRINAMIC_I2C)
     STEPPERS_DISABLE_Z_PORT->DIR |= STEPPERS_DISABLE_Z_BIT;
     STEPPERS_DISABLE_XY_PORT->DIR |= STEPPERS_DISABLE_X_BIT;
 #endif
@@ -1515,7 +1515,7 @@ bool driver_init (void)
     serial2Init(19200);
 #endif
 
-#if TRINAMIC_ENABLE == 2130
+#if TRINAMIC_ENABLE
     trinamic_init();
 #endif
 
@@ -1778,7 +1778,7 @@ void KEYPAD_IRQHandler (void)
 
     KEYPAD_PORT->IFG &= ~iflags;
 
-#elif TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
+#elif TRINAMIC_ENABLE && TRINAMIC_I2C
 
 void TRINAMIC_DIAG_IRQHandler (void)
 {
@@ -1800,7 +1800,7 @@ void TRINAMIC_DIAG_IRQHandler (void)
     }
 #endif
 
-#if KEYPAD_ENABLE || (TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C)
+#if KEYPAD_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
 }
 #endif
 
