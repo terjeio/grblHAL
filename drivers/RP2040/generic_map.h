@@ -24,21 +24,7 @@
 #endif
 
 // Define step pulse output pins.
-#define STEP_PORT       GPIO_OUT
-#define X_STEP_PIN      0
-#define Y_STEP_PIN      1
-#define Z_STEP_PIN      2
-#define X_STEP_BIT      (1<<X_STEP_PIN)
-#define Y_STEP_BIT      (1<<Y_STEP_PIN)
-#define Z_STEP_BIT      (1<<Z_STEP_PIN)
-#if N_AXIS > 3
-#define A_STEP_PIN      3
-#define A_STEP_BIT      (1<<A_STEP_PIN)
-#define STEP_MASK       (X_STEP_BIT|Y_STEP_BIT|Z_STEP_BIT|A_STEP_BIT) // All step bits
-#else
-#define STEP_MASK       (X_STEP_BIT|Y_STEP_BIT|Z_STEP_BIT) // All step bits
-#endif
-#define STEP_OUTMODE    GPIO_OE
+#define STEP_PINS_BASE      2
 
 // Define step direction output pins.
 #define DIRECTION_PORT      GPIO_OUT

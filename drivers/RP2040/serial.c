@@ -21,11 +21,11 @@
 
 #include <string.h>
 
-#include "pico/stdlib.h"
+#include "hardware/gpio.h"
 #include "hardware/uart.h"
 #include "hardware/irq.h"
-#include "serial.h"
 
+#include "serial.h"
 #include "driver.h"
 
 #define UART_TX_PIN 0

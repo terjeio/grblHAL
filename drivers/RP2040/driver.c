@@ -24,6 +24,12 @@
 #include <math.h>
 #include <string.h>
 
+#include "pico/stdlib.h"
+#include "hardware/timer.h"
+#include "hardware/irq.h"
+#include "hardware/pio.h"
+#include "hardware/structs/systick.h"
+
 #include "driver.h"
 #include "serial.h"
 #include "driverPIO.pio.h"
@@ -71,6 +77,19 @@ typedef union {
     };
 } debounce_t;
 
+typedef union {
+    uint32_t value;
+    struct {
+        uint32_t delay  :8,
+                 length :8,
+                 set    :6,
+                 reset  :6;
+    };
+} pio_steps_t;
+
+static pio_steps_t pio_steps = { .delay = 20, .length = 100 };
+
+static uint pulse, timer;
 static uint16_t pulse_length, pulse_delay;
 static bool pwmEnabled = false, IOInitDone = false;
 static axes_signals_t next_step_outbits;
@@ -101,61 +120,6 @@ static void stepperPulseStartSynchronized (stepper_t *stepper);
 static void spindleDataReset (void);
 static spindle_data_t spindleGetData (spindle_data_request_t request);
 
-#endif
-
-#if STEP_OUTMODE == GPIO_MAP
-
-static const uint32_t c_step_outmap[] = {
-	0,
-	X_STEP_BIT,
-	Y_STEP_BIT,
-	Y_STEP_BIT | X_STEP_BIT,
-	Z_STEP_BIT,
-	Z_STEP_BIT | X_STEP_BIT,
-	Z_STEP_BIT | Y_STEP_BIT,
-	Z_STEP_BIT | Y_STEP_BIT | X_STEP_BIT,
-#if N_AXIS > 3
-	A_STEP_BIT,
-	A_STEP_BIT | X_STEP_BIT,
-	A_STEP_BIT | Y_STEP_BIT,
-	A_STEP_BIT | Y_STEP_BIT | X_STEP_BIT,
-	A_STEP_BIT | Z_STEP_BIT,
-	A_STEP_BIT | Z_STEP_BIT | X_STEP_BIT,
-	A_STEP_BIT | Z_STEP_BIT | Y_STEP_BIT,
-	A_STEP_BIT | Z_STEP_BIT | Y_STEP_BIT | X_STEP_BIT,
-#endif
-#if N_AXIS > 4
-	B_STEP_BIT,
-	B_STEP_BIT | X_STEP_BIT,
-	B_STEP_BIT | Y_STEP_BIT,
-	B_STEP_BIT | X_STEP_BIT,
-	B_STEP_BIT | Z_STEP_BIT,
-	B_STEP_BIT | Z_STEP_BIT | X_STEP_BIT,
-	B_STEP_BIT | Z_STEP_BIT | Y_STEP_BIT,
-	B_STEP_BIT | Z_STEP_BIT | Y_STEP_BIT | X_STEP_BIT,
-	B_STEP_BIT | A_STEP_BIT,
-	B_STEP_BIT | A_STEP_BIT | X_STEP_BIT,
-	B_STEP_BIT | A_STEP_BIT | Y_STEP_BIT,
-	B_STEP_BIT | A_STEP_BIT | Y_STEP_BIT | X_STEP_BIT,
-	B_STEP_BIT | A_STEP_BIT | Z_STEP_BIT,
-	B_STEP_BIT | A_STEP_BIT | Z_STEP_BIT | X_STEP_BIT,
-	B_STEP_BIT | A_STEP_BIT | Z_STEP_BIT | Y_STEP_BIT,
-	B_STEP_BIT | A_STEP_BIT | Z_STEP_BIT | Y_STEP_BIT | X_STEP_BIT,
-#endif
-};
-
-static uint32_t step_outmap[sizeof(c_step_outmap) / sizeof(uint32_t)];
-
-#elif STEP_OUTMODE == GPIO_BITBAND
-  #ifndef X_STEP_PORT
-    #define X_STEP_PORT STEP_PORT
-  #endif
-  #ifndef Y_STEP_PORT
-    #define Y_STEP_PORT STEP_PORT
-  #endif
-  #ifndef Z_STEP_PORT
-    #define X_STEP_PORT STEP_PORT
-  #endif
 #endif
 
 #if DIRECTION_OUTMODE == GPIO_MAP
@@ -226,16 +190,24 @@ static uint32_t dir_outmap[sizeof(c_dir_outmap) / sizeof(uint32_t)];
 
 #define DRIVER_IRQMASK (LIMIT_MASK|CONTROL_MASK|KEYPAD_STROBE_BIT|SPINDLE_INDEX_BIT)
 
+static void systick_handler (void);
 static void spindle_set_speed (uint_fast16_t pwm_value);
+static void STEPPER_TIMER_IRQHandler(void);
+static int64_t delay_callback(alarm_id_t id, void *callback)
+{
+    ((void (*)(void))callback)();
+
+    return 0;
+}
 
 static void driver_delay (uint32_t ms, void (*callback)(void))
 {
     if((delay.ms = ms) > 0) {
-        // Restart systick...
-//        SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
-//        SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
-        if(!(delay.callback = callback))
-            while(delay.ms);
+        if(!(delay.callback = callback)) {
+            uint32_t delay = ms * 1000, start = timer_hw->timerawl;
+            while(timer_hw->timerawl - start < delay);
+        } else
+            add_alarm_in_ms(ms, delay_callback, callback, false);
     } else if(callback)
         callback();
 }
@@ -265,39 +237,30 @@ static void stepperWakeUp (void)
 {
     stepperEnable((axes_signals_t){AXES_BITMASK});
 
- //   STEPPER_TIMER->ARR = 5000; // delay to allow drivers time to wake up
- //   STEPPER_TIMER->EGR = TIM_EGR_UG;
- //   STEPPER_TIMER->CR1 |= TIM_CR1_CEN;
+    stepper_timer_set_period(pio1, 0, 1000);
 }
 
 // Disables stepper driver interrupts
 static void stepperGoIdle (bool clear_signals)
 {
-//    STEPPER_TIMER->CR1 &= ~TIM_CR1_CEN;
-//    STEPPER_TIMER->CNT = 0;
+    stepper_timer_stop(pio1, 0);
 }
 
 
 // Sets up stepper driver interrupt timeout, "Normal" version
 static void stepperCyclesPerTick (uint32_t cycles_per_tick)
 {
-//    STEPPER_TIMER->ARR = cycles_per_tick < (1UL << 20) ? cycles_per_tick : 0x000FFFFFUL;
+    stepper_timer_set_period(pio1, 0, cycles_per_tick);
 }
 
 // Set stepper pulse output pins
 // NOTE: step_outbits are: bit0 -> X, bit1 -> Y, bit2 -> Z...
-inline static __attribute__((always_inline)) void stepperSetStepOutputs (axes_signals_t step_outbits)
+//inline static __attribute__((always_inline)) void stepperSetStepOutputs (axes_signals_t step_outbits)
+static void stepperSetStepOutputs (axes_signals_t step_outbits)
 {
-#if STEP_OUTMODE == GPIO_BITBAND
-    step_outbits.mask ^= settings.steppers.step_invert.mask;
-//    BITBAND_PERI(X_STEP_PORT->ODR, X_STEP_PIN) = step_outbits.x;
-//    BITBAND_PERI(Y_STEP_PORT->ODR, Y_STEP_PIN) = step_outbits.y;
-//    BITBAND_PERI(Z_STEP_PORT->ODR, Z_STEP_PIN) = step_outbits.z;
-#elif STEP_OUTMODE == GPIO_MAP
-//	STEP_PORT->ODR = (STEP_PORT->ODR & ~STEP_MASK) | step_outmap[step_outbits.value];
-#else
- //   STEP_PORT->ODR = (STEP_PORT->ODR & ~STEP_MASK) | ((step_outbits.mask ^ settings.steppers.step_invert.mask) << STEP_OUTMODE);
-#endif
+    pio_steps.set = step_outbits.mask ^ settings.steppers.step_invert.mask;
+
+    step_pulse_generate(pio0, 0, pio_steps.value);
 }
 
 // Set stepper direction output pins
@@ -643,17 +606,8 @@ void settings_changed (settings_t *settings)
     hal.driver_cap.variable_spindle = settings->spindle.rpm_min < settings->spindle.rpm_max;
 #endif
 
-#if (STEP_OUTMODE == GPIO_MAP) || (DIRECTION_OUTMODE == GPIO_MAP)
+#if (DIRECTION_OUTMODE == GPIO_MAP)
     uint8_t i;
-#endif
-
-#if STEP_OUTMODE == GPIO_MAP
-
-    i = sizeof(step_outmap) / sizeof(uint32_t);
-    do {
-        i--;
-        step_outmap[i] = c_step_outmap[i ^ settings->steppers.step_invert.value];
-    } while(i);
 #endif
 
 #if DIRECTION_OUTMODE == GPIO_MAP
@@ -723,24 +677,13 @@ void settings_changed (settings_t *settings)
 
         } else
             hal.spindle.set_state = spindleSetState;
-
-        pulse_length = (uint32_t)(10.0f * (settings->steppers.pulse_microseconds - STEP_PULSE_LATENCY)) - 1;
-
-        if(hal.driver_cap.step_pulse_delay && settings->steppers.pulse_delay_microseconds > 0.0f) {
-            pulse_delay = (uint32_t)(10.0f * (settings->steppers.pulse_delay_microseconds - 1.0f));
-            if(pulse_delay < 2)
-                pulse_delay = 2;
-            else if(pulse_delay == pulse_length)
-                pulse_delay++;
-            hal.stepper.pulse_start = &stepperPulseStartDelayed;
-        } else {
-            pulse_delay = 0;
-            hal.stepper.pulse_start = &stepperPulseStart;
-        }
-
-        PULSE_TIMER->ARR = pulse_length;
-        PULSE_TIMER->EGR = TIM_EGR_UG;
 */
+
+        pio_steps.length = (uint32_t)(10.0f * (settings->steppers.pulse_microseconds)) - 1;
+        pio_steps.delay = (uint32_t)(10.0f * (settings->steppers.pulse_delay_microseconds)) - 1;
+        pio_steps.reset = settings->steppers.step_invert.mask;
+
+/*
         /*************************
          *  Control pins config  *
          *************************/
@@ -874,6 +817,13 @@ void settings_changed (settings_t *settings)
     }
 }
 
+
+void pio_rpt (stream_write_ptr stream_write, report_tracking_flags_t report)
+{
+    stream_write("|pio:");
+    stream_write(uitoa(pio1->intr));
+}
+
 // Initializes MCU peripherals for Grbl use
 static bool driver_setup (settings_t *settings)
 {
@@ -903,18 +853,6 @@ static bool driver_setup (settings_t *settings)
  #endif
 #endif
 
-#ifdef STEP_MASK
-    GPIO_Init.Pin = STEP_MASK;
-    HAL_GPIO_Init(STEP_PORT, &GPIO_Init);
-#else
-    GPIO_Init.Pin = X_STEP_BIT;
-    HAL_GPIO_Init(X_STEP_PORT, &GPIO_Init);
-    GPIO_Init.Pin = Y_STEP_BIT;
-    HAL_GPIO_Init(Y_STEP_PORT, &GPIO_Init);
-    GPIO_Init.Pin = Z_STEP_BIT;
-    HAL_GPIO_Init(Z_STEP_PORT, &GPIO_Init);
-#endif
-
 #ifdef DIRECTION_MASK
     GPIO_Init.Pin = DIRECTION_MASK;
     HAL_GPIO_Init(DIRECTION_PORT, &GPIO_Init);
@@ -926,25 +864,19 @@ static bool driver_setup (settings_t *settings)
     GPIO_Init.Pin = Z_DIRECTION_BIT;
     HAL_GPIO_Init(Z_DIRECTION_PORT, &GPIO_Init);
 #endif
+*/
+    grbl.on_realtime_report = pio_rpt;
 
-    STEPPER_TIMER->CR1 &= ~TIM_CR1_CEN;
-    STEPPER_TIMER->SR &= ~TIM_SR_UIF;
-    STEPPER_TIMER->CNT = 0;
-    STEPPER_TIMER->DIER |= TIM_DIER_UIE;
+    pulse = pio_add_program(pio0, &step_pulse_program);
+    timer = pio_add_program(pio1, &stepper_timer_program);
 
-    NVIC_SetPriority(STEPPER_TIMER_IRQn, 1);
-    NVIC_EnableIRQ(STEPPER_TIMER_IRQn);
+    step_pulse_program_init(pio0, 0, pulse, STEP_PINS_BASE, N_AXIS);
+    stepper_timer_program_init(pio1, 0, timer, 12.5f); // 10MHz
 
- // Single-shot 100 ns per tick
-    PULSE_TIMER->CR1 |= TIM_CR1_OPM|TIM_CR1_DIR|TIM_CR1_CKD_1|TIM_CR1_ARPE|TIM_CR1_URS;
-    PULSE_TIMER->PSC = hal.f_step_timer / 10000000UL - 1;
-    PULSE_TIMER->SR &= ~(TIM_SR_UIF|TIM_SR_CC1IF);
-    PULSE_TIMER->CNT = 0;
-    PULSE_TIMER->DIER |= TIM_DIER_UIE;
+    irq_set_exclusive_handler(PIO1_IRQ_0, STEPPER_TIMER_IRQHandler);
+    irq_set_enabled(PIO1_IRQ_0, true);
 
-    NVIC_SetPriority(PULSE_TIMER_IRQn, 0);
-    NVIC_EnableIRQ(PULSE_TIMER_IRQn);
-
+/*
  // Limit pins init
 
     if (settings->limits.flags.hard_enabled)
@@ -1046,6 +978,14 @@ bool driver_init (void)
 {
     // Enable EEPROM and serial port here for Grbl to be able to configure itself and report any errors
 
+//    irq_set_exclusive_handler(-1, systick_handler);
+
+
+
+//mpu_hw->rvr = 999;
+//mpu_hw->csr = M0PLUS_SYST_CSR_TICKINT_BITS|M0PLUS_SYST_CSR_ENABLE_BITS;
+// M0PLUS_SYST_CSR_CLKSOURCE_BITS - set to use processor clock
+
 #if USB_SERIAL_CDC
     usbInit();
 #else
@@ -1053,7 +993,7 @@ bool driver_init (void)
 #endif
 
 #ifdef I2C_PORT
-    i2c_init();
+    I2C_Init();
 #endif
 
     hal.info = "RP2040";
@@ -1062,7 +1002,7 @@ bool driver_init (void)
     hal.board = BOARD_NAME;
 #endif
     hal.driver_setup = driver_setup;
- //   hal.f_step_timer = HAL_RCC_GetPCLK1Freq() * 2;
+    hal.f_step_timer = 10000000;
     hal.rx_buffer_size = RX_BUFFER_SIZE;
     hal.delay_ms = driver_delay;
     hal.settings_changed = settings_changed;
@@ -1200,41 +1140,10 @@ bool driver_init (void)
 // Main stepper driver
 void STEPPER_TIMER_IRQHandler (void)
 {
+    //irq_clear(PIO1_IRQ_0);
+    stepper_timer_irq_clear(pio1);
+
     hal.stepper.interrupt_callback();
-}
-
-/* The Stepper Port Reset Interrupt: This interrupt handles the falling edge of the step
-   pulse. This should always trigger before the next general stepper driver interrupt and independently
-   finish, if stepper driver interrupts is disabled after completing a move.
-   NOTE: Interrupt collisions between the serial and stepper interrupts can cause delays by
-   a few microseconds, if they execute right before one another. Not a big deal, but can
-   cause issues at high step rates if another high frequency asynchronous interrupt is
-   added to Grbl.
-*/
-
-// This interrupt is used only when STEP_PULSE_DELAY is enabled. Here, the step pulse is
-// initiated after the STEP_PULSE_DELAY time period has elapsed. The ISR TIMER2_OVF interrupt
-// will then trigger after the appropriate settings.pulse_microseconds, as in normal operation.
-// The new timing between direction, step pulse, and step complete events are setup in the
-// st_wake_up() routine.
-
-// This interrupt is enabled when Grbl sets the motor port bits to execute
-// a step. This ISR resets the motor port after a short period (settings.pulse_microseconds)
-// completing one step cycle.
-void PULSE_TIMER_IRQHandler (void)
-{
-    /*
-    PULSE_TIMER->SR &= ~TIM_SR_UIF;                 // Clear UIF flag
-
-    if (PULSE_TIMER->ARR == pulse_delay)            // Delayed step pulse?
-    {
-        PULSE_TIMER->ARR = pulse_length;
-        stepperSetStepOutputs(next_step_outbits);   // begin step pulse
-        PULSE_TIMER->EGR = TIM_EGR_UG;
-        PULSE_TIMER->CR1 |= TIM_CR1_CEN;
-    } else
-        stepperSetStepOutputs((axes_signals_t){0}); // end step pulse
-        */
 }
 
 // Debounce timer interrupt handler
@@ -1298,8 +1207,11 @@ void EXTI4_IRQHandler(void)
 }
 
 // Interrupt handler for 1 ms interval timer
-void HAL_IncTick(void)
+void isr_systick (void)
 {
+    static uint32_t cnt = 0;
+
+    cnt++;
     /*
 #ifdef Z_LIMIT_POLL
     static bool z_limit_state = false;
