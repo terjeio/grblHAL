@@ -219,6 +219,7 @@ static void stepperEnable (axes_signals_t enable)
 #if TRINAMIC_ENABLE && TRINAMIC_I2C
     axes_signals_t tmc_enable = trinamic_stepper_enable(enable);
 #else
+    gpio_put(STEPPERS_DISABLE_PIN, enable.x);
   #ifdef STEPPERS_DISABLE_PORT
  //   BITBAND_PERI(STEPPERS_DISABLE_PORT->ODR, STEPPERS_DISABLE_PIN) = enable.x;
   #else
@@ -237,7 +238,7 @@ static void stepperWakeUp (void)
 {
     stepperEnable((axes_signals_t){AXES_BITMASK});
 
-    stepper_timer_set_period(pio1, 0, 1000);
+    stepper_timer_set_period(pio1, 0, timer, 1000);
 }
 
 // Disables stepper driver interrupts
@@ -246,17 +247,15 @@ static void stepperGoIdle (bool clear_signals)
     stepper_timer_stop(pio1, 0);
 }
 
-
 // Sets up stepper driver interrupt timeout, "Normal" version
 static void stepperCyclesPerTick (uint32_t cycles_per_tick)
 {
-    stepper_timer_set_period(pio1, 0, cycles_per_tick);
+    stepper_timer_set_period(pio1, 0, timer, cycles_per_tick);
 }
 
 // Set stepper pulse output pins
 // NOTE: step_outbits are: bit0 -> X, bit1 -> Y, bit2 -> Z...
-//inline static __attribute__((always_inline)) void stepperSetStepOutputs (axes_signals_t step_outbits)
-static void stepperSetStepOutputs (axes_signals_t step_outbits)
+inline static __attribute__((always_inline)) void stepperSetStepOutputs (axes_signals_t step_outbits)
 {
     pio_steps.set = step_outbits.mask ^ settings.steppers.step_invert.mask;
 
@@ -267,65 +266,22 @@ static void stepperSetStepOutputs (axes_signals_t step_outbits)
 // NOTE: see note for stepperSetStepOutputs()
 inline static __attribute__((always_inline)) void stepperSetDirOutputs (axes_signals_t dir_outbits)
 {
-#if STEP_OUTMODE == GPIO_BITBAND
-    dir_outbits.mask ^= settings.steppers.dir_invert.mask;
-//    BITBAND_PERI(X_DIRECTION_PORT->ODR, X_DIRECTION_PIN) = dir_outbits.x;
-//    BITBAND_PERI(Y_DIRECTION_PORT->ODR, Y_DIRECTION_PIN) = dir_outbits.y;
-//    BITBAND_PERI(Z_DIRECTION_PORT->ODR, Z_DIRECTION_PIN) = dir_outbits.z;
-#elif DIRECTION_OUTMODE == GPIO_MAP
-//    DIRECTION_PORT->ODR = (DIRECTION_PORT->ODR & ~DIRECTION_MASK) | dir_outmap[dir_outbits.value];
+#if DIRECTION_OUTMODE == GPIO_MAP
+    gpio_put_masked(DIRECTION_MASK, dir_outmap[dir_outbits.mask]);
 #else
-//    DIRECTION_PORT->ODR = (DIRECTION_PORT->ODR & ~DIRECTION_MASK) | ((dir_outbits.mask ^ settings.steppers.dir_invert.mask) << DIRECTION_OUTMODE);
+    gpio_put_masked(DIRECTION_MASK, (dir_outbits.mask ^ settings.steppers.dir_invert.mask) << DIRECTION_OUTMODE);
 #endif
 }
 
 // Sets stepper direction and pulse pins and starts a step pulse.
 static void stepperPulseStart (stepper_t *stepper)
 {
-#ifdef SPINDLE_SYNC_ENABLE
-    if(stepper->new_block && stepper->exec_segment->spindle_sync) {
-        spindle_tracker.stepper_pulse_start_normal = hal.stepper.pulse_start;
-        hal.stepper.pulse_start = stepperPulseStartSynchronized;
-        hal.stepper.pulse_start(stepper);
-        return;
-    }
-#endif
-
     if(stepper->dir_change)
         stepperSetDirOutputs(stepper->dir_outbits);
 
-    if(stepper->step_outbits.value) {
+    if(stepper->step_outbits.value)
         stepperSetStepOutputs(stepper->step_outbits);
-//        PULSE_TIMER->EGR = TIM_EGR_UG;
-//        PULSE_TIMER->CR1 |= TIM_CR1_CEN;
-    }
 }
-
-// Start a stepper pulse, delay version.
-// Note: delay is only added when there is a direction change and a pulse to be output.
-static void stepperPulseStartDelayed (stepper_t *stepper)
-{
-    if(stepper->dir_change) {
-
-        stepperSetDirOutputs(stepper->dir_outbits);
-
-        if(stepper->step_outbits.value) {
-            next_step_outbits = stepper->step_outbits; // Store out_bits
-//            PULSE_TIMER->ARR = pulse_delay;
-//            PULSE_TIMER->EGR = TIM_EGR_UG;
-//            PULSE_TIMER->CR1 |= TIM_CR1_CEN;
-        }
-
-        return;
-    }
-
-    if(stepper->step_outbits.value) {
-        stepperSetStepOutputs(stepper->step_outbits);
-//        PULSE_TIMER->EGR = TIM_EGR_UG;
-//        PULSE_TIMER->CR1 |= TIM_CR1_CEN;
-    }
-}
-
 
 // Enable/disable limit pins interrupt
 static void limitsEnable (bool on, bool homing)
@@ -852,19 +808,10 @@ static bool driver_setup (settings_t *settings)
   HAL_GPIO_Init(A_STEPPERS_DISABLE_PORT, &GPIO_Init);
  #endif
 #endif
-
-#ifdef DIRECTION_MASK
-    GPIO_Init.Pin = DIRECTION_MASK;
-    HAL_GPIO_Init(DIRECTION_PORT, &GPIO_Init);
-#else
-    GPIO_Init.Pin = X_DIRECTION_BIT;
-    HAL_GPIO_Init(X_DIRECTION_PORT, &GPIO_Init);
-    GPIO_Init.Pin = Y_DIRECTION_BIT;
-    HAL_GPIO_Init(Y_DIRECTION_PORT, &GPIO_Init);
-    GPIO_Init.Pin = Z_DIRECTION_BIT;
-    HAL_GPIO_Init(Z_DIRECTION_PORT, &GPIO_Init);
-#endif
 */
+    gpio_init_mask(DIRECTION_MASK|STEPPERS_DISABLE_MASK);
+    gpio_set_dir_out_masked(DIRECTION_MASK|STEPPERS_DISABLE_MASK);
+
     grbl.on_realtime_report = pio_rpt;
 
     pulse = pio_add_program(pio0, &step_pulse_program);
@@ -1213,21 +1160,6 @@ void isr_systick (void)
 
     cnt++;
     /*
-#ifdef Z_LIMIT_POLL
-    static bool z_limit_state = false;
-    if(settings.limits.flags.hard_enabled) {
-        bool z_limit = BITBAND_PERI(Z_LIMIT_PORT->IDR, Z_LIMIT_PIN) ^ settings.limits.invert.z;
-        if(z_limit_state != z_limit) {
-            if((z_limit_state = z_limit)) {
-                if(hal.driver_cap.software_debounce) {
-                    DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
-                    DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
-                } else
-                    hal.limits.interrupt_callback(limitsGetState());
-            }
-        }
-    }
-#endif
 
 #if SDCARD_ENABLE
     static uint32_t fatfs_ticks = 10;

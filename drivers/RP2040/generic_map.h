@@ -24,24 +24,24 @@
 #endif
 
 // Define step pulse output pins.
-#define STEP_PINS_BASE      2
+#define STEP_PINS_BASE      2 // N_AXIS number of consecutive pins are used by PIO
 
 // Define step direction output pins.
 #define DIRECTION_PORT      GPIO_OUT
-#define X_DIRECTION_PIN     4
-#define Y_DIRECTION_PIN     5
-#define Z_DIRECTION_PIN     6
+#define X_DIRECTION_PIN     5
+#define Y_DIRECTION_PIN     6
+#define Z_DIRECTION_PIN     7
 #define X_DIRECTION_BIT     (1<<X_DIRECTION_PIN)
 #define Y_DIRECTION_BIT     (1<<Y_DIRECTION_PIN)
 #define Z_DIRECTION_BIT     (1<<Z_DIRECTION_PIN)
-#if N_AXIS > 3
+#ifdef A_AXIS
 #define A_DIRECTION_PIN     7
 #define A_DIRECTION_BIT     (1<<A_DIRECTION_PIN)
 #define DIRECTION_MASK      (X_DIRECTION_BIT|Y_DIRECTION_BIT|Z_DIRECTION_BIT|A_DIRECTION_BIT) // All direction bits
 #else
 #define DIRECTION_MASK      (X_DIRECTION_BIT|Y_DIRECTION_BIT|Z_DIRECTION_BIT) // All direction bits
 #endif
-#define DIRECTION_OUTMODE   GPIO_OE
+#define DIRECTION_OUTMODE   GPIO_SHIFT5
 
 // Define stepper driver enable/disable output pin.
 #define STEPPERS_DISABLE_PORT   GPIO_OUT

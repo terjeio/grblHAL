@@ -28,11 +28,12 @@ static inline void stepper_timer_program_init(PIO pio, uint sm, uint offset, flo
     pio_sm_set_clkdiv(pio, sm, div);
 }
 
-static inline void stepper_timer_set_period(PIO pio, uint sm, uint32_t period) {
+static inline void stepper_timer_set_period(PIO pio, uint sm, uint offset, uint32_t period) {
 
-     pio_sm_put(pio, sm, period);
+    pio_sm_put(pio, sm, period);
+    pio_sm_exec(pio, sm, pio_encode_jmp(offset));
 
-    if(!(pio->ctrl & 1)) {
+    if(!(pio->ctrl & (1 << sm))) {
         pio_sm_set_enabled(pio, sm, true);
         pio->inte0 |= PIO_INTR_SM0_BITS;
     }

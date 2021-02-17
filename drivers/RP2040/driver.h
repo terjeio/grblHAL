@@ -101,7 +101,6 @@
 #define GPIO_SHIFT12 12
 #define GPIO_SHIFT13 13
 #define GPIO_MAP     14
-#define GPIO_BITBAND 15
 
 // Define timer allocations.
 
