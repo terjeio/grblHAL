@@ -5,7 +5,7 @@
 
     pull noblock    ; Pull timer period from the TX FIFO, loads X into OSR if empty
     mov x osr       ; Reload X from OSR
-    irq clear 0     ; Clear interrupt - how to do this from the ISR?
+ ;   irq clear 0    ; Clear interrupt - how to do this from the ISR?
  ;   set pins 1
     mov y x
 count:
@@ -16,11 +16,11 @@ count:
 % c-sdk {
 static inline void stepper_timer_program_init(PIO pio, uint sm, uint offset, float div ) {
     pio_sm_config c = stepper_timer_program_get_default_config(offset);
-/*
+
+/*  Output signal to a pin to test the frequency
     sm_config_set_out_pins(&c, 15, 1);
     pio_gpio_init(pio, 15);
     pio_sm_set_consecutive_pindirs(pio, sm, 15, 1, true);
-    sm_config_set_set_pins(&c, 15, 1);
 */
     // Load our configuration, and jump to the start of the program
     pio_sm_init(pio, sm, offset, &c);
@@ -45,8 +45,8 @@ static inline void stepper_timer_stop(PIO pio, uint sm) {
 }
 
 static inline void stepper_timer_irq_clear(PIO pio) {
-  //  pio->irq = PIO_INTR_SM0_BITS;
-  //  pio->intr &= ~PIO_INTR_SM0_BITS;
+    pio->irq = 1;
+    irq_clear(PIO0_IRQ_0);
 }
 %}
 
