@@ -69,6 +69,10 @@
 #include "flash.h"
 #endif
 
+#if IOEXPAND_ENABLE
+#include "ioexpand.h"
+#endif
+
 typedef union {
     uint8_t mask;
     struct {
@@ -89,7 +93,7 @@ typedef union {
 } pio_steps_t;
 
 static pio_steps_t pio_steps = { .delay = 20, .length = 100 };
-
+uint32_t pirq = 0;
 static uint pulse, timer;
 static uint16_t pulse_length, pulse_delay;
 static bool pwmEnabled = false, IOInitDone = false;
@@ -101,6 +105,10 @@ static debounce_t debounce;
 static probe_state_t probe; /* = {
     .connected = On
 }; */
+
+#if IOEXPAND_ENABLE
+static ioexpand_t io_expander = {0};
+#endif
 
 #if MODBUS_ENABLE
 static modbus_stream_t modbus_stream = {0};
@@ -168,6 +176,10 @@ static uint32_t dir_outmap[sizeof(c_dir_outmap) / sizeof(uint32_t)];
 
 #endif
 
+#ifndef STEPPERS_DISABLE_MASK
+#define STEPPERS_DISABLE_MASK 0
+#endif
+
 #ifndef X_LIMIT_PORT
   #define X_LIMIT_PORT LIMIT_PORT
 #endif
@@ -213,6 +225,7 @@ static void driver_delay (uint32_t ms, void (*callback)(void))
         callback();
 }
 
+
 // Enable/disable stepper motors
 static void stepperEnable (axes_signals_t enable)
 {
@@ -220,16 +233,16 @@ static void stepperEnable (axes_signals_t enable)
 #if TRINAMIC_ENABLE && TRINAMIC_I2C
     axes_signals_t tmc_enable = trinamic_stepper_enable(enable);
 #else
-    gpio_put(STEPPERS_DISABLE_PIN, enable.x);
-  #ifdef STEPPERS_DISABLE_PORT
- //   BITBAND_PERI(STEPPERS_DISABLE_PORT->ODR, STEPPERS_DISABLE_PIN) = enable.x;
+  #if STEPPERS_DISABLE_OUTMODE == GPIO_IOEXPAND
+    #ifdef STEPPERS_DISABLEX_PIN
+    ioex_out(STEPPERS_DISABLEX_PIN) = enable.x;
+    #endif
+    #ifdef STEPPERS_DISABLEZ_PIN
+    ioex_out(STEPPERS_DISABLEZ_PIN) = enable.z;
+    #endif
+    ioexpand_out(io_expander);
   #else
- //   BITBAND_PERI(X_STEPPERS_DISABLE_PORT->ODR, X_STEPPERS_DISABLE_PIN) = enable.x;
- //   BITBAND_PERI(Y_STEPPERS_DISABLE_PORT->ODR, Y_STEPPERS_DISABLE_PIN) = enable.y;
- //   BITBAND_PERI(Z_STEPPERS_DISABLE_PORT->ODR, Z_STEPPERS_DISABLE_PIN) = enable.z;
-   #if N_AXIS > 3
- //   BITBAND_PERI(A_STEPPERS_DISABLE_PORT->ODR, A_STEPPERS_DISABLE_PIN) = enable.a;
-   #endif
+    gpio_put(STEPPERS_DISABLE_PIN, enable.x);
   #endif
 #endif
 }
@@ -474,46 +487,51 @@ static void spindleSetStateVariable (spindle_state_t state, float rpm)
 }
 
 // Returns spindle state in a spindle_state_t variable
-static spindle_state_t spindleGetState (void)
-{
-    spindle_state_t state = {0};
+static spindle_state_t spindleGetState (void) {
+    spindle_state_t state = {settings.spindle.invert.mask};
 
- //   state.on = (SPINDLE_ENABLE_PORT->IDR & SPINDLE_ENABLE_BIT) != 0;
- //   state.ccw = hal.driver_cap.spindle_dir && (SPINDLE_DIRECTION_PORT->IDR & SPINDLE_DIRECTION_BIT) != 0;
+#if SPINDLE_OUTMODE == GPIO_IOEXPAND
+    state.on = ioex_out(SPINDLE_ENABLE_PIN);
+    state.ccw = hal.driver_cap.spindle_dir && ioex_out(SPINDLE_DIRECTION_PIN);
+#else
+    sio
+    state.on =  sio_hw->gpio_out & SPINDLE_ENABLE_BIT;
+    state.ccw = (hal.driver_cap.spindle_dir && (sio_hw->gpio_out & SPINDLE_DIRECTION_BIT)) != 0;
+#endif
 
     state.value ^= settings.spindle.invert.mask;
 
     return state;
 }
 
-void driver_spindle_pwm_init(void) {
+void driver_spindle_pwm_init (void) {
 
     if(hal.driver_cap.variable_spindle) {
 
-        	hal.spindle.set_state = spindleSetStateVariable;
+        hal.spindle.set_state = spindleSetStateVariable;
 
-            // Get the default config for 
-            pwm_config config = pwm_get_default_config();
-            
-            uint32_t prescaler = settings->spindle.pwm_freq > 2000.0f ? 1 : (settings->spindle.pwm_freq > 200.0f ? 12 : 25);
+        // Get the default config for 
+        pwm_config config = pwm_get_default_config();
+        
+        uint32_t prescaler = settings->spindle.pwm_freq > 2000.0f ? 1 : (settings->spindle.pwm_freq > 200.0f ? 12 : 25);
 
-        	spindle_precompute_pwm_values(&spindle_pwm, clock_get_hz(clk_sys) / prescaler);
+        spindle_precompute_pwm_values(&spindle_pwm, clock_get_hz(clk_sys) / prescaler);
 
-            // Set divider, not using the 4 fractional bit part of the clock divider, only the integer part
-            pwm_config_set_clkdiv_int(&config, prescaler);
-            // Set the top value of the PWM => the period
-            pwm_config_set_wrap(&config, spindle_pwm.period);
-            // Set the off value of the PWM => off duty cycle (either 0 or the off value)
-            pwm_set_gpio_level(spindle_pwm.off_value);
+        // Set divider, not using the 4 fractional bit part of the clock divider, only the integer part
+        pwm_config_set_clkdiv_int(&config, prescaler);
+        // Set the top value of the PWM => the period
+        pwm_config_set_wrap(&config, spindle_pwm.period);
+        // Set the off value of the PWM => off duty cycle (either 0 or the off value)
+        pwm_set_gpio_level(spindle_pwm.off_value);
 
-            // Set polarity of the channel
-            uint channel = pwm_gpio_to_channel(SPINDLE_PWM_PIN);                                                                            // Get which is associated with the PWM pin
-            pwm_config_set_output_polarity(&config, (!channel & settings->spindle.invert.pwm), (channel & settings->spindle.invert.pwm));   // Set the polarity of the pin's channel
+        // Set polarity of the channel
+        uint channel = pwm_gpio_to_channel(SPINDLE_PWM_PIN);                                                                            // Get which is associated with the PWM pin
+        pwm_config_set_output_polarity(&config, (!channel & settings->spindle.invert.pwm), (channel & settings->spindle.invert.pwm));   // Set the polarity of the pin's channel
 
-            // Load the configuration into our PWM slice, and set it running.
-            pwm_init(pwm_gpio_to_slice_num(SPINDLE_PWM_PIN), &config, true);
-        } else
-            hal.spindle.set_state = spindleSetState;
+        // Load the configuration into our PWM slice, and set it running.
+        pwm_init(pwm_gpio_to_slice_num(SPINDLE_PWM_PIN), &config, true);
+    } else
+        hal.spindle.set_state = spindleSetState;
 }
 
 #if PPI_ENABLE
@@ -536,21 +554,35 @@ static void spindlePulseOn (uint_fast16_t pulse_length)
 static void coolantSetState (coolant_state_t mode)
 {
     mode.value ^= settings.coolant_invert.mask;
-//    BITBAND_PERI(COOLANT_FLOOD_PORT->ODR, COOLANT_FLOOD_PIN) = mode.flood;
-#ifdef COOLANT_MIST_PIN
-//    BITBAND_PERI(COOLANT_MIST_PORT->ODR, COOLANT_MIST_PIN) = mode.mist;
-#endif
+
+  #if COOLANT_OUTMODE == GPIO_IOEXPAND
+    ioex_out(COOLANT_FLOOD_PIN) = mode.flood;
+    #ifdef COOLANT_MIST_PIN
+    ioex_out(COOLANT_MIST_PIN) = mode.mist;
+    #endif
+    ioexpand_out(io_expander);
+  #else
+  //  gpio_put(STEPPERS_DISABLE_PIN, enable.x);
+  #endif
 }
 
 // Returns coolant state in a coolant_state_t variable
 static coolant_state_t coolantGetState (void)
 {
-    coolant_state_t state = (coolant_state_t){settings.coolant_invert.mask};
+    coolant_state_t state = {settings.coolant_invert.mask};
 
+  #if COOLANT_OUTMODE == GPIO_IOEXPAND
+    state.flood = ioex_out(COOLANT_FLOOD_PIN);
+    #ifdef COOLANT_MIST_PIN
+    state.mist = ioex_out(COOLANT_MIST_PIN);
+    #endif
+  #else
 //    state.flood = (COOLANT_FLOOD_PORT->IDR & COOLANT_FLOOD_BIT) != 0;
 #ifdef COOLANT_MIST_PIN
 //    state.mist  = (COOLANT_MIST_PORT->IDR & COOLANT_MIST_BIT) != 0;
 #endif
+  #endif
+
     state.value ^= settings.coolant_invert.mask;
 
     return state;
@@ -622,7 +654,7 @@ void settings_changed (settings_t *settings)
 */
 
         // Init of the spindle PWM
-        driver_Spindle_pwm_init();
+        driver_spindle_pwm_init();
 
         // PIO step parameters init
 
@@ -764,46 +796,13 @@ void settings_changed (settings_t *settings)
     }
 }
 
-
-void pio_rpt (stream_write_ptr stream_write, report_tracking_flags_t report)
-{
-    stream_write("|pio:");
-    stream_write(uitoa(pio1->intr));
-}
-
 // Initializes MCU peripherals for Grbl use
 static bool driver_setup (settings_t *settings)
 {
-    //    Interrupt_disableSleepOnIsrExit();
-
-/*
-    GPIO_InitTypeDef GPIO_Init = {0};
-
-    GPIO_Init.Speed = GPIO_SPEED_FREQ_HIGH;
-    GPIO_Init.Mode = GPIO_MODE_OUTPUT_PP;
-
  // Stepper init
 
-#ifdef STEPPERS_DISABLE_PORT
-    GPIO_Init.Pin = STEPPERS_DISABLE_MASK;
-    HAL_GPIO_Init(STEPPERS_DISABLE_PORT, &GPIO_Init);
-#else
-    GPIO_Init.Pin = X_STEPPERS_DISABLE_BIT;
-    HAL_GPIO_Init(X_STEPPERS_DISABLE_PORT, &GPIO_Init);
-    GPIO_Init.Pin = Y_STEPPERS_DISABLE_BIT;
-    HAL_GPIO_Init(Y_STEPPERS_DISABLE_PORT, &GPIO_Init);
-    GPIO_Init.Pin = Z_STEPPERS_DISABLE_BIT;
-    HAL_GPIO_Init(Z_STEPPERS_DISABLE_PORT, &GPIO_Init);
- #if N_AXIS > 3
-  GPIO_Init.Pin = A_STEPPERS_DISABLE_BIT;
-  HAL_GPIO_Init(A_STEPPERS_DISABLE_PORT, &GPIO_Init);
- #endif
-#endif
-*/
     gpio_init_mask(DIRECTION_MASK|STEPPERS_DISABLE_MASK);
     gpio_set_dir_out_masked(DIRECTION_MASK|STEPPERS_DISABLE_MASK);
-
-    grbl.on_realtime_report = pio_rpt;
 
     pulse = pio_add_program(pio0, &step_pulse_program);
     timer = pio_add_program(pio1, &stepper_timer_program);
@@ -833,13 +832,13 @@ static bool driver_setup (settings_t *settings)
         HAL_NVIC_EnableIRQ(DEBOUNCE_TIMER_IRQn); // Enable debounce interrupt
     }
 */
+
  // Spindle init
 
-    gpio_init(SPINDLE_DIRECTION_PIN);
-    gpio_set_dir(SPINDLE_DIRECTION_PIN, GPIO_OUT);
-
-    gpio_init(SPINDLE_ENABLE_PIN);
-    gpio_set_dir(SPINDLE_ENABLE_PIN, GPIO_OUT);
+#if SPINDLE_OUTMODE != GPIO_IOEXPAND
+    gpio_init_mask(SPINDLE_MASK);
+    gpio_set_dir_out_masked(SPINDLE_MASK);
+#endif
 
 #ifdef SPINDLE_PWM_PIN
 
@@ -849,23 +848,16 @@ static bool driver_setup (settings_t *settings)
     }
 
 #endif
-/*
+
+
  // Coolant init
 
-    GPIO_Init.Mode = GPIO_MODE_OUTPUT_PP;
-
-    GPIO_Init.Pin = COOLANT_FLOOD_BIT;
-    HAL_GPIO_Init(COOLANT_FLOOD_PORT, &GPIO_Init);
-    BITBAND_PERI(COOLANT_FLOOD_PORT->ODR, COOLANT_FLOOD_PIN) = 1;
-    BITBAND_PERI(COOLANT_FLOOD_PORT->ODR, COOLANT_FLOOD_PIN) = 0;
-
-#ifdef COOLANT_MIST_PIN
-    GPIO_Init.Pin = COOLANT_MIST_BIT;
-    HAL_GPIO_Init(COOLANT_MIST_PORT, &GPIO_Init);
-    BITBAND_PERI(COOLANT_MIST_PORT->ODR, COOLANT_MIST_PIN) = 1;
-    BITBAND_PERI(COOLANT_MIST_PORT->ODR, COOLANT_MIST_PIN) = 0;
+#if COOLANT_OUTMODE != GPIO_IOEXPAND
+    gpio_init_mask(COOLANT_MASK);
+    gpio_set_dir_out_masked(COOLANT_MASK);
 #endif
-*/
+
+
 #if SDCARD_ENABLE
 
     GPIO_Init.Mode = GPIO_MODE_OUTPUT_PP;
@@ -890,7 +882,7 @@ static bool driver_setup (settings_t *settings)
     HAL_NVIC_EnableIRQ(PPI_TIMER_IRQn);
 
 #endif
-*/
+
     IOInitDone = settings->version == 19;
 
     hal.settings_changed(settings);
@@ -1039,6 +1031,10 @@ bool driver_init (void)
     keypad_init();
 #endif
 
+#if IOEXPAND_ENABLE
+    ioexpand_init();
+#endif
+
 #if MODBUS_ENABLE
 
     modbus_stream.write = serial2Write;
@@ -1075,6 +1071,8 @@ bool driver_init (void)
 void STEPPER_TIMER_IRQHandler (void)
 {
     //irq_clear(PIO1_IRQ_0);
+
+    pirq = pio1->irq;
     stepper_timer_irq_clear(pio1);
 
     hal.stepper.interrupt_callback();

@@ -12,6 +12,7 @@ add_executable(grblHAL
  driver.c
  serial.c
  i2c.c
+ PCA9654E.c
  eeprom/eeprom_24AAxxx.c
  eeprom/eeprom_24LC16B.c
  grbl/grbllib.c

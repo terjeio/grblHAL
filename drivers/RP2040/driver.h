@@ -84,7 +84,7 @@
 
 #define CNC_BOOSTERPACK     0
 
-// Define GPIO output mode options
+// Define GPIO mode options
 
 #define GPIO_SHIFT0   0
 #define GPIO_SHIFT1   1
@@ -101,6 +101,8 @@
 #define GPIO_SHIFT12 12
 #define GPIO_SHIFT13 13
 #define GPIO_MAP     14
+#define GPIO_DIRECT   15
+#define GPIO_IOEXPAND 16
 
 // Define timer allocations.
 
@@ -137,7 +139,9 @@
 #define PPI_TIMER_IRQn              timerINT(PPI_TIMER_N)
 #define PPI_TIMER_IRQHandler        timerHANDLER(PPI_TIMER_N)
 
-#if defined(BOARD_MY_MACHINE)
+#ifdef BOARD_CNC_BOOSTERPACK
+  #include "cnc_boosterpack_map.h"
+#elif defined(BOARD_MY_MACHINE)
   #include "my_machine_map.h"
 #else // default board
   #include "generic_map.h"
@@ -158,27 +162,15 @@
 #define FLASH_ENABLE 0
 #endif
 
-#if EEPROM_ENABLE|| KEYPAD_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
-  #if defined(NUCLEO_F411) || defined(NUCLEO_F446)
-    #define I2C_PORT 1 // GPIOB, SCL_PIN = 8, SDA_PIN = 9
-  #else
-    #define I2C_PORT 2 // GPIOB, SCL_PIN = 10, SDA_PIN = 11
-  #endif
+#if EEPROM_ENABLE || KEYPAD_ENABLE || IOEXPAND_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
+  #define I2C_PORT 1 // SCL_PIN = 27, SDA_PIN = 26
 #endif
 
-#if TRINAMIC_ENABLE == 2130
+#if TRINAMIC_ENABLE 
 #ifndef TRINAMIC_MIXED_DRIVERS
 #define TRINAMIC_MIXED_DRIVERS 1
 #endif
-#include "tmc2130/trinamic.h"
-#endif
-
-#if TRINAMIC_ENABLE == 2209
-#define SERIAL2_MOD
-#ifndef TRINAMIC_MIXED_DRIVERS
-#define TRINAMIC_MIXED_DRIVERS 1
-#endif
-#include "tmc2209/trinamic.h"
+#include "trinamic/trinamic.h"
 #endif
 
 // End configuration
