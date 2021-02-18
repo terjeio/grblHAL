@@ -5,7 +5,6 @@
 
     pull noblock    ; Pull timer period from the TX FIFO, loads X into OSR if empty
     mov x osr       ; Reload X from OSR
-    irq clear 0     ; Clear interrupt - how to do this from the ISR?
  ;   set pins 1
     mov y x
 count:
@@ -30,8 +29,13 @@ static inline void stepper_timer_program_init(PIO pio, uint sm, uint offset, flo
 
 static inline void stepper_timer_set_period(PIO pio, uint sm, uint offset, uint32_t period) {
 
-    pio_sm_put(pio, sm, period);
-    pio_sm_exec(pio, sm, pio_encode_jmp(offset));
+    static uint32_t period_prev = 0;
+
+    if(period_prev != period) {
+        period_prev = period;
+        pio_sm_put(pio, sm, period);
+        pio_sm_exec(pio, sm, pio_encode_jmp(offset));
+    }
 
     if(!(pio->ctrl & (1 << sm))) {
         pio_sm_set_enabled(pio, sm, true);
@@ -45,8 +49,7 @@ static inline void stepper_timer_stop(PIO pio, uint sm) {
 }
 
 static inline void stepper_timer_irq_clear(PIO pio) {
-  //  pio->irq = PIO_INTR_SM0_BITS;
-  //  pio->intr &= ~PIO_INTR_SM0_BITS;
+    pio->irq = 1;
 }
 %}
 
