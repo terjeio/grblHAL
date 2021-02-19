@@ -40,6 +40,15 @@ Typicaly you can use command similar to this: `idf.py -p /dev/ttyUSB0 flash`
 
 Once flashing is complete, your CNC controller is ready to be configured and used.
 
+
+### Using Docker
+
+If you're familiar with [Docker](https://docker.io), you can use it to build grblHAL in a self-contained environment without installing the complete toolchain on your system:
+
+- prepare and configure the codebase as described above
+- build with `docker run -it --rm -v $(pwd):/grbl -w /grbl/drivers/ESP32 espressif/idf:release-v3.3 idf.py build`
+- flash with `docker run -it --rm -v $(pwd):/grbl --privileged -v /dev:/dev -w /grbl/drivers/ESP32 espressif/idf:release-v3.3 idf.py -p /dev/ttyUSB0 flash`
+
 ### Changelog/Notes:
 
 ---
