@@ -28,7 +28,9 @@
 #include "hardware/timer.h"
 #include "hardware/irq.h"
 #include "hardware/pio.h"
-#include "hardware_adc/gpio.h"
+#include "hardware/gpio.h"
+#include "hardware/pwm.h"
+#include "hardware/clocks.h"
 #include "hardware/structs/systick.h"
 
 #include "driver.h"
@@ -446,7 +448,7 @@ static void spindle_set_speed (uint_fast16_t pwm_value)
         pwmEnabled = false;
         if(settings.spindle.flags.pwm_action == SpindleAction_DisableWithZeroSPeed)
             spindle_off();
-        if(spindle_pwm.always_on) {
+        if(spindle_pwm.always_on) 
             pwm_set_gpio_level(SPINDLE_PWM_PIN, spindle_pwm.off_value);
         else
             pwm_set_gpio_level(SPINDLE_PWM_PIN, 0);
@@ -494,9 +496,8 @@ static spindle_state_t spindleGetState (void) {
     state.on = ioex_out(SPINDLE_ENABLE_PIN);
     state.ccw = hal.driver_cap.spindle_dir && ioex_out(SPINDLE_DIRECTION_PIN);
 #else
-    sio
-    state.on =  sio_hw->gpio_out & SPINDLE_ENABLE_BIT;
-    state.ccw = (hal.driver_cap.spindle_dir && (sio_hw->gpio_out & SPINDLE_DIRECTION_BIT)) != 0;
+    state.on =  gpio_get_out_state(SPINDLE_ENABLE_PIN);
+    state.ccw = (hal.driver_cap.spindle_dir && (gpio_get_out_state(SPINDLE_DIRECTION_PIN))) != 0;
 #endif
 
     state.value ^= settings.spindle.invert.mask;
@@ -513,7 +514,7 @@ void driver_spindle_pwm_init (void) {
         // Get the default config for 
         pwm_config config = pwm_get_default_config();
         
-        uint32_t prescaler = settings->spindle.pwm_freq > 2000.0f ? 1 : (settings->spindle.pwm_freq > 200.0f ? 12 : 25);
+        uint32_t prescaler = settings.spindle.pwm_freq > 2000.0f ? 1 : (settings.spindle.pwm_freq > 200.0f ? 12 : 25);
 
         spindle_precompute_pwm_values(&spindle_pwm, clock_get_hz(clk_sys) / prescaler);
 
@@ -522,11 +523,11 @@ void driver_spindle_pwm_init (void) {
         // Set the top value of the PWM => the period
         pwm_config_set_wrap(&config, spindle_pwm.period);
         // Set the off value of the PWM => off duty cycle (either 0 or the off value)
-        pwm_set_gpio_level(spindle_pwm.off_value);
+        pwm_set_gpio_level(SPINDLE_PWM_PIN, spindle_pwm.off_value);
 
         // Set polarity of the channel
         uint channel = pwm_gpio_to_channel(SPINDLE_PWM_PIN);                                                                            // Get which is associated with the PWM pin
-        pwm_config_set_output_polarity(&config, (!channel & settings->spindle.invert.pwm), (channel & settings->spindle.invert.pwm));   // Set the polarity of the pin's channel
+        pwm_config_set_output_polarity(&config, (!channel & settings.spindle.invert.pwm), (channel & settings.spindle.invert.pwm));   // Set the polarity of the pin's channel
 
         // Load the configuration into our PWM slice, and set it running.
         pwm_init(pwm_gpio_to_slice_num(SPINDLE_PWM_PIN), &config, true);
