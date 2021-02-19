@@ -39,14 +39,9 @@
 #include "my_machine.h"
 #endif
 
-#define BITBAND_PERI(x, b) (*((__IO uint8_t *) (PERIPH_BB_BASE + (((uint32_t)(volatile const uint32_t *)&(x)) - PERIPH_BASE)*32 + (b)*4)))
 
-#define timer(p) timerN(p)
-#define timerN(p) TIM ## p
-#define timerINT(p) timeri(p)
-#define timeri(p) TIM ## p ## _IRQn
-#define timerHANDLER(p) timerh(p)
-#define timerh(p) TIM ## p ## _IRQHandler
+// Read GPIO out register value
+#define gpio_get_out_state(x) !!!!((1ul << x) & sio_hw->gpio_out)
 
 // Configuration
 // Set value to 1 to enable, 0 to disable
@@ -84,7 +79,7 @@
 
 #define CNC_BOOSTERPACK     0
 
-// Define GPIO output mode options
+// Define GPIO mode options
 
 #define GPIO_SHIFT0   0
 #define GPIO_SHIFT1   1
@@ -101,28 +96,12 @@
 #define GPIO_SHIFT12 12
 #define GPIO_SHIFT13 13
 #define GPIO_MAP     14
-#define GPIO_BITBAND 15
+#define GPIO_DIRECT   15
+#define GPIO_IOEXPAND 16
 
 // Define timer allocations.
 
-#define STEPPER_TIMER_N             5
-#define STEPPER_TIMER               timer(STEPPER_TIMER_N)
-#define STEPPER_TIMER_IRQn          timerINT(STEPPER_TIMER_N)
-#define STEPPER_TIMER_IRQHandler    timerHANDLER(STEPPER_TIMER_N)
-
-#define PULSE_TIMER_N               4
-#define PULSE_TIMER                 timer(PULSE_TIMER_N)
-#define PULSE_TIMER_IRQn            timerINT(PULSE_TIMER_N)
-#define PULSE_TIMER_IRQHandler      timerHANDLER(PULSE_TIMER_N)
-
-#define SPINDLE_PWM_TIMER_N         1
-#define SPINDLE_PWM_TIMER           timer(SPINDLE_PWM_TIMER_N)
-
-#define DEBOUNCE_TIMER_N            9
-#define DEBOUNCE_TIMER              timer(DEBOUNCE_TIMER_N)
-#define DEBOUNCE_TIMER_IRQn         TIM1_BRK_TIM9_IRQn       // !
-#define DEBOUNCE_TIMER_IRQHandler   TIM1_BRK_TIM9_IRQHandler // !
-
+/*
 #define RPM_COUNTER_N               3
 #define RPM_COUNTER                 timer(RPM_COUNTER_N)
 #define RPM_COUNTER_IRQn            timerINT(RPM_COUNTER_N)
@@ -137,25 +116,12 @@
 #define PPI_TIMER                   timer(PPI_TIMER_N)
 #define PPI_TIMER_IRQn              timerINT(PPI_TIMER_N)
 #define PPI_TIMER_IRQHandler        timerHANDLER(PPI_TIMER_N)
+*/
 
 #ifdef BOARD_CNC_BOOSTERPACK
-  #if N_AXIS > 3
-    #error Max number of axes is 3!
-  #endif
   #include "cnc_boosterpack_map.h"
-#elif defined(BOARD_CNC3040)
-  #if EEPROM_ENABLE
-    #error EEPROM plugin not supported!
-  #endif
-  #include "cnc3040_map.h"
-#elif defined(BOARD_PROTONEER_3XX)
-  #include "protoneer_3.xx_map.h"
-#elif defined(BOARD_GENERIC_UNO)
-  #include "uno_map.h"
-#elif defined(BOARD_MORPHO_CNC)
-  #include "st_morpho_map.h"
-#elif defined(BOARD_MORPHO_DAC_CNC)
-  #include "st_morpho_dac_map.h"
+#elif defined(BOARD_MY_MACHINE)
+  #include "my_machine_map.h"
 #else // default board
   #include "generic_map.h"
 #endif
@@ -175,27 +141,15 @@
 #define FLASH_ENABLE 0
 #endif
 
-#if EEPROM_ENABLE|| KEYPAD_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
-  #if defined(NUCLEO_F411) || defined(NUCLEO_F446)
-    #define I2C_PORT 1 // GPIOB, SCL_PIN = 8, SDA_PIN = 9
-  #else
-    #define I2C_PORT 2 // GPIOB, SCL_PIN = 10, SDA_PIN = 11
-  #endif
+#if EEPROM_ENABLE || KEYPAD_ENABLE || IOEXPAND_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
+  #define I2C_PORT 1 // SCL_PIN = 27, SDA_PIN = 26
 #endif
 
-#if TRINAMIC_ENABLE == 2130
+#if TRINAMIC_ENABLE 
 #ifndef TRINAMIC_MIXED_DRIVERS
 #define TRINAMIC_MIXED_DRIVERS 1
 #endif
-#include "tmc2130/trinamic.h"
-#endif
-
-#if TRINAMIC_ENABLE == 2209
-#define SERIAL2_MOD
-#ifndef TRINAMIC_MIXED_DRIVERS
-#define TRINAMIC_MIXED_DRIVERS 1
-#endif
-#include "tmc2209/trinamic.h"
+#include "trinamic/trinamic.h"
 #endif
 
 // End configuration

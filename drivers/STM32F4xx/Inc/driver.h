@@ -4,7 +4,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2019-2020 Terje Io
+  Copyright (c) 2019-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -161,6 +161,8 @@
   #include "st_morpho_dac_map.h"
 #elif defined(BOARD_MINI_BLACKPILL)
   #include "mini_blackpill_map.h"
+#elif defined(BOARD_MY_MACHINE)
+  #include "my_machine_map.h"
 #else // default board
   #include "generic_map.h"
 #endif
@@ -188,27 +190,14 @@
   #endif
 #endif
 
-#if TRINAMIC_ENABLE == 2130
-#ifndef TRINAMIC_MIXED_DRIVERS
-#define TRINAMIC_MIXED_DRIVERS 1
-#endif
-#include "tmc2130/trinamic.h"
-#endif
-
-#if TRINAMIC_ENABLE == 2209
-#define SERIAL2_MOD
-#ifndef TRINAMIC_MIXED_DRIVERS
-#define TRINAMIC_MIXED_DRIVERS 1
-#endif
-#include "tmc2209/trinamic.h"
-#endif
-
-#if TRINAMIC_ENABLE == 5160
-#define SERIAL2_MOD
-#ifndef TRINAMIC_MIXED_DRIVERS
-#define TRINAMIC_MIXED_DRIVERS 1
-#endif
-#include "tmc5160/trinamic.h"
+#if TRINAMIC_ENABLE
+  #include "motors/trinamic.h"
+  #ifndef TRINAMIC_MIXED_DRIVERS
+    #define TRINAMIC_MIXED_DRIVERS 1
+  #endif
+  #if TRINAMIC_ENABLE == 2209
+    #define SERIAL2_MOD
+  #endif
 #endif
 
 // End configuration

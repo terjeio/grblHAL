@@ -3,7 +3,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -160,8 +160,12 @@
   #include "T40X101_map.h"
 #elif defined(BOARD_T41U5XBB)
   #include "T41U5XBB_map.h"
+#elif defined(BOARD_T41U5XSS)
+  #include "T41U5XSS_map.h"
 #elif defined(BOARD_T41PROBB)
   #include "T41ProBB_map.h"
+#elif defined(BOARD_MY_MACHINE)
+  #include "my_machine_map.h"
 #else // default board
 #include "generic_map.h"
 #endif

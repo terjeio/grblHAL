@@ -204,6 +204,12 @@ typedef union {
     };
 } system_flags_t;
 
+typedef struct
+{
+    control_signals_t control;
+    limit_signals_t limits;
+} signal_event_t;
+
 // Define global system variables
 // NOTE: probe_position and position variables may need to be declared as volatiles, if problems arise.
 typedef struct {
@@ -239,6 +245,7 @@ typedef struct {
     bool cold_start;                        // Set to true on boot, is false on subsequent soft resets.
     bool driver_started;                    // Set to true when driver initialization is completed.
     bool mpg_mode;                          // To be moved to system_flags_t
+    signal_event_t last_event;              // Last signal events (control and limits signal).
     int32_t position[N_AXIS];               // Real-time machine (aka home) position vector in steps.
 } system_t;
 

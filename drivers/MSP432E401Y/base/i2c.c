@@ -1,11 +1,11 @@
 /*
-  i2c.c - I2C bridge interface for Trinamic TMC2130 stepper drivers
+  i2c.c - I2C bridge interface for Trinamic stepper drivers
 
   For Texas Instruments SimpleLink ARM processors/LaunchPads
 
   Part of grblHAL
 
-  Copyright (c) 2018-2020 Terje Io
+  Copyright (c) 2018-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,11 +23,11 @@
 
 #include "driver.h"
 
-#ifdef USE_I2C
+#if I2C_ENABLE
 
 #include "i2c.h"
 
-#if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
+#if TRINAMIC_ENABLE && TRINAMIC_I2C
 #define I2C_ADR_I2CBRIDGE 0x47
 #endif
 
@@ -122,19 +122,25 @@ void I2C_GetKeycode (uint32_t i2cAddr, keycode_callback_ptr callback)
 
 #endif
 
-#if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
+#if TRINAMIC_ENABLE && TRINAMIC_I2C
 
-static TMC2130_status_t TMC_I2C_ReadRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
+static uint8_t axis = 0xFF;
+
+TMC_spi_status_t tmc_spi_read (trinamic_motor_t driver, TMC_spi_datagram_t *datagram)
 {
-    uint8_t *res, i2creg;
-    TMC2130_status_t status = {0};
-
-    if((i2creg = TMCI2C_GetMapAddress((uint8_t)(driver ? (uint32_t)driver->cs_pin : 0), reg->addr).value) == 0xFF)
-        return status; // unsupported register
+    uint8_t *res;
+    TMC_spi_status_t status = 0;
 
     while(i2cIsBusy);
 
-    i2c.buffer[0] = i2creg;
+    if(driver.axis != axis) {
+        i2c.buffer[0] = driver.axis | 0x80;;
+        I2C_Send(I2C_ADR_I2CBRIDGE, 1, true);
+
+        axis = driver.axis;
+    }
+
+    i2c.buffer[0] = datagram->addr.idx;
     i2c.buffer[1] = 0;
     i2c.buffer[2] = 0;
     i2c.buffer[3] = 0;
@@ -142,32 +148,37 @@ static TMC2130_status_t TMC_I2C_ReadRegister (TMC2130_t *driver, TMC2130_datagra
 
     res = I2C_ReadRegister(I2C_ADR_I2CBRIDGE, 5, true);
 
-    status.value = (uint8_t)*res++;
-    reg->payload.value = ((uint8_t)*res++ << 24);
-    reg->payload.value |= ((uint8_t)*res++ << 16);
-    reg->payload.value |= ((uint8_t)*res++ << 8);
-    reg->payload.value |= (uint8_t)*res++;
+    status = (uint8_t)*res++;
+    datagram->payload.value = ((uint8_t)*res++ << 24);
+    datagram->payload.value |= ((uint8_t)*res++ << 16);
+    datagram->payload.value |= ((uint8_t)*res++ << 8);
+    datagram->payload.value |= (uint8_t)*res++;
 
     return status;
 }
 
-static TMC2130_status_t TMC_I2C_WriteRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
+TMC_spi_status_t tmc_spi_write (trinamic_motor_t driver, TMC_spi_datagram_t *datagram)
 {
-    TMC2130_status_t status = {0};
+    TMC_spi_status_t status = 0;
 
     while(i2cIsBusy);
 
-    reg->addr.write = 1;
-    i2c.buffer[0] = TMCI2C_GetMapAddress((uint8_t)(driver ? (uint32_t)driver->cs_pin : 0), reg->addr).value;
-    reg->addr.write = 0;
+    if(driver.axis != axis) {
+        i2c.buffer[0] = driver.axis | 0x80;;
+        I2C_Send(I2C_ADR_I2CBRIDGE, 1, true);
 
-    if(i2c.buffer[0] == 0xFF)
-        return status; // unsupported register
+        while(i2cIsBusy);
 
-    i2c.buffer[1] = (reg->payload.value >> 24) & 0xFF;
-    i2c.buffer[2] = (reg->payload.value >> 16) & 0xFF;
-    i2c.buffer[3] = (reg->payload.value >> 8) & 0xFF;
-    i2c.buffer[4] = reg->payload.value & 0xFF;
+        axis = driver.axis;
+    }
+
+    datagram->addr.write = 1;
+    i2c.buffer[0] = datagram->addr.value;
+    i2c.buffer[1] = (datagram->payload.value >> 24) & 0xFF;
+    i2c.buffer[2] = (datagram->payload.value >> 16) & 0xFF;
+    i2c.buffer[3] = (datagram->payload.value >> 8) & 0xFF;
+    i2c.buffer[4] = datagram->payload.value & 0xFF;
+    datagram->addr.write = 0;
 
     I2C_Send(I2C_ADR_I2CBRIDGE, 5, true);
 
@@ -200,17 +211,6 @@ void I2CInit (void)
 
     I2CMasterIntClear(I2C0_BASE);
     I2CMasterIntEnable(I2C0_BASE);
-
-#if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
-
-    trinamic_driver_if_t driver = {
-        .interface.WriteRegister = TMC_I2C_WriteRegister,
-        .interface.ReadRegister = TMC_I2C_ReadRegister
-    };
-
-    trinamic_if_init(&driver);
-
-#endif
 }
 
 static void I2C_interrupt_handler (void)

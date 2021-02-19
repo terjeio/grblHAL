@@ -26,6 +26,7 @@
 //#define BOARD_T40X101
 #define BOARD_T41U5XBB
 //#define BOARD_CNC_BOOSTERPACK
+//#define BOARD_MY_MACHINE // Add my_machine_map.h before enabling this!
 
 // Configuration
 // Uncomment to enable, for some a value > 1 may be assigned, if so the default value is shown.

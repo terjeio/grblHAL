@@ -128,6 +128,7 @@ int grbl_enter (void)
     hal.control.interrupt_callback = control_interrupt_handler;
     hal.stepper.interrupt_callback = stepper_driver_interrupt_handler;
     hal.stream_blocking_callback = stream_tx_blocking;
+    hal.signals_cap.reset = hal.signals_cap.feed_hold = hal.signals_cap.cycle_start = On;
 
     sys.cold_start = true;
 
@@ -153,9 +154,9 @@ int grbl_enter (void)
 #endif
 
 #ifndef ENABLE_SAFETY_DOOR_INPUT_PIN
-    hal.driver_cap.safety_door = false;
+    hal.signals_cap.safety_door_ajar = Off;
 #else
-    driver_ok &= hal.driver_cap.safety_door;
+    driver_ok &= hal.signals_cap.safety_door_ajar;
 #endif
 
   #ifdef BUFFER_NVSDATA

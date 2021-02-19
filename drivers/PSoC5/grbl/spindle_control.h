@@ -3,7 +3,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2017-2020 Terje Io
+  Copyright (c) 2017-2021 Terje Io
   Copyright (c) 2012-2015 Sungeun K. Jeon
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -61,13 +61,14 @@ typedef struct {
 
 // Used when HAL driver supports spindle synchronization
 typedef struct {
-    volatile uint32_t index_count;
-    volatile uint32_t pulse_count;
     float rpm;
     float rpm_low_limit;
     float rpm_high_limit;
     float angular_position; // Number of revolutions since last reset
     float rpm_programmed;
+    uint32_t index_count;
+    uint32_t pulse_count;
+    uint32_t error_count;
     spindle_state_t state_programmed;
 } spindle_data_t;
 

@@ -1,0 +1,8 @@
+{
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+    "editor.fontSize": 12,
+    "files.associations": {
+        "irq.h": "c",
+        "i2c.h": "c"
+    }
+}

@@ -34,7 +34,7 @@
 #else
 #define GRBL_VERSION "1.1f"
 #endif
-#define GRBL_VERSION_BUILD "20210120"
+#define GRBL_VERSION_BUILD "20210219"
 
 // The following symbols are set here if not already set by the compiler or in config.h
 // Do NOT change here!
@@ -46,6 +46,14 @@
 // Used to decorate code run in interrupt context.
 // Do not remove or change unless you know what you are doing.
 #define ISR_CODE
+#endif
+
+#ifdef ARDUINO
+#include <Arduino.h>
+#endif
+
+#ifndef PROGMEM
+#define PROGMEM
 #endif
 
 #ifndef N_AXIS

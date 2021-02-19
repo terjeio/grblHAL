@@ -4,7 +4,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2017-2020 Terje Io
+  Copyright (c) 2017-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -107,6 +107,8 @@
 
 #ifdef BOARD_CNC_BOOSTERPACK
 #include "cnc_boosterpack_map.h"
+#elif defined(BOARD_MY_MACHINE)
+#include "my_machine_map.h"
 #else
 #error "No board!"
 #endif
@@ -129,19 +131,22 @@
 #define CNC_BOOSTERPACK_A4998 1
 #endif
 
-#if TRINAMIC_ENABLE == 2130
+#if TRINAMIC_ENABLE
 #ifndef TRINAMIC_MIXED_DRIVERS
 #define TRINAMIC_MIXED_DRIVERS 1
 #endif
-#include "tmc2130/trinamic.h"
+#include "motors/trinamic.h"
+#include "trinamic/common.h"
 #endif
 
 #if PLASMA_ENABLE
 #include "plasma/thc.h"
 #endif
 
-#if (TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C) || ATC_ENABLE || EEPROM_ENABLE
-#define USE_I2C
+#if (TRINAMIC_ENABLE && TRINAMIC_I2C) || ATC_ENABLE || EEPROM_ENABLE
+#define I2C_ENABLE 1
+#else
+#define I2C_ENABLE 1
 #endif
 
 #define port(p) portI(p)

@@ -3,7 +3,7 @@
 
   Part of grblHAL driver for ESP32
 
-  Copyright (c) 2018-2020 Terje Io
+  Copyright (c) 2018-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -31,12 +31,8 @@
 #include "keypad/keypad.h"
 #endif
 
-#if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
-
-#include "tmc2130\trinamic.h"
-
+#if TRINAMIC_ENABLE && TRINAMIC_I2C
 #define I2C_ADR_I2CBRIDGE 0x47
-
 #endif
 
 QueueHandle_t i2cQueue = NULL;
@@ -149,18 +145,42 @@ void I2C_GetKeycode (uint32_t i2cAddr, keycode_callback_ptr callback)
 
 #endif
 
-#if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
+#if TRINAMIC_ENABLE && TRINAMIC_I2C
 
+static uint8_t axis = 0xFF;
 static const uint8_t tmc_addr = I2C_ADR_I2CBRIDGE << 1;
 
-static TMC2130_status_t TMC_I2C_ReadRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
+inline static bool tmc_set_axis (uint8_t axis) {
+
+    esp_err_t ret = ESP_FAIL;
+
+    if(i2cBusy != NULL && xSemaphoreTake(i2cBusy, 5 / portTICK_PERIOD_MS) == pdTRUE) {
+
+        i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+        i2c_master_start(cmd);
+        i2c_master_write_byte(cmd, tmc_addr|I2C_MASTER_WRITE, true);
+        i2c_master_write_byte(cmd, axis | 0x80, true);
+        i2c_master_stop(cmd);
+        ret = i2c_master_cmd_begin(I2C_PORT, cmd, 1000 / portTICK_PERIOD_MS);
+        i2c_cmd_link_delete(cmd);
+
+        xSemaphoreGive(i2cBusy);
+    }
+
+    return ret == ESP_OK;
+}
+
+TMC_spi_status_t tmc_spi_read (trinamic_motor_t driver, TMC_spi_datagram_t *reg)
 {
     uint8_t buffer[8];
-    TMC2130_status_t status = {0};
+    TMC_spi_status_t status = 0;
 
-    if((buffer[0] = TMCI2C_GetMapAddress((uint8_t)(driver ? (uint32_t)driver->axis : 0), reg->addr).value) == 0xFF)
-        return status; // unsupported register
+    if(driver.axis != axis) {
+        tmc_set_axis(driver.axis);
+        axis = driver.axis;
+    }
 
+    buffer[0] = reg->addr.idx;
     buffer[1] = 0;
     buffer[2] = 0;
     buffer[3] = 0;
@@ -177,13 +197,13 @@ static TMC2130_status_t TMC_I2C_ReadRegister (TMC2130_t *driver, TMC2130_datagra
         i2c_master_read(cmd, buffer, 4, I2C_MASTER_ACK);
         i2c_master_read_byte(cmd, buffer + 4, I2C_MASTER_NACK);
         i2c_master_stop(cmd);
-        esp_err_t ret = i2c_master_cmd_begin(I2C_PORT, cmd, 1000 / portTICK_PERIOD_MS);
+        i2c_master_cmd_begin(I2C_PORT, cmd, 1000 / portTICK_PERIOD_MS);
         i2c_cmd_link_delete(cmd);
 
         xSemaphoreGive(i2cBusy);
     }
 
-    status.value = buffer[0];
+    status = buffer[0];
     reg->payload.value = buffer[4];
     reg->payload.value |= buffer[3] << 8;
     reg->payload.value |= buffer[2] << 16;
@@ -192,18 +212,19 @@ static TMC2130_status_t TMC_I2C_ReadRegister (TMC2130_t *driver, TMC2130_datagra
     return status;
 }
 
-static TMC2130_status_t TMC_I2C_WriteRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
+TMC_spi_status_t tmc_spi_write (trinamic_motor_t driver, TMC_spi_datagram_t *reg)
 {
     uint8_t buffer[8];
-    TMC2130_status_t status = {0};
+    TMC_spi_status_t status = 0;
+
+    if(driver.axis != axis) {
+        tmc_set_axis(driver.axis);
+        axis = driver.axis;
+    }
 
     reg->addr.write = 1;
-    buffer[0] = TMCI2C_GetMapAddress((uint8_t)(driver ? (uint32_t)driver->axis : 0), reg->addr).value;
+    buffer[0] = reg->addr.value;
     reg->addr.write = 0;
-
-    if(buffer[0] == 0xFF)
-        return status; // unsupported register
-
     buffer[1] = (reg->payload.value >> 24) & 0xFF;
     buffer[2] = (reg->payload.value >> 16) & 0xFF;
     buffer[3] = (reg->payload.value >> 8) & 0xFF;
@@ -217,7 +238,7 @@ static TMC2130_status_t TMC_I2C_WriteRegister (TMC2130_t *driver, TMC2130_datagr
         i2c_master_write(cmd, buffer, 5, true);
         i2c_master_stop(cmd);
 
-        esp_err_t ret = i2c_master_cmd_begin(I2C_PORT, cmd, 1000 / portTICK_PERIOD_MS);
+        i2c_master_cmd_begin(I2C_PORT, cmd, 1000 / portTICK_PERIOD_MS);
 //      printf("EE %d %d %d\n", read, i2c.count, ret);
         i2c_cmd_link_delete(cmd);
 
@@ -260,17 +281,6 @@ void I2CInit (void)
 
         xSemaphoreGive(i2cBusy);
     }
-
-#if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
-
-    trinamic_driver_if_t driver = {
-        .interface.WriteRegister = TMC_I2C_WriteRegister,
-        .interface.ReadRegister = TMC_I2C_ReadRegister
-    };
-
-    trinamic_if_init(&driver);
-
-#endif
 }
 
 #endif

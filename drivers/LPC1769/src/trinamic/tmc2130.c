@@ -1,12 +1,12 @@
 /*
  * tmc2130.c - interface for Trinamic TMC2130 stepper driver
  *
- * v0.0.4 / 2020-12-26 / (c) Io Engineering / Terje
+ * v0.0.5 / 2020-02-05 / (c) Io Engineering / Terje
  */
 
 /*
 
-Copyright (c) 2018-2020, Terje Io
+Copyright (c) 2018-2021, Terje Io
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -46,15 +46,13 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "tmc2130.h"
 
-static TMC2130_interface_t io = {0};
-
 static const TMC2130_t tmc2130_defaults = {
-    .f_clk = TMC2130_F_CLK,
-    .cool_step_enabled = TMC2130_COOLSTEP_ENABLE,
-    .r_sense = TMC2130_R_SENSE,
-    .current = TMC2130_CURRENT,
-    .hold_current_pct = TMC2130_HOLD_CURRENT_PCT,
-    .microsteps = TMC2130_MICROSTEPS,
+    .config.f_clk = TMC2130_F_CLK,
+    .config.cool_step_enabled = TMC2130_COOLSTEP_ENABLE,
+    .config.r_sense = TMC2130_R_SENSE,
+    .config.current = TMC2130_CURRENT,
+    .config.hold_current_pct = TMC2130_HOLD_CURRENT_PCT,
+    .config.microsteps = TMC2130_MICROSTEPS,
 
     // register adresses
     .gconf.addr.reg = TMC2130Reg_GCONF,
@@ -128,20 +126,6 @@ static const TMC2130_t tmc2130_defaults = {
     .tpwmthrs.reg.tpwmthrs = TMC2130_TPWM_THRS
 };
 
-static uint8_t to_mres (tmc2130_microsteps_t msteps)
-{
-    uint8_t value = 0;
-
-    msteps = msteps == 0 ? TMC2130_Microsteps_1 : msteps;
-
-    while((msteps & 0x01) == 0) {
-      value++;
-      msteps >>= 1;
-    }
-
-    return 8 - (value > 8 ? 8 : value);
-}
-
 static void set_tfd (TMC2130_chopconf_reg_t *chopconf, uint8_t fast_decay_time)
 {
     chopconf->chm = 1;
@@ -153,60 +137,53 @@ void TMC2130_SetDefaults (TMC2130_t *driver)
 {
     memcpy(driver, &tmc2130_defaults, sizeof(TMC2130_t));
 
-    driver->chopconf.reg.mres = to_mres(driver->microsteps);
-}
-
-void TMC2130_InterfaceInit (TMC2130_interface_t *interface)
-{
-    memcpy(&io, interface, sizeof(TMC2130_interface_t));
+    driver->chopconf.reg.mres = tmc_microsteps_to_mres(driver->config.microsteps);
 }
 
 bool TMC2130_Init (TMC2130_t *driver)
 {
-    if(io.ReadRegister == NULL)
-        return false;
 
     // Read drv_status to check if driver is online
-    io.ReadRegister(driver, (TMC2130_datagram_t *)&driver->drv_status);
+    tmc_spi_read(driver->motor, (TMC_spi_datagram_t *)&driver->drv_status);
     if(driver->drv_status.reg.value == 0 || driver->drv_status.reg.value == 0xFFFFFFFF)
         return false;
 
     // Perform a status register read to clear reset flag
-    io.ReadRegister(driver, (TMC2130_datagram_t *)&driver->gstat);
+    tmc_spi_read(driver->motor, (TMC_spi_datagram_t *)&driver->gstat);
 
-    driver->chopconf.reg.mres = to_mres(driver->microsteps);
-    io.WriteRegister(driver, (TMC2130_datagram_t *)&driver->gconf);
-    io.WriteRegister(driver, (TMC2130_datagram_t *)&driver->chopconf);
-    io.WriteRegister(driver, (TMC2130_datagram_t *)&driver->coolconf);
-    io.WriteRegister(driver, (TMC2130_datagram_t *)&driver->pwmconf);
-    io.WriteRegister(driver, (TMC2130_datagram_t *)&driver->ihold_irun);
-    io.WriteRegister(driver, (TMC2130_datagram_t *)&driver->tpowerdown);
-    io.WriteRegister(driver, (TMC2130_datagram_t *)&driver->tpwmthrs);
+    driver->chopconf.reg.mres = tmc_microsteps_to_mres(driver->config.microsteps);
+    tmc_spi_write(driver->motor, (TMC_spi_datagram_t *)&driver->gconf);
+    tmc_spi_write(driver->motor, (TMC_spi_datagram_t *)&driver->chopconf);
+    tmc_spi_write(driver->motor, (TMC_spi_datagram_t *)&driver->coolconf);
+    tmc_spi_write(driver->motor, (TMC_spi_datagram_t *)&driver->pwmconf);
+    tmc_spi_write(driver->motor, (TMC_spi_datagram_t *)&driver->ihold_irun);
+    tmc_spi_write(driver->motor, (TMC_spi_datagram_t *)&driver->tpowerdown);
+    tmc_spi_write(driver->motor, (TMC_spi_datagram_t *)&driver->tpwmthrs);
 
-    TMC2130_SetCurrent(driver, driver->current, driver->hold_current_pct);
+    TMC2130_SetCurrent(driver, driver->config.current, driver->config.hold_current_pct);
 
     //set to a conservative start value
     //TMC2130_SetConstantOffTimeChopper(driver, 5, 24, 13, 12, true); // move to default values
 
     // Read back chopconf to check if driver is online
     uint32_t chopconf = driver->chopconf.reg.value;
-    io.ReadRegister(driver, (TMC2130_datagram_t *)&driver->chopconf);
+    tmc_spi_read(driver->motor, (TMC_spi_datagram_t *)&driver->chopconf);
 
     return driver->chopconf.reg.value == chopconf;
 }
 
 uint16_t TMC2130_GetCurrent (TMC2130_t *driver)
 {
-    return (uint16_t)((float)(driver->ihold_irun.reg.irun + 1) / 32.0f * (driver->chopconf.reg.vsense ? 180.0f : 325.0f) / (float)(driver->r_sense + 20) / 1.41421f * 1000.0f);
+    return (uint16_t)((float)(driver->ihold_irun.reg.irun + 1) / 32.0f * (driver->chopconf.reg.vsense ? 180.0f : 325.0f) / (float)(driver->config.r_sense + 20) / 1.41421f * 1000.0f);
 }
 
 // r_sense = mOhm, Vsense = mV, current = mA (RMS)
 void TMC2130_SetCurrent (TMC2130_t *driver, uint16_t mA, uint8_t hold_pct)
 {
-    driver->current = mA;
-    driver->hold_current_pct = hold_pct;
+    driver->config.current = mA;
+    driver->config.hold_current_pct = hold_pct;
 
-    float maxv = (((float)(driver->r_sense + 20)) * (float)(32UL * driver->current)) * 1.41421f / 1000.0f;
+    float maxv = (((float)(driver->config.r_sense + 20)) * (float)(32UL * driver->config.current)) * 1.41421f / 1000.0f;
 
     uint8_t current_scaling = (uint8_t)(maxv / 325.0f) - 1;
 
@@ -215,49 +192,53 @@ void TMC2130_SetCurrent (TMC2130_t *driver, uint16_t mA, uint8_t hold_pct)
         current_scaling = (uint8_t)(maxv / 180.0f) - 1;
 
     driver->ihold_irun.reg.irun = current_scaling > 31 ? 31 : current_scaling;
-    driver->ihold_irun.reg.ihold = (driver->ihold_irun.reg.irun * driver->hold_current_pct) / 100;
+    driver->ihold_irun.reg.ihold = (driver->ihold_irun.reg.irun * driver->config.hold_current_pct) / 100;
 
-    io.WriteRegister(driver, (TMC2130_datagram_t *)&driver->chopconf);
-    io.WriteRegister(driver, (TMC2130_datagram_t *)&driver->ihold_irun);
+    tmc_spi_write(driver->motor, (TMC_spi_datagram_t *)&driver->chopconf);
+    tmc_spi_write(driver->motor, (TMC_spi_datagram_t *)&driver->ihold_irun);
 }
 
 uint32_t TMC2130_GetTPWMTHRS (TMC2130_t *driver, float stpmm)
 {
-    return (uint32_t)((driver->microsteps * TMC2130_F_CLK) / (256 * driver->tpwmthrs.reg.tpwmthrs * stpmm));
+    return (uint32_t)((driver->config.microsteps * TMC2130_F_CLK) / (256 * driver->tpwmthrs.reg.tpwmthrs * stpmm));
 }
 
 void TMC2130_SetTPWMTHRS (TMC2130_t *driver, uint32_t velocity, float stpmm)
 {
-    driver->tpwmthrs.reg.tpwmthrs = (uint32_t)((driver->microsteps * TMC2130_F_CLK) / (256 * velocity * stpmm));
+    driver->tpwmthrs.reg.tpwmthrs = (uint32_t)((driver->config.microsteps * TMC2130_F_CLK) / (256 * velocity * stpmm));
 }
 
 // threshold = velocity in mm/s
 void TMC2130_SetHybridThreshold (TMC2130_t *driver, uint32_t threshold, float steps_mm)
 {
-    driver->tpwmthrs.reg.tpwmthrs = threshold == 0.0f ? 0UL : driver->f_clk * driver->microsteps / (256 * (uint32_t)((float)threshold * steps_mm));
-    io.WriteRegister(driver, (TMC2130_datagram_t *)&driver->tpwmthrs);
+    driver->tpwmthrs.reg.tpwmthrs = threshold == 0.0f ? 0UL : driver->config.f_clk * driver->config.microsteps / (256 * (uint32_t)((float)threshold * steps_mm));
+    tmc_spi_write(driver->motor, (TMC_spi_datagram_t *)&driver->tpwmthrs);
+}
+
+void TMC2130_SetTHIGH (TMC2130_t *driver, float mm_sec, float steps_mm) // -> pwm threshold
+{
+    driver->thigh.reg.thigh = tmc_calc_tstep(&driver->config, mm_sec, steps_mm);
+    tmc_spi_write(driver->motor, (TMC_spi_datagram_t *)&driver->thigh);
+}
+
+void TMC2130_SetTCOOLTHRS (TMC2130_t *driver, float mm_sec, float steps_mm) // -> pwm threshold
+{
+    driver->tcoolthrs.reg.tcoolthrs = tmc_calc_tstep(&driver->config, mm_sec, steps_mm);
+    tmc_spi_write(driver->motor, (TMC_spi_datagram_t *)&driver->tcoolthrs);
 }
 
 // 1 - 256 in steps of 2^value is valid for TMC2130
 bool TMC2130_MicrostepsIsValid (uint16_t usteps)
 {
-    uint_fast8_t i = 8, count = 0;
-
-    if(usteps <= 256) do {
-        if(usteps & 0x01)
-            count++;
-        usteps >>= 1;
-    } while(i--);
-
-    return count == 1;
+    return tmc_microsteps_validate(usteps);
 }
 
 void TMC2130_SetMicrosteps (TMC2130_t *driver, tmc2130_microsteps_t msteps)
 {
-    driver->chopconf.reg.mres = to_mres(msteps);
-    driver->microsteps = (tmc2130_microsteps_t)(1 << (8 - driver->chopconf.reg.mres));
+    driver->chopconf.reg.mres = tmc_microsteps_to_mres(msteps);
+    driver->config.microsteps = (tmc2130_microsteps_t)(1 << (8 - driver->chopconf.reg.mres));
 // TODO: recalc and set hybrid threshold if enabled?
-    io.WriteRegister(driver, (TMC2130_datagram_t *)&driver->chopconf);
+    tmc_spi_write(driver->motor, (TMC_spi_datagram_t *)&driver->chopconf);
 }
 
 void TMC2130_SetConstantOffTimeChopper (TMC2130_t *driver, uint8_t constant_off_time, uint8_t blank_time, uint8_t fast_decay_time, int8_t sine_wave_offset, bool use_current_comparator)
@@ -282,18 +263,25 @@ void TMC2130_SetConstantOffTimeChopper (TMC2130_t *driver, uint8_t constant_off_
     driver->chopconf.reg.hend = (sine_wave_offset < -3 ? -3 : (sine_wave_offset > 12 ? 12 : sine_wave_offset)) + 3;
     driver->chopconf.reg.rndtf = !use_current_comparator;
 
-    io.WriteRegister(driver, (TMC2130_datagram_t *)&driver->chopconf);
+    tmc_spi_write(driver->motor, (TMC_spi_datagram_t *)&driver->chopconf);
 }
 
 TMC2130_status_t TMC2130_WriteRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
 {
-    return io.WriteRegister(driver, reg);
+    TMC2130_status_t status;
+
+    status.value = tmc_spi_write(driver->motor, (TMC_spi_datagram_t *)reg);
+
+    return status;
 }
 
 TMC2130_status_t TMC2130_ReadRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
 {
-    return io.ReadRegister(driver, reg);
-}
+    TMC2130_status_t status;
+
+    status.value = tmc_spi_read(driver->motor, (TMC_spi_datagram_t *)reg);
+
+    return status;}
 
 // Returns pointer to shadow register or NULL if not found
 TMC2130_datagram_t *TMC2130_GetRegPtr (TMC2130_t *driver, tmc2130_regaddr_t reg)

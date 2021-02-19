@@ -80,6 +80,8 @@
 
 #ifdef BOARD_CNC_BOOSTERPACK
   #include "cnc_boosterpack_map.h"
+#elif defined(BOARD_MY_MACHINE)
+  #include "my_machine_map.h"
 #else
   #include "generic_map.h"
 #endif
@@ -93,8 +95,12 @@
 
 // End configuration
 
-#if TRINAMIC_ENABLE == 2130
-#include "tmc2130/trinamic.h"
+#if TRINAMIC_ENABLE
+#ifndef TRINAMIC_MIXED_DRIVERS
+#define TRINAMIC_MIXED_DRIVERS 1
+#endif
+#include "motors/trinamic.h"
+#include "trinamic/common.h"
 #endif
 
 #if KEYPAD_ENABLE
@@ -107,7 +113,7 @@
 void IRQRegister(int32_t IRQnum, void (*IRQhandler)(void));
 void IRQUnRegister(int32_t IRQnum);
 
-#if KEYPAD_ENABLE || IOEXPAND_ENABLE || EEPROM_ENABLE || (TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C)
+#if KEYPAD_ENABLE || IOEXPAND_ENABLE || EEPROM_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
 
 #define I2C_ENABLE 1
 

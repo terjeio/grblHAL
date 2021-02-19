@@ -1,5 +1,5 @@
-# CMake for GrblHAL driver for ESP32
-# 2020-12-30
+# CMake for grblHAL driver for ESP32
+# 2021-02-06
 
 cmake_minimum_required(VERSION 3.5)
 
@@ -13,6 +13,7 @@ OPTION(BOARD_BDRING_V4 "Compile for bdring v4 3-axis board" ON)
 OPTION(BOARD_BDRING_I2S6A "Compile for bdring 6-axis I2S board - untested!" OFF)
 OPTION(BOARD_CNC_BOOSTERPACK "Compile for CNC BoosterPack" OFF)
 OPTION(BOARD_ESPDUINO32 "Compile for ESPDUINO-32 Wemos D1 R32" OFF)
+OPTION(BOARD_MY_MACHINE "Compile for my_machine_map.h" OFF)
 
 # The following plugins/options are supported:
 
@@ -42,7 +43,7 @@ OPTION(NOPROBE "Compile without probe support" OFF)
 
 set(SDCARD_SOURCE sdcard/sdcard.c)
 set(KEYPAD_SOURCE keypad/keypad.c)
-set(TRINAMIC_SOURCE trinamic/tmc2130.c trinamic/tmc2130_i2c_map.c tmc2130/trinamic.c)
+set(TRINAMIC_SOURCE motors/trinamic.c trinamic/tmc2130.c trinamic/tmc2130hal.c trinamic/common.c trinamic/tmc_interface.c)
 set(NETWORKING_SOURCE wifi.c dns_server.c web/backend.c web/upload.c networking/TCPStream.c networking/WsStream.c networking/base64.c networking/sha1.c networking/urldecode.c networking/strutils.c networking/utils.c networking/multipartparser.c )
 set(WEBUI_SOURCE webui/server.c webui/response.c webui/commands.c webui/flashfs.c )
 set(BLUETOOTH_SOURCE bluetooth.c )
@@ -53,6 +54,7 @@ set(MAIN_SRCS main.c driver.c nvs.c esp32-hal-uart.c
  i2c.c
  ioexpand.c
  i2s_out.c
+ networking/strutils.c
  grbl/grbllib.c
  grbl/coolant_control.c
  grbl/nvs_buffer.c
@@ -72,6 +74,7 @@ set(MAIN_SRCS main.c driver.c nvs.c esp32-hal-uart.c
  grbl/stepper.c
  grbl/system.c
  grbl/tool_change.c
+ grbl_esp32_if/grbl_esp32_if.c
 )
 
 if(Networking)
@@ -128,6 +131,8 @@ elseif(BOARD_ESPDUINO32)
 target_compile_definitions(grbl.elf PUBLIC BOARD_ESPDUINO32)
 elseif(BOARD_CNC_BOOSTERPACK)
 target_compile_definitions(grbl.elf PUBLIC BOARD_CNC_BOOSTERPACK)
+elseif(BOARD_MY_MACHINE)
+target_compile_definitions(grbl.elf PUBLIC BOARD_MY_MACHINE)
 endif()
 
 if(Networking)
@@ -196,6 +201,7 @@ unset(BOARD_BDRING_V4 CACHE)
 unset(BOARD_BDRING_I2S6A CACHE)
 unset(BOARD_CNC_BOOSTERPACK CACHE)
 unset(BOARD_ESPDUINO32 CACHE)
+unset(BOARD_MY_MACHINE CACHE)
 
 unset(Networking CACHE)
 unset(SoftAP CACHE)
@@ -214,7 +220,7 @@ unset(NOPROBE CACHE)
 
 include_directories(BEFORE ".")
 
-#target_compile_options(grbl.elf PRIVATE -Werror -Wall -Wextra)
+#target_compile_options(grbl.elf PRIVATE -Werror -Wall -Wextra -Wmissing-field-initializers)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 

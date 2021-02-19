@@ -4,7 +4,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2019-2020 Terje Io
+  Copyright (c) 2019-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -100,10 +100,6 @@
 #define PULSE_TIMER TIM3
 #define DEBOUNCE_TIMER TIM4
 
-#if TRINAMIC_ENABLE
-#include "tmc2130/trinamic.h"
-#endif
-
 #ifdef BOARD_CNC_BOOSTERPACK
   #if N_AXIS > 3
     #error Max number of axes is 3!
@@ -114,6 +110,8 @@
     #error EEPROM plugin not supported!
   #endif
   #include "cnc3040_map.h"
+#elif defined(BOARD_MY_MACHINE)
+  #include "my_machine_map.h"
 #else // default board
   #include "generic_map.h"
 #endif
@@ -127,13 +125,21 @@
 
 // End configuration
 
+#if TRINAMIC_ENABLE
+#ifndef TRINAMIC_MIXED_DRIVERS
+#define TRINAMIC_MIXED_DRIVERS 1
+#endif
+#include "motors/trinamic.h"
+#include "trinamic/common.h"
+#endif
+
 #if EEPROM_ENABLE == 0
 #define FLASH_ENABLE 1
 #else
 #define FLASH_ENABLE 0
 #endif
 
-#if EEPROM_ENABLE|| KEYPAD_ENABLE || (TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C)
+#if EEPROM_ENABLE|| KEYPAD_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
 #define I2C_PORT
 #endif
 

@@ -65,7 +65,7 @@ const settings_restore_t settings_all = {
     .driver_parameters = SETTINGS_RESTORE_DRIVER_PARAMETERS
 };
 
-const settings_t defaults = {
+PROGMEM const settings_t defaults = {
 
     .version = SETTINGS_VERSION,
 
@@ -256,7 +256,7 @@ const settings_t defaults = {
     .parking.pullout_increment = DEFAULT_PARKING_PULLOUT_INCREMENT
 };
 
-static const setting_group_detail_t setting_group_detail [] = {
+PROGMEM static const setting_group_detail_t setting_group_detail [] = {
     { Group_Root, Group_Root, "Root"},
     { Group_Root, Group_General, "General"},
     { Group_Root, Group_ControlSignals, "Control signals"},
@@ -325,7 +325,7 @@ static char control_signals[] = "Reset,Feed hold,Cycle start,Safety door,Block d
 static char control_signals_map[] = "0,1,2,3,4,5,6,7,8";
 static char spindle_signals[] = "Spindle enable,Spindle direction,PWM";
 
-static const setting_detail_t setting_detail[] = {
+PROGMEM static const setting_detail_t setting_detail[] = {
     { Setting_PulseMicroseconds, Group_Stepper, "Step pulse time", "microseconds", Format_Decimal, "#0.0", "2.0", NULL, Setting_IsLegacy, &settings.steppers.pulse_microseconds, NULL, NULL },
     { Setting_StepperIdleLockTime, Group_Stepper, "Step idle delay", "milliseconds", Format_Int16, "####0", NULL, "65535", Setting_IsLegacy, &settings.steppers.idle_lock_time, NULL, NULL },
     { Setting_StepInvertMask, Group_Stepper, "Step pulse invert", NULL, Format_AxisMask, NULL, NULL, NULL, Setting_IsLegacy, &settings.steppers.step_invert.mask, NULL, NULL },
@@ -1525,7 +1525,9 @@ static char *remove_element (char *s, uint_fast8_t entry)
 
     if(entry == 0) {
         char *s2 = s + 1;
-        while(*s2 && *s2 != ',')
+        if(*s2 == ',')
+            s2++;
+        else while(*s2 && *s2 != ',')
             s2++;
         while(*s2)
             *s++ = *s2++;
@@ -1555,7 +1557,22 @@ inline static bool setting_is_core (setting_type_t  type)
 {
     return !(type == Setting_NonCore || type == Setting_NonCoreFn);
 }
+/*
+static uint32_t get_mask (const char *bits)
+{
+    uint32_t mask = 0;
+    uint_fast8_t set_idx = 0;
+    float value;
 
+    while(read_float((char *)bits, &set_idx, &value)) {
+        mask |= (1 << (uint8_t)value);
+        if(bits[set_idx] == ',')
+            set_idx++;
+    }
+
+    return mask;
+}
+*/
 status_code_t setting_validate_me (const setting_detail_t *setting, float value, char *svalue)
 {
     status_code_t status = Status_OK;
@@ -1568,8 +1585,10 @@ status_code_t setting_validate_me (const setting_detail_t *setting, float value,
             break;
 
         case Format_Bitfield:
-        case Format_XBitfield:
-            if(!(isintf(value) && (uint32_t)value < (1UL << strnumentries(setting->format, ','))))
+        case Format_XBitfield:;
+            if(!(isintf(value) && /* (setting->min_value
+                                   ? (((uint32_t)value & ~get_mask(setting->min_value)) == 0)
+                                   : */ ((uint32_t)value < (1UL << strnumentries(setting->format, ','))))) //)
                 status = Status_SettingValueOutOfRange;
             break;
 
@@ -1773,6 +1792,7 @@ void settings_init (void)
     if(!hal.signals_cap.safety_door_ajar)
         setting_remove_element(Setting_ControlInvertMask, 3);
 */
+
     setting_details_t *details = settings_get_details();
 
     while(details->on_get_settings) {

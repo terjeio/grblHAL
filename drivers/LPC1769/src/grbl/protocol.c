@@ -115,7 +115,7 @@ bool protocol_main_loop (void)
         // blocks from crashing into things uncontrollably. Very bad.
         system_raise_alarm(Alarm_HomingRequried);
         grbl.report.feedback_message(Message_HomingCycleRequired);
-    } else if (settings.limits.flags.hard_enabled && settings.limits.flags.check_at_init && hal.limits.get_state().value) {
+    } else if (settings.limits.flags.hard_enabled && settings.limits.flags.check_at_init && limit_signals_merge(hal.limits.get_state()).value) {
         if(sys.alarm == Alarm_LimitsEngaged && hal.control.get_state().limits_override)
             state_set(STATE_IDLE); // Clear alarm state to enable limit switch pulloff.
         else {
@@ -783,7 +783,7 @@ ISR_CODE bool protocol_enqueue_realtime_command (char c)
             break;
 
         case CMD_SAFETY_DOOR:
-            if(!hal.driver_cap.safety_door) {
+            if(!hal.signals_cap.safety_door_ajar) {
                 system_set_exec_state_flag(EXEC_SAFETY_DOOR);
                 drop = true;
             }
@@ -810,7 +810,7 @@ ISR_CODE bool protocol_enqueue_realtime_command (char c)
             break;
 
         case CMD_OPTIONAL_STOP_TOGGLE:
-            if(!hal.driver_cap.program_stop) // Not available as realtime command if HAL supports physical switch
+            if(!hal.signals_cap.stop_disable) // Not available as realtime command if HAL supports physical switch
                 sys.flags.optional_stop_disable = !sys.flags.optional_stop_disable;
             break;
 

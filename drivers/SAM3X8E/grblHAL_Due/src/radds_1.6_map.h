@@ -3,7 +3,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -51,7 +51,7 @@
 #define Y_DIRECTION_BIT     (1<<Y_DIRECTION_PIN)
 #define Z_DIRECTION_PORT    PIOC
 #define Z_DIRECTION_PIN     28  // Due Digital Pin 3
-#define Z_DIRECTION_BIT     (1<<Z_STEP_PIN)
+#define Z_DIRECTION_BIT     (1<<Z_DIRECTION_PIN)
 #ifdef A_AXIS
 #define A_DIRECTION_PORT    PIOD
 #define A_DIRECTION_PIN     3   // Due Digital Pin 60?
@@ -121,7 +121,7 @@
 #define SPINDLE_PWM_TIMER   (TC2->TC_CHANNEL[0])
 #define SPINDLE_PWM_CCREG   2
 #define SPINDLE_PWM_PORT    PIOC
-#define SPINDLE_PWM_PIN     22  // Due Digital Pin 8 // PWML5
+#define SPINDLE_PWM_PIN     22  // Due Digital Pin 8 // PWML5 B
 #define SPINDLE_PWM_BIT     (1<<SPINDLE_PWM_PIN)
 
 #endif

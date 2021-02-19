@@ -3,7 +3,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -21,15 +21,19 @@
 
 // NOTE: Only one board may be enabled!
 #define BOARD_CNC_BOOSTERPACK
+//#define BOARD_MY_MACHINE // Add my_machine_map.h before enabling this!
 
 // Configuration
 // Uncomment to enable.
 
-#define ETHERNET_ENABLE     1 // Ethernet streaming. Requires networking plugin.
-//#define SDCARD_ENABLE     1 // Run gcode programs from SD card, requires sdcard plugin.
-//#define KEYPAD_ENABLE     1 // I2C keypad for jogging etc., requires keypad plugin.
-//#define PWM_RAMPED        1 // Ramped spindle PWM.
-//#define LASER_PPI         1 // Laser PPI (Pulses Per Inch) option.
+#define ETHERNET_ENABLE      1 // Ethernet streaming. Requires networking plugin.
+//#define SDCARD_ENABLE      1 // Run gcode programs from SD card, requires sdcard plugin.
+//#define KEYPAD_ENABLE      1 // I2C keypad for jogging etc., requires keypad plugin.
+//#define PWM_RAMPED         1 // Ramped spindle PWM.
+//#define LASER_PPI          1 // Laser PPI (Pulses Per Inch) option.
+//#define TRINAMIC_ENABLE 2130 // Trinamic TMC2130 stepper driver support. NOTE: work in progress.
+//#define TRINAMIC_ENABLE 5160 // Trinamic TMC5160 stepper driver support. NOTE: work in progress.
+//#define TRINAMIC_I2C       0 // Trinamic I2C - SPI bridge interface.
 
 #ifdef BOARD_CNC_BOOSTERPACK
 //#define CNC_BOOSTERPACK_SHORTS  1 // Shorts added to BoosterPack for some signals (for faster and simpler driver)

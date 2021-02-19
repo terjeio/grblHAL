@@ -3,7 +3,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2019 Terje Io
+  Copyright (c) 2019-2021 Terje Io
 
   Mappings according to cpu_map.h for Arduino Mega 2560 : Working @EliteEng
 
@@ -43,7 +43,7 @@
 #define Y_DIRECTION_BIT     (1<<Y_DIRECTION_PIN)
 #define Z_DIRECTION_PORT    PIOD
 #define Z_DIRECTION_PIN     10  // Due Digital Pin 32
-#define Z_DIRECTION_BIT     (1<<Z_STEP_PIN)
+#define Z_DIRECTION_BIT     (1<<Z_DIRECTION_PIN)
 
 // Define stepper driver enable/disable output pin(s).
 #define X_DISABLE_PORT      PIOB
@@ -77,9 +77,10 @@
 #define SPINDLE_DIRECTION_BIT   (1<<SPINDLE_DIRECTION_PIN)
 
 // Start of PWM & Stepper Enabled Spindle
-#define SPINDLE_PWM_TIMER   (TC2->TC_CHANNEL[0])
+
+#define SPINDLE_PWM_CHANNEL 6
 #define SPINDLE_PWM_PORT    PIOC
-#define SPINDLE_PWM_PIN     25 // Due Digital Pin 5 / TIOA6
+#define SPINDLE_PWM_PIN     23 // Due Digital Pin 7 / PWML6 B
 #define SPINDLE_PWM_BIT     (1<<SPINDLE_PWM_PIN)
 
 // Define flood and mist coolant enable output pins.

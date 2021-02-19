@@ -4,7 +4,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2018-2020 Terje Io
+  Copyright (c) 2018-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -28,6 +28,8 @@
 #include "serial.h"
 #include "grbl-lpc/pwm_driver.h"
 
+#include "grbl/limits.h"
+
 #if SDCARD_ENABLE
 #include "sdcard/sdcard.h"
 #include "ff.h"
@@ -48,6 +50,26 @@
 
 #if defined(X_LIMIT_PORT_MAX) || defined(Z_LIMIT_PORT_MAX) || defined(Z_LIMIT_PORT_MAX)
 #define HAS_MAX_LIMIT_INPUTS
+#endif
+
+#ifndef X_STEP_PN
+#define X_STEP_PN STEP_PN
+#endif
+#ifndef Y_STEP_PN
+#define Y_STEP_PN STEP_PN
+#endif
+#ifndef Z_STEP_PN
+#define Z_STEP_PN STEP_PN
+#endif
+
+#ifndef X_DIRECTION_PN
+#define X_DIRECTION_PN DIRECTION_PN
+#endif
+#ifndef Y_DIRECTION_PN
+#define Y_DIRECTION_PN DIRECTION_PN
+#endif
+#ifndef Z_DIRECTION_PN
+#define Z_DIRECTION_PN DIRECTION_PN
 #endif
 
 static bool pwmEnabled = false, IOInitDone = false;
@@ -115,6 +137,7 @@ typedef struct {
 
 static bool limits_debounce = false;
 static uint32_t limits_invert;
+static volatile uint32_t elapsed_tics = 0;
 static debounce_queue_t debounce_queue = {0};
 static input_signal_t gpio0_signals[10] = {0}, gpio1_signals[10] = {0}, gpio2_signals[10] = {0};
 
@@ -268,6 +291,7 @@ uint32_t cpt;
 static void driver_delay (uint32_t ms, void (*callback)(void))
 {
     if((delay.ms = ms) > 0) {
+        SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
         SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
         if(!(delay.callback = callback))
             while(delay.ms);
@@ -280,14 +304,14 @@ static void stepperEnable (axes_signals_t enable)
 {
     enable.mask ^= settings.steppers.enable_invert.mask;
 #if DISABLE_OUTMODE == GPIO_BITBAND
-    BITBAND_GPIO(X_DISABLE_PORT->PIN, X_DISABLE_PIN) = enable.x;
-    BITBAND_GPIO(Y_DISABLE_PORT->PIN, Y_DISABLE_PIN) = enable.y;
-    BITBAND_GPIO(Z_DISABLE_PORT->PIN, Z_DISABLE_PIN) = enable.z;
+    DIGITAL_OUT(X_DISABLE_PORT, X_DISABLE_BIT, enable.x);
+    DIGITAL_OUT(Y_DISABLE_PORT, Y_DISABLE_BIT, enable.y);
+    DIGITAL_OUT(Z_DISABLE_PORT, Z_DISABLE_BIT, enable.z);
   #ifdef A_AXIS
-    BITBAND_GPIO(A_DISABLE_PORT->PIN, A_DISABLE_PIN) = enable.a;
+    DIGITAL_OUT(A_DISABLE_PORT, A_DISABLE_BIT, enable.a);
   #endif
   #ifdef B_AXIS
-    BITBAND_GPIO(B_DISABLE_PORT->PIN, B_DISABLE_PIN) = enable.b;
+    DIGITAL_OUT(B_DISABLE_PORT, B_DISABLE_BIT, enable.z);
   #endif
 #elif defined(DISABLE_MASK)
     DISABLE_PORT->PIN = (DISABLE_PORT->PIN & ~DISABLE_MASK) | enable.mask;
@@ -329,14 +353,14 @@ inline static __attribute__((always_inline)) void stepperSetStepOutputs (axes_si
 {
 #if STEP_OUTMODE == GPIO_BITBAND
     step_outbits.value ^= settings.steppers.step_invert.value;
-    BITBAND_GPIO(X_STEP_PORT->PIN, X_STEP_PIN) = step_outbits.x;
-    BITBAND_GPIO(Y_STEP_PORT->PIN, Y_STEP_PIN) = step_outbits.y;
-    BITBAND_GPIO(Z_STEP_PORT->PIN, Z_STEP_PIN) = step_outbits.z;
+    DIGITAL_OUT(X_STEP_PORT, X_STEP_BIT, step_outbits.x);
+    DIGITAL_OUT(Y_STEP_PORT, Y_STEP_BIT, step_outbits.y);
+    DIGITAL_OUT(Z_STEP_PORT, Z_STEP_BIT, step_outbits.z);
   #ifdef A_AXIS
-    BITBAND_GPIO(A_STEP_PORT->PIN, A_STEP_PIN) = step_outbits.a;
+    DIGITAL_OUT(A_STEP_PORT, A_STEP_BIT, step_outbits.a);
   #endif
   #ifdef B_AXIS
-    BITBAND_GPIO(B_STEP_PORT->PIN, B_STEP_PIN) = step_outbits.b;
+    DIGITAL_OUT(B_STEP_PORT, B_STEP_BIT, step_outbits.b);
   #endif
 #elif STEP_OUTMODE == GPIO_MAP
     STEP_PORT->PIN = (STEP_PORT->PIN & ~STEP_MASK) | step_outmap[step_outbits.value];
@@ -351,14 +375,14 @@ inline static __attribute__((always_inline)) void stepperSetDirOutputs (axes_sig
 {
 #if DIRECTION_OUTMODE == GPIO_BITBAND
     dir_outbits.value ^= settings.steppers.dir_invert.value;
-    BITBAND_GPIO(X_DIRECTION_PORT->PIN, X_DIRECTION_PIN) = dir_outbits.x;
-    BITBAND_GPIO(Y_DIRECTION_PORT->PIN, Y_DIRECTION_PIN) = dir_outbits.y;
-    BITBAND_GPIO(Z_DIRECTION_PORT->PIN, Z_DIRECTION_PIN) = dir_outbits.z;
+    DIGITAL_OUT(X_DIRECTION_PORT, X_DIRECTION_BIT, dir_outbits.x);
+    DIGITAL_OUT(Y_DIRECTION_PORT, Y_DIRECTION_BIT, dir_outbits.y);
+    DIGITAL_OUT(Z_DIRECTION_PORT, Z_DIRECTION_BIT, dir_outbits.z);
   #ifdef A_AXIS
-    BITBAND_GPIO(A_DIRECTION_PORT->PIN, A_DIRECTION_PIN) = dir_outbits.a;
+    DIGITAL_OUT(A_DIRECTION_PORT, A_DIRECTION_BIT, dir_outbits.a);
   #endif
   #ifdef B_AXIS
-    BITBAND_GPIO(B_DIRECTION_PORT->PIN, B_DIRECTION_PIN) = dir_outbits.b;
+    DIGITAL_OUT(B_DIRECTION_PORT, B_DIRECTION_BIT, dir_outbits.b);
   #endif
 #elif DIRECTION_OUTMODE == GPIO_MAP
     DIRECTION_PORT->PIN = (DIRECTION_PORT->PIN & ~DIRECTION_MASK) | dir_outmap[dir_outbits.value];
@@ -424,46 +448,47 @@ static void limitsEnable (bool on, bool homing)
 
 // Returns limit state as an axes_signals_t variable.
 // Each bitfield bit indicates an axis limit, where triggered is 1 and not triggered is 0.
-inline static axes_signals_t limitsGetState()
+inline static limit_signals_t limitsGetState()
 {
-    axes_signals_t signals;
+    limit_signals_t signals = {0};
 
 #if LIMIT_INMODE == LIMIT_SHIFT
     signals.value = (uint32_t)(LIMIT_PORT->PIN & LIMIT_MASK) >> LIMIT_SHIFT;
 #elif LIMIT_INMODE == GPIO_BITBAND
-    signals.x = BITBAND_GPIO(X_LIMIT_PORT->PIN, X_LIMIT_PIN);
-    signals.y = BITBAND_GPIO(Y_LIMIT_PORT->PIN, Y_LIMIT_PIN);
-    signals.z = BITBAND_GPIO(Z_LIMIT_PORT->PIN, Z_LIMIT_PIN);
+    signals.min.x = DIGITAL_IN(X_LIMIT_PORT, X_LIMIT_BIT);
+    signals.min.y = DIGITAL_IN(Y_LIMIT_PORT, Y_LIMIT_BIT);
+    signals.min.z = DIGITAL_IN(Z_LIMIT_PORT, Z_LIMIT_BIT);
 #else
     uint32_t bits = LIMIT_PORT->PIN;
-    signals.x = (bits & X_LIMIT_BIT) != 0;
-    signals.y = (bits & Y_LIMIT_BIT) != 0;
-    signals.z = (bits & Z_LIMIT_BIT) != 0;
+    signals.min.x = (bits & X_LIMIT_BIT) != 0;
+    signals.min.y = (bits & Y_LIMIT_BIT) != 0;
+    signals.min.z = (bits & Z_LIMIT_BIT) != 0;
 #endif
 
     if (settings.limits.invert.mask)
-        signals.value ^= settings.limits.invert.mask;
+        signals.min.value ^= settings.limits.invert.mask;
 
 #ifdef HAS_MAX_LIMIT_INPUTS
 
-    axes_signals_t signals_max;
+    signals.max.value = settings.limits.invert.mask;
 
 #ifdef X_LIMIT_PORT_MAX
-    signals_max.x = BITBAND_GPIO(X_LIMIT_PORT_MAX->PIN, X_LIMIT_PIN_MAX);
+    signals.max.x = DIGITAL_IN(X_LIMIT_PORT_MAX, X_LIMIT_BIT_MAX);
 #else
-    signals_max.x = (bits & X_LIMIT_BIT_MAX) != 0;
+    signals.max.x = (bits & X_LIMIT_BIT_MAX) != 0;
 #endif
 #ifdef Y_LIMIT_PORT_MAX
-    signals_max.y = BITBAND_GPIO(Y_LIMIT_PORT_MAX->PIN, Y_LIMIT_PIN_MAX);
+    signals.max.y = DIGITAL_IN(Y_LIMIT_PORT_MAX, Y_LIMIT_BIT_MAX);
 #else
-    signals_max.y = (bits & Y_LIMIT_BIT_MAX) != 0;
+    signals.max.y = (bits & Y_LIMIT_BIT_MAX) != 0;
 #endif
 #ifdef Z_LIMIT_PORT_MAX
-    signals_max.z = BITBAND_GPIO(Z_LIMIT_PORT_MAX->PIN, Z_LIMIT_PIN_MAX);
+    signals.max.z = DIGITAL_IN(Z_LIMIT_PORT_MAX, Z_LIMIT_BIT_MAX);
 #else
-    signals_max.z = (bits & Z_LIMIT_BIT_MAX) != 0;
+    signals.max.z = (bits & Z_LIMIT_BIT_MAX) != 0;
 #endif
-    signals.value |= (signals_max.value ^ settings.limits.invert.mask);
+    if (settings.limits.invert.mask)
+        signals.max.value ^= settings.limits.invert.mask;
 #endif
 
     return signals;
@@ -478,11 +503,11 @@ static control_signals_t systemGetState (void)
     signals.value = settings.control_invert.mask;
 
 #if CONTROL_INMODE == GPIO_BITBAND
-    signals.reset = BITBAND_GPIO(RESET_PORT->PIN, RESET_PIN);
-    signals.feed_hold = BITBAND_GPIO(FEED_HOLD_PORT->PIN, FEED_HOLD_PIN);
-    signals.cycle_start = BITBAND_GPIO(CYCLE_START_PORT->PIN, CYCLE_START_PIN);
+    signals.reset = DIGITAL_IN(RESET_PORT, RESET_BIT);
+    signals.feed_hold = DIGITAL_IN(FEED_HOLD_PORT, FEED_HOLD_BIT);
+    signals.cycle_start = DIGITAL_IN(CYCLE_START_PORT, CYCLE_START_BIT);
   #ifdef SAFETY_DOOR_PORT
-    signals.safety_door_ajar = BITBAND_GPIO(SAFETY_DOOR_PORT->PIN, SAFETY_DOOR_PIN);
+    signals.safety_door_ajar = DIGITAL_IN(SAFETY_DOOR_PORT, SAFETY_DOOR_BIT);
   #endif
 #else
     uint8_t bits = CONTROL_PORT->PIN;
@@ -529,18 +554,18 @@ probe_state_t probeGetState (void)
 
 inline static void spindle_off (void)
 {
-    BITBAND_GPIO(SPINDLE_ENABLE_PORT->PIN, SPINDLE_ENABLE_PIN) = settings.spindle.invert.on;
+    DIGITAL_OUT(SPINDLE_ENABLE_PORT, SPINDLE_ENABLE_BIT, settings.spindle.invert.on);
 }
 
 inline static void spindle_on (void)
 {
-    BITBAND_GPIO(SPINDLE_ENABLE_PORT->PIN, SPINDLE_ENABLE_PIN) = !settings.spindle.invert.on;
+    DIGITAL_OUT(SPINDLE_ENABLE_PORT, SPINDLE_ENABLE_BIT, !settings.spindle.invert.on);
 }
 
 inline static void spindle_dir (bool ccw)
 {
     if(hal.driver_cap.spindle_dir)
-        BITBAND_GPIO(SPINDLE_DIRECTION_PORT->PIN, SPINDLE_DIRECTION_PIN) = ccw ^ settings.spindle.invert.ccw;
+        DIGITAL_OUT(SPINDLE_DIRECTION_PORT, SPINDLE_DIRECTION_BIT, ccw ^ settings.spindle.invert.ccw);
 }
 
 // Start or stop spindle
@@ -612,7 +637,7 @@ static void spindleSetStateVariable (spindle_state_t state, float rpm)
 // Returns spindle state in a spindle_state_t variable
 static spindle_state_t spindleGetState (void)
 {
-    spindle_state_t state = {0};
+    spindle_state_t state = {settings.spindle.invert.mask};
 
     state.on = (SPINDLE_ENABLE_PORT->PIN & SPINDLE_ENABLE_BIT) != 0;
     state.ccw = hal.driver_cap.spindle_dir && (SPINDLE_DIRECTION_PORT->PIN & SPINDLE_DIRECTION_BIT) != 0;
@@ -630,20 +655,21 @@ static void coolantSetState (coolant_state_t mode)
 {
     mode.value ^= settings.coolant_invert.mask;
 
-    BITBAND_GPIO(COOLANT_FLOOD_PORT->PIN, COOLANT_FLOOD_PIN) = mode.flood;
+    DIGITAL_OUT(COOLANT_FLOOD_PORT, COOLANT_FLOOD_BIT, mode.flood);
+
 #ifdef COOLANT_MIST_PORT
-    BITBAND_GPIO(COOLANT_MIST_PORT->PIN, COOLANT_MIST_PIN) = mode.mist;
+    DIGITAL_OUT(COOLANT_MIST_PORT, COOLANT_MIST_BIT, mode.mist);
 #endif
 }
 
 // Returns coolant state in a coolant_state_t variable
 static coolant_state_t coolantGetState (void)
 {
-    coolant_state_t state = {0};
+    coolant_state_t state = {settings.coolant_invert.mask};
 
-    state.flood = (COOLANT_FLOOD_PORT->PIN & COOLANT_FLOOD_BIT) != 0;
+    state.flood = DIGITAL_IN(COOLANT_FLOOD_PORT, COOLANT_FLOOD_BIT);
 #ifdef COOLANT_MIST_PORT
-    state.mist  = (COOLANT_MIST_PORT->PIN & COOLANT_MIST_BIT) != 0;
+    state.mist  = DIGITAL_IN(COOLANT_MIST_PORT, COOLANT_MIST_BIT);;
 #endif
     state.value ^= settings.coolant_invert.mask;
 
@@ -676,23 +702,9 @@ static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t 
     return prev;
 }
 
-void gpio_pinmode (LPC_GPIO_T *port, uint8_t pin, bool pullup)
+inline static uint8_t gpio_to_pn (LPC_GPIO_T *port)
 {
-    uint32_t pn = ((uint32_t)port - LPC_GPIO0_BASE) / sizeof(LPC_GPIO_T);
-
-    pn = LPC_IOCON_BASE + 0x40 + pn * 8;
-    if(pin > 15) {
-        pn += 4;
-        pin &= 0x0F;
-    }
-    pin <<= 1;
-    port = (LPC_GPIO_T *)pn;
-    BITBAND_PERI(port, pin++) = pullup ? 0 : 1;
-    BITBAND_PERI(port, pin)   = pullup ? 0 : 1;
-
-//    *(uint32_t*)port = pinmode << pin;
-
-//    pn = *(uint32_t*)port;
+    return ((uint32_t)port - LPC_GPIO0_BASE) / sizeof(LPC_GPIO_T);
 }
 
 static void gpio0_int_enable (uint32_t bit, gpio_intr_t intr_type)
@@ -741,6 +753,11 @@ static void gpio2_int_enable (uint32_t bit, gpio_intr_t intr_type)
             LPC_GPIOINT->IO2.ENF &= ~bit;
             break;
     }
+}
+
+uint32_t getElapsedTicks (void)
+{
+    return elapsed_tics;
 }
 
 // Configures peripherals when settings are initialized or changed
@@ -960,8 +977,7 @@ void settings_changed (settings_t *settings)
                         break;
                 }
 
-
-                gpio_pinmode(pin->port, pin->pin, pullup);
+                Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, gpio_to_pn(pin->port), pin->pin, pullup ? IOCON_MODE_PULLUP : IOCON_MODE_PULLDOWN, IOCON_FUNC0);
 
                 // GPIO1, GPIO3 and GPIO4 are not interrupt capable ports
                 if(pin->port == LPC_GPIO3 || pin->port == LPC_GPIO4) {
@@ -1000,16 +1016,20 @@ void settings_changed (settings_t *settings)
 static bool driver_setup (settings_t *settings)
 {
 
-    // Cleanup after sloppy bootloader
+    // Cleanup after (potential) sloppy bootloader
     Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, X_STEP_PN, X_STEP_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
     Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, Y_STEP_PN, Y_STEP_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
     Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, Z_STEP_PN, Z_STEP_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
     Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, X_DIRECTION_PN, X_DIRECTION_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
     Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, Y_DIRECTION_PN, Y_DIRECTION_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
     Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, Z_DIRECTION_PN, Z_DIRECTION_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
+#ifdef STEPPERS_DISABLE_PN
+    Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, STEPPERS_DISABLE_PN, STEPPERS_DISABLE_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
+#else
     Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, X_DISABLE_PN, X_DISABLE_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
     Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, Y_DISABLE_PN, Y_DISABLE_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
     Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, Z_DISABLE_PN, Z_DISABLE_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
+#endif
 #ifdef A_AXIS
     Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, A_STEP_PN, A_STEP_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
     Chip_IOCON_PinMux((LPC_IOCON_T *)LPC_IOCON_BASE, A_DIRECTION_PN, A_DIRECTION_PIN, IOCON_MODE_INACT, IOCON_FUNC0);
@@ -1033,40 +1053,40 @@ static bool driver_setup (settings_t *settings)
 
     // Stepper init
 
-    BITBAND_GPIO(X_STEP_PORT->DIR, X_STEP_PIN) = 1;
-    BITBAND_GPIO(Y_STEP_PORT->DIR, Y_STEP_PIN) = 1;
-    BITBAND_GPIO(Z_STEP_PORT->DIR, Z_STEP_PIN) = 1;
+    X_STEP_PORT->DIR |= X_STEP_BIT;
+    Y_STEP_PORT->DIR |= Y_STEP_BIT;
+    Z_STEP_PORT->DIR |= Z_STEP_BIT;
 #ifdef A_AXIS
-    BITBAND_GPIO(A_STEP_PORT->DIR, A_STEP_PIN) = 1;
+    A_STEP_PORT->DIR |= A_STEP_BIT;
 #endif
 #ifdef B_AXIS
-    BITBAND_GPIO(B_STEP_PORT->DIR, B_STEP_PIN) = 1;
+    B_STEP_PORT->DIR |= B_STEP_BIT;
 #endif
 
-    BITBAND_GPIO(X_DIRECTION_PORT->DIR, X_DIRECTION_PIN) = 1;
-    BITBAND_GPIO(Y_DIRECTION_PORT->DIR, Y_DIRECTION_PIN) = 1;
-    BITBAND_GPIO(Z_DIRECTION_PORT->DIR, Z_DIRECTION_PIN) = 1;
+    X_DIRECTION_PORT->DIR |= X_DIRECTION_BIT;
+    Y_DIRECTION_PORT->DIR |= Y_DIRECTION_BIT;
+    Z_DIRECTION_PORT->DIR |= Z_DIRECTION_BIT;
 #ifdef A_AXIS
-    BITBAND_GPIO(A_DIRECTION_PORT->DIR, A_DIRECTION_PIN) = 1;
+    A_DIRECTION_PORT->DIR |= A_DIRECTION_BIT;
 #endif
 #ifdef B_AXIS
-    BITBAND_GPIO(B_DIRECTION_PORT->DIR, B_DIRECTION_PIN) = 1;
+    B_DIRECTION_PORT->DIR |= B_DIRECTION_BIT;
 #endif
 
 #if DISABLE_OUTMODE == GPIO_BITBAND
-    BITBAND_GPIO(X_DISABLE_PORT->DIR, X_DISABLE_PIN) = 1;
-    BITBAND_GPIO(Y_DISABLE_PORT->DIR, Y_DISABLE_PIN) = 1;
-    BITBAND_GPIO(Z_DISABLE_PORT->DIR, Z_DISABLE_PIN) = 1;
+    X_DISABLE_PORT->DIR |= X_DISABLE_BIT;
+    Y_DISABLE_PORT->DIR |= Y_DISABLE_BIT;
+    Z_DISABLE_PORT->DIR |= Z_DISABLE_BIT;
   #ifdef A_AXIS
-    BITBAND_GPIO(A_DISABLE_PORT->DIR, A_DISABLE_PIN) = 1;
+    A_DISABLE_PORT->DIR |= A_DISABLE_BIT;
   #endif
   #ifdef B_AXIS
-    BITBAND_GPIO(B_DISABLE_PORT->DIR, B_DISABLE_PIN) = 1;
+    B_DISABLE_PORT->DIR |= B_DISABLE_BIT;
   #endif
 #elif defined(DISABLE_MASK)
     DISABLE_PORT->DIR |= DISABLE_MASK;
 #else
-    BITBAND_GPIO(STEPPERS_DISABLE_PORT->DIR, STEPPERS_DISABLE_PIN) = 1;
+    STEPPERS_DISABLE_PORT->DIR |= STEPPERS_DISABLE_PIN;
 #endif
 
     Chip_TIMER_Init(STEPPER_TIMER);
@@ -1170,7 +1190,7 @@ bool driver_init (void) {
 #endif
 
     hal.info = "LCP1769";
-    hal.driver_version = "210111";
+    hal.driver_version = "210209";
     hal.driver_setup = driver_setup;
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
@@ -1236,9 +1256,12 @@ bool driver_init (void) {
     hal.nvs.type = NVS_None;
 #endif
 
+    hal.irq_enable = __enable_irq;
+    hal.irq_disable = __disable_irq;
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
+    hal.get_elapsed_ticks = getElapsedTicks;
 
 #ifdef HAS_KEYPAD
     hal.execute_realtime = process_keypress;
@@ -1247,7 +1270,7 @@ bool driver_init (void) {
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
 
 #ifdef SAFETY_DOOR_PIN
-    hal.driver_cap.safety_door = On;
+    hal.signals_cap.safety_door_ajar = On;
 #endif
     hal.driver_cap.spindle_dir = On;
     hal.driver_cap.variable_spindle = On;
@@ -1276,7 +1299,7 @@ bool driver_init (void) {
 
     // No need to move version check before init.
     // Compiler will fail any signature mismatch for existing entries.
-    return hal.version == 7;
+    return hal.version == 8;
 }
 
 /* interrupt handlers */
@@ -1361,7 +1384,7 @@ void DEBOUNCE_IRQHandler (void)
         else if(signal->port == LPC_GPIO2)
             gpio2_int_enable(signal->bit, signal->intr_type);
 
-        if(BITBAND_GPIO(signal->port->PIN, signal->pin) == (signal->intr_type == GPIO_Intr_Falling ? 0 : 1))
+        if(DIGITAL_IN(signal->port, signal->bit) == (signal->intr_type == GPIO_Intr_Falling ? 0 : 1))
           switch(signal->group) {
 
             case INPUT_GROUP_LIMIT:
@@ -1438,6 +1461,8 @@ void GPIO_IRQHandler (void)
 // Interrupt handler for 1 ms interval timer
 void SysTick_Handler (void)
 {
+    elapsed_tics++;
+
 #ifdef LIMITS_POLL_PORT // Poll limit pins when hard limits enabled
     static uint32_t limits_state = 0, limits = 0;
     if(settings.limits.flags.hard_enabled) {
@@ -1468,28 +1493,8 @@ void SysTick_Handler (void)
     }
 #endif
 
-#if SDCARD_ENABLE || LIMIT_PN == 1
-
-  #if SDCARD_ENABLE
-    static uint32_t fatfs_ticks = 10;
-    if(!(--fatfs_ticks)) {
-        disk_timerproc();
-        fatfs_ticks = 10;
+    if(delay.ms && !(--delay.ms) && delay.callback) {
+        delay.callback();
+        delay.callback = NULL;
     }
-  #endif
-    if(delay.ms && !(--delay.ms)) {
-        if(delay.callback) {
-            delay.callback();
-            delay.callback = NULL;
-        }
-    }
-#else
-    if(!(--delay.ms)) {
-        SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
-        if(delay.callback) {
-            delay.callback();
-            delay.callback = NULL;
-        }
-    }
-#endif
 }

@@ -467,7 +467,9 @@ status_code_t tc_probe_workpiece (void)
     if(ok && protocol_buffer_synchronize()) {
         sync_position();
         block_cycle_start = false;
-        report_message("Remove any touch plate and press cycle start to continue.", Message_Plain);
+        report_message(settings.tool_change.mode == ToolChange_Manual_G59_3
+                        ? "Press cycle start to continue."
+                        : "Remove any touch plate and press cycle start to continue.", Message_Plain);
     }
 
     return ok ? Status_OK : Status_GCodeToolError;

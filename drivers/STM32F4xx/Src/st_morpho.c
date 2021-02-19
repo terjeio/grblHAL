@@ -173,19 +173,19 @@ static int32_t wait_on_input (bool digital, uint8_t port, wait_mode_t wait_mode,
 
 static axes_signals_t tmc;
 static uint32_t n_axis;
-static TMC_SPI_datagram_t datagram[N_AXIS];
+static TMC_spi_datagram_t datagram[N_AXIS];
 
-static TMC_SPI_status_t TMC_SPI_ReadRegister (TMC_SPI_driver_t *driver, TMC_SPI_datagram_t *reg)
+TMC_spi_status_t tmc_spi_read (trinamic_motor_t driver, TMC_spi_datagram_t *reg)
 {
-    static TMC_SPI_status_t status = {0};
+    static TMC_spi_status_t status = 0;
 
     uint8_t res;
     uint_fast8_t idx = N_AXIS, ridx = 0;
     uint32_t f_spi = spi_set_speed(SPI_BAUDRATEPRESCALER_32);
     volatile uint32_t dly = 100;
 
-    datagram[driver->axis].addr.value = reg->addr.value;
-    datagram[driver->axis].addr.write = 0;
+    datagram[driver.axis].addr.value = reg->addr.value;
+    datagram[driver.axis].addr.write = 0;
 
     BITBAND_PERI(TRINAMIC_CS_PORT->ODR, TRINAMIC_CS_PIN) = 0;
 
@@ -215,8 +215,8 @@ static TMC_SPI_status_t TMC_SPI_ReadRegister (TMC_SPI_driver_t *driver, TMC_SPI_
 
             res = spi_put_byte(datagram[idx].addr.value);
 
-            if(N_AXIS - ridx == driver->axis) {
-                status.value = res;
+            if(N_AXIS - ridx == driver.axis) {
+                status = res;
                 reg->payload.data[3] = spi_get_byte();
                 reg->payload.data[2] = spi_get_byte();
                 reg->payload.data[1] = spi_get_byte();
@@ -243,17 +243,17 @@ static TMC_SPI_status_t TMC_SPI_ReadRegister (TMC_SPI_driver_t *driver, TMC_SPI_
     return status;
 }
 
-static TMC_SPI_status_t TMC_SPI_WriteRegister (TMC_SPI_driver_t *driver, TMC_SPI_datagram_t *reg)
+TMC_spi_status_t tmc_spi_write (trinamic_motor_t driver, TMC_spi_datagram_t *reg)
 {
-    static TMC_SPI_status_t status = {0};
+    TMC_spi_status_t status = 0;
 
     uint8_t res;
     uint_fast8_t idx = N_AXIS, ridx = 0;
     uint32_t f_spi = spi_set_speed(SPI_BAUDRATEPRESCALER_32);
     volatile uint32_t dly = 100;
 
-    memcpy(&datagram[driver->axis], reg, sizeof(TMC_SPI_datagram_t));
-    datagram[driver->axis].addr.write = 1;
+    memcpy(&datagram[driver.axis], reg, sizeof(TMC_spi_datagram_t));
+    datagram[driver.axis].addr.write = 1;
 
     BITBAND_PERI(TRINAMIC_CS_PORT->ODR, TRINAMIC_CS_PIN) = 0;
 
@@ -267,11 +267,11 @@ static TMC_SPI_status_t TMC_SPI_WriteRegister (TMC_SPI_driver_t *driver, TMC_SPI
             spi_put_byte(datagram[idx].payload.data[1]);
             spi_put_byte(datagram[idx].payload.data[0]);
 
-            if(N_AXIS - ridx == driver->axis)
-                status.value = res;
+            if(N_AXIS - ridx == driver.axis)
+                status = res;
 
-            if(idx == driver->axis) {
-                datagram[idx].addr.reg = TMC_SPI_STATUS_REG;
+            if(idx == driver.axis) {
+                datagram[idx].addr.idx = 0; //TMC_SPI_STATUS_REG;
                 datagram[idx].addr.write = 0;
             }
         }
@@ -305,12 +305,12 @@ void TMC_SPI_DriverInit (axes_signals_t axisflags)
 
 #include "serial.h"
 
-static TMC2209_write_datagram_t *TMC_UART_ReadRegister (TMC2209_t *driver, TMC2209_read_datagram_t *dgr)
+TMC_uart_write_datagram_t *tmc_uart_read (trinamic_motor_t driver, TMC_uart_read_datagram_t *dgr)
 {
-    static TMC2209_write_datagram_t wdgr = {0};
+    static TMC_uart_write_datagram_t wdgr = {0};
     volatile uint32_t dly = 50, ms = hal.get_elapsed_ticks();
 
-    serial2Write((char *)dgr->data, sizeof(TMC2209_read_datagram_t));
+    serial2Write((char *)dgr->data, sizeof(TMC_uart_read_datagram_t));
 
     while(serial2TxCount());
 
@@ -342,9 +342,9 @@ static TMC2209_write_datagram_t *TMC_UART_ReadRegister (TMC2209_t *driver, TMC22
     return &wdgr;
 }
 
-static void TMC_UART_WriteRegister (TMC2209_t *driver, TMC2209_write_datagram_t *dgr)
+void tmc_uart_write (trinamic_motor_t driver, TMC_uart_write_datagram_t *dgr)
 {
-    serial2Write((char *)dgr->data, sizeof(TMC2209_write_datagram_t));
+    serial2Write((char *)dgr->data, sizeof(TMC_uart_write_datagram_t));
 }
 
 #endif
@@ -373,9 +373,7 @@ void board_init (void)
 #if TRINAMIC_ENABLE == 2130 || TRINAMIC_ENABLE == 5160
 
     trinamic_driver_if_t driver = {
-        .on_drivers_init = TMC_SPI_DriverInit,
-        .interface.WriteRegister = TMC_SPI_WriteRegister,
-        .interface.ReadRegister = TMC_SPI_ReadRegister
+        .on_drivers_init = TMC_SPI_DriverInit
     };
 
     spi_init();
@@ -385,7 +383,7 @@ void board_init (void)
 
     uint_fast8_t idx = N_AXIS;
     do {
-        datagram[--idx].addr.reg = TMC_SPI_STATUS_REG;
+        datagram[--idx].addr.idx = 0; //TMC_SPI_STATUS_REG;
     } while(idx);
 
     trinamic_if_init(&driver);
@@ -393,16 +391,7 @@ void board_init (void)
 #endif
 
 #if TRINAMIC_ENABLE == 2209
-
-    TMC2209_interface_t interface = {
-        .WriteRegister = TMC_UART_WriteRegister,
-        .ReadRegister = TMC_UART_ReadRegister
-    };
-
     serial2Init(230400);
-
-    trinamic_if_init(&interface);
-
 #endif
 
 }

@@ -86,7 +86,7 @@
 #error No free pins for keypad!
 #endif
 
-#if IOEXPAND_ENABLE || KEYPAD_ENABLE || EEPROM_ENABLE || (TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C)
+#if I2C_ENABLE
 // Define I2C port/pins
 #define I2C_PORT  I2C_NUM_1
 #define I2C_SDA   GPIO_NUM_21

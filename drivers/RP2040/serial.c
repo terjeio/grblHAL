@@ -21,10 +21,11 @@
 
 #include <string.h>
 
-#include "pico/stdlib.h"
+#include "hardware/gpio.h"
 #include "hardware/uart.h"
 #include "hardware/irq.h"
 
+#include "serial.h"
 #include "driver.h"
 
 #define UART_TX_PIN 0
@@ -36,6 +37,10 @@
 #define UART_IRQ UART0_IRQ
 #endif
 
+#define RX_BUFFER_MODULO RX_BUFFER_SIZE - 1
+#define TX_BUFFER_MODULO TX_BUFFER_SIZE - 1
+#define bufferIncPointer(ptr, size) ((ptr + 1) & size)
+
 static uint16_t tx_fifo_size;
 static stream_tx_buffer_t txbuffer = {0};
 static stream_rx_buffer_t rxbuffer = {0}, rxbackup;
@@ -44,20 +49,20 @@ static void uart_interrupt_handler (void);
 
 void serialInit (uint32_t baud_rate)
 {
-	uart_init(UART_PORT, 2400);
-
     gpio_set_function(UART_TX_PIN, GPIO_FUNC_UART);
     gpio_set_function(UART_RX_PIN, GPIO_FUNC_UART);
+    
+    uart_init(UART_PORT, 2400);
 
-    uart_set_baudrate(UART_PORT, 115200);
     uart_set_hw_flow(UART_PORT, false, false);
     uart_set_format(UART_PORT, 8, 1, UART_PARITY_NONE);
-
+    uart_set_baudrate(UART_PORT, 115200);
     uart_set_fifo_enabled(UART_PORT, true);
+
     irq_set_exclusive_handler(UART_IRQ, uart_interrupt_handler);
     irq_set_enabled(UART_IRQ, true);
-
-    uart_set_irq_enables(UART_PORT, true, false);
+    
+    hw_set_bits(&UART->imsc, UART_UARTIMSC_RXIM_BITS|UART_UARTIMSC_RTIM_BITS);             
 }
 
 bool serialSetBaudRate (uint32_t baud_rate)
@@ -83,8 +88,8 @@ int16_t serialGetC (void)
     if(bptr == rxbuffer.head)
         return -1; // no data available else EOF
 
-    data = rxbuffer.data[bptr++];                   // Get next character, increment tmp pointer
-    rxbuffer.tail = bptr & (RX_BUFFER_SIZE - 1);    // and update pointer
+    data = rxbuffer.data[bptr];                   // Get next character, increment tmp pointer
+    rxbuffer.tail = bufferIncPointer(bptr, RX_BUFFER_MODULO);    // and update pointer
 
     return data;
 }
@@ -103,7 +108,7 @@ uint16_t serialRxCount (void)
 
 uint16_t serialRxFree (void)
 {
-    return (RX_BUFFER_SIZE - 1) - serialRxCount();
+    return RX_BUFFER_MODULO - serialRxCount();
 }
 
 void serialRxFlush (void)
@@ -116,29 +121,31 @@ void serialRxCancel (void)
 {
     serialRxFlush();
     rxbuffer.data[rxbuffer.head] = ASCII_CAN;
-    rxbuffer.head = (rxbuffer.tail + 1) & (RX_BUFFER_SIZE - 1);
+    rxbuffer.head = bufferIncPointer(rxbuffer.head, RX_BUFFER_MODULO);
 }
 
 bool serialPutC (const char c)
 {
     uint_fast16_t next_head;
 
-    if(txbuffer.head == txbuffer.tail && (UART->fr & UART_UARTFR_TXFE_BITS)) {
-        UART->dr  = c;
-        return true;
+    if(!(UART->imsc & UART_UARTIMSC_TXIM_BITS)) {                   // If the transmit interrupt is deactivated
+        if(!(UART->fr & UART_UARTFR_TXFF_BITS)) {                   // and if the TX FIFO is not full
+            UART->dr = c;                                           // Write data in the TX FIFO
+            return true;
+        } else
+            hw_set_bits(&UART->imsc, UART_UARTIMSC_TXIM_BITS);      // Enable transmit interrupt
     }
 
-    next_head = (txbuffer.head + 1) & (TX_BUFFER_SIZE - 1); // Get and update head pointer
+    // Write data in the Buffer is transmit interrupt activated or TX FIFO is                                                                
+    next_head = bufferIncPointer(txbuffer.head, TX_BUFFER_MODULO);  // Get and update head pointer
 
-    while(txbuffer.tail == next_head) {                     // Buffer full, block until space is available...
+    while(txbuffer.tail == next_head) {                             // Buffer full, block until space is available...
         if(!hal.stream_blocking_callback())
             return false;
     }
 
-    txbuffer.data[txbuffer.head] = c;                       // Add data to buffer
-    txbuffer.head = next_head;                              // and update head pointer
-
-    hw_set_bits(UART->imsc, UART_UARTIMSC_TXIM_BITS);       // Enable transmit interrupt      
+    txbuffer.data[txbuffer.head] = c;                               // Add data to buffer
+    txbuffer.head = next_head;                                      // and update head pointer
 
     return true;
 }
@@ -187,32 +194,11 @@ static void uart_interrupt_handler (void)
     uint_fast16_t bptr;
     uint32_t data, ctrl = UART->mis;
 
-    if (ctrl & UART_UARTMIS_TXMIS_BITS)
-    {
-        bptr = txbuffer.tail;
-
-        do {
-            if(txbuffer.head != bptr) {
-
-                UART->dr = txbuffer.data[bptr++];           // Put character in TXT register
-                bptr &= (TX_BUFFER_SIZE - 1);               // and update tmp tail pointer
-
-            } else
-                break;
-
-        } while(!!(UART->fr & UART_UARTFR_TXFF_BITS));
-
-        txbuffer.tail = bptr;                                       //  Update tail pinter
-
-        if(bptr == txbuffer.head)									// Disable TX interrups
-			hw_clear_bits(UART->imsc, UART_UARTIMSC_TXIM_BITS);
-    }
-
-    if (ctrl & UART_UARTMIS_RXMIS_BITS) {
+    if(ctrl & (UART_UARTMIS_RXMIS_BITS | UART_UARTIMSC_RTIM_BITS)) {
 
         while (uart_is_readable(UART_PORT)) {
 
-            bptr = (rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1);  // Get next head pointer
+            bptr = bufferIncPointer(rxbuffer.head, RX_BUFFER_MODULO);  // Get next head pointer
             data = UART->dr & 0xFF;                             // and read input (use only 8 bits of data)
 
             if(bptr == rxbuffer.tail) {                         // If buffer full
@@ -234,5 +220,22 @@ static void uart_interrupt_handler (void)
 #endif
             }
         }
+    }
+
+    // Interrupt if the TX FIFO is lower or equal to the empty TX FIFO threshold
+    if(ctrl & UART_UARTMIS_TXMIS_BITS)
+    {
+        bptr = txbuffer.tail;
+
+        // As long as the TX FIFO is not full or the buffer is not empty
+        while((!(UART->fr & UART_UARTFR_TXFF_BITS)) && (txbuffer.head != bptr)) {
+            UART->dr = txbuffer.data[bptr];                         // Put character in TX FIFO
+            bptr = bufferIncPointer(bptr, TX_BUFFER_MODULO);        // and update tmp tail pointer
+        }
+
+        txbuffer.tail = bptr;                                       //  Update tail pointer
+
+        if(txbuffer.tail == txbuffer.head)						    // Disable TX interrupt when the TX buffer is empty
+            hw_clear_bits(&UART->imsc, UART_UARTIMSC_TXIM_BITS);
     }
 }

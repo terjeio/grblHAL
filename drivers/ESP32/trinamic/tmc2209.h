@@ -42,6 +42,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "common.h"
+
 //#define TMC2209_COMPLETE // comment out for minimum set of registers
 
 #pragma pack(push, 1)
@@ -343,7 +345,7 @@ typedef union {
     };
 } TMC2209_sgthrs_reg_t;
 
-// SG_RESULT : W
+// SG_RESULT : R
 typedef union {
     uint32_t value;
     struct {
@@ -640,12 +642,12 @@ typedef union {
     TMC2209_pwmconf_reg_t pwmconf;
     TMC2209_pwm_scale_reg_t pwm_scale;
     TMC2209_pwm_auto_ctrl_reg_t pwm_auto_ctrl;
- } TMC2209_payload;
+} TMC2209_payload;
 
- typedef struct {
+typedef struct {
      TMC2209_addr_t addr;
      TMC2209_payload payload;
- } TMC2209_datagram_t;
+} TMC2209_datagram_t;
 
 typedef union {
     uint8_t data[8];
@@ -697,24 +699,12 @@ typedef struct {
 
     TMC2209_status_t driver_status;
 
-    uint8_t addr;
-    uint32_t f_clk;
-    tmc2209_microsteps_t microsteps;
-    uint16_t r_sense; // mOhm
-    uint16_t current;  // mA
-    uint8_t hold_current_pct; // percent
-    uint8_t axis; // axis index
-    bool cool_step_enabled;
+    trinamic_motor_t motor;
+    trinamic_config_t config;
 } TMC2209_t;
-
-typedef struct {
-    void (*WriteRegister)(TMC2209_t *driver, TMC2209_write_datagram_t *reg);
-    TMC2209_write_datagram_t *(*ReadRegister)(TMC2209_t *driver, TMC2209_read_datagram_t *reg);
-} TMC2209_interface_t;
 
 #pragma pack(pop)
 
-void TMC2209_InterfaceInit (TMC2209_interface_t *interface);
 bool TMC2209_Init(TMC2209_t *driver);
 void TMC2209_SetDefaults (TMC2209_t *driver);
 void TMC2209_SetCurrent (TMC2209_t *driver, uint16_t mA, uint8_t hold_pct);
@@ -723,6 +713,7 @@ uint32_t TMC2209_GetTPWMTHRS (TMC2209_t *driver, float stpmm);
 bool TMC2209_MicrostepsIsValid (uint16_t usteps);
 void TMC2209_SetMicrosteps(TMC2209_t *driver, tmc2209_microsteps_t usteps);
 void TMC2209_SetHybridThreshold (TMC2209_t *driver, uint32_t threshold, float steps_mm);
+void TMC2209_SetTCOOLTHRS (TMC2209_t *driver, float mm_sec, float steps_mm);
 void TMC2209_SetConstantOffTimeChopper(TMC2209_t *driver, uint8_t constant_off_time, uint8_t blank_time, uint8_t fast_decay_time, int8_t sine_wave_offset, bool use_current_comparator);
 TMC2209_datagram_t *TMC2209_GetRegPtr (TMC2209_t *driver, tmc2209_regaddr_t reg);
 bool TMC2209_WriteRegister (TMC2209_t *driver, TMC2209_datagram_t *reg);

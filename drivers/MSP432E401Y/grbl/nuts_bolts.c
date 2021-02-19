@@ -287,7 +287,6 @@ char *strcaps (char *s)
     return s;
 }
 
-
 void dummy_handler (void)
 {
     // NOOP

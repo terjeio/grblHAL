@@ -97,6 +97,17 @@ typedef union {
     };
 } axes_signals_t;
 
+#pragma pack(push, 1)
+
+typedef struct {
+    axes_signals_t min;
+    axes_signals_t max;
+    axes_signals_t min2;
+    axes_signals_t max2;
+} limit_signals_t;
+
+#pragma pack(pop)
+
 typedef enum {
     DelayMode_Dwell = 0,
     DelayMode_SysSuspend
@@ -132,7 +143,6 @@ typedef struct {
 #define bit_true(x,mask) (x) |= (mask)
 #define bit_false(x,mask) (x) &= ~(mask)
 #define BIT_SET(x, bit, v) { if (v) { x |= (bit); } else { x &= ~(bit); } }
-//#define bit_set(x, y, z) HWREGBITW(&x, y) = z;
 
 #define bit_istrue(x, mask) ((x & (mask)) != 0)
 #define bit_isfalse(x, mask) ((x & (mask)) == 0)
