@@ -27,6 +27,7 @@
 //#define BOARD_CNC_BOOSTERPACK
 //#define BOARD_MORPHO_CNC      // For use with Nucleo-F411RE and F446RE boards. Work in progress.
 //#define BOARD_MORPHO_DAC_CNC  // For use with F446RE boards and a 32-bit I2S stereo DAC for X and Y output. **EXPERIMENTAL**
+//#define BOARD_MINI_BLACKPILL
 //#define BOARD_MY_MACHINE      // Add my_machine_map.h before enabling this!
 
 // Configuration

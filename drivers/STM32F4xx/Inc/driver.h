@@ -157,6 +157,10 @@
   #include "st_morpho_map.h"
 #elif defined(BOARD_MORPHO_DAC_CNC)
   #include "st_morpho_dac_map.h"
+#elif defined(BOARD_MORPHO_DAC_CNC)
+  #include "st_morpho_dac_map.h"
+#elif defined(BOARD_MINI_BLACKPILL)
+  #include "mini_blackpill_map.h"
 #elif defined(BOARD_MY_MACHINE)
   #include "my_machine_map.h"
 #else // default board
