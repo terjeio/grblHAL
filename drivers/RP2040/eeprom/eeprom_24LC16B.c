@@ -21,7 +21,7 @@
 
 */
 
-#include "../driver.h"
+#include "driver.h"
 
 #if EEPROM_ENABLE == 1
 
