@@ -39,14 +39,9 @@
 #include "my_machine.h"
 #endif
 
-#define BITBAND_PERI(x, b) (*((__IO uint8_t *) (PERIPH_BB_BASE + (((uint32_t)(volatile const uint32_t *)&(x)) - PERIPH_BASE)*32 + (b)*4)))
 
-#define timer(p) timerN(p)
-#define timerN(p) TIM ## p
-#define timerINT(p) timeri(p)
-#define timeri(p) TIM ## p ## _IRQn
-#define timerHANDLER(p) timerh(p)
-#define timerh(p) TIM ## p ## _IRQHandler
+// Read GPIO out register value
+#define gpio_get_out_state(x) !!!!((1ul << x) & sio_hw->gpio_out)
 
 // Configuration
 // Set value to 1 to enable, 0 to disable
@@ -106,24 +101,7 @@
 
 // Define timer allocations.
 
-#define STEPPER_TIMER_N             5
-#define STEPPER_TIMER               timer(STEPPER_TIMER_N)
-#define STEPPER_TIMER_IRQn          timerINT(STEPPER_TIMER_N)
-#define STEPPER_TIMER_IRQHandler    timerHANDLER(STEPPER_TIMER_N)
-
-#define PULSE_TIMER_N               4
-#define PULSE_TIMER                 timer(PULSE_TIMER_N)
-#define PULSE_TIMER_IRQn            timerINT(PULSE_TIMER_N)
-#define PULSE_TIMER_IRQHandler      timerHANDLER(PULSE_TIMER_N)
-
-#define SPINDLE_PWM_TIMER_N         1
-#define SPINDLE_PWM_TIMER           timer(SPINDLE_PWM_TIMER_N)
-
-#define DEBOUNCE_TIMER_N            9
-#define DEBOUNCE_TIMER              timer(DEBOUNCE_TIMER_N)
-#define DEBOUNCE_TIMER_IRQn         TIM1_BRK_TIM9_IRQn       // !
-#define DEBOUNCE_TIMER_IRQHandler   TIM1_BRK_TIM9_IRQHandler // !
-
+/*
 #define RPM_COUNTER_N               3
 #define RPM_COUNTER                 timer(RPM_COUNTER_N)
 #define RPM_COUNTER_IRQn            timerINT(RPM_COUNTER_N)
@@ -138,6 +116,7 @@
 #define PPI_TIMER                   timer(PPI_TIMER_N)
 #define PPI_TIMER_IRQn              timerINT(PPI_TIMER_N)
 #define PPI_TIMER_IRQHandler        timerHANDLER(PPI_TIMER_N)
+*/
 
 #ifdef BOARD_CNC_BOOSTERPACK
   #include "cnc_boosterpack_map.h"

@@ -42,7 +42,7 @@ pico_generate_pio_header(grblHAL ${CMAKE_CURRENT_LIST_DIR}/driverPIO.pio)
 target_sources(grblHAL PRIVATE driver.c)
 
 # Pull in our pico_stdlib which pulls in commonly used features
-target_link_libraries(grblHAL PRIVATE pico_stdlib hardware_uart hardware_pio hardware_i2c)
+target_link_libraries(grblHAL PRIVATE pico_stdlib hardware_uart hardware_pio hardware_i2c hardware_gpio hardware_pwm hardware_clocks)
 
 # create map/bin/hex file etc.
 pico_add_extra_outputs(grblHAL)

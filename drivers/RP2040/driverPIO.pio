@@ -15,11 +15,11 @@ count:
 % c-sdk {
 static inline void stepper_timer_program_init(PIO pio, uint sm, uint offset, float div ) {
     pio_sm_config c = stepper_timer_program_get_default_config(offset);
-/*
+
+/*  Output signal to a pin to test the frequency
     sm_config_set_out_pins(&c, 15, 1);
     pio_gpio_init(pio, 15);
     pio_sm_set_consecutive_pindirs(pio, sm, 15, 1, true);
-    sm_config_set_set_pins(&c, 15, 1);
 */
     // Load our configuration, and jump to the start of the program
     pio_sm_init(pio, sm, offset, &c);
@@ -49,7 +49,8 @@ static inline void stepper_timer_stop(PIO pio, uint sm) {
 }
 
 static inline void stepper_timer_irq_clear(PIO pio) {
-    pio->irq = 1;
+    pio->irq = 1;           // Clear the PIO Flag that is raised when the period is done
+    irq_clear(PIO0_IRQ_0);  // Clear tge system IRQ
 }
 %}
 
