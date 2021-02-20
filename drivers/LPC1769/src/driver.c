@@ -44,6 +44,10 @@
 #include "usb_serial.h"
 #endif
 
+#if I2C_ENABLE
+#include "i2c.h"
+#endif
+
 #if EEPROM_ENABLE
 #include "eeprom/eeprom.h"
 #endif
@@ -316,7 +320,7 @@ static void stepperEnable (axes_signals_t enable)
 #elif defined(DISABLE_MASK)
     DISABLE_PORT->PIN = (DISABLE_PORT->PIN & ~DISABLE_MASK) | enable.mask;
 #else
-    BITBAND_GPIO(STEPPERS_DISABLE_PORT->PIN, STEPPERS_DISABLE_PIN) = enable.x;
+    DIGITAL_OUT(STEPPERS_DISABLE_PORT, STEPPERS_DISABLE_BIT, enable.x);
 #endif
 
 }
@@ -1190,7 +1194,7 @@ bool driver_init (void) {
 #endif
 
     hal.info = "LCP1769";
-    hal.driver_version = "210209";
+    hal.driver_version = "210219";
     hal.driver_setup = driver_setup;
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
@@ -1388,8 +1392,11 @@ void DEBOUNCE_IRQHandler (void)
           switch(signal->group) {
 
             case INPUT_GROUP_LIMIT:
-                limits_debounce = false;
-                hal.limits.interrupt_callback(limitsGetState());
+                {
+                    limit_signals_t state = limitsGetState();
+                    if(limit_signals_merge(state).value) //TODO: add check for limit switches having same state as when limit_isr were invoked?
+                        hal.limits.interrupt_callback(state);
+                }
                 break;
 
             case INPUT_GROUP_CONTROL:

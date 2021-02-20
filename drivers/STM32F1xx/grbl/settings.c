@@ -65,7 +65,7 @@ const settings_restore_t settings_all = {
     .driver_parameters = SETTINGS_RESTORE_DRIVER_PARAMETERS
 };
 
-const settings_t defaults = {
+PROGMEM const settings_t defaults = {
 
     .version = SETTINGS_VERSION,
 
@@ -256,7 +256,7 @@ const settings_t defaults = {
     .parking.pullout_increment = DEFAULT_PARKING_PULLOUT_INCREMENT
 };
 
-static const setting_group_detail_t setting_group_detail [] = {
+PROGMEM static const setting_group_detail_t setting_group_detail [] = {
     { Group_Root, Group_Root, "Root"},
     { Group_Root, Group_General, "General"},
     { Group_Root, Group_ControlSignals, "Control signals"},
@@ -325,7 +325,7 @@ static char control_signals[] = "Reset,Feed hold,Cycle start,Safety door,Block d
 static char control_signals_map[] = "0,1,2,3,4,5,6,7,8";
 static char spindle_signals[] = "Spindle enable,Spindle direction,PWM";
 
-static const setting_detail_t setting_detail[] = {
+PROGMEM static const setting_detail_t setting_detail[] = {
     { Setting_PulseMicroseconds, Group_Stepper, "Step pulse time", "microseconds", Format_Decimal, "#0.0", "2.0", NULL, Setting_IsLegacy, &settings.steppers.pulse_microseconds, NULL, NULL },
     { Setting_StepperIdleLockTime, Group_Stepper, "Step idle delay", "milliseconds", Format_Int16, "####0", NULL, "65535", Setting_IsLegacy, &settings.steppers.idle_lock_time, NULL, NULL },
     { Setting_StepInvertMask, Group_Stepper, "Step pulse invert", NULL, Format_AxisMask, NULL, NULL, NULL, Setting_IsLegacy, &settings.steppers.step_invert.mask, NULL, NULL },

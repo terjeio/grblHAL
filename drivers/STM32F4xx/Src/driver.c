@@ -75,14 +75,19 @@ typedef union {
 
 extern __IO uint32_t uwTick;
 static uint32_t pulse_length, pulse_delay;
-static bool pwmEnabled = false, IOInitDone = false;
+static bool IOInitDone = false;
 static axes_signals_t next_step_outbits;
-static spindle_pwm_t spindle_pwm;
 static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
 static debounce_t debounce;
 static probe_state_t probe = {
     .connected = On
 };
+
+#if !VFD_SPINDLE
+static bool pwmEnabled = false;
+static spindle_pwm_t spindle_pwm;
+static void spindle_set_speed (uint_fast16_t pwm_value);
+#endif
 
 #if MODBUS_ENABLE
 static modbus_stream_t modbus_stream = {0};
@@ -227,8 +232,6 @@ static uint32_t dir_outmap[sizeof(c_dir_outmap) / sizeof(uint32_t)];
 #endif
 
 #define DRIVER_IRQMASK (LIMIT_MASK|CONTROL_MASK|KEYPAD_STROBE_BIT|SPINDLE_INDEX_BIT)
-
-static void spindle_set_speed (uint_fast16_t pwm_value);
 
 static void driver_delay (uint32_t ms, void (*callback)(void))
 {
@@ -570,6 +573,8 @@ probe_state_t probeGetState (void)
 
 #endif
 
+#if !VFD_SPINDLE
+
 // Static spindle (off, on cw & on ccw)
 
 inline static void spindle_off (void)
@@ -779,6 +784,8 @@ static void spindleDataReset (void)
 
 // end spindle code
 
+#endif // !VFD_SPINDLE
+
 // Start/stop coolant (and mist if enabled)
 static void coolantSetState (coolant_state_t mode)
 {
@@ -874,6 +881,8 @@ void settings_changed (settings_t *settings)
 
         stepperEnable(settings->steppers.deenergize);
 
+#if !VFD_SPINDLE
+
         if(hal.driver_cap.variable_spindle) {
 
         	hal.spindle.set_state = spindleSetStateVariable;
@@ -922,6 +931,8 @@ void settings_changed (settings_t *settings)
 
         } else
             hal.spindle.set_state = spindleSetState;
+
+#endif
 
 #ifdef SPINDLE_SYNC_ENABLE
 
@@ -1237,6 +1248,8 @@ static bool driver_setup (settings_t *settings)
         HAL_NVIC_EnableIRQ(DEBOUNCE_TIMER_IRQn); // Enable debounce interrupt
     }
 
+#if !VFD_SPINDLE
+
  // Spindle init
 
     GPIO_Init.Pin = SPINDLE_DIRECTION_BIT;
@@ -1245,7 +1258,7 @@ static bool driver_setup (settings_t *settings)
     GPIO_Init.Pin = SPINDLE_ENABLE_BIT;
     HAL_GPIO_Init(SPINDLE_ENABLE_PORT, &GPIO_Init);
 
-#ifdef SPINDLE_PWM_PIN
+  #ifdef SPINDLE_PWM_PIN
 
     if(hal.driver_cap.variable_spindle) {
         GPIO_Init.Pin = SPINDLE_PWM_BIT;
@@ -1256,6 +1269,7 @@ static bool driver_setup (settings_t *settings)
         GPIO_Init.Alternate = 0;
     }
 
+  #endif
 #endif
 
  // Coolant init
@@ -1352,7 +1366,7 @@ bool driver_init (void)
 #else
     hal.info = "STM32F401CC";
 #endif
-    hal.driver_version = "210206";
+    hal.driver_version = "210220";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1379,16 +1393,18 @@ bool driver_init (void)
     hal.probe.configure = probeConfigure;
 #endif
 
+#if !VFD_SPINDLE
     hal.spindle.set_state = spindleSetState;
     hal.spindle.get_state = spindleGetState;
-#ifdef SPINDLE_PWM_DIRECT
+  #ifdef SPINDLE_PWM_DIRECT
     hal.spindle.get_pwm = spindleGetPWM;
     hal.spindle.update_pwm = spindle_set_speed;
-#else
+  #else
     hal.spindle.update_rpm = spindleUpdateRPM;
-#endif
-#if PPI_ENABLE
+  #endif
+  #if PPI_ENABLE
     hal.spindle.pulse_on = spindlePulseOn;
+  #endif
 #endif
 
     hal.control.get_state = systemGetState;
@@ -1443,11 +1459,15 @@ bool driver_init (void)
 #ifdef CONTROL_SAFETY_DOOR_PIN
     hal.signals_cap.safety_door_ajar = On;
 #endif
+
+#if !VFD_SPINDLE && !PLASMA_ENABLE
     hal.driver_cap.spindle_dir = On;
-#ifdef SPINDLE_PWM_PIN
+  #ifdef SPINDLE_PWM_PIN
     hal.driver_cap.variable_spindle = On;
-#endif
     hal.driver_cap.spindle_pwm_invert = On;
+  #endif
+#endif
+
 #ifdef SPINDLE_SYNC_ENABLE
     hal.driver_cap.spindle_sync = On;
     hal.driver_cap.spindle_at_speed = On;
@@ -1477,6 +1497,8 @@ bool driver_init (void)
 #endif
 
 #if MODBUS_ENABLE
+
+    serial2Init(115200);
 
     modbus_stream.write = serial2Write;
     modbus_stream.read = serial2GetC;

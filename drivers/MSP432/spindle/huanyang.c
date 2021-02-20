@@ -4,7 +4,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -191,9 +191,9 @@ static spindle_state_t spindleGetState (void)
     return vfd_state; // return previous state as we do not want to wait for the response
 }
 
-static spindle_data_t spindleGetData (spindle_data_request_t request)
+static spindle_data_t *spindleGetData (spindle_data_request_t request)
 {
-    return spindle_data;
+    return &spindle_data;
 }
 
 

@@ -1688,8 +1688,11 @@ inline static void PIO_IRQHandler (input_signal_t *signals, uint32_t isr)
     if(debounce)
         DEBOUNCE_TIMER.TC_CCR = TC_CCR_SWTRG;
 
-    if(grp & INPUT_GROUP_LIMIT)
-        hal.limits.interrupt_callback(limitsGetState());
+    if(grp & INPUT_GROUP_LIMIT) {
+        limit_signals_t state = limitsGetState();
+        if(limit_signals_merge(state).value) //TODO: add check for limit switches having same state as when limit_isr were invoked?
+            hal.limits.interrupt_callback(state);
+    }
 
     if(grp & INPUT_GROUP_CONTROL)
         hal.control.interrupt_callback(systemGetState());

@@ -1,11 +1,10 @@
 /*
-  i2c.h - I2C interface
 
-  Driver code for Texas Instruments MSP430F5529 processor
+  huanyang.h - Huanyang VFD spindle support
 
   Part of grblHAL
 
-  Copyright (c) 2020-2021 Terje Io
+  Copyright (c) 2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -19,13 +18,29 @@
 
   You should have received a copy of the GNU General Public License
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
+
 */
 
-#ifndef __I2C_DRIVER_H__
-#define __I2C_DRIVER_H__
+#ifndef _HUANYANG_H_
+#define _HUANYANG_H_
 
-#include "grbl/plugins.h"
+#ifdef ARDUINO
+#include "../driver.h"
+#else
+#include "driver.h"
+#endif
 
-void i2c_init (void);
+#if SPINDLE_HUANYANG
+
+#ifdef VFD_SPINDLE
+#undef VFD_SPINDLE
+#endif
+#define VFD_SPINDLE 1
+
+#include "modbus.h"
+
+void huanyang_init (modbus_stream_t *stream);
+
+#endif // _HUANYANG_H_
 
 #endif

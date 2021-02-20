@@ -791,8 +791,10 @@ static void limitsEnable (bool on, bool homing)
 // Each bitfield bit indicates an axis limit, where triggered is 1 and not triggered is 0.
 inline static limit_signals_t limitsGetState()
 {
-#if CNC_BOOSTERPACK // Change to bit-band read to avoid call overhead!
     limit_signals_t signals = {0};
+    signals.min.value = settings.limits.invert.value;
+
+#if CNC_BOOSTERPACK // Change to bit-band read to avoid call overhead!
     uint32_t flags = GPIOPinRead(LIMIT_PORT_YZ, HWLIMIT_MASK_YZ);
 
     signals.min.x = GPIOPinRead(LIMIT_PORT_X, X_LIMIT_PIN) != 0;
@@ -809,7 +811,6 @@ inline static limit_signals_t limitsGetState()
 #endif
 #else
     uint32_t flags = GPIOPinRead(LIMIT_PORT, HWLIMIT_MASK);
-    axes_signals_t signals;
 
     signals.min.x = (flags & X_LIMIT_PIN) != 0;
     signals.min.y = (flags & Y_LIMIT_PIN) != 0;
@@ -1673,7 +1674,7 @@ bool driver_init (void)
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
-    hal.driver_version = "210206";
+    hal.driver_version = "210214";
     hal.driver_setup = driver_setup;
 #if !USE_32BIT_TIMER
     hal.f_step_timer = hal.f_step_timer / (STEPPER_DRIVER_PRESCALER + 1);
