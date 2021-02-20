@@ -157,8 +157,6 @@
   #include "st_morpho_map.h"
 #elif defined(BOARD_MORPHO_DAC_CNC)
   #include "st_morpho_dac_map.h"
-#elif defined(BOARD_MORPHO_DAC_CNC)
-  #include "st_morpho_dac_map.h"
 #elif defined(BOARD_MINI_BLACKPILL)
   #include "mini_blackpill_map.h"
 #elif defined(BOARD_MY_MACHINE)
@@ -182,6 +180,18 @@
 #define FLASH_ENABLE 0
 #endif
 
+#if SPINDLE_HUANYANG
+#include "spindle/huanyang.h"
+#endif
+
+#ifndef VFD_SPINDLE
+#define VFD_SPINDLE 0
+#endif
+
+#ifdef MODBUS_ENABLE
+#define SERIAL2_MOD
+#endif
+
 #if EEPROM_ENABLE|| KEYPAD_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
   #if defined(NUCLEO_F411) || defined(NUCLEO_F446)
     #define I2C_PORT 1 // GPIOB, SCL_PIN = 8, SDA_PIN = 9
@@ -196,7 +206,11 @@
     #define TRINAMIC_MIXED_DRIVERS 1
   #endif
   #if TRINAMIC_ENABLE == 2209
-    #define SERIAL2_MOD
+    #ifdef MODBUS_ENABLE
+      #error "Cannot use TMC2209 drivers with Modbus spindle!"
+    #else
+      #define SERIAL2_MOD
+    #endif
   #endif
 #endif
 
