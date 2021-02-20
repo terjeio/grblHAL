@@ -2,9 +2,9 @@
 
   driver.h - driver code for STM32F4xx ARM processors
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2019-2020 Terje Io
+  Copyright (c) 2019-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -155,6 +155,12 @@
   #include "uno_map.h"
 #elif defined(BOARD_MORPHO_CNC)
   #include "st_morpho_map.h"
+#elif defined(BOARD_MORPHO_DAC_CNC)
+  #include "st_morpho_dac_map.h"
+#elif defined(BOARD_MINI_BLACKPILL)
+  #include "mini_blackpill_map.h"
+#elif defined(BOARD_MY_MACHINE)
+  #include "my_machine_map.h"
 #else // default board
   #include "generic_map.h"
 #endif
@@ -174,6 +180,18 @@
 #define FLASH_ENABLE 0
 #endif
 
+#if SPINDLE_HUANYANG
+#include "spindle/huanyang.h"
+#endif
+
+#ifndef VFD_SPINDLE
+#define VFD_SPINDLE 0
+#endif
+
+#ifdef MODBUS_ENABLE
+#define SERIAL2_MOD
+#endif
+
 #if EEPROM_ENABLE|| KEYPAD_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
   #if defined(NUCLEO_F411) || defined(NUCLEO_F446)
     #define I2C_PORT 1 // GPIOB, SCL_PIN = 8, SDA_PIN = 9
@@ -183,14 +201,17 @@
 #endif
 
 #if TRINAMIC_ENABLE
-#include "tmc2130/trinamic.h"
-#endif
-
-#if SDCARD_ENABLE
-#define SD_CS_PORT  GPIOC
-#define SD_CS_PIN   8
-#define SD_CS_BIT   (1<<SD_CS_PIN)
-#define SPI_PORT 1 // GPIOA, SCK_PIN = 5, MISO_PIN = 6, MOSI_PIN = 7
+  #include "motors/trinamic.h"
+  #ifndef TRINAMIC_MIXED_DRIVERS
+    #define TRINAMIC_MIXED_DRIVERS 1
+  #endif
+  #if TRINAMIC_ENABLE == 2209
+    #ifdef MODBUS_ENABLE
+      #error "Cannot use TMC2209 drivers with Modbus spindle!"
+    #else
+      #define SERIAL2_MOD
+    #endif
+  #endif
 #endif
 
 // End configuration
@@ -201,10 +222,6 @@
 
 #if SDCARD_ENABLE && !defined(SD_CS_PORT)
 #error SD card plugin not supported!
-#endif
-
-#if TRINAMIC_ENABLE && CNC_BOOSTERPACK == 0
-#error Trinamic plugin not supported!
 #endif
 
 bool driver_init (void);

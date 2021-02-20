@@ -3,9 +3,9 @@
 
   Grbl driver code for Texas Instruments Tiva C (TM4C123GH6PM) ARM processor
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2018-2019 Terje Io
+  Copyright (c) 2018-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -22,6 +22,12 @@
 */
 
 #include "i2c.h"
+
+#if I2C_ENABLE
+
+#if TRINAMIC_ENABLE && TRINAMIC_I2C
+#define I2C_ADR_I2CBRIDGE 0x47
+#endif
 
 #define i2cIsBusy ((i2c.state != I2CState_Idle) || I2CMasterBusy(I2C1_BASE))
 
@@ -50,26 +56,6 @@ typedef struct {
 static i2c_trans_t i2c;
 
 static void I2C_interrupt_handler (void);
-
-void I2CInit (void)
-{
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_I2C1);
-    SysCtlPeripheralReset(SYSCTL_PERIPH_I2C1);
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
-
-    GPIOPinConfigure(GPIO_PA6_I2C1SCL);
-    GPIOPinConfigure(GPIO_PA7_I2C1SDA);
-    GPIOPadConfigSet(GPIO_PORTA_BASE, GPIO_PIN_7, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_OD);
-
-    GPIOPinTypeI2CSCL(GPIO_PORTA_BASE, GPIO_PIN_6);
-    GPIOPinTypeI2C(GPIO_PORTA_BASE, GPIO_PIN_7);
-
-    I2CMasterInitExpClk(I2C1_BASE, SysCtlClockGet(), false);
-    I2CIntRegister(I2C1_BASE, I2C_interrupt_handler);
-
-    I2CMasterIntClear(I2C1_BASE);
-    I2CMasterIntEnable(I2C1_BASE);
-}
 
 // get bytes (max 8), waits for result
 static uint8_t* I2C_Receive (uint32_t i2cAddr, uint32_t bytes, bool block)
@@ -133,17 +119,23 @@ void I2C_GetKeycode (uint32_t i2cAddr, keycode_callback_ptr callback)
 
 #if TRINAMIC_ENABLE && TRINAMIC_I2C
 
-static TMC2130_status_t I2C_TMC_ReadRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
-{
-    uint8_t *res, i2creg;
-    TMC2130_status_t status = {0};
+static uint8_t axis = 0xFF;
 
-    if((i2creg = TMCI2C_GetMapAddress((uint8_t)(driver ? (uint32_t)driver->cs_pin : 0), reg->addr).value) == 0xFF)
-        return status; // unsupported register
+TMC_spi_status_t tmc_spi_read (trinamic_motor_t driver, TMC_spi_datagram_t *datagram)
+{
+    uint8_t *res;
+    TMC_spi_status_t status = 0;
 
     while(i2cIsBusy);
 
-    i2c.buffer[0] = i2creg;
+    if(driver.axis != axis) {
+        i2c.buffer[0] = driver.axis | 0x80;
+        I2C_Send(I2C_ADR_I2CBRIDGE, 1, true);
+
+        axis = driver.axis;
+    }
+
+    i2c.buffer[0] = datagram->addr.idx;
     i2c.buffer[1] = 0;
     i2c.buffer[2] = 0;
     i2c.buffer[3] = 0;
@@ -151,46 +143,64 @@ static TMC2130_status_t I2C_TMC_ReadRegister (TMC2130_t *driver, TMC2130_datagra
 
     res = I2C_ReadRegister(I2C_ADR_I2CBRIDGE, 5, true);
 
-    status.value = (uint8_t)*res++;
-    reg->payload.value = ((uint8_t)*res++ << 24);
-    reg->payload.value |= ((uint8_t)*res++ << 16);
-    reg->payload.value |= ((uint8_t)*res++ << 8);
-    reg->payload.value |= (uint8_t)*res++;
+    status = (uint8_t)*res++;
+    datagram->payload.value = ((uint8_t)*res++ << 24);
+    datagram->payload.value |= ((uint8_t)*res++ << 16);
+    datagram->payload.value |= ((uint8_t)*res++ << 8);
+    datagram->payload.value |= (uint8_t)*res++;
 
     return status;
 }
 
-
-static TMC2130_status_t I2C_TMC_WriteRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
+TMC_spi_status_t tmc_spi_write (trinamic_motor_t driver, TMC_spi_datagram_t *datagram)
 {
-    TMC2130_status_t status = {0};
+    TMC_spi_status_t status = 0;
 
     while(i2cIsBusy);
 
-    reg->addr.write = 1;
-    i2c.buffer[0] = TMCI2C_GetMapAddress((uint8_t)(driver ? (uint32_t)driver->cs_pin : 0), reg->addr).value;
-    reg->addr.write = 0;
+    if(driver.axis != axis) {
+        i2c.buffer[0] = driver.axis | 0x80;
+        I2C_Send(I2C_ADR_I2CBRIDGE, 1, true);
 
-    if(i2c.buffer[0] == 0xFF)
-        return status; // unsupported register
+        while(i2cIsBusy);
 
-    i2c.buffer[1] = (reg->payload.value >> 24) & 0xFF;
-    i2c.buffer[2] = (reg->payload.value >> 16) & 0xFF;
-    i2c.buffer[3] = (reg->payload.value >> 8) & 0xFF;
-    i2c.buffer[4] = reg->payload.value & 0xFF;
+        axis = driver.axis;
+    }
+
+    datagram->addr.write = On;
+    i2c.buffer[0] = datagram->addr.value;
+    i2c.buffer[1] = (datagram->payload.value >> 24) & 0xFF;
+    i2c.buffer[2] = (datagram->payload.value >> 16) & 0xFF;
+    i2c.buffer[3] = (datagram->payload.value >> 8) & 0xFF;
+    i2c.buffer[4] = datagram->payload.value & 0xFF;
+    datagram->addr.write = Off;
 
     I2C_Send(I2C_ADR_I2CBRIDGE, 5, true);
 
     return status;
 }
 
-void I2C_DriverInit (TMC_io_driver_t *driver)
-{
-    driver->WriteRegister = I2C_TMC_WriteRegister;
-    driver->ReadRegister = I2C_TMC_ReadRegister;
-}
-
 #endif
+
+void I2CInit (void)
+{
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_I2C1);
+    SysCtlPeripheralReset(SYSCTL_PERIPH_I2C1);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
+
+    GPIOPinConfigure(GPIO_PA6_I2C1SCL);
+    GPIOPinConfigure(GPIO_PA7_I2C1SDA);
+    GPIOPadConfigSet(GPIO_PORTA_BASE, GPIO_PIN_7, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_OD);
+
+    GPIOPinTypeI2CSCL(GPIO_PORTA_BASE, GPIO_PIN_6);
+    GPIOPinTypeI2C(GPIO_PORTA_BASE, GPIO_PIN_7);
+
+    I2CMasterInitExpClk(I2C1_BASE, SysCtlClockGet(), false);
+    I2CIntRegister(I2C1_BASE, I2C_interrupt_handler);
+
+    I2CMasterIntClear(I2C1_BASE);
+    I2CMasterIntEnable(I2C1_BASE);
+}
 
 static void I2C_interrupt_handler (void)
 {
@@ -261,3 +271,5 @@ static void I2C_interrupt_handler (void)
             break;
     }
 }
+
+#endif

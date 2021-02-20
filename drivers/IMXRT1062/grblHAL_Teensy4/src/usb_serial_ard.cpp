@@ -2,7 +2,7 @@
 
   usb_serial_ard.cpp - driver code for IMXRT1062 processor (on Teensy 4.0 board) : USB serial port wrapper
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2018-2020 Terje Io
 

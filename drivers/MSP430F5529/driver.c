@@ -3,9 +3,9 @@
 
   Driver code for Texas Instruments MSP430F5529 16-bit processor
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2016-2020 Terje Io
+  Copyright (c) 2016-2021 Terje Io
   Copyright (c) 2011-2015 Sungeun K. Jeon
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -27,12 +27,14 @@
 
 #include "driver.h"
 #include "serial.h"
+
 #include "grbl/hal.h"
 #include "grbl/grbl.h"
+#include "grbl/limits.h"
 #include "grbl/nuts_bolts.h"
-#include "eeprom/eeprom.h"
 
 #ifdef EEPROM_ENABLE
+#include "i2c.h"
 #include "eeprom/eeprom.h"
 #endif
 
@@ -42,11 +44,11 @@ static uint16_t pulse_length;
 static axes_signals_t next_step_outbits;
 static spindle_pwm_t spindle_pwm;
 static delay_t delay = { .ms = 0, .callback = NULL };
+static probe_state_t probe = {
+    .connected = On
+};
 
 static void spindle_set_speed (uint_fast16_t pwm_value);
-
-// Inverts the probe pin state depending on user settings and probing cycle mode.
-static uint8_t probe_invert;
 
 static void driver_delay_ms (uint32_t ms, void (*callback)(void))
 {
@@ -185,17 +187,17 @@ static void limitsEnable (bool on, bool homing)
 
 // Returns limit state as an axes_signals_t variable.
 // Each bitfield bit indicates an axis limit, where triggered is 1 and not triggered is 0.
-inline static axes_signals_t limitsGetState()
+inline static limit_signals_t limitsGetState()
 {
-    axes_signals_t signals = {0};
+    limit_signals_t signals = {0};
     uint8_t flags = LIMIT_PORT_IN;
 
-    signals.x = (flags & X_LIMIT_PIN) == X_LIMIT_PIN;
-    signals.y = (flags & Y_LIMIT_PIN) == Y_LIMIT_PIN;
-    signals.z = (flags & Z_LIMIT_PIN) == Z_LIMIT_PIN;
+    signals.min.x = (flags & X_LIMIT_PIN) == X_LIMIT_PIN;
+    signals.min.y = (flags & Y_LIMIT_PIN) == Y_LIMIT_PIN;
+    signals.min.z = (flags & Z_LIMIT_PIN) == Z_LIMIT_PIN;
 
     if (settings.limits.invert.value)
-        signals.value ^= settings.limits.invert.value;
+        signals.min.value ^= settings.limits.invert.value;
 
     return signals;
 }
@@ -227,20 +229,18 @@ inline static control_signals_t systemGetState (void)
 // and the probing cycle modes for toward-workpiece/away-from-workpiece.
 static void probeConfigure(bool is_probe_away, bool probing)
 {
-  probe_invert = settings.probe.invert_probe_pin ? 0 : PROBE_PIN;
-
-  if (is_probe_away)
-      probe_invert ^= PROBE_PIN;
+    probe.triggered = Off;
+    probe.is_probing = probing;
+    probe.inverted = is_probe_away ? !settings.probe.invert_probe_pin : settings.probe.invert_probe_pin;
 }
 
 // Returns the probe connected and pin states.
 probe_state_t probeGetState (void)
 {
-    probe_state_t state = {
-        .connected = On
-    };
+    probe_state_t state = {0};
 
-    state.triggered = ((PROBE_PORT_IN & PROBE_PIN) ^ probe_invert) != 0;
+    state.connected = probe.connected;
+    state.triggered = !!(PROBE_PORT_IN & PROBE_PIN) ^ probe.inverted;
 
     return state;
 }
@@ -291,7 +291,7 @@ static void spindle_set_speed (uint_fast16_t pwm_value)
 {
     if (pwm_value == spindle_pwm.off_value) {
         pwmEnabled = false;
-        if(settings.spindle.disable_with_zero_speed)
+        if(settings.spindle.flags.pwm_action == SpindleAction_DisableWithZeroSPeed)
             spindle_off();
         if(spindle_pwm.always_on) {
             PWM_TIMER_CCR1 = spindle_pwm.off_value;
@@ -406,6 +406,16 @@ static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t 
     *ptr = value;
     _EINT();
     return prev;
+}
+
+static void enable_irq (void)
+{
+    _EINT();
+}
+
+static void disable_irq (void)
+{
+    _DINT();
 }
 
 // Configures perhipherals when settings are initialized or changed
@@ -640,10 +650,9 @@ static bool driver_setup (settings_t *settings)
 
   // Set defaults
 
-    IOInitDone = settings->version == 18;
+    IOInitDone = settings->version == 19;
 
-    settings_changed(settings);
-
+    hal.settings_changed(settings);
     hal.stepper.go_idle(true);
     hal.spindle.set_state((spindle_state_t){0}, 0.0f);
     hal.coolant.set_state((coolant_state_t){0});
@@ -665,7 +674,7 @@ bool driver_init (void)
     serialInit();
 
     hal.info = "MSP430F5529";
-    hal.driver_version = "201014";
+    hal.driver_version = "210219";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = 24000000;
     hal.rx_buffer_size = RX_BUFFER_SIZE;
@@ -715,6 +724,8 @@ bool driver_init (void)
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
+    hal.irq_enable = enable_irq;
+    hal.irq_disable = disable_irq;
 
 #ifdef HAS_KEYPAD
     hal.execute_realtime = process_keypress;
@@ -723,7 +734,7 @@ bool driver_init (void)
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
 
 #ifdef SAFETY_DOOR_PIN
-    hal.driver_cap.safety_door = On;
+    hal.signals_cap.safety_door_ajar = On;
 #endif
     hal.driver_cap.spindle_dir = On;
     hal.driver_cap.variable_spindle = On;
@@ -741,7 +752,7 @@ bool driver_init (void)
     my_plugin_init();
 
     // no need to move version check before init - compiler will fail any signature mismatch for existing entries
-    return hal.version == 7;
+    return hal.version == 8;
 }
 
 /* interrupt handlers */
@@ -796,8 +807,8 @@ __interrupt void software_debounce_isr (void)
 {
     if(!--debounce_count) {
         SFRIE1 &= ~WDTIE;
-        axes_signals_t state = limitsGetState();
-        if(state.value) //TODO: add check for limit swicthes having same state as when limit_isr were invoked?
+        limit_signals_t state = limitsGetState();
+        if(limit_signals_merge(state).value) //TODO: add check for limit switches having same state as when limit_isr were invoked?
             hal.limits.interrupt_callback(state);
     }
 }

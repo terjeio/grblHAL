@@ -1,6 +1,6 @@
 ## SAM3X8E Driver
 
-### Pin assignmets for [RAMPS 1.6](https://github.com/cmcgrath5035/G2core-DUE-External-Interfaces) board.
+### Pin assignmets for [RAMPS 1.6] board.
 
 Uncomment `#define BOARD_RAMPS16` in [driver.h](../main/driver.h) to use this mapping.
 
@@ -9,17 +9,17 @@ Uncomment `#define BOARD_RAMPS16` in [driver.h](../main/driver.h) to use this ma
                                                           [SDA1] A.18
                                       NOT USED [  ]         [  ] AREF
                                          IOREF [  ]         [  ] GND
-                                         RESET [  ]    A    [13] B.27 - Spindle dir
-                                           3V3 [  ]    R    [12] D.08 - Spindle enable
-                                            5V [  ]    D    [11] D.07 - Spindle PWM
+                                         RESET [  ]    A    [13] B.27
+                                           3V3 [  ]    R    [12] D.08
+                                            5V [  ]    D    [11] D.07
                                            GND [  ]    U    [10] C.29/A.28
                                            GND [  ]    I    [09] C.21
-                                           VIN [  ]    N    [08] C.22
+                                           VIN [  ]    N    [08] C.22 - Spindle dir
                                                        O
                                  X step - A.16 [A0]         [07] C.23
                                   X dir - A.24 [A1]    D    [06] C.24
-                               Y enable - A.23 [A2]    U    [05] C.25
-                                  Reset - A.22 [A3]    E    [04] C.26/A.29
+                               Y enable - A.23 [A2]    U    [05] C.25 - Spindle PWM
+                                  Reset - A.22 [A3]    E    [04] C.26/A.29 - Spindle enable
                               Feed hold - A.06 [A4]         [03] C.28 - X limit min
                             Cycle start - A.04 [A5]    S    [02] B.25 - X limit max
                                  Y step - A.03 [A6]    A    [01] A.09

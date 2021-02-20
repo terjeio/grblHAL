@@ -177,16 +177,18 @@ static void limitsEnable (bool on, bool homing)
 // Individual signals bits can be accessed by signals.x, signals.y, ...
 // Each bit indicates a limit signal, where triggered is 1 and not triggered is 0.
 // axes_signals_t is defined in grbl/nuts_bolts.h.
-inline static axes_signals_t limitsGetState()
+inline static limit_signals_t limitsGetState()
 {
-    axes_signals_t signals;
+    limit_signals_t signals = {0};
+
+	signals.min.value = settings.limits.invert.value
 
     // Read limits pins, either to a temp variable or directly to signals.vaue if no remapping is required.
     // Single bits may be also assigned directly by reading them via the bit band region.
     // signals.value = GPIO_READ(LIMITS_PORT);
 
     if (settings.limits.invert.mask)
-        signals.value ^= settings.limits.invert.mask;
+        signals.min.value ^= settings.limits.invert.mask;
 
     return signals;
 }
@@ -198,7 +200,7 @@ inline static axes_signals_t limitsGetState()
 // axes_signals_t is defined in grbl/system.h.
 inline static control_signals_t systemGetState (void)
 {
-    control_signals_t signals = {0};
+    control_signals_t signals = {settings.control_invert.value};
 
     // Read control signal pins, either to a temp variable or directly to signals.vaue if no remapping is required.
     // Single bits may be also assigned directly by reading them via the bit band region.

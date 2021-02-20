@@ -1,9 +1,9 @@
 /*
-  cnc_boosterpack_map.h - driver code for IMXRT1062 processor (on Teensy 4.0 board)
+  cnc_boosterpack_map.h - pin mapping configuration file for CNC BoosterPack
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by

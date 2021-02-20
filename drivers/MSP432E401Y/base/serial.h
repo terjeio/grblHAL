@@ -3,7 +3,7 @@
 
   For Texas Instruments SimpleLink ARM processors/LaunchPads
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017-2019 Terje Io
 

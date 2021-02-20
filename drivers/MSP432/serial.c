@@ -2,7 +2,7 @@
 
   serial.c - MSP432 low level functions for transmitting bytes via the serial port
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017-2020 Terje Io
 
@@ -304,6 +304,31 @@ void serial2Init (uint32_t baud_rate)
 #if MODBUS_ENABLE
     SERIAL2_MODULE->IE = EUSCI_A_IE_RXIE;
 #endif
+}
+
+bool serial2SetBaudRate (uint32_t baud_rate)
+{
+    static bool init_ok = false;
+
+    if(!init_ok) {
+        serial2Init(baud_rate);
+        init_ok = true;
+    }
+
+    switch(baud_rate)
+    {
+        case 19200:
+            SERIAL2_MODULE->BRW = 39;
+            SERIAL2_MODULE->MCTLW = (0x0 << 8) | (1 << 4) | 1;
+            break;
+
+        default: // 115200
+            SERIAL2_MODULE->BRW = 6;
+            SERIAL2_MODULE->MCTLW = (0x20 << 8) | (8 << 4) | 1;
+            break;
+    }
+
+    return true;
 }
 
 void serialSelect (bool mpg)

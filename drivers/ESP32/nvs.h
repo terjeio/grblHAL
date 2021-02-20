@@ -3,7 +3,7 @@
 
   Peristent storage of settings in flash
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2018 Terje Io
 

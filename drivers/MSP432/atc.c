@@ -4,7 +4,7 @@
   Driver code for my Mini Mill ATC, 8 tools arranged in a circle
   A motorized socket wrench is mounted in the center, used for opening/closing the spindle nut
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2018-2020 Terje Io
 
@@ -268,7 +268,7 @@ static status_code_t atc_tool_change (parser_state_t *gc_state)
     StartI2C(false);
 
     // Save current position
-    system_convert_array_steps_to_mpos(previous.values, sys_position);
+    system_convert_array_steps_to_mpos(previous.values, sys.position);
 
     // G59.3 contains offsets to position of socket wrench center (X, Y) and spindle nut offset above ATC base plate
     settings_read_coord_data(CoordinateSystem_G59_3, &offset.values); // G59.3 - fail if not set?

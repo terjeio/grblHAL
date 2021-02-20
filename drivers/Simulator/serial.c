@@ -58,7 +58,7 @@ int16_t serialGetC (void)
     return data;
 }
 
-inline uint16_t serialRxCount (void)
+static inline uint16_t serialRxCount (void)
 {
     uint_fast16_t head = rxbuffer.head, tail = rxbuffer.tail;
 

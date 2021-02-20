@@ -3,7 +3,7 @@
 
   Board design files (KiCad): https://github.com/cmcgrath5035/G2core-DUE-External-Interfaces
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2019 Terje Io
 

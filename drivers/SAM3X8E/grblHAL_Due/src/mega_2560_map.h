@@ -1,9 +1,9 @@
 /*
   mega_2560_map.h - driver code for Atmel SAM3X8E ARM processor, pin mappings compatible with Arduino Mega 2560
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2019 Terje Io
+  Copyright (c) 2019-2021 Terje Io
 
   Mappings according to cpu_map.h for Arduino Mega 2560 : Working @EliteEng
 
@@ -43,7 +43,7 @@
 #define Y_DIRECTION_BIT     (1<<Y_DIRECTION_PIN)
 #define Z_DIRECTION_PORT    PIOD
 #define Z_DIRECTION_PIN     10  // Due Digital Pin 32
-#define Z_DIRECTION_BIT     (1<<Z_STEP_PIN)
+#define Z_DIRECTION_BIT     (1<<Z_DIRECTION_PIN)
 
 // Define stepper driver enable/disable output pin(s).
 #define X_DISABLE_PORT      PIOB
@@ -77,10 +77,10 @@
 #define SPINDLE_DIRECTION_BIT   (1<<SPINDLE_DIRECTION_PIN)
 
 // Start of PWM & Stepper Enabled Spindle
-#define SPINDLE_PWM_TIMER   (TC2->TC_CHANNEL[0])
-#define SPINDLE_PWM_CCREG   2
+
+#define SPINDLE_PWM_CHANNEL 6
 #define SPINDLE_PWM_PORT    PIOC
-#define SPINDLE_PWM_PIN     25
+#define SPINDLE_PWM_PIN     23 // Due Digital Pin 7 / PWML6 B
 #define SPINDLE_PWM_BIT     (1<<SPINDLE_PWM_PIN)
 
 // Define flood and mist coolant enable output pins.
@@ -104,9 +104,11 @@
 #define CYCLE_START_PIN     19  // DUE Analog Pin 10
 #define CYCLE_START_BIT     (1<<CYCLE_START_PIN)
 
+#ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
 #define SAFETY_DOOR_PORT    PIOB
 #define SAFETY_DOOR_PIN     20  // DUE Analog Pin 11
 #define SAFETY_DOOR_BIT     (1<<SAFETY_DOOR_PIN)
+#endif
 
 // Define probe switch input pin.
 #define PROBE_PORT          PIOA

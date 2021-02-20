@@ -29,6 +29,7 @@
 #include "simulator.h"
 
 #include "grbl/hal.h"
+#include "grbl/state_machine.h"
 
 int block_position[N_AXIS] = {0}; //step count after most recently planned block
 uint32_t block_number = 0;
@@ -153,7 +154,7 @@ static void print_steps (bool force)
     int ocr = 0;
 
     //Allow exit when idle. Prevents aborting before all streamed commands have run
-    if (sim.exit == exit_REQ && sys.state < STATE_HOMING )
+    if (sim.exit == exit_REQ && state_get() < STATE_HOMING )
         sim.exit = exit_OK;
 
     if (next_print_time == 0.0)
@@ -166,7 +167,7 @@ static void print_steps (bool force)
     if (current_block != printed_block) {
         //new block. 
         if (block_number) //print values from the end of prev block
-            fprintf(args.step_out_file, "%12.5f %d, %d, %d, %d\n", sim.sim_time, sys_position[X_AXIS], sys_position[Y_AXIS], sys_position[Z_AXIS],ocr);
+            fprintf(args.step_out_file, "%12.5f %d, %d, %d, %d\n", sim.sim_time, sys.position[X_AXIS], sys.position[Y_AXIS], sys.position[Z_AXIS],ocr);
 
         printed_block = current_block;
         if (current_block == NULL)
@@ -176,7 +177,7 @@ static void print_steps (bool force)
     }
     //print at correct interval while executing block
     else if ((current_block && sim.sim_time>=next_print_time) || force ) {
-        fprintf(args.step_out_file, "%12.5f %d, %d, %d, %d\n", sim.sim_time, sys_position[X_AXIS], sys_position[Y_AXIS], sys_position[Z_AXIS], ocr);
+        fprintf(args.step_out_file, "%12.5f %d, %d, %d, %d\n", sim.sim_time, sys.position[X_AXIS], sys.position[Y_AXIS], sys.position[Z_AXIS], ocr);
         fflush(args.step_out_file);
         //make sure the simulation time doesn't get ahead of next_print_time
         while (next_print_time <= sim.sim_time)

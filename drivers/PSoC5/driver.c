@@ -3,9 +3,9 @@
 
   Driver for Cypress PSoC 5 (CY8CKIT-059)
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2017-2020 Terje Io
+  Copyright (c) 2017-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -36,7 +36,7 @@
 #define SYSTICK_INTERRUPT_VECTOR_NUMBER 15u
 
 static bool spindlePWM = false, IOInitDone = false;
-static spindle_pwm_t spindle_pwm;
+static spindle_pwm_t spindle_pwm = {0};
 static axes_signals_t next_step_outbits;
 static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
 
@@ -73,7 +73,7 @@ static void spindleSetStateFixed (spindle_state_t state, float rpm)
 static void spindle_set_speed (uint_fast16_t pwm_value)
 {
     if (pwm_value == spindle_pwm.off_value) {
-        if(settings.spindle.disable_with_zero_speed)
+        if(settings.spindle.flags.pwm_action == SpindleAction_DisableWithZeroSPeed)
             SpindleOutput_Write(SpindleOutput_Read() & 0x02);
     } else {
         if(!(SpindleOutput_Read() & 0x01))
@@ -207,9 +207,15 @@ static void limitsEnable (bool on, bool homing)
 // Returns limit state as a bit-wise uint8 variable. Each bit indicates an axis limit, where
 // triggered is 1 and not triggered is 0. Invert mask is applied. Axes are defined by their
 // number in bit position, i.e. Z_AXIS is (1<<2) or bit 2, and Y_AXIS is (1<<1) or bit 1.
-inline static axes_signals_t limitsGetState()
+inline static limit_signals_t limitsGetState()
 {
-    return (axes_signals_t)HomingSignals_Read();
+    limit_signals_t signals;
+    
+    memset(&signals, 0, sizeof(limit_signals_t));
+
+	signals.min.mask = HomingSignals_Read();
+
+    return signals;
 }
 
 static control_signals_t systemGetState (void)
@@ -218,6 +224,10 @@ static control_signals_t systemGetState (void)
     
     signals.value = ControlSignals_Read();
     
+#ifndef ENABLE_SAFETY_DOOR_INPUT_PIN
+	signals.safety_door_ajar = Off;
+#endif
+
     return signals;
 }
 
@@ -296,6 +306,7 @@ static uint_fast16_t bitsClearAtomic (volatile uint_fast16_t *ptr, uint_fast16_t
     uint_fast16_t prev = *ptr;
     *ptr &= ~bits;
     CyGlobalIntEnable;
+
     return prev;
 }
 
@@ -305,7 +316,18 @@ static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t 
     uint_fast16_t prev = *ptr;
     *ptr = value;
     CyGlobalIntEnable;
+
     return prev;
+}
+
+static void enable_irq (void)
+{
+    CyGlobalIntEnable;
+}
+
+static void disable_irq (void)
+{
+    CyGlobalIntDisable;
 }
 
 // Callback to inform settings has been changed, called by settings_store_global_setting()
@@ -391,10 +413,9 @@ static bool driver_setup (settings_t *settings)
     DelayTimer_Interrupt_Enable();
     DelayTimer_Start();
 
-    IOInitDone = settings->version == 18;
+    IOInitDone = settings->version == 19;
 
-    settings_changed(settings);
-
+    hal.settings_changed(settings);
     hal.spindle.set_state((spindle_state_t){0}, 0.0f);
     hal.coolant.set_state((coolant_state_t){0});
     DirOutput_Write(0);
@@ -420,7 +441,7 @@ bool driver_init (void)
     EEPROM_Start();
 
     hal.info = "PSoC 5";
-    hal.driver_version = "2001014";
+    hal.driver_version = "210202";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = 24000000UL;
     hal.rx_buffer_size = RX_BUFFER_SIZE;
@@ -470,10 +491,14 @@ bool driver_init (void)
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
+    hal.irq_enable = enable_irq;
+    hal.irq_disable = disable_irq;
 
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
 
-    hal.driver_cap.safety_door = On;
+#ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
+    hal.signals_cap.safety_door_ajar = On;
+#endif
     hal.driver_cap.spindle_dir = On;
     hal.driver_cap.variable_spindle = On;
     hal.driver_cap.mist_control = On;
@@ -493,7 +518,7 @@ bool driver_init (void)
 
     // No need to move version check before init.
     // Compiler will fail any signature mismatch for existing entries.
-    return hal.version == 7;
+    return hal.version == 8;
 }
 
 /* interrupt handlers */
@@ -519,7 +544,7 @@ static void stepper_pulse_isr (void)
 */
 static void limit_isr (void)
 {
-    hal.limits.interrupt_callback((axes_signals_t)HomingSignals_Read());
+    hal.limits.interrupt_callback(limitsGetState());
 }
 
 static void control_isr (void)

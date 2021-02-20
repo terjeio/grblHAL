@@ -196,9 +196,7 @@ int main(int argc, char *argv[])
     hal.stream.write = serial_write;
     hal.stream.write_all = serial_write;
 
-    protocol_main_loop(true);
+    protocol_main_loop();
 
     return exit_code;
 }
-
-

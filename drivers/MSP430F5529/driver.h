@@ -1,11 +1,11 @@
 /*
   driver.h - An embedded CNC Controller with rs274/ngc (g-code) support
 
-  Grbl driver code for Texas Instruments MSP430F5529 16-bit processor
+  Driver code for Texas Instruments MSP430F5529 16-bit processor
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2016-2017 Terje Io
+  Copyright (c) 2016-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -40,6 +40,8 @@
 
 #ifdef BOARD_CNC_BOOSTERPACK
 #include "cnc_boosterpack_map.h"
+#elif defined(BOARD_MY_MACHINE)
+#include "my_machine_map.h"
 #else
 #error No board!
 #endif

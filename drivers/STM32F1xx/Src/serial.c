@@ -2,7 +2,7 @@
 
   serial.c - serial port implementation for STM32F103C8 ARM processors
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2019-2020 Terje Io
 
@@ -31,8 +31,8 @@
 
 #if !USB_SERIAL_CDC
 
-static stream_rx_buffer_t rxbuf = {0};
-static stream_tx_buffer_t txbuf = {0}, rxbackup;
+static stream_rx_buffer_t rxbuf = {0}, rxbackup;
+static stream_tx_buffer_t txbuf = {0};
 
 void serialInit (void)
 {

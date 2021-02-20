@@ -3,9 +3,9 @@
 
   Driver code for Atmel SAMD21 ARM processor
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2018-2019 Terje Io
+  Copyright (c) 2018-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -33,6 +33,10 @@
 
 #include "i2c.h"
 #include "serial.h"
+
+#if TRINAMIC_ENABLE && TRINAMIC_I2C
+#define I2C_ADR_I2CBRIDGE 0x47
+#endif
 
 #define i2cIsBusy (!(i2c.state == I2CState_Idle || i2c.state == I2CState_Error) || !(i2c_port->I2CM.STATUS.bit.BUSSTATE == 0x01 || i2c_port->I2CM.STATUS.bit.BUSSTATE == 0x02))
 
@@ -73,50 +77,6 @@ static i2c_trans_t i2c = {0};
 static void I2C_interrupt_handler (void);
 
 #define WIRE_RISE_TIME_NANOSECONDS 125
-void i2c_init (void)
-{
-    static bool init_ok = false;
-
-    if(!init_ok) {
-
-        init_ok = true;
-
-        pinPeripheral(I2C_SDA_PIN, g_APinDescription[I2C_SDA_PIN].ulPinType); // PIO_SERCOM
-        pinPeripheral(I2C_SCL_PIN, g_APinDescription[I2C_SCL_PIN].ulPinType);
-
-        initSerClockNVIC(i2c_port);
-
-        NVIC_SetPriority(SERCOM2_IRQn, 0);
-        IRQRegister(SERCOM2_IRQn, I2C_interrupt_handler);
-
-        /* Enable the peripherals used to drive the SDC on SSI */
-
-        i2c_port->I2CM.CTRLA.bit.ENABLE = 0;
-        while(i2c_port->I2CM.SYNCBUSY.bit.ENABLE);
-
-        i2c_port->I2CM.CTRLA.bit.SWRST = 1;
-        //Wait both bits Software Reset from CTRLA and SYNCBUSY are equal to 0
-        while(i2c_port->I2CM.CTRLA.bit.SWRST || i2c_port->I2CM.SYNCBUSY.bit.SWRST);
-
-        i2c_port->I2CM.CTRLA.reg = SERCOM_I2CM_CTRLA_MODE(I2C_MASTER_OPERATION) /*| SERCOM_I2CM_CTRLA_SCLSM*/ ;
-
-        // Enable Smart mode and Quick Command
-        //i2c_port->I2CM.CTRLB.reg =  SERCOM_I2CM_CTRLB_SMEN /*| SERCOM_I2CM_CTRLB_QCEN*/ ;
-
-        // Enable all interrupts
-        i2c_port->I2CM.INTENSET.reg = SERCOM_I2CM_INTENSET_MB | SERCOM_I2CM_INTENSET_SB | SERCOM_I2CM_INTENSET_ERROR ;
-
-        // Synchronous arithmetic baudrate
-        i2c_port->I2CM.BAUD.bit.BAUD = SystemCoreClock / (2 * I2C_CLOCK) - 5 - (((SystemCoreClock / 1000000) * WIRE_RISE_TIME_NANOSECONDS) / (2 * 1000));
-
-        i2c_port->I2CM.CTRLA.bit.ENABLE = 1;
-        while(i2c_port->I2CM.SYNCBUSY.bit.ENABLE);
-
-        // Setting bus idle mode
-        i2c_port->I2CM.STATUS.bit.BUSSTATE = 1;
-        while(i2c_port->I2CM.SYNCBUSY.bit.SYSOP);
-    }
-}
 
 // get bytes (max 8), waits for result
 uint8_t *I2C_Receive (uint32_t i2cAddr, uint8_t *buf, uint16_t bytes, bool block)
@@ -207,17 +167,25 @@ void I2C_GetKeycode (uint32_t i2cAddr, keycode_callback_ptr callback)
 
 #if TRINAMIC_ENABLE && TRINAMIC_I2C
 
-static TMC2130_status_t I2C_TMC_ReadRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
-{
-    uint8_t *res, i2creg;
-    TMC2130_status_t status = {0};
+static uint8_t axis = 0xFF;
 
-    if((i2creg = TMCI2C_GetMapAddress((uint8_t)(driver ? (uint32_t)driver->cs_pin : 0), reg->addr).value) == 0xFF)
-        return status; // unsupported register
+TMC_spi_status_t tmc_spi_read (trinamic_motor_t driver, TMC_spi_datagram_t *datagram)
+{
+    uint8_t *res;
+    TMC_spi_status_t status = 0;
+
+    if(driver.axis != axis) {
+        i2c.buffer[0] = driver.axis;
+        I2C_Send(I2C_ADR_I2CBRIDGE, NULL, 1, true);
+
+        axis = driver.axis;
+    }
+
+    memset(i2c.buffer, 0, sizeof(i2c.buffer));
 
     while(i2cIsBusy);
 
-    i2c.buffer[0] = i2creg;
+    i2c.buffer[0] = datagram->addr.idx;
     i2c.buffer[1] = 0;
     i2c.buffer[2] = 0;
     i2c.buffer[3] = 0;
@@ -225,46 +193,86 @@ static TMC2130_status_t I2C_TMC_ReadRegister (TMC2130_t *driver, TMC2130_datagra
 
     res = I2C_ReadRegister(I2C_ADR_I2CBRIDGE, NULL, 5, true);
 
-    status.value = (uint8_t)*res++;
-    reg->payload.value = ((uint8_t)*res++ << 24);
-    reg->payload.value |= ((uint8_t)*res++ << 16);
-    reg->payload.value |= ((uint8_t)*res++ << 8);
-    reg->payload.value |= (uint8_t)*res++;
+    status = (uint8_t)*res++;
+    datagram->payload.value = ((uint8_t)*res++ << 24);
+    datagram->payload.value |= ((uint8_t)*res++ << 16);
+    datagram->payload.value |= ((uint8_t)*res++ << 8);
+    datagram->payload.value |= (uint8_t)*res++;
 
     return status;
 }
 
-static TMC2130_status_t I2C_TMC_WriteRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
+TMC_spi_status_t tmc_spi_write (trinamic_motor_t driver, TMC_spi_datagram_t *datagram)
 {
-    TMC2130_status_t status = {0};
+    uint8_t *res;
+    TMC_spi_status_t status = 0;
 
-    while(i2cIsBusy);
+    if(driver.axis != axis) {
+        i2c.buffer[0] = driver.axis;
+        I2C_Send(I2C_ADR_I2CBRIDGE, NULL, 1, true);
 
-    reg->addr.write = 1;
-    i2c.buffer[0] = TMCI2C_GetMapAddress((uint8_t)(driver ? (uint32_t)driver->cs_pin : 0), reg->addr).value;
-    reg->addr.write = 0;
+        axis = driver.axis;
+    }
 
-    if(i2c.buffer[0] == 0xFF)
-        return status; // unsupported register
-
-    i2c.buffer[1] = (reg->payload.value >> 24) & 0xFF;
-    i2c.buffer[2] = (reg->payload.value >> 16) & 0xFF;
-    i2c.buffer[3] = (reg->payload.value >> 8) & 0xFF;
-    i2c.buffer[4] = reg->payload.value & 0xFF;
+    datagram->addr.write = On;
+    i2c.buffer[0] = datagram->addr.value;
+    i2c.buffer[1] = (datagram->payload.value >> 24) & 0xFF;
+    i2c.buffer[2] = (datagram->payload.value >> 16) & 0xFF;
+    i2c.buffer[3] = (datagram->payload.value >> 8) & 0xFF;
+    i2c.buffer[4] = datagram->payload.value & 0xFF;
+    datagram->addr.write = Off;
 
     I2C_Send(I2C_ADR_I2CBRIDGE, NULL, 5, true);
 
     return status;
 }
 
-void I2C_DriverInit (TMC_io_driver_t *driver)
-{
-i2c_init();
-    driver->WriteRegister = I2C_TMC_WriteRegister;
-    driver->ReadRegister = I2C_TMC_ReadRegister;
-}
-
 #endif
+
+void i2c_init (void)
+{
+    static bool init_ok = false;
+
+    if(!init_ok) {
+
+        init_ok = true;
+
+        pinPeripheral(I2C_SDA_PIN, g_APinDescription[I2C_SDA_PIN].ulPinType); // PIO_SERCOM
+        pinPeripheral(I2C_SCL_PIN, g_APinDescription[I2C_SCL_PIN].ulPinType);
+
+        initSerClockNVIC(i2c_port);
+
+        NVIC_SetPriority(SERCOM2_IRQn, 0);
+        IRQRegister(SERCOM2_IRQn, I2C_interrupt_handler);
+
+        /* Enable the peripherals used to drive the SDC on SSI */
+
+        i2c_port->I2CM.CTRLA.bit.ENABLE = 0;
+        while(i2c_port->I2CM.SYNCBUSY.bit.ENABLE);
+
+        i2c_port->I2CM.CTRLA.bit.SWRST = 1;
+        //Wait both bits Software Reset from CTRLA and SYNCBUSY are equal to 0
+        while(i2c_port->I2CM.CTRLA.bit.SWRST || i2c_port->I2CM.SYNCBUSY.bit.SWRST);
+
+        i2c_port->I2CM.CTRLA.reg = SERCOM_I2CM_CTRLA_MODE(I2C_MASTER_OPERATION) /*| SERCOM_I2CM_CTRLA_SCLSM*/ ;
+
+        // Enable Smart mode and Quick Command
+        //i2c_port->I2CM.CTRLB.reg =  SERCOM_I2CM_CTRLB_SMEN /*| SERCOM_I2CM_CTRLB_QCEN*/ ;
+
+        // Enable all interrupts
+        i2c_port->I2CM.INTENSET.reg = SERCOM_I2CM_INTENSET_MB | SERCOM_I2CM_INTENSET_SB | SERCOM_I2CM_INTENSET_ERROR ;
+
+        // Synchronous arithmetic baudrate
+        i2c_port->I2CM.BAUD.bit.BAUD = SystemCoreClock / (2 * I2C_CLOCK) - 5 - (((SystemCoreClock / 1000000) * WIRE_RISE_TIME_NANOSECONDS) / (2 * 1000));
+
+        i2c_port->I2CM.CTRLA.bit.ENABLE = 1;
+        while(i2c_port->I2CM.SYNCBUSY.bit.ENABLE);
+
+        // Setting bus idle mode
+        i2c_port->I2CM.STATUS.bit.BUSSTATE = 1;
+        while(i2c_port->I2CM.SYNCBUSY.bit.SYSOP);
+    }
+}
 
 static void I2C_interrupt_handler (void)
 {

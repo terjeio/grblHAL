@@ -1,7 +1,7 @@
 /*
   smoothieboard.h - driver code for LPC176x processor, pin mappings compatible with Smoothieboard
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 
@@ -52,7 +52,7 @@
 #define Y_DIRECTION_PIN     11
 #define Y_DIRECTION_BIT     (1<<Y_DIRECTION_PIN)
 #define Z_DIRECTION_PIN     20
-#define Z_DIRECTION_BIT     (1<<Z_STEP_PIN)
+#define Z_DIRECTION_BIT     (1<<Z_DIRECTION_PIN)
 #ifdef A_AXIS
 #define A_DIRECTION_PIN     22
 #define A_DIRECTION_BIT     (1<<A_DIRECTION_PIN)
@@ -60,34 +60,25 @@
 #else
 #define DIRECTION_MASK      (X_DIRECTION_BIT|Y_DIRECTION_BIT|Z_DIRECTION_BIT)
 #endif
-#define DIRECTION_OUTMODE GPIO_SHIFT0
+#define DIRECTION_OUTMODE GPIO_MAP
 
 // Define stepper driver enable/disable output pin(s).
-#define DISABLE_PN          0
-#define DISABLE_PORT        port(DISABLE_PN)
-#define X_DISABLE_PIN       4
-#define X_DISABLE_BIT       (1<<X_DISABLE_PIN)
-#define Y_DISABLE_PN        0
-#define Y_DISABLE_PORT      port(Y_DISABLE_PN)
-#define Y_DISABLE_PIN       10
-#define Y_DISABLE_BIT       (1<<Y_DISABLE_PIN)
-#define Z_DISABLE_PN        0
-#define Z_DISABLE_PORT      port(Z_DISABLE_PN)
-#define Z_DISABLE_PIN       19
-#define Z_DISABLE_BIT       (1<<Z_DISABLE_PIN)
+#define DISABLE_PN        0
+#define DISABLE_PORT      port(DISABLE_PN)
+#define X_DISABLE_PIN     4
+#define X_DISABLE_BIT     (1<<X_DISABLE_PIN)
+#define Y_DISABLE_PIN     10
+#define Y_DISABLE_BIT     (1<<Y_DISABLE_PIN)
+#define Z_DISABLE_PIN     19
+#define Z_DISABLE_BIT     (1<<Z_DISABLE_PIN)
 #ifdef A_AXIS
-#define A_DISABLE_PN        0
-#define A_DISABLE_PORT      port(A_DISABLE_PN)
-#define A_DISABLE_PIN       21
-#define A_DISABLE_BIT       (1<<A_DISABLE_PIN)
-#define DISABLE_MASK        (X_DISABLE_BIT|Y_DISABLE_BIT|Z_DISABLE_BIT|A_DISABLE_BIT)
-#else
-#define DISABLE_MASK        (X_DISABLE_BIT|Y_DISABLE_BIT|Z_DISABLE_BIT)
+#define A_DISABLE_PIN     21
+#define A_DISABLE_BIT     (1<<A_DISABLE_PIN)
 #endif
-#define DISABLE_OUTMODE GPIO_SHIFT0
+#define DISABLE_OUTMODE GPIO_BITBAND
 
 // Define homing/hard limit switch input pins.
-// NOTE: Port 1 is not interrupt capable!
+// NOTE: All limit bits (needs to be on same port)
 #define LIMIT_PN            1
 #define LIMIT_PORT          port(LIMIT_PN)
 #define X_LIMIT_PIN         24
@@ -96,11 +87,16 @@
 #define Y_LIMIT_BIT         (1<<Y_LIMIT_PIN)
 #define Z_LIMIT_PIN         28
 #define Z_LIMIT_BIT         (1<<Z_LIMIT_PIN)
+#ifdef A_AXIS
 #define A_LIMIT_PORT        LIMIT_PORT
 #define A_LIMIT_PIN         29
 #define A_LIMIT_BIT         (1<<A_LIMIT_PIN)
+#define LIMIT_MASK (X_LIMIT_BIT|Y_LIMIT_BIT|Z_LIMIT_BIT|A_LIMIT_BIT)
+#else
+#define LIMIT_MASK (X_LIMIT_BIT|Y_LIMIT_BIT|Z_LIMIT_BIT)
+#endif
 
-//#define LIMIT_MASK (X_LIMIT_BIT|X_LIMIT_BIT_MAX|Y_LIMIT_BIT|Y_LIMIT_BIT_MAX|Z_LIMIT_BIT|Z_LIMIT_BIT_MAX) // All limit bits (needs to be on same port)
+#define LIMITS_POLL_PORT port(1) // NOTE: Port 1 is not interrupt capable, use polling instead!
 #define LIMIT_INMODE GPIO_BITBAND
 
 // Define probe switch input pin.
@@ -112,11 +108,11 @@
 // Define spindle enable and spindle direction output pins.
 #define SPINDLE_ENABLE_PN       1
 #define SPINDLE_ENABLE_PORT     port(SPINDLE_ENABLE_PN)
-#define SPINDLE_ENABLE_PIN      18  // Due Digital Pin 4
+#define SPINDLE_ENABLE_PIN      18
 #define SPINDLE_ENABLE_BIT      (1<<SPINDLE_ENABLE_PIN)
 #define SPINDLE_DIRECTION_PN    1
 #define SPINDLE_DIRECTION_PORT  port(SPINDLE_DIRECTION_PN)
-#define SPINDLE_DIRECTION_PIN   19  // Due Digital Pin 5
+#define SPINDLE_DIRECTION_PIN   19
 #define SPINDLE_DIRECTION_BIT   (1<<SPINDLE_DIRECTION_PIN)
 
 // Start of PWM & Stepper Enabled Spindle
@@ -124,23 +120,23 @@
 // Define flood and mist coolant enable output pins.
 #define COOLANT_FLOOD_PN    0
 #define COOLANT_FLOOD_PORT  port(COOLANT_FLOOD_PN)
-#define COOLANT_FLOOD_PIN   26  // Due Analog port 9
+#define COOLANT_FLOOD_PIN   26
 #define COOLANT_FLOOD_BIT   (1<<COOLANT_FLOOD_PIN)
 
 // Define user-control CONTROLs (cycle start, reset, feed hold) input pins.
 #define RESET_PORT_PN       0
 #define RESET_PORT          port(RESET_PORT_PN)
-#define RESET_PIN           27  // DUE Analog Pin 3
+#define RESET_PIN           27
 #define RESET_BIT           (1<<RESET_PIN)
 
 #define FEED_HOLD_PN        0
 #define FEED_HOLD_PORT      port(FEED_HOLD_PN)
-#define FEED_HOLD_PIN       28  // DUE Analog Pin 4
+#define FEED_HOLD_PIN       28
 #define FEED_HOLD_BIT       (1<<FEED_HOLD_PIN)
 
 #define CYCLE_START_PN      2
 #define CYCLE_START_PORT    port(CYCLE_START_PN)
-#define CYCLE_START_PIN     6   // DUE Analog Pin 5
+#define CYCLE_START_PIN     6
 #define CYCLE_START_BIT     (1<<CYCLE_START_PIN)
 
 #define CONTROL_INMODE GPIO_BITBAND

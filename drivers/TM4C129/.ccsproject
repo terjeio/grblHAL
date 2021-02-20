@@ -12,5 +12,4 @@
 	<templateProperties value="id=com.ti.common.project.core.emptyProjectWithMainTemplate,"/>
 	<connection value="common/targetdb/connections/Stellaris_ICDI_Connection.xml"/>
 	<isTargetManual value="false"/>
-	<origin value="D:/Driver TM4C1294 FreeRTOS"/>
 </projectOptions>

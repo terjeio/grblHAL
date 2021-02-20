@@ -3,7 +3,7 @@
 
   WebUI backend for https://github.com/luc-github/ESP3D-webui
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 
@@ -326,6 +326,7 @@ esp_err_t webui_sdcard_handler (httpd_req_t *req)
     size_t qlen = httpd_req_get_url_query_len(req);
 
     *status = '\0';
+    *path = '\0';
 
     if(qlen && (query = malloc(qlen + 1))) {
 
@@ -420,6 +421,8 @@ esp_err_t webui_sdcard_upload_handler (httpd_req_t *req)
     fs_path_t path;
     char *scratch = ((file_server_data_t *)req->user_ctx)->scratch;
     file_upload_t *upload = (file_upload_t *)req->sess_ctx;
+
+    *path = '\0';
 
     if (ok) do { // Process received data
 
@@ -891,7 +894,7 @@ esp_err_t webui_login_handler (httpd_req_t *req)
 {
     bool ok = false;
     uint32_t status = 200;
-    char msg[20] = "Ok";
+    char msg[40] = "Ok";
     webui_auth_level_t auth_level = WebUIAuth_None;
 
 #if AUTH_ENABLE
@@ -926,7 +929,7 @@ esp_err_t webui_login_handler (httpd_req_t *req)
                         switch(strlookup(user, "user,admin", ',')) {
 
                             case 0:
-                                if(hal.driver_setting(Setting_UserPassword, NAN, password) != Status_OK) {
+                                if(settings_store_setting(Setting_UserPassword, password) != Status_OK) {
                                     status = 401;
                                     strcpy(msg, "Error: Cannot apply changes");
                                 }
@@ -935,7 +938,7 @@ esp_err_t webui_login_handler (httpd_req_t *req)
                             case 1:
                                 ESP_LOGI("newp", "admin");
 
-                                if(hal.driver_setting(Setting_AdminPassword, NAN, password) != Status_OK) {
+                                if(settings_store_setting(Setting_AdminPassword, password) != Status_OK) {
                                     ESP_LOGI("newp", "admin failed");
                                     status = 401;
                                     strcpy(msg, "Error: Cannot apply changes");
@@ -960,11 +963,12 @@ esp_err_t webui_login_handler (httpd_req_t *req)
                     if(*user) {
 
                         auth_level = WebUIAuth_Guest;
+                        wifi_settings_t *settings = get_wifi_settings();
 
                         switch(strlookup(user, "user,admin", ',')) {
 
                             case 0:
-                                if(strcmp(password, driver_settings.wifi.user_password)) {
+                                if(strcmp(password, settings->user_password)) {
                                     status = 401;
                                     strcpy(msg, "Error: Incorrect password");
                                 } else
@@ -972,7 +976,7 @@ esp_err_t webui_login_handler (httpd_req_t *req)
                                 break;
 
                             case 1:
-                                if(strcmp(password, driver_settings.wifi.admin_password)) {
+                                if(strcmp(password, settings->admin_password)) {
                                     status = 401;
                                     strcpy(msg, "Error: Incorrect password");
                                 } else

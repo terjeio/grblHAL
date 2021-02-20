@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>GRBL Driver TM4C1294 FreeRTOS</name>
+	<name>GRBL Driver TM4C1294</name>
 	<comment></comment>
 	<projects>
 	</projects>
@@ -18,69 +18,10 @@
 		</buildCommand>
 	</buildSpec>
 	<natures>
-		<nature>org.eclipse.rtsc.xdctools.buildDefinitions.XDC.xdcNature</nature>
 		<nature>com.ti.ccstudio.core.ccsNature</nature>
 		<nature>org.eclipse.cdt.core.cnature</nature>
 		<nature>org.eclipse.cdt.managedbuilder.core.managedBuildNature</nature>
 		<nature>org.eclipse.cdt.core.ccnature</nature>
 		<nature>org.eclipse.cdt.managedbuilder.core.ScannerConfigNature</nature>
 	</natures>
-	<linkedResources>
-		<link>
-			<name>third_party/fatfs</name>
-			<type>2</type>
-			<location>C:/ti/TivaWare_C_Series-2.1.4.178/third_party/fatfs</location>
-		</link>
-		<link>
-			<name>utils/lwiplib.c</name>
-			<type>1</type>
-			<locationURI>SW_ROOT/utils/lwiplib.c</locationURI>
-		</link>
-		<link>
-			<name>third_party/FreeRTOS/Source/croutine.c</name>
-			<type>1</type>
-			<locationURI>SW_ROOT/third_party/FreeRTOS/Source/croutine.c</locationURI>
-		</link>
-		<link>
-			<name>third_party/FreeRTOS/Source/list.c</name>
-			<type>1</type>
-			<locationURI>SW_ROOT/third_party/FreeRTOS/Source/list.c</locationURI>
-		</link>
-		<link>
-			<name>third_party/FreeRTOS/Source/queue.c</name>
-			<type>1</type>
-			<locationURI>SW_ROOT/third_party/FreeRTOS/Source/queue.c</locationURI>
-		</link>
-		<link>
-			<name>third_party/FreeRTOS/Source/tasks.c</name>
-			<type>1</type>
-			<locationURI>SW_ROOT/third_party/FreeRTOS/Source/tasks.c</locationURI>
-		</link>
-		<link>
-			<name>third_party/FreeRTOS/Source/timers.c</name>
-			<type>1</type>
-			<locationURI>SW_ROOT/third_party/FreeRTOS/Source/timers.c</locationURI>
-		</link>
-		<link>
-			<name>third_party/FreeRTOS/Source/portable/MemMang/heap_2.c</name>
-			<type>1</type>
-			<locationURI>SW_ROOT/third_party/FreeRTOS/Source/portable/MemMang/heap_2.c</locationURI>
-		</link>
-		<link>
-			<name>third_party/FreeRTOS/Source/portable/CCS/ARM_CM4F/port.c</name>
-			<type>1</type>
-			<locationURI>SW_ROOT/third_party/FreeRTOS/Source/portable/CCS/ARM_CM4F/port.c</locationURI>
-		</link>
-		<link>
-			<name>third_party/FreeRTOS/Source/portable/CCS/ARM_CM4F/portasm.asm</name>
-			<type>1</type>
-			<locationURI>SW_ROOT/third_party/FreeRTOS/Source/portable/CCS/ARM_CM4F/portasm.asm</locationURI>
-		</link>
-	</linkedResources>
-	<variableList>
-		<variable>
-			<name>SW_ROOT</name>
-			<value>file:/C:/ti8/TivaWare_C_Series-2.1.4.178</value>
-		</variable>
-	</variableList>
 </projectDescription>

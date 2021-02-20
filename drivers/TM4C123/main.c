@@ -3,7 +3,7 @@
 
   Startup entry point for TM4C123GH6PM (Texas Instruments Tiva C LaunchPad)
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017 Terje Io
 

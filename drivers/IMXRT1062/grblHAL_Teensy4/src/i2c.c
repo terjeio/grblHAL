@@ -1,7 +1,7 @@
 /*
   i2c.c - driver code for IMXRT1062 processor (on Teensy 4.0 board)
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Some parts of this code is Copyright (c) 2020 Terje Io
 

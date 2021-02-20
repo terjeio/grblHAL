@@ -3,9 +3,9 @@
 
   For Texas Instruments SimpleLink ARM processors/LaunchPads
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2018-2020 Terje Io
+  Copyright (c) 2018-2021 Terje Io
 
   Some parts
    Copyright (c) 2011-2015 Sungeun K. Jeon
@@ -30,7 +30,9 @@
 #include "eeprom.h"
 #include "serial.h"
 
+#include "grbl/limits.h"
 #include "grbl/protocol.h"
+#include "grbl/state_machine.h"
 
 #ifdef FreeRTOS
 #include "FreeRTOS.h"
@@ -47,7 +49,7 @@ static void keyclick_int_handler (void);
 static void trinamic_diag1_isr (void);
 #endif
 
-#if USE_I2C
+#ifdef I2C_ENABLE
 #include "i2c.h"
 #endif
 
@@ -224,7 +226,9 @@ state_signal_t inputpin[] = {
     {CONTROL_PORT_RST, RESET_PIN, false, false, false},
     {CONTROL_PORT_FH_CS, FEED_HOLD_PIN, false, false, false},
     {CONTROL_PORT_FH_CS, CYCLE_START_PIN, false, false, false},
+#ifdef SAFETY_DOOR_PIN
     {CONTROL_PORT_SD, SAFETY_DOOR_PIN, false, false, false},
+#endif
     {PROBE_PORT, PROBE_PIN, false, false, false},
     {LIMIT_PORT_X, X_LIMIT_PIN, false, false, false},
     {LIMIT_PORT_YZ, Y_LIMIT_PIN, false, false, false},
@@ -238,12 +242,15 @@ state_signal_t inputpin[] = {
 
 static bool pwmEnabled = false, IOInitDone = false;
 static uint32_t pulse_length, pulse_delay;
+#ifndef FreeRTOS
+static volatile uint32_t elapsed_tics = 0;
+#endif
 static axes_signals_t next_step_outbits;
-static spindle_pwm_t spindle_pwm;
+static spindle_pwm_t spindle_pwm = {0};
 static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
-
-// Inverts the probe pin state depending on user settings and probing cycle mode.
-static uint8_t probe_invert;
+static probe_state_t probe = {
+    .connected = On
+};
 
 #if STEP_OUTMODE == GPIO_MAP
 
@@ -304,16 +311,16 @@ void selectStream (stream_type_t stream)
 
 #if TELNET_ENABLE
         case StreamType_Telnet:
+            hal.stream.write_all("[MSG:TELNET STREAM ACTIVE]" ASCII_EOL);
             memcpy(&hal.stream, &ethernet_stream, sizeof(io_stream_t));
             services.telnet = On;
-            hal.stream.write_all("[MSG:TELNET STREAM ACTIVE]" ASCII_EOL);
             break;
 #endif
 #if WEBSOCKET_ENABLE
         case StreamType_WebSocket:
+            hal.stream.write_all("[MSG:WEBSOCKET STREAM ACTIVE]" ASCII_EOL);
             memcpy(&hal.stream, &websocket_stream, sizeof(io_stream_t));
             services.websocket = On;
-            hal.stream.write_all("[MSG:WEBSOCKET STREAM ACTIVE]" ASCII_EOL);
             break;
 #endif
         case StreamType_Serial:
@@ -782,35 +789,36 @@ static void limitsEnable (bool on, bool homing)
 
 // Returns limit state as an axes_signals_t variable.
 // Each bitfield bit indicates an axis limit, where triggered is 1 and not triggered is 0.
-inline static axes_signals_t limitsGetState()
+inline static limit_signals_t limitsGetState()
 {
+    limit_signals_t signals = {0};
+    signals.min.value = settings.limits.invert.value;
+
 #if CNC_BOOSTERPACK // Change to bit-band read to avoid call overhead!
-    axes_signals_t signals = {0};
     uint32_t flags = GPIOPinRead(LIMIT_PORT_YZ, HWLIMIT_MASK_YZ);
 
-    signals.x = GPIOPinRead(LIMIT_PORT_X, X_LIMIT_PIN) != 0;
-    signals.y = (flags & Y_LIMIT_PIN) != 0;
-    signals.z = (flags & Z_LIMIT_PIN) != 0;
+    signals.min.x = GPIOPinRead(LIMIT_PORT_X, X_LIMIT_PIN) != 0;
+    signals.min.y = (flags & Y_LIMIT_PIN) != 0;
+    signals.min.z = (flags & Z_LIMIT_PIN) != 0;
 #ifdef A_AXIS
-    signals.a = GPIOPinRead(LIMIT_PORT_A, A_LIMIT_PIN) != 0;
+    signals.min.a = GPIOPinRead(LIMIT_PORT_A, A_LIMIT_PIN) != 0;
 #endif
 #ifdef B_AXIS
-    signals.b = GPIOPinRead(LIMIT_PORT_B, B_LIMIT_PIN) != 0;
+    signals.min.b = GPIOPinRead(LIMIT_PORT_B, B_LIMIT_PIN) != 0;
 #endif
 #ifdef C_AXIS
-    signals.c = GPIOPinRead(LIMIT_PORT_C, C_LIMIT_PIN) != 0;
+    signals.min.c = GPIOPinRead(LIMIT_PORT_C, C_LIMIT_PIN) != 0;
 #endif
 #else
     uint32_t flags = GPIOPinRead(LIMIT_PORT, HWLIMIT_MASK);
-    axes_signals_t signals;
 
-    signals.x = (flags & X_LIMIT_PIN) != 0;
-    signals.y = (flags & Y_LIMIT_PIN) != 0;
-    signals.z = (flags & Z_LIMIT_PIN) != 0;
+    signals.min.x = (flags & X_LIMIT_PIN) != 0;
+    signals.min.y = (flags & Y_LIMIT_PIN) != 0;
+    signals.min.z = (flags & Z_LIMIT_PIN) != 0;
 #endif
 
     if (settings.limits.invert.value)
-        signals.value ^= settings.limits.invert.value;
+        signals.min.value ^= settings.limits.invert.value;
 
     return signals;
 }
@@ -857,24 +865,25 @@ inline static control_signals_t systemGetState (void)
 // and the probing cycle modes for toward-workpiece/away-from-workpiece.
 static void probeConfigure (bool is_probe_away, bool probing)
 {
-  probe_invert = settings.probe.invert_probe_pin ? 0 : PROBE_PIN;
-
-  if (is_probe_away)
-      probe_invert ^= PROBE_PIN;
-
-  GPIOIntTypeSet(PROBE_PORT, PROBE_PIN, probe_invert ? GPIO_FALLING_EDGE : GPIO_RISING_EDGE);
-  GPIOIntEnable(PROBE_PORT, PROBE_PIN);
+    probe.triggered = Off;
+    probe.is_probing = probing;
+    probe.inverted = is_probe_away ? !settings.probe.invert_probe_pin : settings.probe.invert_probe_pin;
+/*
+    GPIOIntDisable(PROBE_PORT, PROBE_PIN);
+    GPIOIntTypeSet(PROBE_PORT, PROBE_PIN, probe.inverted ? GPIO_FALLING_EDGE : GPIO_RISING_EDGE);
+    if(probing)
+        GPIOIntEnable(PROBE_PORT, PROBE_PIN);
+        */
 }
 
 // Returns the probe connected and pin states.
 probe_state_t probeGetState (void)
 {
-    probe_state_t state = {
-        .connected = On
-    };
+    probe_state_t state = {0};
 
+    state.connected = probe.connected;
     //state.triggered = probeState; // TODO: check out using interrupt instead (we want to trap trigger and not risk losing it due to bouncing)
-    state.triggered = (((uint8_t)GPIOPinRead(PROBE_PORT, PROBE_PIN)) ^ probe_invert) != 0;
+    state.triggered = !!GPIOPinRead(PROBE_PORT, PROBE_PIN) ^ probe.inverted;
 
     return state;
 }
@@ -947,7 +956,7 @@ static void spindle_set_speed (uint_fast16_t pwm_value)
 {
     if (pwm_value == spindle_pwm.off_value) {
         pwmEnabled = false;
-        if(settings.spindle.disable_with_zero_speed)
+        if(settings.spindle.flags.pwm_action == SpindleAction_DisableWithZeroSPeed)
             spindle_off();
         if(spindle_pwm.always_on) {
             TimerPrescaleMatchSet(SPINDLE_PWM_TIMER_BASE, TIMER_B, spindle_pwm.off_value >> 16);
@@ -1084,6 +1093,7 @@ static uint_fast16_t bitsClearAtomic (volatile uint_fast16_t *ptr, uint_fast16_t
     uint_fast16_t prev = *ptr;
     *ptr &= ~bits;
     IntMasterEnable();
+
     return prev;
 }
 
@@ -1093,7 +1103,18 @@ static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t 
     uint_fast16_t prev = *ptr;
     *ptr = value;
     IntMasterEnable();
+
     return prev;
+}
+
+static void enable_irq (void)
+{
+    IntMasterEnable();
+}
+
+static void disable_irq (void)
+{
+    IntMasterDisable();
 }
 
 static void modeSelect (bool mpg_mode)
@@ -1101,7 +1122,7 @@ static void modeSelect (bool mpg_mode)
     static stream_type_t normal_stream = StreamType_Serial;
 
     // Deny entering MPG mode if busy
-    if(mpg_mode == sys.mpg_mode || (mpg_mode && (gc_state.file_run || !(sys.state == STATE_IDLE || (sys.state & (STATE_ALARM|STATE_ESTOP)))))) {
+    if(mpg_mode == sys.mpg_mode || (mpg_mode && (gc_state.file_run || !(state_get() == STATE_IDLE || (state_get() & (STATE_ALARM|STATE_ESTOP)))))) {
         hal.stream.enqueue_realtime_command(CMD_STATUS_REPORT_ALL);
         return;
     }
@@ -1132,9 +1153,19 @@ static void modechange (void)
     GPIOIntEnable(MODE_PORT, MODE_SWITCH_PIN);
 }
 
+#ifndef FreeRTOS
+
+uint32_t getElapsedTicks (void)
+{
+    return elapsed_tics;
+}
+
+#endif
+
 // Configures perhipherals when settings are initialized or changed
 static void settings_changed (settings_t *settings)
 {
+    spindle_pwm.offset = -1;
     hal.driver_cap.variable_spindle = spindle_precompute_pwm_values(&spindle_pwm, configCPU_CLOCK_HZ);
 
 #if (STEP_OUTMODE == GPIO_MAP) || (DIRECTION_OUTMODE == GPIO_MAP)
@@ -1156,10 +1187,6 @@ static void settings_changed (settings_t *settings)
 #endif
 
     if(IOInitDone) {
-
-      #if TRINAMIC_ENABLE
-        trinamic_configure();
-      #endif
 
 #if ETHERNET_ENABLE
 
@@ -1542,20 +1569,14 @@ static bool driver_setup (settings_t *settings)
 #endif
 
 #if TRINAMIC_ENABLE
-
-  #if CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
-    trinamic_start(false);
-  #else
-    trinamic_start(true);
-  #endif
-
+/*
     // Configure input pin for DIAG1 signal (with pullup) and enable interrupt
     GPIOPinTypeGPIOInput(TRINAMIC_DIAG_IRQ_PORT, TRINAMIC_DIAG_IRQ_PIN);
     GPIOIntRegister(TRINAMIC_DIAG_IRQ_PORT, trinamic_diag1_isr); // Register a call-back function for interrupt
     GPIOPadConfigSet(TRINAMIC_DIAG_IRQ_PORT, TRINAMIC_DIAG_IRQ_PIN, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
     GPIOIntTypeSet(TRINAMIC_DIAG_IRQ_PORT, TRINAMIC_DIAG_IRQ_PIN, GPIO_FALLING_EDGE);
     GPIOIntEnable(TRINAMIC_DIAG_IRQ_PORT, TRINAMIC_DIAG_IRQ_PIN);
-
+*/
   #if TRINAMIC_I2C
   // Configure input pin for WARN signal (with pullup) and enable interrupt
     GPIOPinTypeGPIOInput(TRINAMIC_WARN_IRQ_PORT, TRINAMIC_WARN_IRQ_PIN);
@@ -1578,10 +1599,9 @@ static bool driver_setup (settings_t *settings)
 
   // Set defaults
 
-    IOInitDone = settings->version == 18;
+    IOInitDone = settings->version == 19;
 
-    settings_changed(settings);
-
+    hal.settings_changed(settings);
     hal.stepper.go_idle(true);
     hal.spindle.set_state((spindle_state_t){0}, 0.0f);
     hal.coolant.set_state((coolant_state_t){0});
@@ -1634,7 +1654,7 @@ bool driver_init (void)
 
     serialInit();
 
-#if USE_I2C
+#if I2C_ENABLE
     I2CInit();
 #endif
 
@@ -1654,7 +1674,7 @@ bool driver_init (void)
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
-    hal.driver_version = "2001014";
+    hal.driver_version = "210214";
     hal.driver_setup = driver_setup;
 #if !USE_32BIT_TIMER
     hal.f_step_timer = hal.f_step_timer / (STEPPER_DRIVER_PRESCALER + 1);
@@ -1699,10 +1719,16 @@ bool driver_init (void)
 
     eeprom_init();
 
+    hal.irq_enable = enable_irq;
+    hal.irq_disable = disable_irq;
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
+#ifdef FreeRTOS
     hal.get_elapsed_ticks = xTaskGetTickCountFromISR;
+#else
+    hal.get_elapsed_ticks = getElapsedTicks;
+#endif
 
 #ifdef DEBUGOUT
     hal.debug_out = debug_out;
@@ -1716,7 +1742,7 @@ bool driver_init (void)
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
 
 #ifdef SAFETY_DOOR_PIN
-    hal.driver_cap.safety_door = On;
+    hal.signals_cap.safety_door_ajar = On;
 #endif
     hal.driver_cap.spindle_dir = On;
     hal.driver_cap.variable_spindle = On;
@@ -1754,7 +1780,7 @@ bool driver_init (void)
     my_plugin_init();
 
     // no need to move version check before init - compiler will fail any signature mismatch for existing entries
-    return hal.version == 7;
+    return hal.version == 8;
 }
 
 /* interrupt handlers */
@@ -1818,9 +1844,8 @@ static void software_debounce_isr (void)
 {
     TimerIntClear(DEBOUNCE_TIMER_BASE, TIMER_TIMA_TIMEOUT); // clear interrupt flag
 
-    axes_signals_t state = limitsGetState();
-
-    if(state.value) //TODO: add check for limit swicthes having same state as when limit_isr were invoked?
+    limit_signals_t state = limitsGetState();
+    if(limit_signals_merge(state).value) //TODO: add check for limit switches having same state as when limit_isr were invoked?
         hal.limits.interrupt_callback(state);
 }
 
@@ -1916,7 +1941,8 @@ static void keyclick_int_handler (void)
 
 #endif
 
-#if TRINAMIC_ENABLE
+/*
+#if TRINAMIC_ENABLE && TRINAMIC_ENABLE != 2130
 
 static void trinamic_diag1_isr (void)
 {
@@ -1929,8 +1955,8 @@ static void trinamic_diag1_isr (void)
 }
 
 #endif
-
-  #if CNC_BOOSTERPACK2
+*/
+#if CNC_BOOSTERPACK2
 
     static void limit_a_isr (void)
     {
@@ -2071,8 +2097,10 @@ static void control_isr_sd (void)
             hal.limits.interrupt_callback(limitsGetState());
     }
 #endif
+#ifdef SAFETY_DOOR_PIN
     if(iflags & SAFETY_DOOR_PIN)
         hal.control.interrupt_callback(systemGetState());
+#endif
 }
 
 #ifndef FreeRTOS
@@ -2080,6 +2108,8 @@ static void control_isr_sd (void)
 #if PWM_RAMPED
 static void systick_isr (void)
 {
+    elapsed_tics++;
+    
     if(pwm_ramp.ms_cfg) {
         if(++pwm_ramp.delay_ms == pwm_ramp.ms_cfg) {
 
@@ -2113,21 +2143,17 @@ static void systick_isr (void)
 
     if(delay.ms && !(--delay.ms) && delay.callback) {
         delay.callback();
-        delay.callback = 0;
+        delay.callback = NULL;
     }
-
-    if(!(delay.ms || pwm_ramp.ms_cfg))
-        SysTickDisable();
 }
 #else
 static void systick_isr (void)
 {
-    if(!(--delay.ms)) {
-        SysTickDisable();
-        if(delay.callback) {
-            delay.callback();
-            delay.callback = NULL;
-        }
+    elapsed_tics++;
+
+    if(delay.ms && !(--delay.ms) && delay.callback) {
+        delay.callback();
+        delay.callback = NULL;
     }
 }
 #endif

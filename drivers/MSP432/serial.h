@@ -2,7 +2,7 @@
 
   serial.h - low level functions for transmitting bytes via the serial port
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017-2020 Terje Io
 
@@ -86,6 +86,7 @@ void serialRxCancel(void);
 
 #ifdef SERIAL2_MOD
 void serial2Init(uint32_t baud_rate);
+bool serial2SetBaudRate (uint32_t baud_rate);
 uint16_t serial2RxFree (void);
 void serial2RxFlush (void);
 void serial2RxCancel (void);

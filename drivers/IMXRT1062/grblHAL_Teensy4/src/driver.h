@@ -3,7 +3,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -36,6 +36,10 @@
 
 #include "grbl/hal.h"
 #include "grbl/nuts_bolts.h"
+
+
+#define DIGITAL_IN(gpio) (!!(gpio.reg->DR & gpio.bit))
+#define DIGITAL_OUT(gpio, on) { if(on) gpio.reg->DR_SET = gpio.bit; else gpio.reg->DR_CLEAR = gpio.bit; }
 
 #if USB_SERIAL_CDC > 0
 //#define UART_DEBUG // For development only - enable only with USB_SERIAL_CDC enabled and SPINDLE_HUANYANG disabled
@@ -156,6 +160,12 @@
   #include "T40X101_map.h"
 #elif defined(BOARD_T41U5XBB)
   #include "T41U5XBB_map.h"
+#elif defined(BOARD_T41U5XSS)
+  #include "T41U5XSS_map.h"
+#elif defined(BOARD_T41PROBB)
+  #include "T41ProBB_map.h"
+#elif defined(BOARD_MY_MACHINE)
+  #include "my_machine_map.h"
 #else // default board
 #include "generic_map.h"
 #endif
@@ -241,6 +251,7 @@ typedef enum {
     Input_FeedHold,
     Input_CycleStart,
     Input_SafetyDoor,
+    Input_LimitsOverride,
     Input_EStop,
     Input_ModeSelect,
     Input_LimitX,

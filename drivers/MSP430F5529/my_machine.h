@@ -1,7 +1,7 @@
 /*
   my_machine.h - configuration for Texas Instruments MSP430F5529 16-bit processor
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 
@@ -21,6 +21,7 @@
 
 // NOTE: Only one board may be enabled!
 #define BOARD_CNC_BOOSTERPACK
+//#define BOARD_MY_MACHINE // Add my_machine_map.h before enabling this!
 
 // Configuration
 // Uncomment to enable.

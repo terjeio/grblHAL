@@ -2,9 +2,9 @@
 
   driver.c - driver code for STM32F4xx ARM processors
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2019-2020 Terje Io
+  Copyright (c) 2019-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -27,6 +27,8 @@
 #include "main.h"
 #include "driver.h"
 #include "serial.h"
+
+#include "grbl/limits.h"
 
 #ifdef I2C_PORT
 #include "i2c.h"
@@ -62,15 +64,34 @@
 #include "flash.h"
 #endif
 
+typedef union {
+    uint8_t mask;
+    struct {
+        uint8_t limits :1,
+                door   :1,
+                unused :6;
+    };
+} debounce_t;
+
 extern __IO uint32_t uwTick;
 static uint32_t pulse_length, pulse_delay;
-static bool pwmEnabled = false, IOInitDone = false;
-// Inverts the probe pin state depending on user settings and probing cycle mode.
-static bool probe_invert;
+static bool IOInitDone = false;
 static axes_signals_t next_step_outbits;
-static spindle_pwm_t spindle_pwm;
 static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
-static status_code_t (*on_unknown_sys_command)(uint_fast16_t state, char *line, char *lcline);
+static debounce_t debounce;
+static probe_state_t probe = {
+    .connected = On
+};
+
+#if !VFD_SPINDLE
+static bool pwmEnabled = false;
+static spindle_pwm_t spindle_pwm;
+static void spindle_set_speed (uint_fast16_t pwm_value);
+#endif
+
+#if MODBUS_ENABLE
+static modbus_stream_t modbus_stream = {0};
+#endif
 
 #ifdef SPINDLE_SYNC_ENABLE
 
@@ -78,14 +99,14 @@ static status_code_t (*on_unknown_sys_command)(uint_fast16_t state, char *line, 
 
 static spindle_data_t spindle_data;
 static spindle_encoder_t spindle_encoder = {
-    .counter.tics_per_irq = 4
+    .tics_per_irq = 4
 };
 static spindle_sync_t spindle_tracker;
 static volatile bool spindleLock = false;
 
 static void stepperPulseStartSynchronized (stepper_t *stepper);
 static void spindleDataReset (void);
-static spindle_data_t spindleGetData (spindle_data_request_t request);
+static spindle_data_t *spindleGetData (spindle_data_request_t request);
 
 #endif
 
@@ -212,8 +233,6 @@ static uint32_t dir_outmap[sizeof(c_dir_outmap) / sizeof(uint32_t)];
 
 #define DRIVER_IRQMASK (LIMIT_MASK|CONTROL_MASK|KEYPAD_STROBE_BIT|SPINDLE_INDEX_BIT)
 
-static void spindle_set_speed (uint_fast16_t pwm_value);
-
 static void driver_delay (uint32_t ms, void (*callback)(void))
 {
     if((delay.ms = ms) > 0) {
@@ -254,8 +273,6 @@ static void stepperWakeUp (void)
     STEPPER_TIMER->ARR = 5000; // delay to allow drivers time to wake up
     STEPPER_TIMER->EGR = TIM_EGR_UG;
     STEPPER_TIMER->CR1 |= TIM_CR1_CEN;
-
-//    hal.stepper.interrupt_callback();   // and start the show
 }
 
 // Disables stepper driver interrupts
@@ -270,22 +287,6 @@ static void stepperGoIdle (bool clear_signals)
 static void stepperCyclesPerTick (uint32_t cycles_per_tick)
 {
     STEPPER_TIMER->ARR = cycles_per_tick < (1UL << 20) ? cycles_per_tick : 0x000FFFFFUL;
-    STEPPER_TIMER->EGR = TIM_EGR_UG;
-/*
-    STEPPER_TIMER->ARR = (uint16_t)(cycles_per_tick - 1);
-    // Set timer prescaling for normal step generation
-    if (cycles_per_tick < (1UL << 16)) { // < 65536  (1.1ms @ 72MHz)
-        STEPPER_TIMER->PSC = 0; // DIV 1
-    } else if (cycles_per_tick < (1UL << 19)) { // < 524288 (8.8ms @ 72MHz)
-        STEPPER_TIMER->PSC = 7; // DIV 8
-        cycles_per_tick = cycles_per_tick >> 3;
-    } else {
-        STEPPER_TIMER->PSC = 63; // DIV64
-        cycles_per_tick = cycles_per_tick >> 6;
-    }
-    STEPPER_TIMER->ARR = (uint16_t)(cycles_per_tick - 1);
-    STEPPER_TIMER->EGR = TIM_EGR_UG;
-    */
 }
 
 // Set stepper pulse output pins
@@ -398,7 +399,7 @@ static void stepperPulseStartSynchronized (stepper_t *stepper)
         spindle_tracker.steps_per_mm = stepper->exec_block->steps_per_mm;
         spindle_tracker.segment_id = 0;
         spindle_tracker.prev_pos = 0.0f;
-        block_start = spindleGetData(SpindleData_AngularPosition).angular_position * spindle_tracker.programmed_rate;
+        block_start = spindleGetData(SpindleData_AngularPosition)->angular_position * spindle_tracker.programmed_rate;
         pidf_reset(&spindle_tracker.pid);
 #ifdef PID_LOG
         sys.pid_log.idx = 0;
@@ -423,7 +424,7 @@ static void stepperPulseStartSynchronized (stepper_t *stepper)
             if(stepper->exec_segment->cruising) {
 
                 float dt = (float)hal.f_step_timer / (float)(stepper->exec_segment->cycles_per_tick * stepper->exec_segment->n_step);
-                actual_pos = spindleGetData(SpindleData_AngularPosition).angular_position * spindle_tracker.programmed_rate;
+                actual_pos = spindleGetData(SpindleData_AngularPosition)->angular_position * spindle_tracker.programmed_rate;
 
                 if(sync) {
                     spindle_tracker.pid.sample_rate_prev = dt;
@@ -434,15 +435,13 @@ static void stepperPulseStartSynchronized (stepper_t *stepper)
 
                 actual_pos -= block_start;
                 int32_t step_delta = (int32_t)(pidf(&spindle_tracker.pid, spindle_tracker.prev_pos, actual_pos, dt) * spindle_tracker.steps_per_mm);
-
-
                 int32_t ticks = (((int32_t)stepper->step_count + step_delta) * (int32_t)stepper->exec_segment->cycles_per_tick) / (int32_t)stepper->step_count;
 
-                stepper->exec_segment->cycles_per_tick = (uint32_t)max(ticks, spindle_tracker.min_cycles_per_tick);
+                stepper->exec_segment->cycles_per_tick = (uint32_t)max(ticks, spindle_tracker.min_cycles_per_tick >> stepper->exec_segment->amass_level);
 
                 stepperCyclesPerTick(stepper->exec_segment->cycles_per_tick);
            } else
-               actual_pos = spindle_tracker.prev_pos;
+                actual_pos = spindle_tracker.prev_pos;
 
 #ifdef PID_LOG
             if(sys.pid_log.idx < PID_LOG) {
@@ -484,31 +483,31 @@ static void limitsEnable (bool on, bool homing)
 
 // Returns limit state as an axes_signals_t variable.
 // Each bitfield bit indicates an axis limit, where triggered is 1 and not triggered is 0.
-inline static axes_signals_t limitsGetState()
+inline static limit_signals_t limitsGetState()
 {
-    axes_signals_t signals;
+    limit_signals_t signals = {0};
 
 #if LIMIT_INMODE == GPIO_BITBAND
-    signals.x = BITBAND_PERI(X_LIMIT_PORT->IDR, X_LIMIT_PIN);
-    signals.y = BITBAND_PERI(Y_LIMIT_PORT->IDR, Y_LIMIT_PIN);
-    signals.z = BITBAND_PERI(Z_LIMIT_PORT->IDR, Z_LIMIT_PIN);
+    signals.min.x = BITBAND_PERI(X_LIMIT_PORT->IDR, X_LIMIT_PIN);
+    signals.max.y = BITBAND_PERI(Y_LIMIT_PORT->IDR, Y_LIMIT_PIN);
+    signals.min.z = BITBAND_PERI(Z_LIMIT_PORT->IDR, Z_LIMIT_PIN);
   #ifdef A_LIMIT_PIN
-    signals.a = BITBAND_PERI(A_LIMIT_PORT->IDR, A_LIMIT_PIN);
+    signals.min.a = BITBAND_PERI(A_LIMIT_PORT->IDR, A_LIMIT_PIN);
   #endif
 #elif LIMIT_INMODE == GPIO_MAP
     uint32_t bits = LIMIT_PORT->IDR;
-    signals.x = (bits & X_LIMIT_BIT) != 0;
-    signals.y = (bits & Y_LIMIT_BIT) != 0;
-    signals.z = (bits & Z_LIMIT_BIT) != 0;
+    signals.min.x = (bits & X_LIMIT_BIT) != 0;
+    signals.min.y = (bits & Y_LIMIT_BIT) != 0;
+    signals.min.z = (bits & Z_LIMIT_BIT) != 0;
   #ifdef A_LIMIT_PIN
-    signals.a = (bits & A_LIMIT_BIT) != 0;
+    signals.min.a = (bits & A_LIMIT_BIT) != 0;
   #endif
 #else
-    signals.value = (uint8_t)((LIMIT_PORT->IDR & LIMIT_MASK) >> LIMIT_INMODE);
+    signals.min.value = (uint8_t)((LIMIT_PORT->IDR & LIMIT_MASK) >> LIMIT_INMODE);
 #endif
 
     if (settings.limits.invert.mask)
-        signals.value ^= settings.limits.invert.mask;
+        signals.min.value ^= settings.limits.invert.mask;
 
     return signals;
 }
@@ -549,31 +548,32 @@ static control_signals_t systemGetState (void)
     return signals;
 }
 
+#ifdef PROBE_PIN
+
 // Sets up the probe pin invert mask to
 // appropriately set the pin logic according to setting for normal-high/normal-low operation
 // and the probing cycle modes for toward-workpiece/away-from-workpiece.
-static void probeConfigure(bool is_probe_away, bool probing)
+static void probeConfigure (bool is_probe_away, bool probing)
 {
-    probe_invert = settings.probe.invert_probe_pin ? 1 : 0;
-#ifdef PROBE_PIN
-    if (is_probe_away)
-        probe_invert ^= 1;
-#endif
+    probe.triggered = Off;
+    probe.is_probing = probing;
+    probe.inverted = is_probe_away ? !settings.probe.invert_probe_pin : settings.probe.invert_probe_pin;
 }
 
 // Returns the probe connected and triggered pin states.
 probe_state_t probeGetState (void)
 {
-    probe_state_t state = {
-        .connected = On
-    };
+    probe_state_t state = {0};
 
-#ifdef PROBE_PIN
-    state.triggered = ((PROBE_PORT->IDR & PROBE_BIT) != 0)  ^ probe_invert;
-#endif
+    state.connected = probe.connected;
+    state.triggered = !!(PROBE_PORT->IDR & PROBE_BIT) ^ probe.inverted;
 
     return state;
 }
+
+#endif
+
+#if !VFD_SPINDLE
 
 // Static spindle (off, on cw & on ccw)
 
@@ -614,7 +614,7 @@ static void spindle_set_speed (uint_fast16_t pwm_value)
 {
     if (pwm_value == spindle_pwm.off_value) {
         pwmEnabled = false;
-        if(settings.spindle.disable_with_zero_speed)
+        if(settings.spindle.flags.pwm_action == SpindleAction_DisableWithZeroSPeed)
             spindle_off();
         if(spindle_pwm.always_on) {
             SPINDLE_PWM_TIMER->CCR1 = spindle_pwm.off_value;
@@ -674,13 +674,13 @@ static spindle_state_t spindleGetState (void)
 
     state.on = (SPINDLE_ENABLE_PORT->IDR & SPINDLE_ENABLE_BIT) != 0;
     state.ccw = hal.driver_cap.spindle_dir && (SPINDLE_DIRECTION_PORT->IDR & SPINDLE_DIRECTION_BIT) != 0;
+
     state.value ^= settings.spindle.invert.mask;
-    if(pwmEnabled)
-        state.value = On;
 
 #ifdef SPINDLE_SYNC_ENABLE
-    float rpm = spindleGetData(SpindleData_RPM).rpm;
+    float rpm = spindleGetData(SpindleData_RPM)->rpm;
     state.at_speed = settings.spindle.at_speed_tolerance <= 0.0f || (rpm >= spindle_data.rpm_low_limit && rpm <= spindle_data.rpm_high_limit);
+    state.encoder_error = spindle_encoder.error_count > 0;
 #endif
 
     return state;
@@ -700,23 +700,35 @@ static void spindlePulseOn (uint_fast16_t pulse_length)
 
 #ifdef SPINDLE_SYNC_ENABLE
 
-static spindle_data_t spindleGetData (spindle_data_request_t request)
+static spindle_data_t *spindleGetData (spindle_data_request_t request)
 {
     bool stopped;
-    uint32_t pulse_length = spindle_encoder.timer.pulse_length / spindle_encoder.counter.tics_per_irq;
+    uint32_t pulse_length, rpm_timer_delta;
+    spindle_encoder_counter_t encoder;
 
-    uint32_t rpm_timer_delta = RPM_TIMER->CNT - spindle_encoder.timer.last_pulse;
+//    while(spindle_encoder.spin_lock);
 
-    // If no (4) spindle pulses during last 250 ms assume RPM is 0
+    __disable_irq();
+
+    memcpy(&encoder, &spindle_encoder.counter, sizeof(spindle_encoder_counter_t));
+
+    pulse_length = spindle_encoder.timer.pulse_length / spindle_encoder.tics_per_irq;
+    rpm_timer_delta = RPM_TIMER->CNT - spindle_encoder.timer.last_pulse;
+
+    __enable_irq();
+
+    // If no spindle pulses during last 250 ms assume RPM is 0
     if((stopped = ((pulse_length == 0) || (rpm_timer_delta > spindle_encoder.maximum_tt)))) {
         spindle_data.rpm = 0.0f;
-        rpm_timer_delta = ((uint16_t)RPM_COUNTER->CNT - (uint16_t)spindle_encoder.counter.last_count) * pulse_length;
+        rpm_timer_delta = (uint16_t)(((uint16_t)RPM_COUNTER->CNT - (uint16_t)encoder.last_count)) * pulse_length;
     }
 
     switch(request) {
 
         case SpindleData_Counters:
-            spindle_data.pulse_count += (uint16_t)RPM_COUNTER->CNT - (uint16_t)spindle_encoder.counter.last_count;
+            spindle_data.index_count = encoder.index_count;
+            spindle_data.pulse_count = encoder.pulse_count + (uint32_t)((uint16_t)RPM_COUNTER->CNT - (uint16_t)encoder.last_count);
+            spindle_data.error_count = spindle_encoder.error_count;
             break;
 
         case SpindleData_RPM:
@@ -725,14 +737,14 @@ static spindle_data_t spindleGetData (spindle_data_request_t request)
             break;
 
         case SpindleData_AngularPosition:
-            spindle_data.angular_position = (float)spindle_data.index_count +
-                    ((float)((uint16_t)spindle_encoder.counter.last_count - (uint16_t)spindle_encoder.counter.last_index) +
+            spindle_data.angular_position = (float)encoder.index_count +
+                    ((float)((uint16_t)encoder.last_count - (uint16_t)encoder.last_index) +
                               (pulse_length == 0 ? 0.0f : (float)rpm_timer_delta / (float)pulse_length)) *
                                 spindle_encoder.pulse_distance;
             break;
     }
 
-    return spindle_data;
+    return &spindle_data;
 }
 
 static void spindleDataReset (void)
@@ -741,10 +753,10 @@ static void spindleDataReset (void)
 
     uint32_t timeout = uwTick + 1000; // 1 second
 
-    uint32_t index_count = spindle_data.index_count + 2;
-    if(spindleGetData(SpindleData_RPM).rpm > 0.0f) { // wait for index pulse if running
+    uint32_t index_count = spindle_encoder.counter.index_count + 2;
+    if(spindleGetData(SpindleData_RPM)->rpm > 0.0f) { // wait for index pulse if running
 
-        while(index_count != spindle_data.index_count && uwTick <= timeout);
+        while(index_count != spindle_encoder.counter.index_count && uwTick <= timeout);
 
 //        if(uwTick > timeout)
 //            alarm?
@@ -753,22 +765,26 @@ static void spindleDataReset (void)
     RPM_TIMER->EGR |= TIM_EGR_UG; // Reload RPM timer
     RPM_COUNTER->CR1 &= ~TIM_CR1_CEN;
 
+    spindle_encoder.timer.last_index =
     spindle_encoder.timer.last_index = RPM_TIMER->CNT;
-    spindle_encoder.timer.pulse_length = 0;
-    spindle_encoder.counter.last_count = 0;
-    spindle_encoder.counter.last_index = 0;
 
-    spindle_data.pulse_count = 0;
-    spindle_data.index_count = 0;
+    spindle_encoder.timer.pulse_length =
+    spindle_encoder.counter.last_count =
+    spindle_encoder.counter.last_index =
+    spindle_encoder.counter.pulse_count =
+    spindle_encoder.counter.index_count =
+    spindle_encoder.error_count = 0;
 
     RPM_COUNTER->EGR |= TIM_EGR_UG;
-    RPM_COUNTER->CCR1 = spindle_encoder.counter.tics_per_irq;
+    RPM_COUNTER->CCR1 = spindle_encoder.tics_per_irq;
     RPM_COUNTER->CR1 |= TIM_CR1_CEN;
 }
 
 #endif
 
 // end spindle code
+
+#endif // !VFD_SPINDLE
 
 // Start/stop coolant (and mist if enabled)
 static void coolantSetState (coolant_state_t mode)
@@ -863,11 +879,9 @@ void settings_changed (settings_t *settings)
 
         GPIO_Init.Speed = GPIO_SPEED_FREQ_HIGH;
 
-      #if TRINAMIC_ENABLE
-        trinamic_configure();
-      #endif
-
         stepperEnable(settings->steppers.deenergize);
+
+#if !VFD_SPINDLE
 
         if(hal.driver_cap.variable_spindle) {
 
@@ -875,10 +889,12 @@ void settings_changed (settings_t *settings)
 
             SPINDLE_PWM_TIMER->CR1 &= ~TIM_CR1_CEN;
 
-        	spindle_precompute_pwm_values(&spindle_pwm, SystemCoreClock / (settings->spindle.pwm_freq > 200.0f ? 1 : 25));
+            uint32_t prescaler = settings->spindle.pwm_freq > 4000.0f ? 1 : (settings->spindle.pwm_freq > 200.0f ? 12 : 25);
+
+        	spindle_precompute_pwm_values(&spindle_pwm, SystemCoreClock / prescaler);
 
             TIM_Base_InitTypeDef timerInitStructure = {
-                .Prescaler = (settings->spindle.pwm_freq > 200.0f ? 1 : 25) - 1,
+                .Prescaler = prescaler - 1,
                 .CounterMode = TIM_COUNTERMODE_UP,
                 .Period = spindle_pwm.period - 1,
                 .ClockDivision = TIM_CLOCKDIVISION_DIV1,
@@ -916,9 +932,12 @@ void settings_changed (settings_t *settings)
         } else
             hal.spindle.set_state = spindleSetState;
 
+#endif
+
 #ifdef SPINDLE_SYNC_ENABLE
 
-        if((hal.spindle.get_data = hal.driver_cap.spindle_at_speed ? spindleGetData : NULL) && spindle_encoder.ppr != settings->spindle.ppr) {
+        if((hal.spindle.get_data = hal.driver_cap.spindle_at_speed ? spindleGetData : NULL) &&
+             (spindle_encoder.ppr != settings->spindle.ppr || pidf_config_changed(&spindle_tracker.pid, &settings->position.pid))) {
 
             hal.spindle.reset_data = spindleDataReset;
             hal.spindle.set_state((spindle_state_t){0}, 0.0f);
@@ -927,14 +946,13 @@ void settings_changed (settings_t *settings)
 
             float timer_resolution = 1.0f / 1000000.0f; // 1 us resolution
 
-            spindle_tracker.min_cycles_per_tick = (int32_t)ceilf(settings->steppers.pulse_microseconds * 2.0f + settings->steppers.pulse_delay_microseconds);
+            spindle_tracker.min_cycles_per_tick = hal.f_step_timer / (uint32_t)(settings->axis[Z_AXIS].max_rate * settings->axis[Z_AXIS].steps_per_mm / 60.0f);
             spindle_encoder.ppr = settings->spindle.ppr;
-            spindle_encoder.counter.tics_per_irq = 4;
+            spindle_encoder.tics_per_irq = max(1, spindle_encoder.ppr / 32);
             spindle_encoder.pulse_distance = 1.0f / spindle_encoder.ppr;
-            spindle_encoder.maximum_tt = (uint32_t)(0.25f / timer_resolution) * spindle_encoder.counter.tics_per_irq; // 250 mS
+            spindle_encoder.maximum_tt = (uint32_t)(2.0f / timer_resolution) / spindle_encoder.tics_per_irq;
             spindle_encoder.rpm_factor = 60.0f / ((timer_resolution * (float)spindle_encoder.ppr));
             spindleDataReset();
-            //        spindle_data.rpm = 60.0f / ((float)(spindle_encoder.tpp * spindle_encoder.ppr) * spindle_encoder.timer_resolution); // TODO: get rid of division
         }
 
 #endif
@@ -979,10 +997,10 @@ void settings_changed (settings_t *settings)
 #if DRIVER_IRQMASK & (1<<4)
         HAL_NVIC_DisableIRQ(EXTI4_IRQn);
 #endif
-#if DRIVER_IRQMASK & 0x03F0
+#if DRIVER_IRQMASK & 0x03E0
         HAL_NVIC_DisableIRQ(EXTI9_5_IRQn);
 #endif
-#if DRIVER_IRQMASK & 0xFE00
+#if DRIVER_IRQMASK & 0xFC00
         HAL_NVIC_DisableIRQ(EXTI15_10_IRQn);
 #endif
 
@@ -1018,6 +1036,12 @@ void settings_changed (settings_t *settings)
 
             limit_ire.mask = ~(settings->limits.disable_pullup.mask ^ settings->limits.invert.mask);
 
+            // NOTE: Z limit must be first. Do not change!
+            GPIO_Init.Pin = Z_LIMIT_BIT;
+            GPIO_Init.Mode = limit_ire.z ? GPIO_MODE_IT_RISING : GPIO_MODE_IT_FALLING;
+            GPIO_Init.Pull = settings->limits.disable_pullup.z ? GPIO_NOPULL : GPIO_PULLUP;
+            HAL_GPIO_Init(Z_LIMIT_PORT, &GPIO_Init);
+
             GPIO_Init.Pin = X_LIMIT_BIT;
             GPIO_Init.Mode = limit_ire.x ? GPIO_MODE_IT_RISING : GPIO_MODE_IT_FALLING;
             GPIO_Init.Pull = settings->limits.disable_pullup.x ? GPIO_NOPULL : GPIO_PULLUP;
@@ -1028,10 +1052,6 @@ void settings_changed (settings_t *settings)
             GPIO_Init.Pull = settings->limits.disable_pullup.y ? GPIO_NOPULL : GPIO_PULLUP;
             HAL_GPIO_Init(Y_LIMIT_PORT, &GPIO_Init);
 
-            GPIO_Init.Pin = Z_LIMIT_BIT;
-            GPIO_Init.Mode = limit_ire.z ? GPIO_MODE_IT_RISING : GPIO_MODE_IT_FALLING;
-            GPIO_Init.Pull = settings->limits.disable_pullup.z ? GPIO_NOPULL : GPIO_PULLUP;
-            HAL_GPIO_Init(Z_LIMIT_PORT, &GPIO_Init);
 
 #ifdef A_LIMIT_BIT
             GPIO_Init.Pin = A_LIMIT_BIT;
@@ -1088,7 +1108,7 @@ void settings_changed (settings_t *settings)
 
 #ifdef SPINDLE_SYNC_ENABLE
         GPIO_Init.Pin = SPINDLE_INDEX_BIT;
-        GPIO_Init.Mode = GPIO_MODE_IT_RISING;
+        GPIO_Init.Mode = GPIO_MODE_IT_FALLING;
         GPIO_Init.Pull = GPIO_PULLUP;
         HAL_GPIO_Init(SPINDLE_INDEX_PORT, &GPIO_Init);
 #endif
@@ -1122,26 +1142,15 @@ void settings_changed (settings_t *settings)
         HAL_NVIC_SetPriority(EXTI4_IRQn, 0, 2);
         HAL_NVIC_EnableIRQ(EXTI4_IRQn);
 #endif
-#if DRIVER_IRQMASK & 0x03F0
+#if DRIVER_IRQMASK & 0x03E0
         HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 2);
         HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 #endif
-#if DRIVER_IRQMASK & 0xFE00
+#if DRIVER_IRQMASK & 0xFC00
         HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 2);
         HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 #endif
     }
-}
-
-static status_code_t jtag_enable (uint_fast16_t state, char *line, char *lcline)
-{
-    if(!strcmp(line, "$PGM")) {
-        //__HAL_AFIO_REMAP_SWJ_ENABLE();
-        on_unknown_sys_command = NULL;
-        return Status_OK;
-    }
-
-    return on_unknown_sys_command ? on_unknown_sys_command(state, line, lcline) : Status_Unhandled;
 }
 
 // Initializes MCU peripherals for Grbl use
@@ -1239,6 +1248,8 @@ static bool driver_setup (settings_t *settings)
         HAL_NVIC_EnableIRQ(DEBOUNCE_TIMER_IRQn); // Enable debounce interrupt
     }
 
+#if !VFD_SPINDLE
+
  // Spindle init
 
     GPIO_Init.Pin = SPINDLE_DIRECTION_BIT;
@@ -1247,7 +1258,7 @@ static bool driver_setup (settings_t *settings)
     GPIO_Init.Pin = SPINDLE_ENABLE_BIT;
     HAL_GPIO_Init(SPINDLE_ENABLE_PORT, &GPIO_Init);
 
-#ifdef SPINDLE_PWM_PIN
+  #ifdef SPINDLE_PWM_PIN
 
     if(hal.driver_cap.variable_spindle) {
         GPIO_Init.Pin = SPINDLE_PWM_BIT;
@@ -1258,6 +1269,7 @@ static bool driver_setup (settings_t *settings)
         GPIO_Init.Alternate = 0;
     }
 
+  #endif
 #endif
 
  // Coolant init
@@ -1286,17 +1298,6 @@ static bool driver_setup (settings_t *settings)
 
     sdcard_init();
 
-#endif
-
-    on_unknown_sys_command = grbl.on_unknown_sys_command;
-    grbl.on_unknown_sys_command = jtag_enable;
-
-#if TRINAMIC_ENABLE
-  #if CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
-    trinamic_start(false);
-  #else
-    trinamic_start(true);
-  #endif
 #endif
 
 #if PPI_ENABLE
@@ -1335,7 +1336,7 @@ static bool driver_setup (settings_t *settings)
 
 #endif
 
-    IOInitDone = settings->version == 18;
+    IOInitDone = settings->version == 19;
 
     hal.settings_changed(settings);
     hal.spindle.set_state((spindle_state_t){0}, 0.0f);
@@ -1356,20 +1357,6 @@ bool driver_init (void)
 {
     // Enable EEPROM and serial port here for Grbl to be able to configure itself and report any errors
 
-    // GPIO_PinRemapConfig(GPIO_Remap_SWJ_Disable, ENABLE); // ??? Disable JTAG and SWD!?? Bug?
-
-#if USB_SERIAL_CDC
-    usbInit();
-#else
-    serialInit();
-#endif
-
-#ifdef I2C_PORT
-    i2c_init();
-#endif
-
-    // __HAL_AFIO_REMAP_SWJ_NOJTAG();
-
 #ifdef STM32F446xx
     hal.info = "STM32F446";
 #elif defined(STM32F411xE)
@@ -1379,12 +1366,12 @@ bool driver_init (void)
 #else
     hal.info = "STM32F401CC";
 #endif
-    hal.driver_version = "201103";
+    hal.driver_version = "210220";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
     hal.driver_setup = driver_setup;
-    hal.f_step_timer = HAL_RCC_GetPCLK1Freq() * 2;
+    hal.f_step_timer = HAL_RCC_GetPCLK2Freq();
     hal.rx_buffer_size = RX_BUFFER_SIZE;
     hal.delay_ms = &driver_delay;
     hal.settings_changed = settings_changed;
@@ -1401,27 +1388,33 @@ bool driver_init (void)
     hal.coolant.set_state = coolantSetState;
     hal.coolant.get_state = coolantGetState;
 
+#ifdef PROBE_PIN
     hal.probe.get_state = probeGetState;
     hal.probe.configure = probeConfigure;
+#endif
 
+#if !VFD_SPINDLE
     hal.spindle.set_state = spindleSetState;
     hal.spindle.get_state = spindleGetState;
-#ifdef SPINDLE_PWM_DIRECT
+  #ifdef SPINDLE_PWM_DIRECT
     hal.spindle.get_pwm = spindleGetPWM;
     hal.spindle.update_pwm = spindle_set_speed;
-#else
+  #else
     hal.spindle.update_rpm = spindleUpdateRPM;
-#endif
-#if PPI_ENABLE
+  #endif
+  #if PPI_ENABLE
     hal.spindle.pulse_on = spindlePulseOn;
+  #endif
 #endif
 
     hal.control.get_state = systemGetState;
 
-    hal.get_elapsed_ticks = getElapsedTicks;
+    hal.irq_enable = __enable_irq;
+    hal.irq_disable = __disable_irq;
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
+    hal.get_elapsed_ticks = getElapsedTicks;
 
 #if USB_SERIAL_CDC
     hal.stream.read = usbGetC;
@@ -1441,6 +1434,16 @@ bool driver_init (void)
     hal.stream.suspend_read = serialSuspendInput;
 #endif
 
+#if USB_SERIAL_CDC
+    usbInit();
+#else
+    serialInit();
+#endif
+
+#ifdef I2C_PORT
+    i2c_init();
+#endif
+
 #if EEPROM_ENABLE
     i2c_eeprom_init();
 #elif FLASH_ENABLE
@@ -1454,13 +1457,17 @@ bool driver_init (void)
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
 
 #ifdef CONTROL_SAFETY_DOOR_PIN
-    hal.driver_cap.safety_door = On;
+    hal.signals_cap.safety_door_ajar = On;
 #endif
+
+#if !VFD_SPINDLE && !PLASMA_ENABLE
     hal.driver_cap.spindle_dir = On;
-#ifdef SPINDLE_PWM_PIN
+  #ifdef SPINDLE_PWM_PIN
     hal.driver_cap.variable_spindle = On;
-#endif
     hal.driver_cap.spindle_pwm_invert = On;
+  #endif
+#endif
+
 #ifdef SPINDLE_SYNC_ENABLE
     hal.driver_cap.spindle_sync = On;
     hal.driver_cap.spindle_at_speed = On;
@@ -1489,6 +1496,27 @@ bool driver_init (void)
     keypad_init();
 #endif
 
+#if MODBUS_ENABLE
+
+    serial2Init(115200);
+
+    modbus_stream.write = serial2Write;
+    modbus_stream.read = serial2GetC;
+    modbus_stream.flush_rx_buffer = serial2RxFlush;
+    modbus_stream.flush_tx_buffer = serial2TxFlush;
+    modbus_stream.get_rx_buffer_count = serial2RxCount;
+    modbus_stream.get_tx_buffer_count = serial2TxCount;
+    modbus_stream.set_baud_rate = serial2SetBaudRate;
+
+    bool modbus = modbus_init(&modbus_stream);
+
+#if SPINDLE_HUANYANG > 0
+    if(modbus)
+        huanyang_init(&modbus_stream);
+#endif
+
+#endif
+
     my_plugin_init();
 
 #if ODOMETER_ENABLE
@@ -1497,7 +1525,7 @@ bool driver_init (void)
 
     // No need to move version check before init.
     // Compiler will fail any signature mismatch for existing entries.
-    return hal.version == 7;
+    return hal.version == 8;
 }
 
 /* interrupt handlers */
@@ -1508,7 +1536,6 @@ void STEPPER_TIMER_IRQHandler (void)
     if ((STEPPER_TIMER->SR & TIM_SR_UIF) != 0)                  // check interrupt source
     {
         STEPPER_TIMER->SR = ~TIM_SR_UIF; // clear UIF flag
-        STEPPER_TIMER->CNT = 0;
         hal.stepper.interrupt_callback();
     }
 }
@@ -1550,10 +1577,19 @@ void DEBOUNCE_TIMER_IRQHandler (void)
 {
     DEBOUNCE_TIMER->SR = ~TIM_SR_UIF; // clear UIF flag;
 
-    axes_signals_t state = (axes_signals_t)limitsGetState();
+    if(debounce.limits) {
+        debounce.limits = Off;
+        limit_signals_t state = limitsGetState();
+        if(limit_signals_merge(state).value) //TODO: add check for limit switches having same state as when limit_isr were invoked?
+            hal.limits.interrupt_callback(state);
+    }
 
-    if(state.value) //TODO: add check for limit switches having same state as when limit_isr were invoked?
-        hal.limits.interrupt_callback(state);
+    if(debounce.door) {
+        debounce.door = Off;
+        control_signals_t state = systemGetState();
+        if(state.safety_door_ajar)
+            hal.control.interrupt_callback(state);
+    }
 }
 
 #if PPI_ENABLE
@@ -1572,17 +1608,22 @@ void PPI_TIMER_IRQHandler (void)
 
 void RPM_COUNTER_IRQHandler (void)
 {
+    spindle_encoder.spin_lock = true;
+
+    __disable_irq();
     uint32_t tval = RPM_TIMER->CNT;
     uint16_t cval = RPM_COUNTER->CNT;
+    __enable_irq();
 
     RPM_COUNTER->SR = ~TIM_SR_CC1IF;
-    RPM_COUNTER->CCR1 += spindle_encoder.counter.tics_per_irq;
+    RPM_COUNTER->CCR1 = (uint16_t)(RPM_COUNTER->CCR1 + spindle_encoder.tics_per_irq);
 
-    spindle_data.pulse_count += cval - (uint16_t)spindle_encoder.counter.last_count;
-
+    spindle_encoder.counter.pulse_count += (uint16_t)(cval - (uint16_t)spindle_encoder.counter.last_count);
     spindle_encoder.counter.last_count = cval;
     spindle_encoder.timer.pulse_length = tval - spindle_encoder.timer.last_pulse;
     spindle_encoder.timer.last_pulse = tval;
+
+    spindle_encoder.spin_lock = false;
 }
 
 #endif
@@ -1597,8 +1638,18 @@ void EXTI0_IRQHandler(void)
         __HAL_GPIO_EXTI_CLEAR_IT(ifg);
 #if CONTROL_MASK & (1<<0)
         hal.control.interrupt_callback(systemGetState());
+  #if CONTROL_SAFETY_DOOR_BIT & (1<<0)
+        if(hal.driver_cap.software_debounce) {
+            debounce.door = On;
+            DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
+            DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
+        } else
+  #endif
+#elif KEYPAD_STROBE_BIT & (1<<0)
+        keypad_keyclick_handler(BITBAND_PERI(KEYPAD_PORT->IDR, KEYPAD_STROBE_PIN) == 0);
 #else
         if(hal.driver_cap.software_debounce) {
+            debounce.limits = On;
             DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
             DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
         } else
@@ -1618,9 +1669,17 @@ void EXTI1_IRQHandler(void)
     if(ifg) {
         __HAL_GPIO_EXTI_CLEAR_IT(ifg);
 #if CONTROL_MASK & (1<<1)
+  #if CONTROL_SAFETY_DOOR_BIT & (1<<1)
+        if(hal.driver_cap.software_debounce) {
+            debounce.door = On;
+            DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
+            DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
+        } else
+  #endif
         hal.control.interrupt_callback(systemGetState());
 #else
         if(hal.driver_cap.software_debounce) {
+            debounce.limits = On;
             DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
             DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
         } else
@@ -1640,9 +1699,17 @@ void EXTI2_IRQHandler(void)
     if(ifg) {
         __HAL_GPIO_EXTI_CLEAR_IT(ifg);
 #if CONTROL_MASK & (1<<2)
+  #if CONTROL_SAFETY_DOOR_BIT & (1<<2)
+        if(hal.driver_cap.software_debounce) {
+            debounce.door = On;
+            DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
+            DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
+        } else
+ #endif
         hal.control.interrupt_callback(systemGetState());
 #else
         if(hal.driver_cap.software_debounce) {
+            debounce.limits = On;
             DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
             DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
         } else
@@ -1662,9 +1729,17 @@ void EXTI3_IRQHandler(void)
     if(ifg) {
         __HAL_GPIO_EXTI_CLEAR_IT(ifg);
 #if CONTROL_MASK & (1<<3)
-        hal.control.interrupt_callback(systemGetState());
+  #if CONTROL_SAFETY_DOOR_BIT & (1<<3)
+        if(hal.driver_cap.software_debounce) {
+            debounce.door = On;
+            DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
+            DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
+        } else
+  #endif
+          hal.control.interrupt_callback(systemGetState());
 #else
         if(hal.driver_cap.software_debounce) {
+            debounce.limits = On;
             DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
             DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
         } else
@@ -1684,9 +1759,17 @@ void EXTI4_IRQHandler(void)
     if(ifg) {
         __HAL_GPIO_EXTI_CLEAR_IT(ifg);
 #if CONTROL_MASK & (1<<4)
+  #if CONTROL_SAFETY_DOOR_BIT & (1<<4)
+        if(hal.driver_cap.software_debounce) {
+            debounce.door = On;
+            DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
+            DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
+        } else
+  #endif
         hal.control.interrupt_callback(systemGetState());
 #else
         if(hal.driver_cap.software_debounce) {
+            debounce.limits = On;
             DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
             DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
         } else
@@ -1697,61 +1780,87 @@ void EXTI4_IRQHandler(void)
 
 #endif
 
-#if DRIVER_IRQMASK & (0x03F0)
+#if DRIVER_IRQMASK & (0x03E0)
 
 void EXTI9_5_IRQHandler(void)
 {
-    uint32_t ifg = __HAL_GPIO_EXTI_GET_IT(0x03F0);
+    uint32_t ifg = __HAL_GPIO_EXTI_GET_IT(0x03E0);
 
     if(ifg) {
         __HAL_GPIO_EXTI_CLEAR_IT(ifg);
 
-        if(ifg & CONTROL_MASK)
-            hal.control.interrupt_callback(systemGetState());
-
+#if CONTROL_MASK & 0x03E0
+        if(ifg & CONTROL_MASK) {
+  #if CONTROL_SAFETY_DOOR_BIT & 0x03E0
+            if((ifg & CONTROL_SAFETY_DOOR_BIT) && hal.driver_cap.software_debounce) {
+                debounce.door = On;
+                DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
+                DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
+            } else
+  #endif
+                hal.control.interrupt_callback(systemGetState());
+        }
+#endif
+#if LIMIT_MASK & 0x03E0
         if(ifg & LIMIT_MASK) {
             if(hal.driver_cap.software_debounce) {
+                debounce.limits = On;
                 DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
                 DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
             } else
                 hal.limits.interrupt_callback(limitsGetState());
         }
+#endif
     }
 }
 
 #endif
 
-#if DRIVER_IRQMASK & (0xFE00)
+#if DRIVER_IRQMASK & (0xFC00)
 
 void EXTI15_10_IRQHandler(void)
 {
-    uint32_t ifg = __HAL_GPIO_EXTI_GET_IT(0xFE00);
+    uint32_t ifg = __HAL_GPIO_EXTI_GET_IT(0xFC00);
 
     if(ifg) {
         __HAL_GPIO_EXTI_CLEAR_IT(ifg);
 
 #ifdef SPINDLE_INDEX_PORT
         if(ifg & SPINDLE_INDEX_BIT) {
+
+            if(spindle_encoder.counter.index_count && (uint16_t)(RPM_COUNTER->CNT - (uint16_t)spindle_encoder.counter.last_index) != spindle_encoder.ppr)
+                spindle_encoder.error_count++;
+
             spindle_encoder.counter.last_index = RPM_COUNTER->CNT;
             spindle_encoder.timer.last_index = RPM_TIMER->CNT;
-            spindle_data.index_count++;
+            spindle_encoder.counter.index_count++;
         }
 #endif
-
-        if(ifg & CONTROL_MASK)
-            hal.control.interrupt_callback(systemGetState());
-
+#if CONTROL_MASK & 0xFC00
+        if(ifg & CONTROL_MASK) {
+  #if CONTROL_SAFETY_DOOR_BIT & 0xFC00
+            if((ifg & CONTROL_SAFETY_DOOR_BIT) && hal.driver_cap.software_debounce) {
+                debounce.door = On;
+                DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
+                DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
+            } else
+  #endif
+                hal.control.interrupt_callback(systemGetState());
+        }
+#endif
+#if LIMIT_MASK & 0xFC00
         if(ifg & LIMIT_MASK) {
             if(hal.driver_cap.software_debounce) {
+                debounce.limits = On;
                 DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
                 DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
             } else
                 hal.limits.interrupt_callback(limitsGetState());
         }
-
+#endif
 #if KEYPAD_ENABLE
         if(ifg & KEYPAD_STROBE_BIT)
-            keypad_keyclick_handler(BITBAND_PERI(KEYPAD_PORT->IDR, KEYPAD_STROBE_PIN));
+            keypad_keyclick_handler(BITBAND_PERI(KEYPAD_PORT->IDR, KEYPAD_STROBE_PIN) == 0);
 #endif
     }
 }
@@ -1761,6 +1870,22 @@ void EXTI15_10_IRQHandler(void)
 // Interrupt handler for 1 ms interval timer
 void HAL_IncTick(void)
 {
+#ifdef Z_LIMIT_POLL
+    static bool z_limit_state = false;
+    if(settings.limits.flags.hard_enabled) {
+        bool z_limit = BITBAND_PERI(Z_LIMIT_PORT->IDR, Z_LIMIT_PIN) ^ settings.limits.invert.z;
+        if(z_limit_state != z_limit) {
+            if((z_limit_state = z_limit)) {
+                if(hal.driver_cap.software_debounce) {
+                    DEBOUNCE_TIMER->EGR = TIM_EGR_UG;
+                    DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
+                } else
+                    hal.limits.interrupt_callback(limitsGetState());
+            }
+        }
+    }
+#endif
+
 #if SDCARD_ENABLE
     static uint32_t fatfs_ticks = 10;
     if(!(--fatfs_ticks)) {

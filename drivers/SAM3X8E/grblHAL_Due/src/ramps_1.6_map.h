@@ -3,11 +3,11 @@
 
   NOTE: board must be modified for 3.3V IO before use!
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2019 Terje Io
+  Copyright (c) 2019-2021 Terje Io
 
-  Mappings according to Re-ARM for NXP LCP1768
+  Mappings according to Re-ARM for NXP LPC1768
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -55,7 +55,7 @@
 #define Y_DIRECTION_BIT     (1<<Y_DIRECTION_PIN)
 #define Z_DIRECTION_PORT    PIOC
 #define Z_DIRECTION_PIN     15  // Due Digital Pin 48
-#define Z_DIRECTION_BIT     (1<<Z_STEP_PIN)
+#define Z_DIRECTION_BIT     (1<<Z_DIRECTION_PIN)
 #ifdef A_AXIS
 #define A_DIRECTION_PORT    PIOD
 #define A_DIRECTION_PIN     3   // Due Digital Pin 28
@@ -117,14 +117,14 @@
 #define SPINDLE_ENABLE_PIN      26  // Due Digital Pin 4
 #define SPINDLE_ENABLE_BIT      (1<<SPINDLE_ENABLE_PIN)
 #define SPINDLE_DIRECTION_PORT  PIOC
-#define SPINDLE_DIRECTION_PIN   25  // Due Digital Pin 5
+#define SPINDLE_DIRECTION_PIN   22  // Due Digital Pin 8
 #define SPINDLE_DIRECTION_BIT   (1<<SPINDLE_DIRECTION_PIN)
 
 // Start of PWM & Stepper Enabled Spindle
 #define SPINDLE_PWM_TIMER   (TC2->TC_CHANNEL[0])
 #define SPINDLE_PWM_CCREG   2
 #define SPINDLE_PWM_PORT    PIOC
-#define SPINDLE_PWM_PIN     22  // Due Digital Pin 8 // PWML5
+#define SPINDLE_PWM_PIN     25  // Due Digital Pin 5 // TIOA6
 #define SPINDLE_PWM_BIT     (1<<SPINDLE_PWM_PIN)
 
 #endif

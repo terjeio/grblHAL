@@ -1,7 +1,7 @@
 /*
   spi.c - SPI support for SD card & Trinamic plugins
 
-  Part of GrblHAL driver for STM32F4xx
+  Part of grblHAL driver for STM32F4xx
 
   Copyright (c) 2020 Terje Io
 
@@ -70,12 +70,17 @@ void spi_init (void)
 void spi_set_max_speed (void)
 {
     hspi1.Instance->CR1 &= ~SPI_BAUDRATEPRESCALER_256;
-    hspi1.Instance->CR1 |= SPI_BAUDRATEPRESCALER_8; // should be able to go to 12Mhz...
+    hspi1.Instance->CR1 |= SPI_BAUDRATEPRESCALER_64; // should be able to go to 12Mhz...
 }
 
-void spi_disable (void)
+uint32_t spi_set_speed (uint32_t prescaler)
 {
-    __HAL_SPI_DISABLE(&hspi1);
+    uint32_t cur = hspi1.Instance->CR1 & SPI_BAUDRATEPRESCALER_256;
+
+    hspi1.Instance->CR1 &= ~SPI_BAUDRATEPRESCALER_256;
+    hspi1.Instance->CR1 |= prescaler;
+
+    return cur;
 }
 
 uint8_t spi_get_byte (void)
@@ -87,12 +92,17 @@ uint8_t spi_get_byte (void)
     return (uint8_t)hspi1.Instance->DR;
 }
 
-void spi_put_byte (uint8_t byte)
+uint8_t spi_put_byte (uint8_t byte)
 {
     hspi1.Instance->DR = byte;
 
     while(!__HAL_SPI_GET_FLAG(&hspi1, SPI_FLAG_TXE));
+//    while(__HAL_SPI_GET_FLAG(&hspi1, SPI_FLAG_BSY));
+
+    while(!__HAL_SPI_GET_FLAG(&hspi1, SPI_FLAG_RXNE));
 
     __HAL_SPI_CLEAR_OVRFLAG(&hspi1);
+
+    return (uint8_t)hspi1.Instance->DR;
 }
 

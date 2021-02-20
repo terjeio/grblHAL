@@ -3,7 +3,7 @@
 
   WiFi comms
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2018 Terje Io
 
@@ -43,7 +43,7 @@ bool wifi_stop (void);
 bool wifi_ap_connect (char *ssid, char *password);
 ap_list_t *wifi_get_aplist (void);
 void wifi_release_aplist (void);
-char *wifi_get_ip (void);
+char *wifi_get_ipaddr (void);
 char *wifi_get_mac (void);
 bool wifi_dns_running (void);
 wifi_settings_t *get_wifi_settings (void);

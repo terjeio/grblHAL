@@ -1,9 +1,9 @@
 /*
   driver.c - driver code for simulator MCU
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -359,7 +359,7 @@ bool driver_setup (settings_t *settings)
     hal.spindle.set_state((spindle_state_t){0}, 0.0f);
     hal.coolant.set_state((coolant_state_t){0});
 
-    return settings->version == 18;
+    return settings->version == 19;
 }
 
 // used to inject a sleep in grbl main loop, 
@@ -381,7 +381,7 @@ bool driver_init ()
     serialInit();
 
     hal.info = "Simulator";
-    hal.driver_version = "201024";
+    hal.driver_version = "210131";
     hal.driver_setup = driver_setup;
     hal.rx_buffer_size = RX_BUFFER_SIZE;
     hal.f_step_timer = F_CPU;
@@ -454,7 +454,7 @@ bool driver_init ()
 //    hal.driver_cap.software_debounce = On;
 //    hal.driver_cap.step_pulse_delay = On;
 
-    hal.driver_cap.safety_door = On;
+    hal.signals_cap.safety_door_ajar = On;
     hal.driver_cap.control_pull_up = On;
     hal.driver_cap.limits_pull_up = On;
     hal.driver_cap.probe_pull_up = On;
@@ -462,7 +462,7 @@ bool driver_init ()
  //   hal.driver_cap.axis_ganged_x = On;
 #endif
     // no need to move version check before init - compiler will fail any signature mismatch for existing entries
-    return hal.version == 7;
+    return hal.version == 8;
 }
 
 // Main stepper driver

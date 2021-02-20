@@ -2,7 +2,7 @@
 
   serial.c - LPC17xx low level functions for transmitting bytes via the serial port
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017-2020 Terje Io
 

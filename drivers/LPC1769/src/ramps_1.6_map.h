@@ -3,7 +3,7 @@
 
   NOTE: board must be modified for 3.3V IO before use!
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2019-2020 Terje Io
 
@@ -69,7 +69,7 @@
 #define Z_DIRECTION_PN      0
 #define Z_DIRECTION_PORT    port(Z_DIRECTION_PN)
 #define Z_DIRECTION_PIN     22  // Due Digital Pin 48
-#define Z_DIRECTION_BIT     (1<<Z_STEP_PIN)
+#define Z_DIRECTION_BIT     (1<<Z_DIRECTION_PIN)
 #ifdef A_AXIS
 #define A_DIRECTION_PN      0
 #define A_DIRECTION_PORT    port(A_DIRECTION_PN)
@@ -112,7 +112,7 @@
 #define DISABLE_OUTMODE GPIO_BITBAND
 
 // Define homing/hard limit switch input pins.
-// NOTE: Port 1 is not interrupt capable!
+// NOTE: All limit bits (needs to be on same port)
 #define X_LIMIT_PN          1
 #define X_LIMIT_PORT        port(X_LIMIT_PN)
 #define X_LIMIT_PIN         24  // Due Digital Pin 3
@@ -126,7 +126,8 @@
 #define Z_LIMIT_PIN         29  // Due Digital Pin 18
 #define Z_LIMIT_BIT         (1<<Z_LIMIT_PIN)
 
-// Define homing/hard limit switch input pins.
+// Define max homing/hard limit switch input pins.
+#if LIMIT_MAX_ENABLE
 #define X_LIMIT_PN_MAX      1
 #define X_LIMIT_PORT_MAX    port(X_LIMIT_PN_MAX)
 #define X_LIMIT_PIN_MAX     25  // Due Digital Pin 2
@@ -139,8 +140,12 @@
 #define Z_LIMIT_PORT_MAX    port(Z_LIMIT_PN_MAX)
 #define Z_LIMIT_PIN_MAX     28  // Due Digital Pin 19
 #define Z_LIMIT_BIT_MAX     (1<<Z_LIMIT_PIN_MAX)
+#define LIMIT_MASK (X_LIMIT_BIT|X_LIMIT_BIT_MAX|Y_LIMIT_BIT|Y_LIMIT_BIT_MAX|Z_LIMIT_BIT|Z_LIMIT_BIT_MAX)
+#else
+#define LIMIT_MASK (X_LIMIT_BIT|Y_LIMIT_BIT|Z_LIMIT_BIT)
+#endif
 
-#define LIMIT_MASK (X_LIMIT_BIT|X_LIMIT_BIT_MAX|Y_LIMIT_BIT|Y_LIMIT_BIT_MAX|Z_LIMIT_BIT|Z_LIMIT_BIT_MAX) // All limit bits (needs to be on same port)
+#define LIMITS_POLL_PORT port(1) // NOTE: Port 1 is not interrupt capable, use polling instead!
 #define LIMIT_INMODE GPIO_BITBAND
 
 // Define probe switch input pin.

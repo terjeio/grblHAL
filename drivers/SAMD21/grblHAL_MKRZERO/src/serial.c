@@ -2,7 +2,7 @@
 
   serial.c - Atmel SAMD21 low level functions for transmitting bytes via the serial port
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2017-2019 Terje Io
   Some parts:

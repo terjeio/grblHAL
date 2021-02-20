@@ -1,16 +1,16 @@
 $-Code	 Setting	 Units	Datatype	Data format	Setting Description	Min	Max
 0	Step pulse time	microseconds	float	#0.0	Sets time length per step. Minimum 2 microseconds.\n\nThis needs to be reduced from the default value of 10 when max. step rates exceed approximately 80 kHz. 	2	
-1	Step idle delay	milliseconds	integer	##0	Sets a short hold delay when stopping to let dynamics settle before disabling steppers. Value 255 keeps motors enabled.		255
+1	Step idle delay	milliseconds	integer	####0	Sets a short hold delay when stopping to let dynamics settle before disabling steppers. Value 255 keeps motors enabled.		65535
 2	Step pulse invert	mask	bitfield	axes	Inverts the step signals (active low).		
 3	Step direction invert	mask	bitfield	axes	Inverts the direction signals (active low).		
 4	Invert step enable pin	boolean	bitfield	axes	Inverts the stepper driver enable signals  (active low). If the stepper drivers shares the same enable signal only X is used.		
 5	Invert limit pins	mask	bitfield	axes	Inverts the axis limit input signals. 		
 6	Invert probe pin	boolean	bool		Inverts the probe input pin signal.		
-10	Status report options	mask	bitfield	Position in machine coordinate,Buffer state,Line numbers,Feed & speed,Pin state,Work coordinate offset,Overrides,Probe coordinates,Buffer sync on WCO change,Parser state,Alarm substatus	Specifies optional data included in status reports.\n\nNote that Parser state will be sent separately after the status report and only on changes.		
+10	Status report options	mask	bitfield	Position in machine coordinate,Buffer state,Line numbers,Feed & speed,Pin state,Work coordinate offset,Overrides,Probe coordinates,Buffer sync on WCO change,Parser state,Alarm substatus,Run substatus	Specifies optional data included in status reports.\nIf Run substatus is enabled it may be used for simple probe protection.\n\nNote that Parser state will be sent separately after the status report and only on changes.		
 11	Junction deviation	mm	float	#####0.000	Sets how fast Grbl travels through consecutive motions. Lower value slows it down.		
 12	Arc tolerance	mm	float	#####0.000	Sets the G2 and G3 arc tracing accuracy based on radial error. Beware: A very small value may effect performance.		
 13	Report in inches	boolean	bool		Enables inch units when returning any position and rate value that is not a settings value.		
-14	Invert control pins	mask	bitfield	Reset,Feed hold,Cycle start,Safety door,Block delete,Optional stop,EStop,Probe connected	Inverts the control signals  (active low).\nNOTE: Block delete, Optional stop and EStop are optional signals, availability is driver dependent.		
+14	Invert control pins	mask	bitfield	Reset,Feed hold,Cycle start,Safety door,Block delete,Optional stop,EStop,Probe connected	Inverts the control signals  (active low).\nNOTE: Block delete, Optional stop, EStop and Probe connected are optional signals, availability is driver dependent.		
 15	Invert coolant pins	mask	bitfield	Flood,Mist	Inverts the coolant and mist signals  (active low).		
 16	Invert spindle signals	mask	bitfield	Spindle on,Spindle CCW,Invert PWM	Inverts the spindle on, counterclockwise and PWM signals (active low).		
 17	Pullup disable control pins	mask	bitfield	Reset,Feed hold,Cycle start,Safety door,Block delete,Optional stop,EStop,Probe connected	Disable the control signals pullup resistors. Potentially enables pulldown resistor if available.\nNOTE: Block delete, Optional stop and EStop are optional signals, availability is driver dependent.		
@@ -18,7 +18,7 @@ $-Code	 Setting	 Units	Datatype	Data format	Setting Description	Min	Max
 19	Pullup disable probe pin	boolean	bool		Disable the probe signal pullup resistor. Potentially enables pulldown resistor if available.		
 20	Soft limits enable	boolean	bool		Enables soft limits checks within machine travel and sets alarm when exceeded. Requires homing.		
 21	Hard limits enable	mask	xbitfield	Enable,Strict mode	When enabled immediately halts motion and throws an alarm when a limit switch is triggered. In strict mode only homing is possible when a switch is engaged. 		
-22	Homing cycle	mask	xbitfield	Enable,Enable single axis commands,Homing on startup required,Set machine origin to 0,Two switches shares one input pin,Allow manual	Enables homing cycle. Requires limit switches on axes to be automatically homed.\n\nWhen `Enable single axis commands` is checked, single axis homing can be performed by $H<axis letter> commands.\n\nWhen `Allow manual` is checked, axes not homed automatically may be homed manually by $H or $H<axis letter> commands.		
+22	Homing cycle	mask	xbitfield	Enable,Enable single axis commands,Homing on startup required,Set machine origin to 0,Two switches shares one input pin,Allow manual,Override locks	Enables homing cycle. Requires limit switches on axes to be automatically homed.\n\nWhen `Enable single axis commands` is checked, single axis homing can be performed by $H<axis letter> commands.\n\nWhen `Allow manual` is checked, axes not homed automatically may be homed manually by $H or $H<axis letter> commands.\n\n`Override locks` is for allowing a soft reset to disable `Homing on startup required`.		
 23	Homing direction invert	mask	bitfield	axes	Homing searches for a switch in the positive direction. Set axis bit to search in negative direction.		
 24	Homing locate feed rate	mm/min	float	#####0.0	Feed rate to slowly engage limit switch to determine its location accurately.		
 25	Homing search seek rate	mm/min	float	#####0.0	Seek rate to quickly find the limit switch before the slower locating phase.		
@@ -121,8 +121,12 @@ $-Code	 Setting	 Units	Datatype	Data format	Setting Description	Min	Max
 163	A-axis backlash compensation	mm	float	#####0.000	A-axis backlash distance to compensate for.		
 164	B-axis backlash compensation	mm	float	#####0.000	B-axis backlash distance to compensate for.		
 165	C-axis backlash compensation	mm	float	#####0.000	B-axis backlash distance to compensate for.		
-256	Trinamic driver	mask	bitfield	axes	Enable SPI controlled Trinamic driver for axis.		
-257	Sensorless homing	mask	bitfield	axes	Enable sensorless homing for axis. Requires SPI controlled Trinamic driver.		
+170	X-axis dual axis offset	mm	float	-0.000	X-axis offset between sides to compensate for homing switches inaccuracies.	-2	2
+171	Y-axis dual axis offset	mm	float	-0.000	Y-axis offset between sides to compensate for homing switches inaccuracies.	-2	2
+172	A-axis dual axis offset	mm	float	-0.000	Z-axis offset between sides to compensate for homing switches inaccuracies.	-2	2
+173	A-axis dual axis offset	mm	float	-0.000	A-axis offset between sides to compensate for homing switches inaccuracies.	-2	2
+174	B-axis dual axis offset	mm	float	-0.000	B-axis offset between sides to compensate for homing switches inaccuracies.	-2	2
+175	C-axis dual axis offset	mm	float	-0.000	C-axis offset between sides to compensate for homing switches inaccuracies.	-2	2
 300	Hostname		string	x(64)	Network hostname.\n\nNOTE: A hard reset of the controller is required after changing network settings.
 301	IP Mode	integer	radiobuttons	Static,DHCP,AutoIP	IP Mode.\n\nNOTE: A hard reset of the controller is required after changing network settings.		
 302	IP Address		ip4		Static IP address.\n\nNOTE: A hard reset of the controller is required after changing network settings.
@@ -133,11 +137,37 @@ $-Code	 Setting	 Units	Datatype	Data format	Setting Description	Min	Max
 307	Websocket Port		integer	####0	Websocket port number listening for incoming connections.\n\nNOTE: A hard reset of the controller is required after changing network settings.\nNOTE: WebUI requires this to be HTTP port number + 1.	1	65535
 330	Admin Password		string	x(32)	Administrator password.
 331	User Password		string	x(32)	User password.
-340	Spindle at speed tolerance	percent	float	##0.0	"Spindle at speed" tolerance in percent of programmed RPM. Set to 0 to disable "spindle at speed" check.	1	100
-341	Tool change mode	integer	radiobuttons	Normal,Manual touch off,Manual touch off @ G59.3,Automatic touch off @ G59.3	Normal: allows jogging for manual touch off. Set new position manually.\n\nManual touch off: retracts tool axis to home position for tool change, use jogging or $TPW for touch off.\n\nManual touch off @ G59.3: retracts tool axis to home position then to G59.3 position for tool change, use jogging or $TPW for touch off.\n\nAutomatic touch off @ G59.3: retracts tool axis to home position for tool change, then to G59.3 position for automatic touch off.\n\nAll modes except "Normal" returns the tool (controlled point) to original position after touch off.
+338	Trinamic driver	mask	bitfield	axes	Enable SPI controlled Trinamic driver for axis.		
+339	Sensorless homing	mask	bitfield	axes	Enable sensorless homing for axis. Requires SPI controlled Trinamic driver.		
+340	Spindle at speed tolerance	percent	float	##0.0	"Spindle at speed" tolerance in percent of programmed RPM. Set to 0 to disable "spindle at speed" check.	0	100
+341	Tool change mode	integer	radiobuttons	Normal,Manual touch off,Manual touch off @ G59.3,Automatic touch off @ G59.3,Ignore M6	Normal: allows jogging for manual touch off. Set new position manually.\n\nManual touch off: retracts tool axis to home position for tool change, use jogging or $TPW for touch off.\n\nManual touch off @ G59.3: retracts tool axis to home position then to G59.3 position for tool change, use jogging or $TPW for touch off.\n\nAutomatic touch off @ G59.3: retracts tool axis to home position for tool change, then to G59.3 position for automatic touch off.\n\nAll modes except "Normal" and "Ignore M6" returns the tool (controlled point) to original position after touch off.
 342	Tool change probing distance	mm	float	#####0.0	Maximum probing distance for automatic or $TPW touch off.		
 343	Tool change locate feed rate	mm/min	float	#####0.0	Feed rate to slowly engage tool change sensor to determine the tool offset accurately.		
 344	Tool change search seek rate	mm/min	float	#####0.0	Seek rate to quickly find the tool change sensor before the slower locating phase.		
+345	Tool change probe pull-off rate	mm/min	float	#####0.0	Pull-off rate for the retract move before the slower locating phase.		
+347	Dual axis length fail	percent	float	##0.0	Dual axis length fail in percent of axis max travel.		100
+348	Dual axis length fail min	mm/min	float	#####0.0	Dual axis length fail minimum distance.		
+349	Dual axis length fail max	mm/min	float	#####0.0	Dual axis length fail minimum distance.		
+350	Plasma mode	integer	radiobuttons	Off,Up/down,Voltage	Universal: Toggle between Feed rate, Rapid rate and Spindle RPM override modes with single click. Double click to reset to default.\nOther modes: single or double click to reset to default value.		
+351	Plasma THC delay	s	float	#0.0	Delay from cut start until THC activates.		
+352	Plasma THC threshold	V	float	#0.00	Variation from target voltage for THC to correct height.		
+353	Plasma THC P-gain		float	###0.000			
+354	Plasma THC I-gain		float	###0.000			
+355	Plasma THC D-gain		float	###0.000			
+356	Plasma THC VAD threshold	%	integer	#0	Percentage of Cut Feed Rate velocity needs to fall below to lock THC.		
+357	Plasma THC Void override	%	integer	#0	Higher values need greater voltage change to lock THC.		
+358	Plasma Arc fail timeout	s	float	#0.0	The amount of time to wait from torch on until a failure if arc is not detected.		
+359	Plasma Arc retry delay	s	float	#0.0	The time between an arc failure and another arc start attempt.		
+360	Plasma Arc max retries		integer	#0	The number of attempts at starting an arc.		
+361	Plasma Arc voltage scale		float	###0.000	The value required to scale the arc voltage input to display the correct arc voltage.		
+362	Plasma Arc voltage offset		float	###0.000	The value required to display zero volts when there is zero arc voltage input.\nFor initial setup multiply the arc voltage out value by -1 and enter that for Voltage Offset.		
+363	Plasma Arc height per volt	mm	float	###0.000	The distance the torch would need to move to change the arc voltage by one volt.\nUsed for manual height change only.		
+364	Plasma Arc ok high volts	V	float	###0.000	High voltage threshold for Arc OK.		
+365	Plasma Arc ok low volts	V	float	###0.000	Low voltage threshold for Arc OK.		
+370	Invert IOPort inputs	mask	bitfield	Port 0,Port 1,Port 2,Port 3,Port 4,Port 5,Port 6,Port 7	Invert IOPort inputs. 		
+371	IOPort inputs pullup disable.	mask	bitfield	Port 0,Port 1,Port 2,Port 3,Port 4,Port 5,Port 6,Port 7	Disable IOPort input pullups. 		
+372	Invert IOPort outputs	mask	bitfield	Port 0,Port 1,Port 2,Port 3,Port 4,Port 5,Port 6,Port 7	Invert IOPort output. 		
+373	IOPort outputs OD	mask	bitfield	Port 0,Port 1,Port 2,Port 3,Port 4,Port 5,Port 6,Port 7	Set IOPort outputs as open drain (OD). 		
 400	Encoder mode	integer	radiobuttons	Universal,Feed rate override,Rapid rate override,Spindle RPM override	Universal: Toggle between Feed rate, Rapid rate and Spindle RPM override modes with single click. Double click to reset to default.\nOther modes: single or double click to reset to default value.		
 401	Encoder CPR		integer	###0	Encoder Count Per Revolution.	1	
 402	Encoder CPD		integer	#0	Encoder Count Per Detent.	1	

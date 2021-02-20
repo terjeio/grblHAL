@@ -3,7 +3,7 @@
 
   Driver code for ESP32
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2018-2020 Terje Io
   Copyright (c) 2011-2015 Sungeun K. Jeon
@@ -42,19 +42,6 @@
 //
 #else
 //
-// options for cmake (idf.py)
-//
-#ifdef CNC_BOOSTERPACK
-#define BOARD_CNC_BOOSTERPACK  1
-#else
-// NOTE: Only one board may be enabled!
-// If none is enabled pin mappings from generic_map.h will be used
-//#define BOARD_BDRING_V3P5
-//#define BOARD_BDRING_V4
-//#define BOARD_BDRING_I2S6A // NOT production ready!
-#endif
-
-//
 // Set options from CMakeLists.txt
 //
 #ifdef WEBUI_ENABLE
@@ -89,7 +76,7 @@
 
 #ifdef TRINAMIC_ENABLE
 #undef TRINAMIC_ENABLE
-#define TRINAMIC_ENABLE 1
+#define TRINAMIC_ENABLE 2130
 #define TRINAMIC_I2C    1
 #endif
 
@@ -108,7 +95,18 @@
 #define HTTP_ENABLE 1
 #endif
 
+#ifdef RS485_DIR_ENABLE
+#undef RS485_DIR_ENABLE
+#if SPINDLE_HUANYANG
+#define RS485_DIR_ENABLE 1
+#else
+#define RS485_DIR_ENABLE 0
+#endif
+#endif
+
+#ifndef EEPROM_ENABLE
 #define EEPROM_ENABLE 0
+#endif
 
 #endif
 
@@ -127,7 +125,11 @@
 static const DRAM_ATTR float FZERO = 0.0f;
 
 #define PWM_RAMPED       0 // Ramped spindle PWM.
-#define PROBE_ENABLE     1 // Probe input
+#ifdef NOPROBE
+#define PROBE_ENABLE     0 // No probe input.
+#else
+#define PROBE_ENABLE     1 // Probe input.
+#endif
 #define PROBE_ISR        0 // Catch probe state change by interrupt TODO: needs verification!
 #define TRINAMIC_DEV     0 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code
 
@@ -172,6 +174,8 @@ static const DRAM_ATTR float FZERO = 0.0f;
 #define TRINAMIC_ENABLE  0
 #define TRINAMIC_I2C     0
 #endif
+
+#define IOEXPAND 0xFF   // Dummy pin number for I2C IO expander
 
 // end configuration
 
@@ -221,8 +225,18 @@ static const DRAM_ATTR float FZERO = 0.0f;
 
 // End configuration
 
+#if IOEXPAND_ENABLE || KEYPAD_ENABLE || EEPROM_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
+#define I2C_ENABLE 1
+#else
+#define I2C_ENABLE 0
+#endif
+
 #if TRINAMIC_ENABLE
-#include "tmc2130/trinamic.h"
+#ifndef TRINAMIC_MIXED_DRIVERS
+#define TRINAMIC_MIXED_DRIVERS 1
+#endif
+#include "motors/trinamic.h"
+#include "trinamic/common.h"
 #endif
 
 #ifdef SPINDLE_HUANYANG
@@ -256,7 +270,10 @@ typedef struct {
   #include "bdring_i2s_6_axis_map.h"
 #elif defined(BOARD_ESPDUINO32)
   #include "espduino-32_wemos_d1_r32_uno_map.h"
+#elif defined(BOARD_MY_MACHINE)
+  #include "my_machine_map.h"
 #else // default board - NOTE: NOT FINAL VERSION!
+  #warning "Compiling for generic board!"
   #include "generic_map.h"
 #endif
 
@@ -264,10 +281,14 @@ typedef struct {
 #error "Add #define GRBL_ESP32 in grbl/config.h or update your CMakeLists.txt to the latest version!"
 #endif
 
+#if IOEXPAND_ENABLE == 0 && ((DIRECTION_MASK|STEPPERS_DISABLE_MASK|SPINDLE_MASK|COOLANT_MASK) & 0xC00000000ULL)
+#error "Pins 34 - 39 are input only!"
+#endif
+
 #ifdef I2C_PORT
 extern QueueHandle_t i2cQueue;
 extern SemaphoreHandle_t i2cBusy;
-#elif IOEXPAND_ENABLE || KEYPAD_ENABLE || EEPROM_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
+#elif I2C_ENABLE == 1
 #error "I2C port not available!"
 #endif
 

@@ -1,7 +1,7 @@
 /*
   uno_map.h - driver code for STM32F411 ARM processor on a Nucleo-F411RE board
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 
@@ -18,6 +18,10 @@
   You should have received a copy of the GNU General Public License
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
+
+#if TRINAMIC_ENABLE
+#error Trinamic plugin not supported!
+#endif
 
 #define BOARD_NAME "Generic Uno"
 
@@ -70,6 +74,10 @@
 #define Z_LIMIT_BIT         (1<<Z_LIMIT_PIN)
 #define LIMIT_MASK          (X_LIMIT_BIT|Y_LIMIT_BIT|Z_LIMIT_BIT) // All limit bits
 #define LIMIT_INMODE        GPIO_BITBAND
+
+// Comment out if Z limit pin is not assigned to an interrupt enabled pin on a different port.
+
+#define Z_LIMIT_POLL
 
 // Define spindle enable and spindle direction output pins.
 #ifdef VARIABLE_SPINDLE

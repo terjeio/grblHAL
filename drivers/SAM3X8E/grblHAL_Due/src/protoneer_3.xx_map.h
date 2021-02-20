@@ -1,9 +1,9 @@
 /*
   protoneer_3.xx_map.h - driver code for Atmel SAM3X8E ARM processor, pin mappings compatible with Protoneer 3.xx boards
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2019 Terje Io
+  Copyright (c) 2019-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -41,7 +41,7 @@
 #define Y_DIRECTION_BIT     (1<<Y_DIRECTION_PIN)
 #define Z_DIRECTION_PORT    PIOC
 #define Z_DIRECTION_PIN     23
-#define Z_DIRECTION_BIT     (1<<Z_STEP_PIN)
+#define Z_DIRECTION_BIT     (1<<Z_DIRECTION_PIN)
 
 // Define stepper driver enable/disable output pin(s).
 #define X_DISABLE_PORT      PIOC
@@ -68,8 +68,7 @@
 #define SPINDLE_DIRECTION_BIT   (1<<SPINDLE_DIRECTION_PIN)
 
 // Start of PWM & Stepper Enabled Spindle
-#define SPINDLE_PWM_TIMER   (TC2->TC_CHANNEL[0])
-#define SPINDLE_PWM_CCREG   2
+#define SPINDLE_PWM_TIMER   (TC2->TC_CHANNEL[2])
 #define SPINDLE_PWM_PORT    PIOD
 #define SPINDLE_PWM_PIN     7 // TIOA8
 #define SPINDLE_PWM_BIT     (1<<SPINDLE_PWM_PIN)
@@ -95,9 +94,11 @@
 #define CYCLE_START_PIN     23
 #define CYCLE_START_BIT     (1<<CYCLE_START_PIN)
 /*
+#ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
 #define SAFETY_DOOR_PORT    PIOC
 #define SAFETY_DOOR_PIN     18
 #define SAFETY_DOOR_BIT     (1<<SAFETY_DOOR_PIN)
+#endif
 */
 // Define probe switch input pin.
 #define PROBE_PORT          PIOA

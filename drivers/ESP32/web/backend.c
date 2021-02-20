@@ -3,9 +3,9 @@
 
   Webserver backend
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2019-2020 Terje Io
+  Copyright (c) 2019-2021 Terje Io
 
   Some parts of the code is based on example code by Espressif, in the public domain
 
@@ -61,12 +61,7 @@
 #include "esp_vfs_fat.h"
 #endif
 
-static int setting = -1;
-static char sbuf[100];
 static httpd_handle_t httpdaemon = NULL;
-static cJSON *json_settings;
-
-static stream_write_ptr org_stream;
 
 #define MAX_APs 20
 
@@ -428,12 +423,14 @@ static esp_err_t get_handler(httpd_req_t *req)
 
             inet_ntop(AF_INET, &addr.sin6_addr.un.u32_addr[3], ipstr, sizeof(ipstr));
 
+            wifi_settings_t *settings = get_wifi_settings();
+
             // From local AP?
-            if(!internal && memcmp(&driver_settings.wifi.ap.network.ip, &addr.sin6_addr.un.u32_addr[3], sizeof(ip4_addr_t))) {
+            if(!internal && memcmp(&settings->ap.network.ip, &addr.sin6_addr.un.u32_addr[3], sizeof(ip4_addr_t))) {
 
                 char loc[50];
 
-                inet_ntop(AF_INET, &driver_settings.wifi.ap.network.ip, ipstr, sizeof(ipstr));
+                inet_ntop(AF_INET, &settings->ap.network.ip, ipstr, sizeof(ipstr));
 
                 sprintf(loc, "http://%s/ap_login.html", ipstr);
 
@@ -477,44 +474,21 @@ static esp_err_t get_handler(httpd_req_t *req)
 }
 
 // add setting to the JSON response array
-static bool add_setting (int id, char *value)
+static bool report_setting (const setting_detail_t *setting, uint_fast16_t offset, void *data)
 {
     bool ok = true;
 
-    cJSON *setting;
+    cJSON *settingobj;
 
-    if((ok = (setting = cJSON_CreateObject()) != NULL))
+    if((ok = (settingobj = cJSON_CreateObject()) != NULL))
     {
-        ok = cJSON_AddNumberToObject(setting, "id", (double)id) != NULL;
-        ok &= cJSON_AddStringToObject(setting, "value", value) != NULL;
+        ok = !!cJSON_AddNumberToObject(settingobj, "id", (double)(setting->id + offset));
+        ok &= !!cJSON_AddStringToObject(settingobj, "value", setting_get_value(setting, offset));
         if(ok)
-            cJSON_AddItemToArray(json_settings, setting);
+            cJSON_AddItemToArray((cJSON *)data, settingobj);
     }
 
     return ok;
-}
-
-// Used for trapping settings report and generating a JSON array
-static void backendWriteS (const char *data)
-{
-    strcat(sbuf, data);
-
-    uint32_t len = strlen(sbuf);
-
-    if(sbuf[len - 2] == '\r')
-    {
-        sbuf[len - 2] = '\0';
-        char *eq = strchr(sbuf, '=');
-        if(eq) {
-            *eq = '\0';
-            uint_fast8_t counter = 1;
-            float parameter;
-            read_float(sbuf, &counter, &parameter);
-            if(setting == -1 || (int)parameter == setting)
-                add_setting((int)parameter, eq + 1);
-        }
-        sbuf[0] = '\0';
-    }
 }
 
 static esp_err_t settings_get_handler(httpd_req_t *req)
@@ -523,19 +497,21 @@ static esp_err_t settings_get_handler(httpd_req_t *req)
 
 //  size_t ql = httpd_req_get_url_query_len(req);
 
-    setting = strlen(req->uri) > 9 ? atoi(&req->uri[10]) : -1;
+    int setting = strlen(req->uri) > 9 ? atoi(&req->uri[10]) : -1;
 
-    cJSON *root = cJSON_CreateObject();
+    cJSON *json_settings, *root = cJSON_CreateObject();
 
     if((ok = (root && (json_settings = cJSON_AddArrayToObject(root, "settings"))))) {
 
-        org_stream = hal.stream.write;
+        setting_output_ptr org_ptr = grbl.report.setting;
+        grbl.report.setting = report_setting;
 
-        hal.stream.write = backendWriteS;
+        if(setting == -1)
+            report_grbl_settings(false, &json_settings);
+        else
+            report_grbl_setting((setting_id_t)setting, &json_settings);
 
-        report_grbl_settings(false);
-
-        hal.stream.write = org_stream;
+        grbl.report.setting = org_ptr;
 
         char *resp = cJSON_PrintUnformatted(root);
 
@@ -576,7 +552,7 @@ static esp_err_t settings_set_handler(httpd_req_t *req)
                 cJSON *id = cJSON_GetObjectItemCaseSensitive(setting, "id");
                 cJSON *value = cJSON_GetObjectItemCaseSensitive(setting, "value");
 
-                if((status = settings_store_global_setting ((setting_type_t)((int)id->valuedouble), value->valuestring)) != Status_OK)
+                if((status = settings_store_setting ((setting_id_t)((int)id->valuedouble), value->valuestring)) != Status_OK)
                     break;
             }
             cJSON_Delete(root);

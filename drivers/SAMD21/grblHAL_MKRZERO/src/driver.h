@@ -1,7 +1,7 @@
 /*
   driver.h - driver code for Atmel SAMD21 ARM processor
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2018-2020 Terje Io
 
@@ -80,6 +80,8 @@
 
 #ifdef BOARD_CNC_BOOSTERPACK
   #include "cnc_boosterpack_map.h"
+#elif defined(BOARD_MY_MACHINE)
+  #include "my_machine_map.h"
 #else
   #include "generic_map.h"
 #endif
@@ -94,7 +96,11 @@
 // End configuration
 
 #if TRINAMIC_ENABLE
-#include "tmc2130/trinamic.h"
+#ifndef TRINAMIC_MIXED_DRIVERS
+#define TRINAMIC_MIXED_DRIVERS 1
+#endif
+#include "motors/trinamic.h"
+#include "trinamic/common.h"
 #endif
 
 #if KEYPAD_ENABLE

@@ -2,9 +2,9 @@
 
   driver.c - driver code for Atmel SAM3X8E ARM processor
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2019-2020 Terje Io
+  Copyright (c) 2019-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -22,6 +22,9 @@
 
 #include "driver.h"
 #include "serial.h"
+
+#include "grbl/limits.h"
+
 #if USB_SERIAL_CDC
 #include "usb_serial.h"
 #endif
@@ -110,19 +113,20 @@ typedef struct {
 
 static bool IOInitDone = false;
 static uint32_t pulse_length, pulse_delay;
-// Inverts the probe pin state depending on user settings and probing cycle mode.
-static bool probe_invert;
 static axes_signals_t next_step_outbits;
 static delay_t delay_ms = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
 static debounce_queue_t debounce_queue = {0};
 static input_signal_t a_signals[10] = {0}, b_signals[10] = {0}, c_signals[10] = {0}, d_signals[10] = {0};
+static probe_state_t probe = {
+    .connected = On
+};
 #ifdef SQUARING_ENABLED
 static axes_signals_t motors_1 = {AXES_BITMASK}, motors_2 = {AXES_BITMASK};
 #endif
 
 #ifndef VFD_SPINDLE
 static bool pwmEnabled = false;
-static spindle_pwm_t spindle_pwm;
+static spindle_pwm_t spindle_pwm = {0};
 
 static void spindle_set_speed (uint_fast16_t pwm_value);
 #endif
@@ -324,7 +328,7 @@ inline static __attribute__((always_inline)) void set_dir_outputs (axes_signals_
 static void stepperEnable (axes_signals_t enable)
 {
     enable.value ^= settings.steppers.enable_invert.mask;
-#if TRINAMIC_ENABLE && TRINAMIC_I2C
+#if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
     trinamic_stepper_enable(enable);
 #else
     BITBAND_PERI(X_DISABLE_PORT->PIO_ODSR, X_DISABLE_PIN) = enable.x;
@@ -432,50 +436,68 @@ static void stepperPulseStartDelayed (stepper_t *stepper)
 // Returns limit state as an axes_signals_t variable.
 // Each bitfield bit indicates an axis limit, where triggered is 1 and not triggered is 0.
 // Dual limit switch inputs per axis version. Only one needs to be dual input!
-inline static axes_signals_t limitsGetState()
+inline static limit_signals_t limitsGetState()
 {
-    axes_signals_t signals_min = {settings.limits.invert.mask}, signals_max = {settings.limits.invert.mask};
-    
-    signals_min.x = BITBAND_PERI(X_LIMIT_PORT->PIO_PDSR, X_LIMIT_PIN);
-    signals_min.y = BITBAND_PERI(Y_LIMIT_PORT->PIO_PDSR, Y_LIMIT_PIN);
-    signals_min.z = BITBAND_PERI(Z_LIMIT_PORT->PIO_PDSR, Z_LIMIT_PIN);
-  #ifdef A_LIMIT_PIN
-    signals_min.a = BITBAND_PERI(A_LIMIT_PORT->PIO_PDSR, A_LIMIT_PIN);
-  #endif
-  #ifdef B_LIMIT_PIN
-    signals_min.b = BITBAND_PERI(B_LIMIT_PORT->PIO_PDSR, B_LIMIT_PIN);
-  #endif
-  #ifdef C_LIMIT_PIN
-    signals_min.c = BITBAND_PERI(C_LIMIT_PORT->PIO_PDSR, C_LIMIT_PIN);
-  #endif
+    limit_signals_t signals = {0};
 
-  #ifdef X_LIMIT_PIN_MAX
-    signals_max.x = BITBAND_PERI(X_LIMIT_PORT_MAX->PIO_PDSR, X_LIMIT_PIN_MAX);
+    signals.min.mask = signals.max.mask = settings.limits.invert.mask;
+#ifdef SQUARING_ENABLED
+    signals.min2.mask = settings.limits.invert.mask;
+#endif
+    
+    signals.min.x = BITBAND_PERI(X_LIMIT_PORT->PIO_PDSR, X_LIMIT_PIN);
+    signals.min.y = BITBAND_PERI(Y_LIMIT_PORT->PIO_PDSR, Y_LIMIT_PIN);
+    signals.min.z = BITBAND_PERI(Z_LIMIT_PORT->PIO_PDSR, Z_LIMIT_PIN);
+#ifdef A_LIMIT_PIN
+    signals.min.a = BITBAND_PERI(A_LIMIT_PORT->PIO_PDSR, A_LIMIT_PIN);
+#endif
+#ifdef B_LIMIT_PIN
+    signals.min.b = BITBAND_PERI(B_LIMIT_PORT->PIO_PDSR, B_LIMIT_PIN);
+#endif
+#ifdef C_LIMIT_PIN
+    signals.min.c = BITBAND_PERI(C_LIMIT_PORT->PIO_PDSR, C_LIMIT_PIN);
+#endif
+
+#ifdef X_LIMIT_PIN_MAX
+  #if X_AUTO_SQUARE
+    signals.min2.x = BITBAND_PERI(X_LIMIT_PORT_MAX->PIO_PDSR, X_LIMIT_PIN_MAX);
+  #else
+    signals.max.x = BITBAND_PERI(X_LIMIT_PORT_MAX->PIO_PDSR, X_LIMIT_PIN_MAX);
   #endif
-  #ifdef Y_LIMIT_PIN_MAX
-    signals_max.y = BITBAND_PERI(Y_LIMIT_PORT_MAX->PIO_PDSR, Y_LIMIT_PIN_MAX);
+#endif
+#ifdef Y_LIMIT_PIN_MAX
+  #if Y_AUTO_SQUARE
+    signals.min2.y = BITBAND_PERI(Y_LIMIT_PORT_MAX->PIO_PDSR, Y_LIMIT_PIN_MAX);
+  #else
+    signals.max.y = BITBAND_PERI(Y_LIMIT_PORT_MAX->PIO_PDSR, Y_LIMIT_PIN_MAX);
   #endif
-  #ifdef Z_LIMIT_PIN_MAX
-    signals_max.z = BITBAND_PERI(Z_LIMIT_PORT_MAX->PIO_PDSR, Z_LIMIT_PIN_MAX);
+#endif
+#ifdef Z_LIMIT_PIN_MAX
+  #if Z_AUTO_SQUARE
+    signals.min2.z = BITBAND_PERI(Z_LIMIT_PORT_MAX->PIO_PDSR, Z_LIMIT_PIN_MAX);
+  #else
+    signals.max.z = BITBAND_PERI(Z_LIMIT_PORT_MAX->PIO_PDSR, Z_LIMIT_PIN_MAX);
   #endif
-  #ifdef A_LIMIT_PIN_MAX
-    signals_max.a = BITBAND_PERI(A_LIMIT_PORT_MAX->PIO_PDSR, A_LIMIT_PIN_MAX);
-  #endif
-  #ifdef B_LIMIT_PIN_MAX
-    signals_max.b = BITBAND_PERI(B_LIMIT_PORT_MAX->PIO_PDSR, B_LIMIT_PIN_MAX);
-  #endif
-  #ifdef C_LIMIT_PIN_MAX
-    signals_max.c = BITBAND_PERI(C_LIMIT_PORT_MAX->PIO_PDSR, C_LIMIT_PIN_MAX);
-  #endif
+#endif
+#ifdef A_LIMIT_PIN_MAX
+    signals.max.a = BITBAND_PERI(A_LIMIT_PORT_MAX->PIO_PDSR, A_LIMIT_PIN_MAX);
+#endif
+#ifdef B_LIMIT_PIN_MAX
+    signals.max.b = BITBAND_PERI(B_LIMIT_PORT_MAX->PIO_PDSR, B_LIMIT_PIN_MAX);
+#endif
+#ifdef C_LIMIT_PIN_MAX
+    signals.max.c = BITBAND_PERI(C_LIMIT_PORT_MAX->PIO_PDSR, C_LIMIT_PIN_MAX);
+#endif
 
     if (settings.limits.invert.mask) {
-        signals_min.value ^= settings.limits.invert.mask;
-        signals_max.value ^= settings.limits.invert.mask;
+        signals.min.value ^= settings.limits.invert.mask;
+        signals.max.value ^= settings.limits.invert.mask;
+#ifdef SQUARING_ENABLED
+        signals.min2.mask ^= settings.limits.invert.mask;
+#endif
     }
 
-    signals_min.value |= signals_max.value;
-
-    return signals_min;
+    return signals;
 }
 
 #else // SINGLE INPUT LIMIT SWITCHES
@@ -483,28 +505,28 @@ inline static axes_signals_t limitsGetState()
 // Returns limit state as an axes_signals_t variable.
 // Each bitfield bit indicates an axis limit, where triggered is 1 and not triggered is 0.
 // Single limit switch input per axis version.
-inline static axes_signals_t limitsGetState()
+inline static limit_signals_t limitsGetState()
 {
-    axes_signals_t signals = {settings.limits.invert.mask};
+    limit_signals_t signals = {0};
     
-    signals.x = BITBAND_PERI(X_LIMIT_PORT->PIO_PDSR, X_LIMIT_PIN);
+    signals.min.x = BITBAND_PERI(X_LIMIT_PORT->PIO_PDSR, X_LIMIT_PIN);
 
-    signals.y = BITBAND_PERI(Y_LIMIT_PORT->PIO_PDSR, Y_LIMIT_PIN);
+    signals.min.y = BITBAND_PERI(Y_LIMIT_PORT->PIO_PDSR, Y_LIMIT_PIN);
 
-    signals.z = BITBAND_PERI(Z_LIMIT_PORT->PIO_PDSR, Z_LIMIT_PIN);
+    signals.min.z = BITBAND_PERI(Z_LIMIT_PORT->PIO_PDSR, Z_LIMIT_PIN);
 
-  #ifdef A_LIMIT_PIN
-    signals.a = BITBAND_PERI(A_LIMIT_PORT->PIO_PDSR, A_LIMIT_PIN);
-  #endif
-  #ifdef B_LIMIT_PIN
-    signals.b = BITBAND_PERI(B_LIMIT_PORT->PIO_PDSR, B_LIMIT_PIN);
-  #endif
-  #ifdef C_LIMIT_PIN
-    signals.c = BITBAND_PERI(C_LIMIT_PORT->PIO_PDSR, C_LIMIT_PIN);
-  #endif
+#ifdef A_LIMIT_PIN
+    signals.min.a = BITBAND_PERI(A_LIMIT_PORT->PIO_PDSR, A_LIMIT_PIN);
+#endif
+#ifdef B_LIMIT_PIN
+    signals.min.b = BITBAND_PERI(B_LIMIT_PORT->PIO_PDSR, B_LIMIT_PIN);
+#endif
+#ifdef C_LIMIT_PIN
+    signals.min.c = BITBAND_PERI(C_LIMIT_PORT->PIO_PDSR, C_LIMIT_PIN);
+#endif
 
     if (settings.limits.invert.mask)
-        signals.value ^= settings.limits.invert.mask;
+        signals.min.value ^= settings.limits.invert.mask;
 
     return signals;
 }
@@ -537,52 +559,6 @@ static void StepperDisableMotors (axes_signals_t axes, squaring_mode_t mode)
     motors_2.mask = (mode == SquaringMode_B || mode == SquaringMode_Both ? axes.mask : 0) ^ AXES_BITMASK;
 }
 
-// Returns limit state as an axes_signals_t variable.
-// Each bitfield bit indicates an axis limit, where triggered is 1 and not triggered is 0.
-inline static axes_signals_t limitsGetHomeState()
-{
-    axes_signals_t signals_min = {0}, signals_max = {0};
-    
-    if(motors_1.mask) {
-
-        signals_min.mask = settings.limits.invert.mask;
-
-        if(motors_1.x)
-            signals_min.x = BITBAND_PERI(X_LIMIT_PORT->PIO_PDSR, X_LIMIT_PIN);
-        if(motors_1.y)
-            signals_min.y = BITBAND_PERI(Y_LIMIT_PORT->PIO_PDSR, Y_LIMIT_PIN);
-        if(motors_1.z)
-            signals_min.z = BITBAND_PERI(Z_LIMIT_PORT->PIO_PDSR, Z_LIMIT_PIN);;
-
-        if (settings.limits.invert.mask)
-            signals_min.mask ^= settings.limits.invert.mask;
-    }
-
-    if(motors_2.mask) {
-
-       signals_max.mask = settings.limits.invert.mask;
-
-#ifdef X_LIMIT_PIN_MAX
-        if(motors_2.x)
-            signals_max.x = BITBAND_PERI(X_LIMIT_PORT_MAX->PIO_PDSR, X_LIMIT_PIN_MAX);
-#endif
-#ifdef Y_LIMIT_PIN_MAX
-        if(motors_2.y)
-            signals_max.y = BITBAND_PERI(Y_LIMIT_PORT_MAX->PIO_PDSR, Y_LIMIT_PIN_MAX);
-#endif
-#ifdef Z_LIMIT_PIN_MAX
-        if(motors_2.z)
-            signals_max.z = BITBAND_PERI(Z_LIMIT_PORT_MAX->PIO_PDSR, Z_LIMIT_PIN_MAX);
-#endif
-        if (settings.limits.invert.mask)
-            signals_max.mask ^= settings.limits.invert.mask;
-    }
-
-    signals_min.mask |= signals_max.mask;
-
-    return signals_min;
-}
-
 #endif
 
 // Enable/disable limit pins interrupt
@@ -601,11 +577,7 @@ static void limitsEnable (bool on, bool homing)
         }
     } while(i);
 
-  #ifdef SQUARING_ENABLED
-    hal.limits.get_state = homing ? limitsGetHomeState : limitsGetState;
-  #endif
-
-  #if TRINAMIC_ENABLE
+  #if TRINAMIC_ENABLE == 2130
     trinamic_homing(homing);
   #endif
 }
@@ -637,31 +609,31 @@ static control_signals_t systemGetState (void)
     return signals;
 }
 
+#ifdef PROBE_PIN
+
 // Sets up the probe pin invert mask to
 // appropriately set the pin logic according to setting for normal-high/normal-low operation
 // and the probing cycle modes for toward-workpiece/away-from-workpiece.
 static void probeConfigure (bool is_probe_away, bool probing)
 {
-  probe_invert = settings.probe.invert_probe_pin;
-
-  if (is_probe_away)
-      probe_invert = !probe_invert;
+    probe.triggered = Off;
+    probe.is_probing = probing;
+    probe.inverted = is_probe_away ? !settings.probe.invert_probe_pin : settings.probe.invert_probe_pin;
 }
+
 
 // Returns the probe connected and triggered pin states.
 probe_state_t probeGetState (void)
 {
-    probe_state_t state = {
-        .connected = On
-    };
+    probe_state_t state = {0};
 
-#ifdef PROBE_PIN
-    state.triggered = BITBAND_PERI(PROBE_PORT->PIO_PDSR, PROBE_PIN) ^ probe_invert;
-#else
-    state.triggered = false;
-#endif
+    state.connected = probe.connected;
+    state.triggered = BITBAND_PERI(PROBE_PORT->PIO_PDSR, PROBE_PIN) ^ probe.inverted;
+
     return state;
 }
+
+#endif
 
 #ifndef VFD_SPINDLE
 
@@ -705,7 +677,7 @@ static void spindle_set_speed (uint_fast16_t pwm_value)
 {
     if (pwm_value == spindle_pwm.off_value) {
         pwmEnabled = false;
-        if(settings.spindle.disable_with_zero_speed)
+        if(settings.spindle.flags.pwm_action == SpindleAction_DisableWithZeroSPeed)
             spindle_off();
         if(spindle_pwm.always_on) {
             SPINDLE_PWM_TIMER.TC_RA = spindle_pwm.period - spindle_pwm.off_value;
@@ -714,7 +686,7 @@ static void spindle_set_speed (uint_fast16_t pwm_value)
         } else
             SPINDLE_PWM_TIMER.TC_CMR |= TC_CMR_CPCSTOP; // Ensure output is low, by setting timer to stop at TCC match
     } else {
-        SPINDLE_PWM_TIMER.TC_RA = spindle_pwm.period - pwm_value;
+        SPINDLE_PWM_TIMER.TC_RA = spindle_pwm.period == pwm_value ? 1 : spindle_pwm.period - pwm_value;
         if(!pwmEnabled) {
             spindle_on();
             pwmEnabled = true;
@@ -755,7 +727,7 @@ static void spindleSetStateVariable (spindle_state_t state, float rpm)
 // Returns spindle state in a spindle_state_t variable
 static spindle_state_t spindleGetState (void)
 {
-    spindle_state_t state = {0};
+    spindle_state_t state = {settings.spindle.invert.mask};
 
     state.on = BITBAND_PERI(SPINDLE_ENABLE_PORT->PIO_ODSR, SPINDLE_ENABLE_PIN) != 0;
   #ifdef SPINDLE_DIRECTION_PIN
@@ -900,10 +872,6 @@ void settings_changed (settings_t *settings)
 {
     if(IOInitDone) {
 
-      #if TRINAMIC_ENABLE
-        trinamic_configure();
-      #endif
-
         stepperEnable(settings->steppers.deenergize);
 
 #ifdef SQUARING_ENABLED
@@ -911,13 +879,11 @@ void settings_changed (settings_t *settings)
 #endif
 
       #ifndef VFD_SPINDLE
-
         if(hal.driver_cap.variable_spindle && spindle_precompute_pwm_values(&spindle_pwm, hal.f_step_timer)) {
             SPINDLE_PWM_TIMER.TC_RC = spindle_pwm.period;
             hal.spindle.set_state = spindleSetStateVariable;
         } else
             hal.spindle.set_state = spindleSetState;
-
       #endif
 
         pulse_length = (uint32_t)(42.0f * (settings->steppers.pulse_microseconds - STEP_PULSE_LATENCY)) - 1;
@@ -1260,12 +1226,18 @@ static bool driver_setup (settings_t *settings)
   #endif
 
     SPINDLE_PWM_PORT->PIO_WPMR = PIO_WPMR_WPKEY(0x50494F);
-
     SPINDLE_PWM_PORT->PIO_ABSR |= SPINDLE_PWM_BIT;
     SPINDLE_PWM_PORT->PIO_PDR = SPINDLE_PWM_BIT;
 
+#ifdef SPINDLE_PWM_CHANNEL
+#error "Spindle PWM to be completed for this board!"
+//    PWM->PWM_CLK = ;
+//    PWM->PWM_ENA |= (1 << SPINDLE_PWM_CHANNEL);
+//    PWM->PWM_CH_NUM[SPINDLE_PWM_CHANNEL].PWM_CPRD = ;
+#else
     SPINDLE_PWM_TIMER.TC_CCR = TC_CCR_CLKDIS;
     SPINDLE_PWM_TIMER.TC_CMR = TC_CMR_WAVE|TC_CMR_WAVSEL_UP_RC|TC_CMR_ASWTRG_CLEAR|TC_CMR_ACPA_SET|TC_CMR_ACPC_CLEAR; //|TC_CMR_EEVT_XC0;
+#endif
 
 #endif
 
@@ -1333,16 +1305,15 @@ static bool driver_setup (settings_t *settings)
     PIO_Mode(PROBE_PORT, PROBE_BIT, INPUT);
   #endif
 
-#if TRINAMIC_ENABLE
+#if TRINAMIC_ENABLE == 2130
     trinamic_start(true);
 #endif
 
  // Set defaults
 
-    IOInitDone = settings->version == 18;
+    IOInitDone = settings->version == 19;
 
-    settings_changed(settings);
-
+    hal.settings_changed(settings);
     hal.stepper.go_idle(true);
     hal.spindle.set_state((spindle_state_t){0}, 0.0f);
     hal.coolant.set_state((coolant_state_t){0});
@@ -1467,7 +1438,7 @@ bool driver_init (void)
     NVIC_EnableIRQ(SysTick_IRQn);
 
     hal.info = "SAM3X8E";
-	hal.driver_version = "201014";
+	hal.driver_version = "210214";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1492,10 +1463,11 @@ bool driver_init (void)
 
     hal.coolant.set_state = coolantSetState;
     hal.coolant.get_state = coolantGetState;
-//#ifdef PROBE_PIN
+
+#ifdef PROBE_PIN
     hal.probe.configure = probeConfigure;
     hal.probe.get_state = probeGetState;
-//#endif
+#endif
 
 #ifndef VFD_SPINDLE
     hal.spindle.set_state = spindleSetState;
@@ -1545,6 +1517,8 @@ bool driver_init (void)
         hal.nvs.type = NVS_None;
 #endif
 
+    hal.irq_enable = __enable_irq;
+    hal.irq_disable = __disable_irq;
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
@@ -1559,14 +1533,16 @@ bool driver_init (void)
 #endif
 
  // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
+
+#ifdef SAFETY_DOOR_PIN
+    hal.signals_cap.safety_door_ajar = On;
+#endif
+
 #ifndef VFD_SPINDLE
   #ifdef SPINDLE_DIRECTION_PIN
     hal.driver_cap.spindle_dir = On;
   #endif
     hal.driver_cap.variable_spindle = On;
-#endif
-#ifdef SAFETY_DOOR_PIN
-    hal.driver_cap.safety_door = On;
 #endif
 #ifdef COOLANT_MIST_PIN
     hal.driver_cap.mist_control = On;
@@ -1578,7 +1554,7 @@ bool driver_init (void)
     hal.driver_cap.limits_pull_up = On;
     hal.driver_cap.probe_pull_up = On;
 
-#if TRINAMIC_ENABLE
+#if TRINAMIC_ENABLE == 2130
     trinamic_init();
 #endif
 
@@ -1608,7 +1584,7 @@ bool driver_init (void)
 
     // No need to move version check before init.
     // Compiler will fail any signature mismatch for existing entries.
-    return hal.version == 7;
+    return hal.version == 8;
 }
 
 /* interrupt handlers */
@@ -1712,8 +1688,11 @@ inline static void PIO_IRQHandler (input_signal_t *signals, uint32_t isr)
     if(debounce)
         DEBOUNCE_TIMER.TC_CCR = TC_CCR_SWTRG;
 
-    if(grp & INPUT_GROUP_LIMIT)
-        hal.limits.interrupt_callback(limitsGetState());
+    if(grp & INPUT_GROUP_LIMIT) {
+        limit_signals_t state = limitsGetState();
+        if(limit_signals_merge(state).value) //TODO: add check for limit switches having same state as when limit_isr were invoked?
+            hal.limits.interrupt_callback(state);
+    }
 
     if(grp & INPUT_GROUP_CONTROL)
         hal.control.interrupt_callback(systemGetState());

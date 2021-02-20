@@ -54,13 +54,7 @@ extern uint32_t __STACK_TOP;
 // External declarations for the interrupt handlers used by the application.
 //
 //*****************************************************************************
-
-extern void lwIPEthernetIntHandler(void);
-extern void xPortPendSVHandler(void);
-extern void vPortSVCHandler(void);
-extern void xPortSysTickHandler(void);
-extern void SerialPort1IntHandler(void);
-extern void SerialPort0IntHandler(void);
+// To be added by user
 
 //*****************************************************************************
 //
@@ -84,11 +78,11 @@ void (* const g_pfnVectors[])(void) =
     0,                                      // Reserved
     0,                                      // Reserved
     0,                                      // Reserved
-    vPortSVCHandler,                        // SVCall handler
+    IntDefaultHandler,                      // SVCall handler
     IntDefaultHandler,                      // Debug monitor handler
     0,                                      // Reserved
-    xPortPendSVHandler,                     // The PendSV handler
-    xPortSysTickHandler,                    // The SysTick handler
+    IntDefaultHandler,                      // The PendSV handler
+    IntDefaultHandler,                      // The SysTick handler
     IntDefaultHandler,                      // GPIO Port A
     IntDefaultHandler,                      // GPIO Port B
     IntDefaultHandler,                      // GPIO Port C
@@ -129,7 +123,7 @@ void (* const g_pfnVectors[])(void) =
     IntDefaultHandler,                      // I2C1 Master and Slave
     IntDefaultHandler,                      // CAN0
     IntDefaultHandler,                      // CAN1
-    lwIPEthernetIntHandler,                 // Ethernet
+    IntDefaultHandler,                      // Ethernet
     IntDefaultHandler,                      // Hibernate
     IntDefaultHandler,                      // USB0
     IntDefaultHandler,                      // PWM Generator 3
@@ -145,8 +139,8 @@ void (* const g_pfnVectors[])(void) =
     IntDefaultHandler,                      // GPIO Port L
     IntDefaultHandler,                      // SSI2 Rx and Tx
     IntDefaultHandler,                      // SSI3 Rx and Tx
-    IntDefaultHandler,                  // UART3 Rx and Tx
-    IntDefaultHandler,                  // UART4 Rx and Tx
+    IntDefaultHandler,                      // UART3 Rx and Tx
+    IntDefaultHandler,                      // UART4 Rx and Tx
     IntDefaultHandler,                      // UART5 Rx and Tx
     IntDefaultHandler,                      // UART6 Rx and Tx
     IntDefaultHandler,                      // UART7 Rx and Tx

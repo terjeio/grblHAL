@@ -1,9 +1,9 @@
 /*
   cnc_boosterpack_map.h - driver code for STM32F4xx processor (on Blackpill board)
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -20,6 +20,17 @@
 */
 
 #define BOARD_NAME "CNC BoosterPack"
+
+#if TRINAMIC_ENABLE
+#ifdef TRINAMIC_MIXED_DRIVERS
+#undef TRINAMIC_MIXED_DRIVERS
+#endif
+#define TRINAMIC_MIXED_DRIVERS 0
+#ifdef TRINAMIC_I2C
+#undef TRINAMIC_I2C
+#endif
+#define TRINAMIC_I2C 1
+#endif
 
 #ifdef EEPROM_ENABLE
 #undef EEPROM_ENABLE
@@ -113,16 +124,19 @@
 // Define user-control controls (cycle start, reset, feed hold) input pins.
 #define CONTROL_PORT                GPIOB
 #define CONTROL_RESET_PIN           6
-#define CONTROL_FEED_HOLD_PIN       7
-#define CONTROL_CYCLE_START_PIN     8
-#define CONTROL_SAFETY_DOOR_PIN     9
-#define CONTROL_INMODE GPIO_SHIFT6
-
 #define CONTROL_RESET_BIT           (1<<CONTROL_RESET_PIN)
+#define CONTROL_FEED_HOLD_PIN       7
 #define CONTROL_FEED_HOLD_BIT       (1<<CONTROL_FEED_HOLD_PIN)
+#define CONTROL_CYCLE_START_PIN     8
 #define CONTROL_CYCLE_START_BIT     (1<<CONTROL_CYCLE_START_PIN)
+#ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
+#define CONTROL_SAFETY_DOOR_PIN     9
 #define CONTROL_SAFETY_DOOR_BIT     (1<<CONTROL_SAFETY_DOOR_PIN)
 #define CONTROL_MASK                (CONTROL_RESET_BIT|CONTROL_FEED_HOLD_BIT|CONTROL_CYCLE_START_BIT|CONTROL_SAFETY_DOOR_BIT)
+#else
+#define CONTROL_MASK                (CONTROL_RESET_BIT|CONTROL_FEED_HOLD_BIT|CONTROL_CYCLE_START_BIT)
+#endif
+#define CONTROL_INMODE GPIO_SHIFT6
 
 // Define probe switch input pin.
 #define PROBE_PORT                  GPIOA

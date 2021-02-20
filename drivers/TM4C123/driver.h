@@ -3,9 +3,9 @@
 
   Grbl driver code for Texas Instruments Tiva C (TM4C123GH6PM) ARM processor
 
-  Part of Grbl
+  Part of grblHAL
 
-  Copyright (c) 2016-2020 Terje Io
+  Copyright (c) 2016-2021 Terje Io
   Copyright (c) 2011-2015 Sungeun K. Jeon
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -109,6 +109,8 @@
 
 #ifdef BOARD_CNC_BOOSTERPACK
 #include "cnc_boosterpack_map.h"
+#elif defined(BOARD_MY_MACHINE)
+#include "my_machine_map.h"
 #else
 #error No board!
 #endif
@@ -120,12 +122,21 @@
 #define STEP_PULSE_LATENCY 1.3f // microseconds
 #endif
 
+#if KEYPAD_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
+#define I2C_ENABLE 1
+#else
+#define I2C_ENABLE 0
+#endif
+
 // End configuration
 
 #if TRINAMIC_ENABLE
-#include "tmc2130/trinamic.h"
+#ifndef TRINAMIC_MIXED_DRIVERS
+#define TRINAMIC_MIXED_DRIVERS 1
 #endif
-
+#include "motors/trinamic.h"
+#include "trinamic/common.h"
+#endif
 
 #if PPI_ENABLE
 #define PPI_ENABLE_TIM TIMER2

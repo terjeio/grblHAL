@@ -3,9 +3,9 @@
 
   Driver code for Texas Instruments MSP430F5529 processor
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -25,5 +25,7 @@
 #define __I2C_DRIVER_H__
 
 #include "grbl/plugins.h"
+
+void i2c_init (void);
 
 #endif

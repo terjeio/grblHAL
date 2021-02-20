@@ -1,9 +1,9 @@
 /*
   flashfs.c - SDCard plugin for FatFs
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2018-2020 Terje Io
+  Copyright (c) 2018-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -30,6 +30,7 @@
 
 #include "grbl/settings.h"
 #include "grbl/report.h"
+#include "grbl/state_machine.h"
 
 #include "flashfs.h"
 #include <esp_log.h>
@@ -129,13 +130,14 @@ static void flashfs_end_job (void)
 ISR_CODE static int16_t flashfs_read (void)
 {
     int16_t c = -1;
+    sys_state_t state = state_get();
 
     if(file.eol == 1)
         file.line++;
 
     if(file.handle) {
 
-        if(sys.state == STATE_IDLE || (sys.state & (STATE_CYCLE|STATE_HOLD)))
+        if(state == STATE_IDLE || (state & (STATE_CYCLE|STATE_HOLD)))
             c = file_read();
 
         if(c == -1) { // EOF or error reading or grbl problem
@@ -144,7 +146,7 @@ ISR_CODE static int16_t flashfs_read (void)
                 c = '\n';
         }
 
-    } else if(sys.state == STATE_IDLE) // TODO: end on ok count match line count?
+    } else if(state == STATE_IDLE) // TODO: end on ok count match line count?
         flashfs_end_job();
 
     return c;
@@ -163,7 +165,7 @@ static ISR_CODE bool drop_input_stream (char c)
     return true;
 }
 
-static void trap_state_change_request(uint_fast16_t state)
+static void trap_state_change_request(sys_state_t state)
 {
     if(state == STATE_CYCLE) {
 
@@ -215,7 +217,7 @@ static void flashfs_report (stream_write_ptr stream_write, report_tracking_flags
 {
     char *pct_done = ftoa((float)file.pos / (float)file.size * 100.0f, 1);
 
-    if(sys.state != STATE_IDLE && !strncmp(pct_done, "100.0", 5))
+    if(state_get() != STATE_IDLE && !strncmp(pct_done, "100.0", 5))
         strcpy(pct_done, "99.9");
 
     stream_write("|SD:");
@@ -250,7 +252,7 @@ status_code_t flashfs_stream_file (char *filename)
 {
     status_code_t retval = Status_Unhandled;
 
-    if (sys.state != STATE_IDLE)
+    if (state_get() != STATE_IDLE)
         retval = Status_SystemGClock;
     else {
         if(file_open(filename)) {

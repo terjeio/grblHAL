@@ -1,9 +1,9 @@
 /*
   st_morpho_map.h - driver code for STM32F4xx ARM processors
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -19,8 +19,19 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+
+#if TRINAMIC_ENABLE == 2130
+#include "trinamic\tmc2130.h"
+#endif
+
+#if TRINAMIC_ENABLE == 2209
+#include "trinamic\tmc2209.h"
+#endif
+
+#define BOARD_NAME "ST Nucleo-64"
+
 #define HAS_BOARD_INIT
-#define SPINDLE_SYNC_ENABLE
+//#define SPINDLE_SYNC_ENABLE
 
 void board_init (void);
 
@@ -116,15 +127,19 @@ void board_init (void);
 // Define user-control controls (cycle start, reset, feed hold) input pins.
 #define CONTROL_PORT                GPIOC
 #define CONTROL_RESET_PIN           2
-#define CONTROL_FEED_HOLD_PIN       3
-#define CONTROL_CYCLE_START_PIN     4
-#define CONTROL_SAFETY_DOOR_PIN     1
-#define CONTROL_INMODE GPIO_MAP
 #define CONTROL_RESET_BIT           (1<<CONTROL_RESET_PIN)
+#define CONTROL_FEED_HOLD_PIN       3
 #define CONTROL_FEED_HOLD_BIT       (1<<CONTROL_FEED_HOLD_PIN)
+#define CONTROL_CYCLE_START_PIN     4
 #define CONTROL_CYCLE_START_BIT     (1<<CONTROL_CYCLE_START_PIN)
+#ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
+#define CONTROL_SAFETY_DOOR_PIN     1
 #define CONTROL_SAFETY_DOOR_BIT     (1<<CONTROL_SAFETY_DOOR_PIN)
 #define CONTROL_MASK                (CONTROL_RESET_BIT|CONTROL_FEED_HOLD_BIT|CONTROL_CYCLE_START_BIT|CONTROL_SAFETY_DOOR_BIT)
+#else
+#define CONTROL_MASK                (CONTROL_RESET_BIT|CONTROL_FEED_HOLD_BIT|CONTROL_CYCLE_START_BIT)
+#endif
+#define CONTROL_INMODE GPIO_MAP
 
 // Define probe switch input pin.
 #define PROBE_PORT                  GPIOC
@@ -132,6 +147,7 @@ void board_init (void);
 #define PROBE_BIT                   (1<<PROBE_PIN)
 
 // Spindle encoder pins.
+#ifdef SPINDLE_SYNC_ENABLE
 
 #define SPINDLE_INDEX_PORT  GPIOB
 #define SPINDLE_INDEX_PIN   14
@@ -141,13 +157,17 @@ void board_init (void);
 #define SPINDLE_PULSE_PIN   2
 #define SPINDLE_PULSE_BIT   (1<<SPINDLE_PULSE_PIN)
 
+#endif
+
 // Auxiliary I/O
 #define AUXINPUT0_PORT  GPIOB
-#define AUXINPUT0_PIN   13
+#define AUXINPUT0_PIN   14
 #define AUXINPUT0_BIT   (1<<AUXINPUT0_PIN)
-#define AUXINPUT1_PORT  GPIOB
-#define AUXINPUT1_PIN   14
+#define AUXINPUT1_PORT  GPIOA
+#define AUXINPUT1_PIN   15
 #define AUXINPUT1_BIT   (1<<AUXINPUT1_PIN)
+#define AUX_N_IN 2
+#define AUX_IN_MASK 0b11
 
 #define AUXOUTPUT0_PORT GPIOB
 #define AUXOUTPUT0_PIN  15
@@ -155,6 +175,8 @@ void board_init (void);
 #define AUXOUTPUT1_PORT GPIOB
 #define AUXOUTPUT1_PIN  2
 #define AUXOUTPUT1_BIT  (1<<AUXOUTPUT1_PIN)
+#define AUX_N_OUT 2
+#define AUX_OUT_MASK 0b11
 
 #if KEYPAD_ENABLE
 #define KEYPAD_PORT         GPIOB
@@ -166,6 +188,14 @@ void board_init (void);
 #define SD_CS_PORT  GPIOC
 #define SD_CS_PIN   8
 #define SD_CS_BIT   (1<<SD_CS_PIN)
+#define SPI_PORT    1 // GPIOA, SCK_PIN = 5, MISO_PIN = 6, MOSI_PIN = 7
+#endif
+
+#if TRINAMIC_ENABLE
+#define TRINAMIC_CS_PORT GPIOB
+#define TRINAMIC_CS_PIN  7
+#define TRINAMIC_CS_BIT  (1<<TRINAMIC_CS_PIN)
+#define SPI_PORT         1 // GPIOA, SCK_PIN = 5, MISO_PIN = 6, MOSI_PIN = 7
 #endif
 
 // EOF

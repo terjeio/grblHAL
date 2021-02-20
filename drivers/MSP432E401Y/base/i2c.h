@@ -3,9 +3,9 @@
 
   For Texas Instruments MSP432 LaunchPad
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2018-2019 Terje Io
+  Copyright (c) 2018-2020 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -27,17 +27,6 @@
 #include "driver.h"
 
 void I2CInit (void);
-
-#if TRINAMIC_ENABLE && TRINAMIC_I2C
-
-#include "trinamic\trinamic2130.h"
-#include "trinamic\TMC2130_I2C_map.h"
-
-#define I2C_ADR_I2CBRIDGE 0x47
-
-void I2C_DriverInit (TMC_io_driver_t *drv);
-
-#endif
 
 #if KEYPAD_ENABLE
 

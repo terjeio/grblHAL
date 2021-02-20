@@ -1,7 +1,7 @@
 /*
   protoneer_3.xx_map.h - driver code for STM32F411 ARM processor on a Nucleo-F411RE board
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 
@@ -18,6 +18,10 @@
   You should have received a copy of the GNU General Public License
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
+
+#if TRINAMIC_ENABLE
+#error Trinamic plugin not supported!
+#endif
 
 #define BOARD_NAME "Protoneer v3"
 

@@ -3,9 +3,9 @@
 
   Driver code for ESP32
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2018-2020 Terje Io
+  Copyright (c) 2018-2021 Terje Io
 
   Some parts
    Copyright (c) 2011-2015 Sungeun K. Jeon
@@ -29,11 +29,14 @@
 #include <stdbool.h>
 #include <string.h>
 
+#include "grbl/limits.h"
+
 #include "driver.h"
 #include "esp32-hal-uart.h"
 #include "nvs.h"
 #include "grbl/protocol.h"
 #include "esp_log.h"
+#include "grbl_esp32_if/grbl_esp32_if.h"
 
 #ifdef USE_I2S_OUT
 #include "i2s_out.h"
@@ -48,11 +51,11 @@
 #endif
 
 #if TELNET_ENABLE
-#include "networking/TCPSTream.h"
+#include "networking/TCPStream.h"
 #endif
 
 #if WEBSOCKET_ENABLE
-#include "networking/WsSTream.h"
+#include "networking/WsStream.h"
 #endif
 
 #if BLUETOOTH_ENABLE
@@ -76,7 +79,7 @@
 #include "eeprom/eeprom.h"
 #endif
 
-#ifdef I2C_PORT
+#if I2C_ENABLE
 #include "i2c.h"
 #endif
 
@@ -252,7 +255,9 @@ state_signal_t inputpin[] = {
 #ifdef SAFETY_DOOR_PIN
     { .id = Input_SafetyDoor,   .pin = SAFETY_DOOR_PIN, .group = INPUT_GROUP_CONTROL },
 #endif
+#ifdef PROBE_PIN
     { .id = Input_Probe,        .pin = PROBE_PIN,       .group = INPUT_GROUP_PROBE },
+#endif
     { .id = Input_LimitX,       .pin = X_LIMIT_PIN,     .group = INPUT_GROUP_LIMIT },
     { .id = Input_LimitY,       .pin = Y_LIMIT_PIN,     .group = INPUT_GROUP_LIMIT },
     { .id = Input_LimitZ,       .pin = Z_LIMIT_PIN,     .group = INPUT_GROUP_LIMIT }
@@ -273,11 +278,36 @@ state_signal_t inputpin[] = {
 #endif
 };
 
+gpio_num_t outputpin[] =
+{
+#ifdef STEPPERS_DISABLE_PIN
+    STEPPERS_DISABLE_PIN,
+#endif
+#if defined(SPINDLE_ENABLE_PIN) && SPINDLE_ENABLE_PIN != IOEXPAND
+    SPINDLE_ENABLE_PIN,
+#endif
+#if defined(SPINDLE_DIRECTION_PIN) && SPINDLE_DIRECTION_PIN != IOEXPAND
+    SPINDLE_DIRECTION_PIN,
+#endif
+#if defined(COOLANT_FLOOD_PIN) && COOLANT_FLOOD_PIN != IOEXPAND
+    COOLANT_FLOOD_PIN,
+#endif
+#if defined(COOLANT_MIST_PIN) && COOLANT_MIST_PIN != IOEXPAND
+    COOLANT_MIST_PIN,
+#endif
+    X_DIRECTION_PIN,
+    Y_DIRECTION_PIN,
+    Z_DIRECTION_PIN
+};
+
 static volatile uint32_t ms_count = 1; // NOTE: initial value 1 is for "resetting" systick timer
 static bool IOInitDone = false;
 static portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
-// Inverts the probe pin state depending on user settings and probing cycle mode.
-static uint8_t probe_invert;
+#if PROBE_ENABLE
+static probe_state_t probe = {
+    .connected = On
+};
+#endif
 
 #ifdef USE_I2S_OUT
 #define DIGITAL_IN(pin) i2s_out_state(pin)
@@ -316,11 +346,7 @@ static ledc_channel_config_t ledConfig = {
 #endif
 
 #if MODBUS_ENABLE
-#ifndef MODBUS_BAUD
-#define MODBUS_BAUD 19200
-#endif
 static modbus_stream_t modbus_stream = {0};
-static TimerHandle_t xModBusTimer = NULL;
 #endif
 
 // Interrupt handler prototypes
@@ -357,17 +383,17 @@ void selectStream (stream_type_t stream)
 
 #if TELNET_ENABLE
         case StreamType_Telnet:
+            hal.stream.write_all("[MSG:TELNET STREAM ACTIVE]\r\n");
             activateStream(&telnet_stream);
             services.telnet = On;
-            hal.stream.write_all("[MSG:TELNET STREAM ACTIVE]\r\n");
             break;
 #endif
 
 #if WEBSOCKET_ENABLE
         case StreamType_WebSocket:
+            hal.stream.write_all("[MSG:WEBSOCKET STREAM ACTIVE]\r\n");
             activateStream(&websocket_stream);
             services.websocket = On;
-            hal.stream.write_all("[MSG:WEBSOCKET STREAM ACTIVE]\r\n");
             break;
 #endif
 
@@ -572,7 +598,7 @@ IRAM_ATTR static void I2S_stepperCyclesPerTick (uint32_t cycles_per_tick)
 // Sets stepper direction and pulse pins and starts a step pulse
 IRAM_ATTR static void I2S_stepperPulseStart (stepper_t *stepper)
 {
-    if(stepper->dir_change) {
+    if(stepper->dir_change)
         set_dir_outputs(stepper->dir_outbits);
 
     if(stepper->step_outbits.value) {
@@ -718,25 +744,25 @@ static void limitsEnable (bool on, bool homing)
 
 // Returns limit state as an axes_signals_t variable.
 // Each bitfield bit indicates an axis limit, where triggered is 1 and not triggered is 0.
-inline IRAM_ATTR static axes_signals_t limitsGetState()
+inline IRAM_ATTR static limit_signals_t limitsGetState()
 {
-    axes_signals_t signals;
+    limit_signals_t signals = {0};
 
-    signals.x = gpio_get_level(X_LIMIT_PIN);
-    signals.y = gpio_get_level(Y_LIMIT_PIN);
-    signals.z = gpio_get_level(Z_LIMIT_PIN);
+    signals.min.x = gpio_get_level(X_LIMIT_PIN);
+    signals.min.y = gpio_get_level(Y_LIMIT_PIN);
+    signals.min.z = gpio_get_level(Z_LIMIT_PIN);
 #ifdef A_LIMIT_PIN
-    signals.a = gpio_get_level(A_LIMIT_PIN);
+    signals.min.a = gpio_get_level(A_LIMIT_PIN);
 #endif
 #ifdef B_LIMIT_PIN
-    signals.b = gpio_get_level(B_LIMIT_PIN);
+    signals.min.b = gpio_get_level(B_LIMIT_PIN);
 #endif
 #ifdef C_LIMIT_PIN
-    signals.c = gpio_get_level(C_LIMIT_PIN);
+    signals.min.c = gpio_get_level(C_LIMIT_PIN);
 #endif
 
     if (settings.limits.invert.value)
-        signals.value ^= settings.limits.invert.value;
+        signals.min.value ^= settings.limits.invert.value;
 
     return signals;
 }
@@ -768,6 +794,8 @@ inline IRAM_ATTR static control_signals_t systemGetState (void)
     return signals;
 }
 
+#ifdef PROBE_PIN
+
 // Sets up the probe pin invert mask to
 // appropriately set the pin logic according to setting for normal-high/normal-low operation
 // and the probing cycle modes for toward-workpiece/away-from-workpiece.
@@ -777,10 +805,10 @@ static void probeConfigure(bool is_probe_away, bool probing)
     i2s_set_streaming_mode(!probing);
 #endif
 
-    probe_invert = settings.probe.invert_probe_pin ? 0 : 1;
+    probe.triggered = Off;
+    probe.is_probing = probing;
+    probe.inverted = is_probe_away ? !settings.probe.invert_probe_pin : settings.probe.invert_probe_pin;
 
-    if(is_probe_away)
-        probe_invert ^= 1;
 #if PROBE_ISR
     gpio_set_intr_type(inputpin[INPUT_PROBE].pin, probe_invert ? GPIO_INTR_NEGEDGE : GPIO_INTR_POSEDGE);
     inputpin[INPUT_PROBE].active = false;
@@ -790,20 +818,22 @@ static void probeConfigure(bool is_probe_away, bool probing)
 // Returns the probe connected and triggered pin states.
 probe_state_t probeGetState (void)
 {
-    probe_state_t state = {
-        .connected = On
-    };
+    probe_state_t state = {0};
+
+    state.connected = probe.connected;
 
 #if PROBE_ISR
     // TODO: verify!
-    inputpin[INPUT_PROBE].active = inputpin[INPUT_PROBE].active || ((uint8_t)gpio_get_level(PROBE_PIN) ^ probe_invert);
+    inputpin[INPUT_PROBE].active = inputpin[INPUT_PROBE].active || ((uint8_t)gpio_get_level(PROBE_PIN) ^ probe.inverted);
     state.triggered = inputpin[INPUT_PROBE].active;
 #else
-    state.triggered = (uint8_t)gpio_get_level(PROBE_PIN) ^ probe_invert;
+    state.triggered = (uint8_t)gpio_get_level(PROBE_PIN) ^ probe.inverted;
 #endif
 
     return state;
 }
+
+#endif
 
 #ifndef VFD_SPINDLE
 
@@ -827,7 +857,6 @@ IRAM_ATTR inline static void spindle_on (void)
     gpio_set_level(SPINDLE_ENABLE_PIN, settings.spindle.invert.on ? 0 : 1);
 #endif
 }
-
 
 IRAM_ATTR inline static void spindle_dir (bool ccw)
 {
@@ -858,7 +887,7 @@ IRAM_ATTR static void spindleSetState (spindle_state_t state, float rpm)
 IRAM_ATTR static void spindle_set_speed (uint_fast16_t pwm_value)
 {
     if (pwm_value == spindle_pwm.off_value) {
-        if(settings.spindle.disable_with_zero_speed)
+        if(settings.spindle.flags.pwm_action == SpindleAction_DisableWithZeroSPeed)
             spindle_off();
 #if PWM_RAMPED
         pwm_ramp.pwm_target = pwm_value;
@@ -1012,6 +1041,16 @@ IRAM_ATTR static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint
     return prev;
 }
 
+static void enable_irq (void)
+{
+    portEXIT_CRITICAL(&mux);
+}
+
+static void disable_irq (void)
+{
+    portENTER_CRITICAL(&mux);
+}
+
 #if MPG_MODE_ENABLE
 
 IRAM_ATTR static void modeSelect (bool mpg_mode)
@@ -1113,7 +1152,7 @@ static void settings_changed (settings_t *settings)
                 spindle_pwm.off_value = pwm_max_value - spindle_pwm.off_value;
         }
         spindle_pwm.min_value = (uint32_t)(pwm_max_value * settings->spindle.pwm_min_value / 100.0f);
-        spindle_pwm.max_value = (uint32_t)(pwm_max_value * settings->spindle.pwm_max_value / 100.0f);
+        spindle_pwm.max_value = (uint32_t)(pwm_max_value * settings->spindle.pwm_max_value / 100.0f) + (settings->spindle.invert.pwm ? -1 : 1);
         spindle_pwm.pwm_gradient = (float)(spindle_pwm.max_value - spindle_pwm.min_value) / (settings->spindle.rpm_max - settings->spindle.rpm_min);
         spindle_pwm.always_on = settings->spindle.pwm_off_value != 0.0f;
 
@@ -1123,10 +1162,6 @@ static void settings_changed (settings_t *settings)
 #endif
 
     if(IOInitDone) {
-
-      #if TRINAMIC_ENABLE
-        trinamic_configure();
-      #endif
 
       #ifndef VFD_SPINDLE
         hal.spindle.set_state = hal.driver_cap.variable_spindle ? spindleSetStateVariable : spindleSetState;
@@ -1208,12 +1243,12 @@ static void settings_changed (settings_t *settings)
                     inputpin[i].invert = control_fei.safety_door_ajar;
                     config.intr_type = inputpin[i].invert ? GPIO_INTR_NEGEDGE : GPIO_INTR_POSEDGE;
                     break;
-
+#ifdef PROBE_PIN
                 case Input_Probe:
                     pullup = hal.driver_cap.probe_pull_up;
                     inputpin[i].invert = false;
                     break;
-
+#endif
                 case Input_LimitX:
                     pullup = !settings->limits.disable_pullup.x;
                     inputpin[i].invert = limit_fei.x;
@@ -1291,14 +1326,13 @@ static void settings_changed (settings_t *settings)
             // Delay mode enable a bit so grbl can finish startup and MPG controller can check ready status
             hal.delay_ms(50, modeEnable);
 #endif
-
     }
 }
 
 #if WIFI_ENABLE
-static void reportConnection (void)
+static void reportConnection (bool newopt)
 {
-    if(services.telnet || services.websocket) {
+    if(!newopt && (services.telnet || services.websocket)) {
         hal.stream.write("[NETCON:");
         hal.stream.write(services.telnet ? "Telnet" : "Websocket");
         hal.stream.write("]" ASCII_EOL);
@@ -1309,10 +1343,6 @@ static void reportConnection (void)
 // Initializes MCU peripherals for Grbl use
 static bool driver_setup (settings_t *settings)
 {
-#if TRINAMIC_ENABLE && CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
-    driver_settings.trinamic.driver_enable.mask = AXES_BITMASK;
-#endif
-
     /******************
      *  Stepper init  *
      ******************/
@@ -1335,20 +1365,18 @@ static bool driver_setup (settings_t *settings)
      *  Output signals  *
      ********************/
 
-    uint32_t channel;
-    for(channel = 0; channel < N_AXIS; channel++)
-        rmt_set_source_clk(channel, RMT_BASECLK_APB);
+    uint32_t idx;
+    for(idx = 0; idx < N_AXIS; idx++)
+        rmt_set_source_clk(idx, RMT_BASECLK_APB);
+
+    uint32_t mask = 0; // this is insane...
+    idx = sizeof(outputpin) / sizeof(gpio_num_t);
+    do {
+        mask |= (1ULL << outputpin[--idx]);
+    } while(idx);
 
     gpio_config_t gpioConfig = {
-#if IOEXPAND_ENABLE
-        .pin_bit_mask = DIRECTION_MASK,
-#else
-  #ifdef COOLANT_MASK
-        .pin_bit_mask = DIRECTION_MASK|STEPPERS_DISABLE_MASK|SPINDLE_MASK|COOLANT_MASK,
-  #else
-        .pin_bit_mask = DIRECTION_MASK|STEPPERS_DISABLE_MASK|SPINDLE_MASK,
-  #endif
-#endif
+        .pin_bit_mask = mask,
         .mode = GPIO_MODE_OUTPUT,
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
@@ -1358,7 +1386,7 @@ static bool driver_setup (settings_t *settings)
     gpio_config(&gpioConfig);
 
 #if MPG_MODE_ENABLE
-
+ccc
     /************************
      *  MPG mode (pre)init  *
      ************************/
@@ -1428,35 +1456,19 @@ static bool driver_setup (settings_t *settings)
     ioexpand_init();
 #endif
 
-#if TRINAMIC_ENABLE
-  #if CNC_BOOSTERPACK // Trinamic BoosterPack does not support mixed drivers
-    trinamic_start(false);
-  #else
-    trinamic_start(true);
-  #endif
-#endif
-
 #if WEBUI_ENABLE
     webui_init();
 #endif
 
   // Set defaults
 
-    IOInitDone = settings->version == 18;
+    IOInitDone = settings->version == 19;
 
-    settings_changed(settings);
-
+    hal.settings_changed(settings);
     hal.stepper.go_idle(true);
 
     return IOInitDone;
 }
-
-#if MODBUS_ENABLE
-static void vModBusPollCallback (TimerHandle_t xTimer)
-{
-    modbus_poll();
-}
-#endif
 
 // Initialize HAL pointers, setup serial comms and enable EEPROM
 // NOTE: Grbl is not yet configured (from EEPROM data), driver_setup() will be called when done
@@ -1466,12 +1478,8 @@ bool driver_init (void)
 
     serialInit();
 
-#ifdef I2C_PORT
-    I2CInit();
-#endif
-
     hal.info = "ESP32";
-    hal.driver_version = "201014";
+    hal.driver_version = "210207";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1523,6 +1531,10 @@ bool driver_init (void)
 
     selectStream(StreamType_Serial);
 
+#if I2C_ENABLE
+    I2CInit();
+#endif
+
 #if EEPROM_ENABLE
     i2c_eeprom_init();
 #else
@@ -1535,6 +1547,8 @@ bool driver_init (void)
 #endif
 
 //    hal.reboot = esp_restart; crashes the MCU...
+    hal.irq_enable = enable_irq;
+    hal.irq_disable = disable_irq;
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;
@@ -1570,28 +1584,29 @@ bool driver_init (void)
     hal.driver_cap.limits_pull_up = On;
     hal.driver_cap.probe_pull_up = On;
 #ifdef SAFETY_DOOR_PIN
-    hal.driver_cap.safety_door = On;
+    hal.signals_cap.safety_door_ajar = On;
 #endif
 #if MPG_MODE_ENABLE
     hal.driver_cap.mpg_mode = On;
 #endif
 
 #if MODBUS_ENABLE
-    serial2Init(MODBUS_BAUD);
-    modbus_stream.rx_timeout = 50;
+
     modbus_stream.write = serial2Write;
     modbus_stream.read = serial2Read;
     modbus_stream.flush_rx_buffer = serial2Flush;
     modbus_stream.flush_tx_buffer = serial2Flush;
     modbus_stream.get_rx_buffer_count = serial2Available;
     modbus_stream.get_tx_buffer_count = serial2txCount;
-  #ifdef MODBUS_DIRECTION_PIN
-    modbus_stream.set_direction = serial2Direction;
-  #endif
-    modbus_init(&modbus_stream);
+    modbus_stream.set_baud_rate = serial2SetBaudRate;
 
-    if((xModBusTimer = xTimerCreate("ModBusPoll", pdMS_TO_TICKS(10), pdTRUE, NULL, vModBusPollCallback)))
-        xTimerStart(xModBusTimer, 0);
+    bool modbus = modbus_init(&modbus_stream);
+
+#if SPINDLE_HUANYANG > 0
+    if(modbus)
+        huanyang_init(&modbus_stream);
+#endif
+
 #endif
 
 #if WIFI_ENABLE
@@ -1610,14 +1625,12 @@ bool driver_init (void)
     keypad_init();
 #endif
 
-#ifdef SPINDLE_HUANYANG
-    huanyang_init(&modbus_stream);
-#endif
+//    grbl_esp32_if_init();
 
     my_plugin_init();
 
     // no need to move version check before init - compiler will fail any mismatch for existing entries
-    return hal.version == 7;
+    return hal.version == 8;
 }
 
 /* interrupt handlers */

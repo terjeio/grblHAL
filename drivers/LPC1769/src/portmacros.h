@@ -2,9 +2,9 @@
 
   portmacros.h - driver code for NXP LPC176x ARM processors
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2018-2020 Terje Io
+  Copyright (c) 2018-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,23 +23,8 @@
 
 #include "chip.h"
 
-/******************************************************************************
-* Definitions for bit band access                                             *
-******************************************************************************/
-
-/* Bit band SRAM and GPIO definitions */
-#define BITBAND_SRAM_REF   0x20000000
-#define BITBAND_SRAM_BASE  0x22000000
-
-#define BITBAND_SRAM(a,b) (*((__IO uint32_t *)((BITBAND_SRAM_BASE + ((((uint32_t)(uint32_t *)&a)-BITBAND_SRAM_REF)<<5) + (b<<2)))))
-/* NOTE: GPIO registers live in the SRAM bitband region! */
-#define BITBAND_GPIO BITBAND_SRAM
-
-/* Bit band PERIPHERAL definitions */
-#define BITBAND_PERI_REF   0x40000000
-#define BITBAND_PERI_BASE  0x42000000
-
-#define BITBAND_PERI(a,b) (*((__IO uint32_t *)((BITBAND_PERI_BASE + ((((uint32_t)(uint32_t *)&a)-BITBAND_PERI_REF)<<5) + (b<<2)))))  // Convert PERI address
+#define DIGITAL_IN(gpio, bit) (!!(gpio->PIN & bit))
+#define DIGITAL_OUT(gpio, bit, on) { if(on) gpio->SET = bit; else gpio->CLR = bit; }
 
 // Added missing definition for GPIO0
 #define LPC_GPIO0 ((LPC_GPIO_T *) LPC_GPIO0_BASE)

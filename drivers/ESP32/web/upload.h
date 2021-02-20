@@ -3,7 +3,7 @@
 
   Webserver backend - file upload
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2019 Terje Io
 

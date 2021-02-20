@@ -1,7 +1,7 @@
 /*
   cnc_boosterpack_map.h - driver code for SAMD21 processor (on MKRZERO board)
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2020 Terje Io
 
@@ -22,6 +22,17 @@
 #include "driver.h"
 
 #define BOARD_NAME "CNC BoosterPack"
+
+#if TRINAMIC_ENABLE
+#ifdef TRINAMIC_MIXED_DRIVERS
+#undef TRINAMIC_MIXED_DRIVERS
+#endif
+#define TRINAMIC_MIXED_DRIVERS 0
+#ifdef TRINAMIC_I2C
+#undef TRINAMIC_I2C
+#endif
+#define TRINAMIC_I2C 1
+#endif
 
 #ifdef EEPROM_ENABLE
 #undef EEPROM_ENABLE
@@ -53,7 +64,9 @@
 #define RESET_PIN       (17u)
 #define FEED_HOLD_PIN   (9u)
 #define CYCLE_START_PIN (8u)
+#ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
 #define SAFETY_DOOR_PIN (16u)
+#endif
 
 // Start of PWM & Stepper Enabled Spindle
 #define SPINDLE_PWM_TIMER   TCC0

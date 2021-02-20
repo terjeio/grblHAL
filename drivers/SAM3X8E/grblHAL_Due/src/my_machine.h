@@ -1,9 +1,9 @@
 /*
   my_machine.h - configuration for Atmel SAM3X8E ARM processor
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -27,6 +27,8 @@
 //#define BOARD_MEGA256
 //#define BOARD_PROTONEER
 //#define BOARD_CMCGRATH
+//#define BOARD_RADDS_16   // NOTE: untested!!
+//#define BOARD_MY_MACHINE // Add my_machine_map.h before enabling this!
 
 // Configuration
 // Uncomment to enable.

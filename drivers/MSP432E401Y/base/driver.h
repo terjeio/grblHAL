@@ -3,7 +3,7 @@
 
   For Texas Instruments SimpleLink ARM processors/LaunchPads
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Copyright (c) 2018-2020 Terje Io
   Copyright (c) 2011-2015 Sungeun K. Jeon
@@ -96,8 +96,10 @@
 
 #ifdef BOARD_CNC_BOOSTERPACK
 #include "cnc_boosterpack_map.h"
+#elif defined(BOARD_MY_MACHINE)
+#include "my_machine_map.h.h"
 #else
-#error No board!
+#error "No board!"
 #endif
 
 // Adjust STEP_PULSE_LATENCY to get accurate step pulse length when required, e.g if using high step rates.
@@ -109,15 +111,18 @@
 
 // End configuration
 
-#if KEYPAD_ENABLE || TRINAMIC_I2C
-#define USE_I2C
+#if KEYPAD_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
+#define I2C_ENABLE 1
+#else
+#define I2C_ENABLE 0
 #endif
 
 #if TRINAMIC_ENABLE
-#include "tmc2130/trinamic.h"
-#if CNC_BOOSTERPACK_A4998
-#undef CNC_BOOSTERPACK_A4998
+#ifndef TRINAMIC_MIXED_DRIVERS
+#define TRINAMIC_MIXED_DRIVERS 1
 #endif
+#include "motors/trinamic.h"
+#include "trinamic/common.h"
 #endif
 
 #define GPIOBase(t) gpioB(t)
@@ -173,12 +178,6 @@
 #define SPINDLE_PWM_TIMER_PERIPH    timerPeriph(SPINDLE_PWM_TIM)
 #define SPINDLE_PWM_TIMER_BASE      timerBase(SPINDLE_PWM_TIM)
 //#define SPINDLE_PWM_TIMER_INT   timerINT(SPINDLE_PWM_TIM, A)
-
-#ifdef BOARD_CNC_BOOSTERPACK
-#include "cnc_boosterpack_map.h"
-#else
-#error "No board!"
-#endif
 
 #if LASER_PPI
 
