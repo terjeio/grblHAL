@@ -8,7 +8,7 @@ jobs:
     steps:
     - uses: actions/checkout@v1
     - name: Build grblHAL
-      uses: docker://espressif/idf:release-v3.3
+      uses: docker://espressif/idf:release-v4.3
       with:
         entrypoint: /opt/esp/entrypoint.sh
         args: bash -c "cd drivers/ESP32 && idf.py build"
