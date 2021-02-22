@@ -306,8 +306,6 @@ bool serial2SetBaudRate (uint32_t baud_rate)
         init_ok = true;
     }
 
-    UART2->BRR = UART_BRR_SAMPLING16(HAL_RCC_GetPCLK1Freq(), baud_rate);
-
     return true;
 }
 
