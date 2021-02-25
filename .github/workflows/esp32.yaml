@@ -1,0 +1,19 @@
+name: 'Build for ESP32'
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: Build grblHAL
+      uses: docker://espressif/idf:release-v4.3
+      with:
+        entrypoint: /opt/esp/entrypoint.sh
+        args: bash -c "cd drivers/ESP32 && idf.py build"
+    - name: Upload the build binary
+      uses: actions/upload-artifact@v2
+      with:
+        name: grbl.bin
+        path: drivers/ESP32/build/grbl.bin

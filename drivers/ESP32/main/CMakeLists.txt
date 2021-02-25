@@ -1,8 +1,3 @@
-# CMake for grblHAL driver for ESP32
-# 2021-02-06
-
-cmake_minimum_required(VERSION 3.5)
-
 # Select board to compile for:
 
 # NOTE: Only one board may be enabled!
@@ -50,7 +45,7 @@ set(BLUETOOTH_SOURCE bluetooth.c )
 set(HUANYANG_SOURCE spindle/huanyang.c spindle/modbus)
 set(EEPROM_SOURCE eeprom/eeprom_24LC16B.c eeprom/eeprom_24AAxxx.c)
 
-set(MAIN_SRCS main.c driver.c nvs.c esp32-hal-uart.c
+set(SRCS main.c driver.c nvs.c esp32-hal-uart.c
  i2c.c
  ioexpand.c
  i2s_out.c
@@ -78,123 +73,117 @@ set(MAIN_SRCS main.c driver.c nvs.c esp32-hal-uart.c
 )
 
 if(Networking)
-list (APPEND MAIN_SRCS ${NETWORKING_SOURCE})
+list (APPEND SRCS ${NETWORKING_SOURCE})
 endif()
 
 if(SDcard)
-list (APPEND MAIN_SRCS ${SDCARD_SOURCE})
+list (APPEND SRCS ${SDCARD_SOURCE})
 endif()
 
 if(Keypad)
-list (APPEND MAIN_SRCS ${KEYPAD_SOURCE})
+list (APPEND SRCS ${KEYPAD_SOURCE})
 endif()
 
-if(Trinamic) 
-list (APPEND MAIN_SRCS ${TRINAMIC_SOURCE})
+if(Trinamic)
+list (APPEND SRCS ${TRINAMIC_SOURCE})
 endif()
 
-if(WebUI) 
-list (APPEND MAIN_SRCS ${WEBUI_SOURCE})
-endif()
-
-if(Bluetooth) 
-list (APPEND MAIN_SRCS ${BLUETOOTH_SOURCE})
-endif()
-
-if(HUANYANG)
-list (APPEND MAIN_SRCS ${HUANYANG_SOURCE})
-endif()
-
-if(EEPROM OR FRAM OR BOARD_CNC_BOOSTERPACK)
-list (APPEND MAIN_SRCS ${EEPROM_SOURCE})
-endif()
-
-set(INCLUDE_DIRS ".")
-
-#file(GLOB GRBL_SOURCE "grbl/*.c")
-#list (APPEND GRBL_SOURCE MAIN_SRCS)
-
-include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-
-project(grbl)
-
-target_compile_definitions(grbl.elf PUBLIC GRBL_ESP32)
-target_compile_definitions(grbl.elf PUBLIC OVERRIDE_MY_MACHINE)
-
-if(BOARD_BDRING_V3P5)
-target_compile_definitions(grbl.elf PUBLIC BOARD_BDRING_V3P5)
-elseif(BOARD_BDRING_V4)
-target_compile_definitions(grbl.elf PUBLIC BOARD_BDRING_V4)
-elseif(BOARD_BDRING_I2S6A)
-target_compile_definitions(grbl.elf PUBLIC BOARD_BDRING_I2S6A)
-elseif(BOARD_ESPDUINO32)
-target_compile_definitions(grbl.elf PUBLIC BOARD_ESPDUINO32)
-elseif(BOARD_CNC_BOOSTERPACK)
-target_compile_definitions(grbl.elf PUBLIC BOARD_CNC_BOOSTERPACK)
-elseif(BOARD_MY_MACHINE)
-target_compile_definitions(grbl.elf PUBLIC BOARD_MY_MACHINE)
-endif()
-
-if(Networking)
-target_compile_definitions(grbl.elf PUBLIC NETWORKING_ENABLE)
-endif()
-
-if(SoftAP)
-target_compile_definitions(grbl.elf PUBLIC WIFI_SOFTAP)
+if(WebUI)
+list (APPEND SRCS ${WEBUI_SOURCE})
 endif()
 
 if(Bluetooth)
-target_compile_definitions(grbl.elf PUBLIC BLUETOOTH_ENABLE)
-endif()
-
-if(SDcard)
-target_compile_definitions(grbl.elf PUBLIC SDCARD_ENABLE)
-endif()
-
-if(WebUI)
-target_compile_definitions(grbl.elf PUBLIC WEBUI_ENABLE)
-target_add_binary_data(grbl.elf "index.html.gz" BINARY)
-if(WebUI)
-target_compile_definitions(grbl.elf PUBLIC AUTH_ENABLE)
-endif()
-endif()
-
-if(Trinamic) 
-target_compile_definitions(grbl.elf PUBLIC TRINAMIC_ENABLE)
-endif()
-
-if(Keypad)
-target_compile_definitions(grbl.elf PUBLIC KEYPAD_ENABLE)
-endif()
-
-if(MPGMode)
-target_compile_definitions(grbl.elf PUBLIC MPG_MODE_ENABLE)
+list (APPEND SRCS ${BLUETOOTH_SOURCE})
 endif()
 
 if(HUANYANG)
-target_compile_definitions(grbl.elf PUBLIC SPINDLE_HUANYANG=1)
-target_compile_definitions(grbl.elf PUBLIC SPINDLE_RPM_CONTROLLED)
+list (APPEND SRCS ${HUANYANG_SOURCE})
+endif()
+
+if(EEPROM OR FRAM OR BOARD_CNC_BOOSTERPACK)
+list (APPEND SRCS ${EEPROM_SOURCE})
+endif()
+
+idf_component_register(SRCS "${SRCS}"
+                    INCLUDE_DIRS ".")
+
+target_compile_definitions("${COMPONENT_LIB}" PUBLIC GRBL_ESP32)
+target_compile_definitions("${COMPONENT_LIB}" PUBLIC OVERRIDE_MY_MACHINE)
+
+if(BOARD_BDRING_V3P5)
+target_compile_definitions("${COMPONENT_LIB}" PUBLIC BOARD_BDRING_V3P5)
+elseif(BOARD_BDRING_V4)
+target_compile_definitions("${COMPONENT_LIB}" PUBLIC BOARD_BDRING_V4)
+elseif(BOARD_BDRING_I2S6A)
+target_compile_definitions("${COMPONENT_LIB}" PUBLIC BOARD_BDRING_I2S6A)
+elseif(BOARD_ESPDUINO32)
+target_compile_definitions("${COMPONENT_LIB}" PUBLIC BOARD_ESPDUINO32)
+elseif(BOARD_CNC_BOOSTERPACK)
+target_compile_definitions("${COMPONENT_LIB}" PUBLIC BOARD_CNC_BOOSTERPACK)
+elseif(BOARD_MY_MACHINE)
+target_compile_definitions("${COMPONENT_LIB}" PUBLIC BOARD_MY_MACHINE)
+endif()
+
+if(Networking)
+target_compile_definitions("${COMPONENT_LIB}" PUBLIC NETWORKING_ENABLE)
+endif()
+
+if(SoftAP)
+target_compile_definitions("${COMPONENT_LIB}" PUBLIC WIFI_SOFTAP)
+endif()
+
+if(Bluetooth)
+target_compile_definitions("${COMPONENT_LIB}" PUBLIC BLUETOOTH_ENABLE)
+endif()
+
+if(SDcard)
+target_compile_definitions("${COMPONENT_LIB}" PUBLIC SDCARD_ENABLE)
+endif()
+
+if(WebUI)
+target_compile_definitions("${COMPONENT_LIB}" PUBLIC WEBUI_ENABLE)
+target_add_binary_data("${COMPONENT_LIB}" "index.html.gz" BINARY)
+if(WebUI)
+target_compile_definitions("${COMPONENT_LIB}" PUBLIC AUTH_ENABLE)
+endif()
+endif()
+
+if(Trinamic)
+target_compile_definitions("${COMPONENT_LIB}" PUBLIC TRINAMIC_ENABLE)
+endif()
+
+if(Keypad)
+target_compile_definitions("${COMPONENT_LIB}" PUBLIC KEYPAD_ENABLE)
+endif()
+
+if(MPGMode)
+target_compile_definitions("${COMPONENT_LIB}" PUBLIC MPG_MODE_ENABLE)
+endif()
+
+if(HUANYANG)
+target_compile_definitions("${COMPONENT_LIB}" PUBLIC SPINDLE_HUANYANG=1)
+target_compile_definitions("${COMPONENT_LIB}" PUBLIC SPINDLE_RPM_CONTROLLED)
 endif()
 
 if(RS485_DIR_OUT)
-target_compile_definitions(grbl.elf PUBLIC RS485_DIR_ENABLE)
+target_compile_definitions("${COMPONENT_LIB}" PUBLIC RS485_DIR_ENABLE)
 endif()
 
 if(EEPROM OR BOARD_CNC_BOOSTERPACK)
-target_compile_definitions(grbl.elf PUBLIC EEPROM_ENABLE)
+target_compile_definitions("${COMPONENT_LIB}" PUBLIC EEPROM_ENABLE)
 endif()
 
 if(FRAM)
-target_compile_definitions(grbl.elf PUBLIC EEPROM_IS_FRAM)
+target_compile_definitions("${COMPONENT_LIB}" PUBLIC EEPROM_IS_FRAM)
 endif()
 
 if(NOPROBE)
-target_compile_definitions(grbl.elf PUBLIC NOPROBE)
+target_compile_definitions("${COMPONENT_LIB}" PUBLIC NOPROBE)
 endif()
 
-target_add_binary_data(grbl.elf "favicon.ico" BINARY)
-target_add_binary_data(grbl.elf "index.html" BINARY)
-target_add_binary_data(grbl.elf "ap_login.html" BINARY)
+target_add_binary_data("${COMPONENT_LIB}" "favicon.ico" BINARY)
+target_add_binary_data("${COMPONENT_LIB}" "index.html" BINARY)
+target_add_binary_data("${COMPONENT_LIB}" "ap_login.html" BINARY)
 
 unset(BOARD_BDRING_V3P5 CACHE)
 unset(BOARD_BDRING_V4 CACHE)
@@ -218,10 +207,6 @@ unset(EEPROM CACHE)
 unset(FRAM CACHE)
 unset(NOPROBE CACHE)
 
-include_directories(BEFORE ".")
-
-#target_compile_options(grbl.elf PRIVATE -Werror -Wall -Wextra -Wmissing-field-initializers)
+#target_compile_options("${COMPONENT_LIB}" PRIVATE -Werror -Wall -Wextra -Wmissing-field-initializers)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
-#add_subdirectory (grbl)
