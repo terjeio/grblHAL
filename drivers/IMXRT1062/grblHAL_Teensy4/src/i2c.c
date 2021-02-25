@@ -94,7 +94,7 @@ static const i2c_hardware_t i2c4_hardware = {
     }
 };
 
-static bool force_clock (i2c_hardware_t *hardware)
+static bool force_clock (const i2c_hardware_t *hardware)
 {
     bool ret = false;
     uint32_t sda_pin = hardware->sda_pin.pin;
@@ -127,7 +127,7 @@ static bool force_clock (i2c_hardware_t *hardware)
     return ret;
 }
 
-static void setClock (IMXRT_LPI2C_t *port, uint32_t frequency)
+static void set_clock (IMXRT_LPI2C_t *port, uint32_t frequency)
 {
     port->MCR = 0;
 
@@ -219,7 +219,7 @@ void i2c_init (void)
         *hardware->clock_gate_register |= hardware->clock_gate_mask;
         port->MCR = LPI2C_MCR_RST;
 
-        setClock(port, 100000);
+        set_clock(port, 100000);
 
         // Setup SDA register
         *(portControlRegister(hardware->sda_pin.pin)) = PINCONFIG;
@@ -236,6 +236,22 @@ void i2c_init (void)
         NVIC_SET_PRIORITY(hardware->irq, 1);
         NVIC_ENABLE_IRQ(hardware->irq);
     }
+}
+
+// wait until ready for transfer, try peripheral reset if bus hangs
+inline static bool wait_ready (void)
+{
+    while(i2cIsBusy) {
+        if(port->MSR & LPI2C_MSR_PLTF) {
+            if(force_clock(hardware)) {
+                port->MCR = LPI2C_MCR_RST;
+                set_clock(port, 100000);
+            } else
+                return false;
+        }
+    }
+
+    return true;
 }
 
 // get bytes (max 8 if local buffer, else max 255), waits for result
@@ -338,11 +354,10 @@ nvs_transfer_result_t i2c_nvs_transfer (nvs_transfer_t *transfer, bool read)
 
 void I2C_GetKeycode (uint32_t i2cAddr, keycode_callback_ptr callback)
 {
-    while(i2cIsBusy);
-
-    i2c.keycode_callback = callback;
-
-    I2C_Receive(i2cAddr, NULL, 1, false);
+    if(wait_ready()) {
+        i2c.keycode_callback = callback;
+        I2C_Receive(i2cAddr, NULL, 1, false);
+    }
 }
 
 #endif
@@ -504,7 +519,9 @@ hal.stream.write(ASCII_EOL);
             }
           #endif
             break;
-default: break;
+
+        default:
+            break;
     }
 }
 

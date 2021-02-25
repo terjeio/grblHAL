@@ -101,7 +101,7 @@ typedef struct {
     const char *description;
 } status_detail_t;
 
-static const status_detail_t status_detail[] = {
+PROGMEM static const status_detail_t status_detail[] = {
     { Status_OK, "ok", NULL },
     { Status_ExpectedCommandLetter, "Expected command letter", "G-code words consist of a letter and a value. Letter was not found." },
     { Status_BadNumberFormat, "Bad number format", "Missing the expected G-code word value or numeric value format is not valid." },
