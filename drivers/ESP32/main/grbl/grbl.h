@@ -34,7 +34,6 @@
 #else
 #define GRBL_VERSION "1.1f"
 #endif
-
 #define GRBL_VERSION_BUILD "20210223"
 
 // The following symbols are set here if not already set by the compiler or in config.h

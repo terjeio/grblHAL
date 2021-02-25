@@ -319,7 +319,6 @@ static char *get_linear_piece (setting_id_t id);
 #if COMPATIBILITY_LEVEL > 1
 static status_code_t set_limits_invert_mask (setting_id_t id, uint_fast16_t int_value);
 #endif
-
 static status_code_t set_axis_setting (setting_id_t setting, float value);
 static float get_float (setting_id_t setting);
 static uint32_t get_int (setting_id_t id);
