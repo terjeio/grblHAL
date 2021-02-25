@@ -31,10 +31,6 @@ Latest build date is 20210223, see the [changelog](https://github.com/terjeio/gr
 
 ---
 
-__NOTE:__ Arduino drivers has now been converted to Arduino libraries, [installation and compilation procedure](https://github.com/terjeio/grblHAL/wiki/Compiling-GrblHAL) has been changed!
-
----
-
 grblHAL is a no-compromise, high performance, low cost alternative to parallel-port-based motion control for CNC milling and is based on the [Arduino version of grbl](https://github.com/gnea/grbl). It is mainly aimed at ARM processors \(or other 32-bit MCUs\) with ample amounts of RAM and flash \(compared to AVR 328p\) and requires a [hardware driver](drivers/ReadMe.md) to be functional.
 Currently drivers are available for 13 different processors/processor families all of which share the same core.
 
@@ -53,6 +49,8 @@ It accepts standards-compliant g-code and has been tested with the output of sev
 Grbl includes full acceleration management with look ahead. That means the controller will look up to 16 motions into the future and plan its velocities ahead to deliver smooth acceleration and jerk-free cornering.
 
 This is a port/rewrite of [grbl 1.1f](https://github.com/gnea/grbl) and should be compatible with GCode senders compliant with the specifications for that version. It should be possible to change default compile-time configurations if problems arise, eg. the default serial buffer sizes has been increased in some of the [drivers](drivers/ReadMe.md) provided.
+
+Check out [grbl.org](https://www.grbl.org/) for build showcases, blog posts etc.
 
 <sup>1</sup> This feature is only to be used for private plugins, if shared then a single call must be added to the driver code of the target processors.   
 <sup>2</sup> I do not usually recommend doing this, and I will not accept pull requests for any. However I may add a link to the github repository for any that might be made.  
