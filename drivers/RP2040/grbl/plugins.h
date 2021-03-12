@@ -184,7 +184,7 @@ typedef struct {
     uint8_t *data;
 } nvs_transfer_t;
 
-extern void i2c_Init (void);
+extern void i2c_init (void);
 extern nvs_transfer_result_t i2c_nvs_transfer (nvs_transfer_t *i2c, bool read);
 extern void my_plugin_init (void)  __attribute__((weak));
 

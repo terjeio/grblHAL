@@ -63,7 +63,7 @@
 #else
 #define LIMIT_MASK       (X_LIMIT_BIT|Y_LIMIT_BIT|Z_LIMIT_BIT) // All limit bits
 #endif
-#define LIMIT_INMODE GPIO_OE
+#define LIMIT_INMODE     GPIO_MAP
 
   // Define spindle enable and spindle direction output pins.
 #define SPINDLE_ENABLE_PORT         GPIO_OUT
@@ -102,7 +102,7 @@
 #else
 #define CONTROL_MASK                (CONTROL_RESET_BIT|CONTROL_FEED_HOLD_BIT|CONTROL_CYCLE_START_BIT)
 #endif
-#define CONTROL_INMODE              GPIO_OE
+#define CONTROL_INMODE              GPIO_MAP
 
 // Define probe switch input pin.
 #define PROBE_PORT                  GPIO_IN

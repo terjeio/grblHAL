@@ -162,6 +162,36 @@
 #error SD card plugin not supported!
 #endif
 
+typedef enum {
+    Input_Probe = 0,
+    Input_Reset,
+    Input_FeedHold,
+    Input_CycleStart,
+    Input_SafetyDoor,
+    Input_EStop,
+    Input_LimitX,
+    Input_LimitX_Max,
+    Input_LimitY,
+    Input_LimitY_Max,
+    Input_LimitZ,
+    Input_LimitZ_Max,
+    Input_LimitA,
+    Input_LimitA_Max,
+    Input_KeypadStrobe,
+} input_t;
+
+typedef struct {
+    input_t id;
+    uint8_t group;
+    uint8_t pin;
+    gpio_t *port;
+    gpio_t gpio; // doubled up for now for speed...
+    irq_mode_t irq_mode;
+    uint8_t offset;
+    volatile bool active;
+    volatile bool debounce;
+} input_signal_t;
+
 bool driver_init (void);
 
 #endif // __DRIVER_H__
