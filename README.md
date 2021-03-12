@@ -1,5 +1,21 @@
 ## grblHAL ##
 
+__NEWS!__ grblHAL is moving to a [new home](https://github.com/grblHAL) where the project is split into separate repositories, one for the shared core, one for each plugin and one for for each driver. The driver dependencies to the core and plugins are set up as git submodules and drivers can thus be downloaded separately.
+
+There are both upsides and downsides to this move, the most notable downside for users is that downloading the source code as a .zip-file no-longer get all dependencies resolved.
+Each submodule a driver is dependent on has to be downloaded separately and copied to the corresponding folder in the driver
+This is a bit more involved than the copying that was needed in previous releases where the dependent code can be found in the downloaded .zip-file.
+
+An upside is that a driver download with [git](https://git-scm.com/downloads) or [GitHub desktop](https://desktop.github.com/) will fetch all dependencies automatically and the download is no longer "polluted" with unwanted drivers.
+
+For the time beeing I will keep this repository intact and the source code in sync.
+New issues should be raised, pull requests submitted and discussions started at the new home.
+Use the [core repository](https://github.com/grblHAL/core) for raising new issues or starting discussions if it is not clear to you where they belong. 
+
+This repository will eventually be moved to the new home and kept as an reference.
+
+---
+
 grblHAL has [many extensions](https://github.com/terjeio/grblHAL/wiki) that may cause issues with some senders. As a workaround for these a [compile time option](https://github.com/terjeio/grblHAL/wiki/Changes-from-grbl-1.1#workaround) has been added that disables extensions selectively. 
 
 __IMPORTANT!__ grblHAL defaults to normally closed \(NC\) switches for inputs, if none are connected when testing it is likely that the controller will start in alarm mode.  
@@ -11,11 +27,7 @@ It has been written to complement grblHAL and has features such as proper keyboa
 
 ---
 
-Latest build date is 20210131, see the [changelog](changelog.md) for details.
-
----
-
-__NOTE:__ Arduino drivers has now been converted to Arduino libraries, [installation and compilation procedure](https://github.com/terjeio/grblHAL/wiki/Compiling-GrblHAL) has been changed!
+Latest build date is 20210223, see the [changelog](https://github.com/terjeio/grblHAL/blob/master/changelog.md) for details.
 
 ---
 
@@ -37,6 +49,8 @@ It accepts standards-compliant g-code and has been tested with the output of sev
 Grbl includes full acceleration management with look ahead. That means the controller will look up to 16 motions into the future and plan its velocities ahead to deliver smooth acceleration and jerk-free cornering.
 
 This is a port/rewrite of [grbl 1.1f](https://github.com/gnea/grbl) and should be compatible with GCode senders compliant with the specifications for that version. It should be possible to change default compile-time configurations if problems arise, eg. the default serial buffer sizes has been increased in some of the [drivers](drivers/ReadMe.md) provided.
+
+Check out [grbl.org](https://www.grbl.org/) for build showcases, blog posts etc.
 
 <sup>1</sup> This feature is only to be used for private plugins, if shared then a single call must be added to the driver code of the target processors.   
 <sup>2</sup> I do not usually recommend doing this, and I will not accept pull requests for any. However I may add a link to the github repository for any that might be made.  
@@ -77,4 +91,4 @@ List of Supported G-Codes:
 ```
 
 ---
-2021-02-07
+2021-02-25

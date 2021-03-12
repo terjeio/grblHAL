@@ -4,7 +4,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2019-2020 Terje Io
+  Copyright (c) 2019-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -293,7 +293,7 @@ void serial2Init (uint32_t baud_rate)
 #endif
 
 #if MODBUS_ENABLE
-    SERIAL2_MODULE->IE = EUSCI_A_IE_RXIE;
+//  UART2->IE = EUSCI_A_IE_RXIE;
 #endif
 }
 
@@ -305,8 +305,6 @@ bool serial2SetBaudRate (uint32_t baud_rate)
         serial2Init(baud_rate);
         init_ok = true;
     }
-
-    UART2->BRR = UART_BRR_SAMPLING16(HAL_RCC_GetPCLK1Freq(), baud_rate);
 
     return true;
 }

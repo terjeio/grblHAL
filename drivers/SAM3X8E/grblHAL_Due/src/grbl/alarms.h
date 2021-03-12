@@ -3,7 +3,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2017-2020 Terje Io
+  Copyright (c) 2017-2021 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -52,7 +52,7 @@ typedef struct {
     const char *description;
 } alarm_detail_t;
 
-static const alarm_detail_t alarm_detail[] = {
+PROGMEM static const alarm_detail_t alarm_detail[] = {
     { Alarm_HardLimit, "Hard limit", "Hard limit has been triggered. Machine position is likely lost due to sudden halt. Re-homing is highly recommended." },
     { Alarm_SoftLimit, "Soft limit", "Soft limit alarm. G-code motion target exceeds machine travel. Machine position retained. Alarm may be safely unlocked." },
     { Alarm_AbortCycle, "Abort during cycle", "Reset while in motion. Machine position is likely lost due to sudden halt. Re-homing is highly recommended." },

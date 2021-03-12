@@ -5,7 +5,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -27,6 +27,11 @@
 #include "driver.h"
 #include "grbl/plugins.h"
 
+void i2c_init (void);
+uint8_t *I2C_Receive (uint32_t i2cAddr, uint8_t *buf, uint16_t bytes, bool block);
+void I2C_Send (uint32_t i2cAddr, uint8_t *buf, uint16_t bytes, bool block);
+uint8_t *I2C_ReadRegister (uint32_t i2cAddr, uint8_t *buf, uint8_t abytes, uint16_t bytes, bool block);
+
 #if TRINAMIC_ENABLE && TRINAMIC_I2C
 
 #include "trinamic/trinamic2130.h"
@@ -47,7 +52,3 @@ void I2C_GetKeycode (uint32_t i2cAddr, keycode_callback_ptr callback);
 #endif
 
 #endif
-
-uint8_t *I2C_Receive (uint32_t i2cAddr, uint8_t *buf, uint16_t bytes, bool block);
-void I2C_Send (uint32_t i2cAddr, uint8_t *buf, uint16_t bytes, bool block);
-uint8_t *I2C_ReadRegister (uint32_t i2cAddr, uint8_t *buf, uint8_t abytes, uint16_t bytes, bool block);

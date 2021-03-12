@@ -65,7 +65,7 @@ const settings_restore_t settings_all = {
     .driver_parameters = SETTINGS_RESTORE_DRIVER_PARAMETERS
 };
 
-const settings_t defaults = {
+PROGMEM const settings_t defaults = {
 
     .version = SETTINGS_VERSION,
 
@@ -256,7 +256,7 @@ const settings_t defaults = {
     .parking.pullout_increment = DEFAULT_PARKING_PULLOUT_INCREMENT
 };
 
-static const setting_group_detail_t setting_group_detail [] = {
+PROGMEM static const setting_group_detail_t setting_group_detail [] = {
     { Group_Root, Group_Root, "Root"},
     { Group_Root, Group_General, "General"},
     { Group_Root, Group_ControlSignals, "Control signals"},
@@ -316,6 +316,9 @@ static status_code_t set_door_options (setting_id_t id, uint_fast16_t int_value)
 static status_code_t set_linear_piece (setting_id_t id, char *svalue);
 static char *get_linear_piece (setting_id_t id);
 #endif
+#if COMPATIBILITY_LEVEL > 1
+static status_code_t set_limits_invert_mask (setting_id_t id, uint_fast16_t int_value);
+#endif
 static status_code_t set_axis_setting (setting_id_t setting, float value);
 static float get_float (setting_id_t setting);
 static uint32_t get_int (setting_id_t id);
@@ -325,13 +328,17 @@ static char control_signals[] = "Reset,Feed hold,Cycle start,Safety door,Block d
 static char control_signals_map[] = "0,1,2,3,4,5,6,7,8";
 static char spindle_signals[] = "Spindle enable,Spindle direction,PWM";
 
-static const setting_detail_t setting_detail[] = {
+PROGMEM static const setting_detail_t setting_detail[] = {
     { Setting_PulseMicroseconds, Group_Stepper, "Step pulse time", "microseconds", Format_Decimal, "#0.0", "2.0", NULL, Setting_IsLegacy, &settings.steppers.pulse_microseconds, NULL, NULL },
     { Setting_StepperIdleLockTime, Group_Stepper, "Step idle delay", "milliseconds", Format_Int16, "####0", NULL, "65535", Setting_IsLegacy, &settings.steppers.idle_lock_time, NULL, NULL },
     { Setting_StepInvertMask, Group_Stepper, "Step pulse invert", NULL, Format_AxisMask, NULL, NULL, NULL, Setting_IsLegacy, &settings.steppers.step_invert.mask, NULL, NULL },
     { Setting_DirInvertMask, Group_Stepper, "Step direction invert", NULL, Format_AxisMask, NULL, NULL, NULL, Setting_IsLegacy, &settings.steppers.dir_invert.mask, NULL, NULL },
     { Setting_InvertStepperEnable, Group_Stepper, "Invert step enable pin(s)", NULL, Format_AxisMask, NULL, NULL, NULL, Setting_IsLegacy, &settings.steppers.enable_invert.mask, NULL, NULL },
+#if COMPATIBILITY_LEVEL <= 1
     { Setting_LimitPinsInvertMask, Group_Limits, "Invert limit pins", NULL, Format_AxisMask, NULL, NULL, NULL, Setting_IsLegacy, &settings.limits.invert.mask, NULL, NULL },
+#else
+    { Setting_LimitPinsInvertMask, Group_Limits, "Invert limit pins", NULL, Format_Bool, NULL, NULL, NULL, Setting_IsLegacyFn, set_limits_invert_mask, get_int, NULL },
+#endif
     { Setting_InvertProbePin, Group_Probing, "Invert probe pin", NULL, Format_Bool, NULL, NULL, NULL, Setting_IsLegacyFn, set_probe_invert, get_int, NULL },
     { Setting_SpindlePWMBehaviour, Group_Spindle, "Disable spindle with zero speed", NULL, Format_Bool, NULL, NULL, NULL, Setting_IsExtended, &settings.spindle.flags.mask, NULL, is_setting_available },
 //    { Setting_SpindlePWMBehaviour, Group_Spindle, "Spindle enable vs. speed behaviour", NULL, Format_RadioButtons, "No action,Disable spindle with zero speed,Enable spindle with all speeds", NULL, NULL, Setting_IsExtended, &settings.spindle.flags.mask, NULL, NULL },
@@ -455,6 +462,15 @@ setting_details_t *settings_get_details (void)
 
     return &details;
 }
+
+#if COMPATIBILITY_LEVEL > 1
+static status_code_t set_limits_invert_mask (setting_id_t id, uint_fast16_t int_value)
+{
+    settings.limits.invert.mask = (int_value ? ~(INVERT_LIMIT_PIN_MASK) : INVERT_LIMIT_PIN_MASK) & AXES_BITMASK;
+
+    return Status_OK;
+}
+#endif
 
 static status_code_t set_probe_invert (setting_id_t id, uint_fast16_t int_value)
 {
@@ -868,6 +884,12 @@ static uint32_t get_int (setting_id_t id)
 
     switch(id) {
 
+#if COMPATIBILITY_LEVEL > 1
+        case Setting_LimitPinsInvertMask:
+            value = settings.limits.invert.mask == INVERT_LIMIT_PIN_MASK ? 0 : 1;
+            break;
+#endif
+
         case Setting_Mode:
             value = settings.mode;
             break;
@@ -877,7 +899,11 @@ static uint32_t get_int (setting_id_t id)
             break;
 
         case Setting_StatusReportMask:
+#if COMPATIBILITY_LEVEL <= 1
             value = settings.status_report.mask;
+#else
+            value = settings.status_report.mask & 0b11;
+#endif
             break;
 
         case Setting_ReportInches:

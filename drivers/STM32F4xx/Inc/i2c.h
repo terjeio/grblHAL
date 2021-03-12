@@ -3,7 +3,7 @@
 
   Part of grblHAL driver for STM32F4xx
 
-  Copyright (c) 2018-2020 Terje Io
+  Copyright (c) 2018-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -27,12 +27,10 @@
 
 #if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
 
-#include "trinamic\trinamic2130.h"
-#include "trinamic\TMC2130_I2C_map.h"
+#include "motors\trinamic.h"
+#include "trinamic\tmc_i2c_interface.h"
 
 #define I2C_ADR_I2CBRIDGE 0x47
-
-void I2C_DriverInit (TMC_io_driver_t *drv);
 
 #endif
 
@@ -43,5 +41,7 @@ void I2C_DriverInit (TMC_io_driver_t *drv);
 void I2C_GetKeycode (uint32_t i2cAddr, keycode_callback_ptr callback);
 
 #endif
+
+void i2c_init (void);
 
 #endif

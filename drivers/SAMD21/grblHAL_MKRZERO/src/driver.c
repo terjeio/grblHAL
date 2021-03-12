@@ -1126,9 +1126,9 @@ static void DEBOUNCE_IRQHandler (void)
             disk_ioctl(0, CTRL_POWER, &pwr);
         }
     } else {
-        axes_signals_t state = limitsGetState();
+        limit_signals_t state = limitsGetState();
 
-        if(state.mask) //TODO: add check for limit switches having same state as when limit_isr were invoked?
+        if(limit_signals_merge(state).value) //TODO: add check for limit switches having same state as when limit_isr were invoked?
             hal.limit_interrupt_callback(state);
     }
 #else

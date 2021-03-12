@@ -28,6 +28,10 @@
 #include "grbl/protocol.h"
 #include "grbl/limits.h"
 
+#ifdef I2C_PORT
+#include "i2c.h"
+#endif
+
 #if EEPROM_ENABLE
 #include "eeprom/eeprom.h"
 #else
@@ -2082,7 +2086,7 @@ bool driver_init (void)
         options[strlen(options) - 1] = '\0';
 
     hal.info = "iMXRT1062";
-    hal.driver_version = "210214";
+    hal.driver_version = "210221";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -2144,8 +2148,11 @@ bool driver_init (void)
 
     selectStream(StreamType_Serial);
 
-#if EEPROM_ENABLE
+#ifdef I2C_PORT
     i2c_init();
+#endif
+
+#if EEPROM_ENABLE
     i2c_eeprom_init();
 #else // use Arduino emulated EEPROM in flash
     eeprom_initialize();

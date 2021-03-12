@@ -16,7 +16,9 @@
 #endif
 
 #define SOCKET_TIMEOUT 0
+#ifndef TCP_SLOW_INTERVAL
 #define TCP_SLOW_INTERVAL 500
+#endif
 
 //*****************************************************************************
 

@@ -49,7 +49,9 @@ If the oscillator frequency is different from the default 25 MHz then add the sy
 
 CNC breakout boards:
 
+[Minimal breakout for Blackpill](https://github.com/avizienis/Minimal-Black-Pill--STM32F4xx-BOB-for-grblHAL) by avizienis.
+
 [CNC breakout for Nucleo-64](https://github.com/terjeio/CNC_Breakout_Nucleo64) by Terje Io.
 
 ---
-2021-01-03
+2021-02-19

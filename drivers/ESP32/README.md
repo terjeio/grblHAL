@@ -1,8 +1,55 @@
-## ESP32 grblHAL driver
+## ESP32GrblDriver
 
-A grblHAL driver for the ESP32 processor.
+A GrblHAL driver for the ESP32 processor. *** Preview version ***
 
-*** Preview version ***
+### How to build using ESP-IDF v4.3:
+
+While this manual briefly describes basic build process on Linux OS, you can find more details
+as well as differences for building on other OS at this webpage:
+
+https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.html#step-2-get-esp-idf
+
+First you have to prepare esp-idf v4.3:
+
+```bash
+#Create directory and clone esp-idf into it:
+mkdir -p ~/esp
+cd ~/esp
+git clone -b release/v4.3 --recursive --shallow-submodules https://github.com/espressif/esp-idf.git
+
+#Prepare build environment and toolchain:
+cd ~/esp/esp-idf
+./install.sh
+. ~/esp/esp-idf/export.sh
+```
+
+Once you have ESP-IDF prepared, go back to grblHAL directory and copy `grbl/*` to `drivers/ESP32/grbl/` in grblHAL repo
+as well as desired plugins into the respective folders. eg. `plugins/spindle/*` to `drivers/ESP32/spindle/` and so on...
+
+Modify settings in `grbl/config.h` and `CMakeLists.txt` as needed.
+Pin assignments and board specific config is in `*_map.h` files for each individual board.
+
+Go into the `drivers/ESP32/` directory and run `idf.py build`.
+This will build the firmware image which can be later flashed into ESP32 device.
+
+Note that `idf.py` command is only available in terminal window which was previously configured
+using the `. ~/esp/esp-idf/export.sh` command.
+
+After build is completed you will be instructed on how to flash firmware into the device.
+Typicaly you can use command similar to this: `idf.py -p /dev/ttyUSB0 flash`
+
+Once flashing is complete, your CNC controller is ready to be configured and used.
+
+
+### Using Docker
+
+If you're familiar with [Docker](https://docker.io), you can use it to build grblHAL in a self-contained environment without installing the complete toolchain on your system:
+
+- prepare and configure the codebase as described above
+- build with `docker run -it --rm -v $(pwd):/grbl -w /grbl/drivers/ESP32 espressif/idf:release-v4.3 idf.py build`
+- flash with `docker run -it --rm -v $(pwd):/grbl --privileged -v /dev:/dev -w /grbl/drivers/ESP32 espressif/idf:release-v4.3 idf.py -p /dev/ttyUSB0 flash`
+
+### Changelog/Notes:
 
 ---
 
@@ -98,4 +145,4 @@ dns_server.c is Copyright (c) 2019 Tony Pottier - from his [ESP32 WiFi Manager](
 Snippets of code is extracted from Espressif ESP-IDF examples which are public domain.
 
 ---
-2020-11-22
+2020-02-10

@@ -5,7 +5,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2016-2020 Terje Io
+  Copyright (c) 2016-2021 Terje Io
   Copyright (c) 2011-2015 Sungeun K. Jeon
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -34,6 +34,7 @@
 #include "grbl/nuts_bolts.h"
 
 #ifdef EEPROM_ENABLE
+#include "i2c.h"
 #include "eeprom/eeprom.h"
 #endif
 
@@ -673,7 +674,7 @@ bool driver_init (void)
     serialInit();
 
     hal.info = "MSP430F5529";
-    hal.driver_version = "210202";
+    hal.driver_version = "210219";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = 24000000;
     hal.rx_buffer_size = RX_BUFFER_SIZE;

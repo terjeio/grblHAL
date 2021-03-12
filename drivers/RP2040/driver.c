@@ -32,6 +32,7 @@
 #include "hardware/pwm.h"
 #include "hardware/clocks.h"
 #include "hardware/structs/systick.h"
+#include "hardware/structs/iobank0.h"
 
 #include "driver.h"
 #include "serial.h"
@@ -203,7 +204,7 @@ static input_signal_t inputpin[] = {
 static void systick_handler (void);
 static void spindle_set_speed (uint_fast16_t pwm_value);
 static void STEPPER_TIMER_IRQHandler(void);
-static void GPIO_EXT_INT_IRQHandler(void);
+static void GPIO_IRQHandler(void);
 
 static int64_t delay_callback(alarm_id_t id, void *callback)
 {
@@ -413,13 +414,22 @@ probe_state_t probeGetState (void)
 // Static spindle (off, on cw & on ccw)
 inline static void spindle_off (void)
 {
+#if SPINDLE_OUTMODE == GPIO_IOEXPAND
+    ioex_out(SPINDLE_ENABLE_PIN) = settings.spindle.invert.on;
+    ioexpand_out(io_expander);
+#else
     gpio_put(SPINDLE_ENABLE_PIN, settings.spindle.invert.on);
+#endif
 }
 
 inline static void spindle_on (void)
 {
+#if SPINDLE_OUTMODE == GPIO_IOEXPAND
+    ioex_out(SPINDLE_ENABLE_PIN) = !settings.spindle.invert.on;
+    ioexpand_out(io_expander);
+#else
     gpio_put(SPINDLE_ENABLE_PIN, !settings.spindle.invert.on);
-
+#endif
 #ifdef SPINDLE_SYNC_ENABLE
     spindleDataReset();
 #endif
@@ -427,8 +437,15 @@ inline static void spindle_on (void)
 
 inline static void spindle_dir (bool ccw)
 {
+#if SPINDLE_OUTMODE == GPIO_IOEXPAND
+    if(hal.driver_cap.spindle_dir) {
+        ioex_out(SPINDLE_DIRECTION_PIN) = settings.spindle.invert.ccw;
+        ioexpand_out(io_expander);
+    }
+#else
     if(hal.driver_cap.spindle_dir)
         gpio_put(SPINDLE_DIRECTION_PIN, ccw ^ settings.spindle.invert.ccw);
+#endif
 }
 
 // Start or stop spindle
@@ -492,14 +509,15 @@ static void spindleSetStateVariable (spindle_state_t state, float rpm)
 }
 
 // Returns spindle state in a spindle_state_t variable
-static spindle_state_t spindleGetState (void) {
+static spindle_state_t spindleGetState (void)
+{
     spindle_state_t state = {settings.spindle.invert.mask};
 
 #if SPINDLE_OUTMODE == GPIO_IOEXPAND
     state.on = ioex_out(SPINDLE_ENABLE_PIN);
     state.ccw = hal.driver_cap.spindle_dir && ioex_out(SPINDLE_DIRECTION_PIN);
 #else
-    state.on =  gpio_get_out_state(SPINDLE_ENABLE_PIN);
+    state.on = gpio_get_out_state(SPINDLE_ENABLE_PIN);
     state.ccw = (hal.driver_cap.spindle_dir && (gpio_get_out_state(SPINDLE_DIRECTION_PIN))) != 0;
 #endif
 
@@ -517,7 +535,7 @@ void driver_spindle_pwm_init (void) {
         // Get the default config for 
         pwm_config config = pwm_get_default_config();
         
-        uint32_t prescaler = settings.spindle.pwm_freq > 2000.0f ? 1 : (settings.spindle.pwm_freq > 200.0f ? 12 : 25);
+        uint32_t prescaler = settings.spindle.pwm_freq > 2000.0f ? 1 : (settings.spindle.pwm_freq > 200.0f ? 12 : 50);
 
         spindle_precompute_pwm_values(&spindle_pwm, clock_get_hz(clk_sys) / prescaler);
 
@@ -552,9 +570,7 @@ static void spindlePulseOn (uint_fast16_t pulse_length)
 
 // end spindle code
 
-//*********************  COOLANT  ********************************//
 // Start/stop coolant (and mist if enabled)
-
 static void coolantSetState (coolant_state_t mode)
 {
     mode.value ^= settings.coolant_invert.mask;
@@ -591,8 +607,6 @@ static coolant_state_t coolantGetState (void)
 
     return state;
 }
-
-// end coolant code
 
 // Helper functions for setting/clearing/inverting individual bits atomically (uninterruptable)
 static void bitsSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t bits)
@@ -649,19 +663,11 @@ void settings_changed (settings_t *settings)
     stepperSetDirOutputs((axes_signals_t){0});
 
     if(IOInitDone) {
-/*
-        GPIO_InitTypeDef GPIO_Init = {0};
-
-        GPIO_Init.Speed = GPIO_SPEED_FREQ_HIGH;
-
-        stepperEnable(settings->steppers.deenergize);
-*/
 
         // Init of the spindle PWM
         driver_spindle_pwm_init();
 
         // PIO step parameters init
-
         pio_steps.length = (uint32_t)(10.0f * (settings->steppers.pulse_microseconds)) - 1;
         pio_steps.delay = (uint32_t)(10.0f * (settings->steppers.pulse_delay_microseconds)) - 1;
         pio_steps.reset = settings->steppers.step_invert.mask;
@@ -901,6 +907,23 @@ void settings_changed (settings_t *settings)
         gpio_init(Z_LIMIT_PIN);
         gpio_set_pulls(Z_LIMIT_PIN, !settings->limits.disable_pullup.z, false);
 
+ /*
+            // NOTE: Z limit must be first. Do not change!
+            GPIO_Init.Pin = Z_LIMIT_BIT;
+            GPIO_Init.Mode = limit_ire.z ? GPIO_MODE_IT_RISING : GPIO_MODE_IT_FALLING;
+            GPIO_Init.Pull = settings->limits.disable_pullup.z ? GPIO_NOPULL : GPIO_PULLUP;
+            HAL_GPIO_Init(Z_LIMIT_PORT, &GPIO_Init);
+
+            GPIO_Init.Pin = X_LIMIT_BIT;
+            GPIO_Init.Mode = limit_ire.x ? GPIO_MODE_IT_RISING : GPIO_MODE_IT_FALLING;
+            GPIO_Init.Pull = settings->limits.disable_pullup.x ? GPIO_NOPULL : GPIO_PULLUP;
+            HAL_GPIO_Init(X_LIMIT_PORT, &GPIO_Init);
+
+            GPIO_Init.Pin = Y_LIMIT_BIT;
+            GPIO_Init.Mode = limit_ire.y ? GPIO_MODE_IT_RISING : GPIO_MODE_IT_FALLING;
+            GPIO_Init.Pull = settings->limits.disable_pullup.y ? GPIO_NOPULL : GPIO_PULLUP;
+            HAL_GPIO_Init(Y_LIMIT_PORT, &GPIO_Init);
+
         gpio_init(X_LIMIT_PIN);
         gpio_set_pulls(X_LIMIT_PIN, !settings->limits.disable_pullup.x, false);
 
@@ -947,6 +970,16 @@ void settings_changed (settings_t *settings)
 
         irq_set_priority(IO_IRQ_BANK0, NVIC_MEDIUM_LEVEL_PRIORITY); // By default all IRQ are medium priority but in case the GPIO IRQ would need high or low priority it can be done here 
         irq_set_enabled(IO_IRQ_BANK0, true);                        // Enable GPIO IRQ
+    irq_set_exclusive_handler(IO_IRQ_BANK0, GPIO_IRQHandler);
+    irq_set_enabled(IO_IRQ_BANK0, true);
+
+//        __HAL_GPIO_EXTI_CLEAR_IT(DRIVER_IRQMASK);
+
+
+//        HAL_NVIC_SetPriority(EXTI0_IRQn, 0, 2);
+//        HAL_NVIC_EnableIRQ(EXTI0_IRQn);
+
+
     }
 }
 
@@ -976,6 +1009,20 @@ static bool driver_setup (settings_t *settings)
 
  // Control pins init
 
+ // Limit pins init
+
+    gpio_init_mask(LIMIT_MASK);
+
+/*
+    if (settings->limits.flags.hard_enabled)
+        HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0x02, 0x02);
+*/
+
+ // Control pins init
+
+    gpio_init_mask(CONTROL_MASK);
+
+/*
     if(hal.driver_cap.software_debounce) {
 
         // Single-shot 0.1 ms per tick
@@ -998,14 +1045,11 @@ static bool driver_setup (settings_t *settings)
 #endif
 
 #ifdef SPINDLE_PWM_PIN
-
     if(hal.driver_cap.variable_spindle) {
         gpio_init(SPINDLE_PWM_PIN);
         gpio_set_function(SPINDLE_PWM_PIN, GPIO_FUNC_PWM);
     }
-
 #endif
-
 
  // Coolant init
 
@@ -1013,7 +1057,6 @@ static bool driver_setup (settings_t *settings)
     gpio_init_mask(COOLANT_MASK);
     gpio_set_dir_out_masked(COOLANT_MASK);
 #endif
-
 
 #if SDCARD_ENABLE
 
@@ -1296,10 +1339,11 @@ void PPI_TIMER_IRQHandler (void)
 
 #endif
 
-// 
-void GPIO_EXT_INT_IRQHandler(void)
+static void GPIO_IRQHandler(void)
 {
-    uint32_t ifg = 0; //__HAL_GPIO_EXTI_GET_IT(1<<4);
+    uint32_t ifg = iobank0_hw->proc0_irq_ctrl.ints[1];
+
+    iobank0_hw->intr[1] = 0b1100 << 16;
 
     if(ifg) {
   //      __HAL_GPIO_EXTI_CLEAR_IT(ifg);

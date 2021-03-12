@@ -3,7 +3,7 @@
 
   Part of grblHAL driver for STM32F103C8
 
-  Copyright (c) 2018-2020 Terje Io
+  Copyright (c) 2018-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -33,5 +33,7 @@
 void I2C_GetKeycode (uint32_t i2cAddr, keycode_callback_ptr callback);
 
 #endif
+
+void i2c_init (void);
 
 #endif
