@@ -1,12 +1,12 @@
 //
 // WsStream.h - lwIP websocket stream implementation
 //
-// v1.0 / 2019-11-18 / Io Engineering / Terje
+// v1.3 / 2021-03-13 / Io Engineering / Terje
 //
 
 /*
 
-Copyright (c) 2019, Terje Io
+Copyright (c) 2019-2021, Terje Io
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -55,5 +55,6 @@ uint16_t WsStreamRxFree(void);
 void WsStreamRxFlush(void);
 void WsStreamRxCancel(void);
 bool WsStreamRxInsert (char c);
+bool WsStreamSuspendInput (bool suspend);
 
 #endif

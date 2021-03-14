@@ -66,10 +66,10 @@ set(SRCS main.c driver.c nvs.c esp32-hal-uart.c
  grbl/sleep.c
  grbl/spindle_control.c
  grbl/state_machine.c
+ grbl/stream.c
  grbl/stepper.c
  grbl/system.c
  grbl/tool_change.c
- grbl_esp32_if/grbl_esp32_if.c
 )
 
 if(Networking)

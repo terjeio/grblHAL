@@ -5,7 +5,7 @@
 
   Part of GrblHAL
 
-  Copyright (c) 2017-2020 Terje Io
+  Copyright (c) 2017-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -28,7 +28,7 @@
 
 static void uart_rx_interrupt_handler (void);
 
-static stream_rx_buffer_t rxbuffer = {0}, rxbackup;
+static stream_rx_buffer_t rxbuffer = {0};
 
 void serialInit (void)
 {
@@ -45,8 +45,8 @@ int16_t serialGetC (void)
         return SERIAL_NO_DATA; // return no data available
 
 //    UARTIntDisable(UARTCH, UART_INT_RX|UART_INT_RT);
-    data = rxbuffer.data[bptr++];                   // Get next character, increment tmp pointer
-    rxbuffer.tail = bptr & (RX_BUFFER_SIZE - 1);  // and update pointer
+    data = rxbuffer.data[bptr++];               	// Get next character, increment tmp pointer
+    rxbuffer.tail = bptr & (RX_BUFFER_SIZE - 1);  	// and update pointer
 
 //    UARTIntEnable(UARTCH, UART_INT_RX|UART_INT_RT);
 
@@ -56,20 +56,9 @@ int16_t serialGetC (void)
     return data;
 }
 
-// "dummy" version of serialGetC
-static int16_t serialGetNull (void)
-{
-    return -1;
-}
-
 bool serialSuspendInput (bool suspend)
 {
-    if(suspend)
-        hal.stream.read = serialGetNull;
-    else if(rxbuffer.backup)
-        memcpy(&rxbuffer, &rxbackup, sizeof(stream_rx_buffer_t));
-
-    return rxbuffer.tail != rxbuffer.head;
+    return stream_rx_suspend(&rxbuffer, suspend);
 }
 
 inline uint16_t serialRxCount(void)
@@ -137,12 +126,8 @@ static void uart_rx_interrupt_handler (void)
 
     while((data = UART_GetChar())) { // UART_GetChar() returns 0 if no data
         if(data == CMD_TOOL_ACK && !rxbuffer.backup) {
-
-            memcpy(&rxbackup, &rxbuffer, sizeof(stream_rx_buffer_t));
-            rxbuffer.backup = true;
-            rxbuffer.tail = rxbuffer.head;
+			stream_rx_backup(&rxbuffer);
             hal.stream.read = serialGetC; // restore normal input
-
         } else if(!hal.stream.enqueue_realtime_command((char)data)) {
 
             uint32_t bptr = (rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1);  // Get next head pointer

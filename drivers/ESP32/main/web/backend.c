@@ -428,7 +428,7 @@ static esp_err_t get_handler(httpd_req_t *req)
             // From local AP?
             if(!internal && memcmp(&settings->ap.network.ip, &addr.sin6_addr.un.u32_addr[3], sizeof(ip4_addr_t))) {
 
-                char loc[50];
+                char loc[75];
 
                 inet_ntop(AF_INET, &settings->ap.network.ip, ipstr, sizeof(ipstr));
 

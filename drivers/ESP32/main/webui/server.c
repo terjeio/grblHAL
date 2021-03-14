@@ -1034,8 +1034,9 @@ esp_err_t webui_login_handler (httpd_req_t *req)
     }
 
     if(status != 200) {
-        sprintf(password, "%d %s", status, msg);
-        httpd_resp_set_status(req, password);
+		char paranoia[50];
+        sprintf(paranoia, "%d %s", status, msg);
+        httpd_resp_set_status(req, paranoia);
     }
 
 #endif

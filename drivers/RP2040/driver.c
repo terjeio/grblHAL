@@ -24,19 +24,21 @@
 #include <math.h>
 #include <string.h>
 
-#include "pico/stdlib.h"
 #include "hardware/timer.h"
 #include "hardware/irq.h"
 #include "hardware/pio.h"
 #include "hardware/gpio.h"
 #include "hardware/pwm.h"
 #include "hardware/clocks.h"
+#include "hardware/spi.h"
 #include "hardware/structs/systick.h"
 #include "hardware/structs/iobank0.h"
 
 #include "driver.h"
 #include "serial.h"
 #include "driverPIO.pio.h"
+
+#include "grbl/state_machine.h"
 
 #ifdef I2C_PORT
 #include "i2c.h"
@@ -58,6 +60,7 @@
 
 #if KEYPAD_ENABLE
 #include "keypad/keypad.h"
+static void gpio_int_handler (uint gpio, uint32_t events);
 #endif
 
 #if ODOMETER_ENABLE
@@ -96,15 +99,15 @@ typedef union {
 } pio_steps_t;
 
 static pio_steps_t pio_steps = { .delay = 20, .length = 100 };
-uint32_t pirq = 0;
 static uint pulse, timer;
 static uint16_t pulse_length, pulse_delay;
 static bool pwmEnabled = false, IOInitDone = false;
 static axes_signals_t next_step_outbits;
 static spindle_pwm_t spindle_pwm;
-static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to 1 for "resetting" systick timer on startup
 static status_code_t (*on_unknown_sys_command)(uint_fast16_t state, char *line, char *lcline);
 static debounce_t debounce;
+static volatile uint32_t elapsed_ticks = 0;
+static volatile bool ms_event = false;
 static probe_state_t probe; /* = {
     .connected = On
 }; */
@@ -213,19 +216,20 @@ static void GPIO_IRQHandler(void);
 
 static int64_t delay_callback(alarm_id_t id, void *callback)
 {
-    ((void (*)(void))callback)();
+    ((delay_callback_ptr)callback)();
 
     return 0;
 }
 
-static void driver_delay (uint32_t ms, void (*callback)(void))
+static void driver_delay (uint32_t ms, delay_callback_ptr callback)
 {
-    if((delay.ms = ms) > 0) {
-        if(!(delay.callback = callback)) {
+    if(ms > 0) {
+        if(callback)
+            add_alarm_in_ms(ms, delay_callback, callback, false);
+        else {
             uint32_t delay = ms * 1000, start = timer_hw->timerawl;
             while(timer_hw->timerawl - start < delay);
-        } else
-            add_alarm_in_ms(ms, delay_callback, callback, false);
+        }
     } else if(callback)
         callback();
 }
@@ -609,33 +613,88 @@ static coolant_state_t coolantGetState (void)
 // Helper functions for setting/clearing/inverting individual bits atomically (uninterruptable)
 static void bitsSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t bits)
 {
-//    __disable_irq();
+    __disable_irq();
     *ptr |= bits;
-//    __enable_irq();
+    __enable_irq();
 }
 
 static uint_fast16_t bitsClearAtomic (volatile uint_fast16_t *ptr, uint_fast16_t bits)
 {
-//    __disable_irq();
+    __disable_irq();
     uint_fast16_t prev = *ptr;
     *ptr &= ~bits;
-//   __enable_irq();
+   __enable_irq();
     return prev;
 }
 
 static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t value)
 {
-//    __disable_irq();
+    __disable_irq();
     uint_fast16_t prev = *ptr;
     *ptr = value;
-//    __enable_irq();
+    __enable_irq();
     return prev;
 }
 
 static uint32_t getElapsedTicks (void)
 {
-   return 0; //uwTick;
+   return elapsed_ticks;
 }
+
+#if MPG_MODE_ENABLE
+
+static void modeSelect (bool mpg_mode)
+{
+    gpio_set_irq_enabled(MODE_SWITCH_PIN, !mpg_mode ? GPIO_IRQ_EDGE_RISE : GPIO_IRQ_EDGE_FALL, false);
+    gpio_set_irq_enabled(MODE_SWITCH_PIN, mpg_mode ? GPIO_IRQ_EDGE_RISE : GPIO_IRQ_EDGE_FALL, true);
+
+    // Deny entering MPG mode if busy
+    sys_state_t state = state_get();
+    if(mpg_mode == sys.mpg_mode || (mpg_mode && (gc_state.file_run || !(state == STATE_IDLE || (state & (STATE_ALARM|STATE_ESTOP)))))) {
+        hal.stream.enqueue_realtime_command(CMD_STATUS_REPORT_ALL);
+        return;
+    }
+
+    serialSelect(mpg_mode);
+
+    if(mpg_mode) {
+        hal.stream.read = serial2GetC;
+        hal.stream.get_rx_buffer_available = serial2RxFree;
+        hal.stream.cancel_read_buffer = serial2RxCancel;
+        hal.stream.reset_read_buffer = serial2RxFlush;
+    } else {
+        hal.stream.read = serialGetC;
+        hal.stream.get_rx_buffer_available = serialRxFree;
+        hal.stream.cancel_read_buffer = serialRxCancel;
+        hal.stream.reset_read_buffer = serialRxFlush;
+    }
+
+    hal.stream.reset_read_buffer();
+
+    sys.mpg_mode = mpg_mode;
+    sys.report.mpg_mode = On;
+
+    // Force a realtime status report, all reports when MPG mode active
+    hal.stream.enqueue_realtime_command(mpg_mode ? CMD_STATUS_REPORT_ALL : CMD_STATUS_REPORT);
+}
+
+static void modeChange (void)
+{
+    modeSelect(gpio_get(MODE_SWITCH_PIN) == 0);
+}
+
+static void modeEnable (void)
+{
+    bool on = gpio_get(MODE_SWITCH_PIN) == 0;
+
+    if(sys.mpg_mode != on)
+        modeSelect(true);
+
+    gpio_set_irq_enabled(MODE_SWITCH_PIN, !on ? GPIO_IRQ_EDGE_RISE : GPIO_IRQ_EDGE_FALL, false);
+    gpio_set_irq_enabled(MODE_SWITCH_PIN, on ? GPIO_IRQ_EDGE_RISE : GPIO_IRQ_EDGE_FALL, true);
+}
+
+#endif
 
 // Configures peripherals when settings are initialized or changed
 void settings_changed (settings_t *settings)
@@ -680,7 +739,7 @@ void settings_changed (settings_t *settings)
         control_ire.mask = ~(settings->control_disable_pullup.mask ^ settings->control_invert.mask);
 
         gpio_set_pulls(CONTROL_RESET_PIN, !settings->control_disable_pullup.reset, settings->control_disable_pullup.reset);
-        gpio_set_irq_enabled(CONTROL_RESET_PIN, control_ire.reset ? GPIO_IRQ_EDGE_RISE : GPIO_IRQ_EDGE_FALL, true);
+ //       gpio_set_irq_enabled(CONTROL_RESET_PIN, control_ire.reset ? GPIO_IRQ_EDGE_RISE : GPIO_IRQ_EDGE_FALL, true);
 
 /*        HAL_NVIC_DisableIRQ(EXTI0_IRQn);
 
@@ -793,14 +852,26 @@ void settings_changed (settings_t *settings)
 #endif
 
 #if KEYPAD_ENABLE
-        GPIO_Init.Pin = KEYPAD_STROBE_BIT;
-        GPIO_Init.Mode = GPIO_MODE_IT_RISING_FALLING;
-        GPIO_Init.Pull = GPIO_PULLUP;
-        HAL_GPIO_Init(KEYPAD_PORT, &GPIO_Init);
+    gpio_set_irq_enabled_with_callback(KEYPAD_STROBE_PIN, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, gpio_int_handler);
+    gpio_pull_up(KEYPAD_STROBE_PIN);
 #endif
 
-    irq_set_exclusive_handler(IO_IRQ_BANK0, GPIO_IRQHandler);
-    irq_set_enabled(IO_IRQ_BANK0, true);
+        /***************************
+         *  MPG mode input enable  *
+         ***************************/
+
+#if MPG_MODE_ENABLE
+        if(hal.driver_cap.mpg_mode) {
+            // Enable pullup and switch to input
+            gpio_init(MODE_SWITCH_PIN);
+            gpio_set_pulls(MODE_SWITCH_PIN, true, false);
+            // Delay mode enable a bit so grblHAL can finish startup and MPG controller can check ready status
+            hal.delay_ms(50, modeEnable);
+        }
+#endif
+
+//    irq_set_exclusive_handler(IO_IRQ_BANK0, GPIO_IRQHandler);
+//    irq_set_enabled(IO_IRQ_BANK0, true);
 
 //        __HAL_GPIO_EXTI_CLEAR_IT(DRIVER_IRQMASK);
 
@@ -877,15 +948,7 @@ static bool driver_setup (settings_t *settings)
 #endif
 
 #if SDCARD_ENABLE
-
-    GPIO_Init.Mode = GPIO_MODE_OUTPUT_PP;
-    GPIO_Init.Pin = SD_CS_BIT;
-    HAL_GPIO_Init(SD_CS_PORT, &GPIO_Init);
-
-    BITBAND_PERI(SD_CS_PORT->ODR, SD_CS_PIN) = 1;
-
     sdcard_init();
-
 #endif
 
 #if PPI_ENABLE
@@ -915,6 +978,16 @@ static bool driver_setup (settings_t *settings)
     return IOInitDone;
 }
 
+#if USB_SERIAL_CDC
+static void execute_realtime (uint_fast16_t state)
+{
+    if(ms_event) {
+        ms_event = false;
+        usb_execute_realtime(state);
+    }
+}
+#endif
+
 // Initialize HAL pointers, setup serial comms and enable EEPROM
 // NOTE: Grbl is not yet configured (from EEPROM data), driver_setup() will be called when done
 
@@ -924,16 +997,18 @@ bool driver_init (void)
 
 //    irq_set_exclusive_handler(-1, systick_handler);
 
-
-
-//mpu_hw->rvr = 999;
-//mpu_hw->csr = M0PLUS_SYST_CSR_TICKINT_BITS|M0PLUS_SYST_CSR_ENABLE_BITS;
-// M0PLUS_SYST_CSR_CLKSOURCE_BITS - set to use processor clock
+    systick_hw->rvr = 999;
+    systick_hw->cvr = 0;
+    systick_hw->csr = M0PLUS_SYST_CSR_TICKINT_BITS|M0PLUS_SYST_CSR_ENABLE_BITS;
 
 #if USB_SERIAL_CDC
-    usbInit();
+    usb_serialInit();
 #else
     serialInit(115200);
+#endif
+
+#ifdef SERIAL2_MOD
+    serial2Init(115200);
 #endif
 
 #ifdef I2C_PORT
@@ -942,6 +1017,7 @@ bool driver_init (void)
 
     hal.info = "RP2040";
     hal.driver_version = "21xxxx";
+    hal.driver_options = "SDK_" PICO_SDK_VERSION_STRING;
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -988,13 +1064,14 @@ bool driver_init (void)
     hal.set_value_atomic = valueSetAtomic;
 
 #if USB_SERIAL_CDC
-    hal.stream.read = usbGetC;
-    hal.stream.write = usbWriteS;
-    hal.stream.write_all = usbWriteS;
-    hal.stream.get_rx_buffer_available = usbRxFree;
-    hal.stream.reset_read_buffer = usbRxFlush;
-    hal.stream.cancel_read_buffer = usbRxCancel;
-    hal.stream.suspend_read = usbSuspendInput;
+    hal.stream.read = usb_serialGetC;
+    hal.stream.write = usb_serialWriteS;
+    hal.stream.write_all = usb_serialWriteS;
+    hal.stream.get_rx_buffer_available = usb_serialRxFree;
+    hal.stream.reset_read_buffer = usb_serialRxFlush;
+    hal.stream.cancel_read_buffer = usb_serialRxCancel;
+    hal.stream.suspend_read = usb_serialSuspendInput;
+    grbl.on_execute_realtime = execute_realtime;
 #else
     hal.stream.read = serialGetC;
     hal.stream.write = serialWriteS;
@@ -1035,6 +1112,9 @@ bool driver_init (void)
     hal.driver_cap.limits_pull_up = On;
 #ifdef PROBE_PIN
     hal.driver_cap.probe_pull_up = On;
+#endif
+#if MPG_MODE_ENABLE
+    hal.driver_cap.mpg_mode = On;
 #endif
 
 #ifdef HAS_BOARD_INIT
@@ -1088,9 +1168,6 @@ bool driver_init (void)
 // Main stepper driver
 void STEPPER_TIMER_IRQHandler (void)
 {
-    //irq_clear(PIO1_IRQ_0);
-
-    pirq = pio1->irq;
     stepper_timer_irq_clear(pio1);
 
     hal.stepper.interrupt_callback();
@@ -1158,13 +1235,31 @@ static void GPIO_IRQHandler(void)
     }
 }
 
+static void gpio_int_handler (uint gpio, uint32_t events)
+{
+    switch(gpio) {
+
+#if KEYPAD_ENABLE
+        case KEYPAD_STROBE_PIN:
+            keypad_keyclick_handler(gpio_get(gpio) == 0);
+            break;
+#endif
+#if MPG_MODE_ENABLE
+        case MODE_SWITCH_PIN:
+            gpio_set_irq_enabled(MODE_SWITCH_PIN, GPIO_IRQ_EDGE_RISE|GPIO_IRQ_EDGE_FALL, false);
+            hal.delay_ms(50, modeChange);
+            break;
+#endif
+        default:
+            break;
+    }
+}
+
 // Interrupt handler for 1 ms interval timer
 void isr_systick (void)
 {
-    static uint32_t cnt = 0;
-
-    cnt++;
-    /*
+    ms_event = true;
+    elapsed_ticks++;
 
 #if SDCARD_ENABLE
     static uint32_t fatfs_ticks = 10;
@@ -1173,13 +1268,4 @@ void isr_systick (void)
         fatfs_ticks = 10;
     }
 #endif
-    uwTick += uwTickFreq;
-
-    if(delay.ms && !(--delay.ms)) {
-        if(delay.callback) {
-            delay.callback();
-            delay.callback = NULL;
-        }
-    }
-    */
 }

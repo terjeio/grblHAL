@@ -1,7 +1,7 @@
 //
 // TCPStream.c - lwIP stream implementation, raw "Telnet"
 //
-// v1.2 / 2021-01-10 / Io Engineering / Terje
+// v1.3 / 2021-03-13 / Io Engineering / Terje
 //
 
 /*
@@ -164,6 +164,11 @@ void TCPStreamRxCancel (void)
     streamSession.rxbuf.head = (streamSession.rxbuf.tail + 1) & (RX_BUFFER_SIZE - 1);
 }
 
+bool TCPStreamSuspendInput (bool suspend)
+{
+    return stream_rx_suspend(&streamSession.rxbuf, suspend);
+}
+
 static bool streamBufferRX (char c)
 {
     // discard input if MPG has taken over...
@@ -173,7 +178,10 @@ static bool streamBufferRX (char c)
 
         if(bptr == streamSession.rxbuf.tail)                        // If buffer full
             streamSession.rxbuf.overflow = true;                    // flag overflow
-        else if(!hal.stream.enqueue_realtime_command(c)) {          // If not a real time command
+        else if(c == CMD_TOOL_ACK && !streamSession.rxbuf.backup) {
+            stream_rx_backup(&streamSession.rxbuf);
+            hal.stream.read = TCPStreamGetC; // restore normal input
+        } else if(!hal.stream.enqueue_realtime_command(c)) {        // If not a real time command
             streamSession.rxbuf.data[streamSession.rxbuf.head] = c; // add data to buffer
             streamSession.rxbuf.head = bptr;                        // and update pointer
         }

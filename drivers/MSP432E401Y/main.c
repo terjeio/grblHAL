@@ -3,9 +3,9 @@
 
   Startup entry point for TM4C1294NCPDT (Texas Instruments Tiva C LaunchPad)
 
-  Part of Grbl
+  Part of grblHAL
 
-  Copyright (c) 2018 Terje Io
+  Copyright (c) 2018-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -30,7 +30,7 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
-#include "base/driver.h"
+#include "shared/base/driver.h"
 #include "GRBL/grbllib.h"
 
 #ifndef FreeRTOS
@@ -45,7 +45,7 @@ static void vGrblTask (void * pvParameters)
 int main(void)
 {
     /* Call driver init functions */
-    Board_initGeneral();
+    MSP_EXP432E401Y_initGeneral();
 
     xTaskCreate(vGrblTask, "Grbl", configMINIMAL_STACK_SIZE, NULL, 0, NULL);
 

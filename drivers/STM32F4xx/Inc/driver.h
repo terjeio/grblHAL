@@ -55,6 +55,9 @@
 #ifndef USB_SERIAL_CDC
 #define USB_SERIAL_CDC      0 // for UART comms
 #endif
+#ifndef ESTOP_ENABLE
+#define ESTOP_ENABLE        0
+#endif
 #ifndef SDCARD_ENABLE
 #define SDCARD_ENABLE       0
 #endif

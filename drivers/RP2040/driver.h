@@ -59,7 +59,7 @@
 #define ODOMETER_ENABLE     0
 #endif
 #ifndef PPI_ENABLE
-#define PPI_ENABLE       	0
+#define PPI_ENABLE       	  0
 #endif
 #ifndef EEPROM_ENABLE
 #define EEPROM_ENABLE       0
@@ -136,7 +136,7 @@
 // End configuration
 
 #if EEPROM_ENABLE == 0
-#define FLASH_ENABLE 0
+#define FLASH_ENABLE 1
 #else
 #define FLASH_ENABLE 0
 #endif
@@ -152,16 +152,44 @@
 #include "trinamic/trinamic.h"
 #endif
 
+#if MPG_MODE_ENABLE
+#define SERIAL2_MOD
+#endif
+
 // End configuration
 
-#if KEYPAD_ENABLE && !defined(KEYPAD_PORT)
+#if KEYPAD_ENABLE && !defined(KEYPAD_STROBE_PIN)
 #error Keypad plugin not supported!
 #endif
 
-#if SDCARD_ENABLE && !defined(SD_CS_PORT)
+#if SDCARD_ENABLE && !defined(SD_CS_PIN)
 #error SD card plugin not supported!
 #endif
 
 bool driver_init (void);
+
+/**
+  \brief   Enable IRQ Interrupts
+  \details Enables IRQ interrupts by clearing the I-bit in the CPSR.
+           Can only be executed in Privileged modes.
+ */
+
+// While waiting for CMSIS headers...:
+
+static inline void __enable_irq(void)
+{
+  __asm volatile ("cpsie i" : : : "memory");
+}
+
+/**
+  \brief   Disable IRQ Interrupts
+  \details Disables IRQ interrupts by setting the I-bit in the CPSR.
+           Can only be executed in Privileged modes.
+ */
+static inline  void __disable_irq(void)
+{
+  __asm volatile ("cpsid i" : : : "memory");
+}
+
 
 #endif // __DRIVER_H__

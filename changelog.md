@@ -1,5 +1,11 @@
 ## grblHAL changelog
 
+2021-03-14:
+
+* Added support for tool change protocol to networking protocols using shared stream buffer.
+* Added `$S` system command for toggling single step mode, when enabled cycle start has to be issued after each block.
+* Some bug fixes.
+
 2021-02-07:
 
 * Added `#define BOARD_MY_MACHINE` option in _my_machine.h_ for building using _my_machine-map.c_, this for simpler handling of user defined pin mappings.  

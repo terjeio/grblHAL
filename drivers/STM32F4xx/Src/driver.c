@@ -487,9 +487,11 @@ inline static limit_signals_t limitsGetState()
 {
     limit_signals_t signals = {0};
 
+    signals.min.mask = settings.limits.invert.mask;
+
 #if LIMIT_INMODE == GPIO_BITBAND
     signals.min.x = BITBAND_PERI(X_LIMIT_PORT->IDR, X_LIMIT_PIN);
-    signals.max.y = BITBAND_PERI(Y_LIMIT_PORT->IDR, Y_LIMIT_PIN);
+    signals.min.y = BITBAND_PERI(Y_LIMIT_PORT->IDR, Y_LIMIT_PIN);
     signals.min.z = BITBAND_PERI(Z_LIMIT_PORT->IDR, Z_LIMIT_PIN);
   #ifdef A_LIMIT_PIN
     signals.min.a = BITBAND_PERI(A_LIMIT_PORT->IDR, A_LIMIT_PIN);
@@ -518,10 +520,14 @@ static control_signals_t systemGetState (void)
 {
     control_signals_t signals;
 
-    signals.value = settings.control_invert.mask;
+    signals.mask = settings.control_invert.mask;
 
 #if CONTROL_INMODE == GPIO_BITBAND
+#if ESTOP_ENABLE
+    signals.e_stop = BITBAND_PERI(CONTROL_PORT->IDR, CONTROL_RESET_PIN);
+#else
     signals.reset = BITBAND_PERI(CONTROL_PORT->IDR, CONTROL_RESET_PIN);
+#endif
     signals.feed_hold = BITBAND_PERI(CONTROL_PORT->IDR, CONTROL_FEED_HOLD_PIN);
     signals.cycle_start = BITBAND_PERI(CONTROL_PORT->IDR, CONTROL_CYCLE_START_PIN);
   #ifdef CONTROL_SAFETY_DOOR_PIN
@@ -529,7 +535,11 @@ static control_signals_t systemGetState (void)
   #endif
 #elif CONTROL_INMODE == GPIO_MAP
     uint32_t bits = CONTROL_PORT->IDR;
+#if ESTOP_ENABLE
+    signals.e_stop = (bits & CONTROL_RESET_BIT) != 0;
+#else
     signals.reset = (bits & CONTROL_RESET_BIT) != 0;
+#endif
     signals.feed_hold = (bits & CONTROL_FEED_HOLD_BIT) != 0;
     signals.cycle_start = (bits & CONTROL_CYCLE_START_BIT) != 0;
   #ifdef CONTROL_SAFETY_DOOR_PIN
@@ -539,6 +549,10 @@ static control_signals_t systemGetState (void)
     signals.value = (uint8_t)((CONTROL_PORT->IDR & CONTROL_MASK) >> CONTROL_INMODE);
   #ifndef ENABLE_SAFETY_DOOR_INPUT_PIN
     signals.safety_door_ajar = settings.control_invert.safety_door_ajar;
+  #endif
+  #if ESTOP_ENABLE
+    signals.e_stop = signals.reset;
+    signals.reset = settings.control_invert.mask.reset;
   #endif
 #endif
 
@@ -1366,7 +1380,7 @@ bool driver_init (void)
 #else
     hal.info = "STM32F401CC";
 #endif
-    hal.driver_version = "210220";
+    hal.driver_version = "210312";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1456,6 +1470,9 @@ bool driver_init (void)
 
   // driver capabilities, used for announcing and negotiating (with Grbl) driver functionality
 
+#if ESTOP_ENABLE
+    hal.signals_cap.e_stop = On;
+#endif
 #ifdef CONTROL_SAFETY_DOOR_PIN
     hal.signals_cap.safety_door_ajar = On;
 #endif

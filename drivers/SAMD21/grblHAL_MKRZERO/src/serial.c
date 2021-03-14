@@ -4,7 +4,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2017-2019 Terje Io
+  Copyright (c) 2017-2021 Terje Io
   Some parts:
   Copyright (c) 2015 Arduino LLC.  All right reserved.
 
@@ -74,8 +74,7 @@ typedef enum
 } SercomDataOrder;
 
 static Sercom *sercom = SERCOM5;
-static stream_rx_buffer_t rxbuffer = {0}, rxbackup;
-
+static stream_rx_buffer_t rxbuffer = {0};
 static stream_rx_buffer_t txbuffer = {0};
 
 static void SERIAL_IRQHandler (void);
@@ -333,20 +332,9 @@ int16_t serialGetC (void)
     return (int16_t)data;
 }
 
-// "dummy" version of serialGetC
-static int16_t serialGetNull (void)
-{
-    return -1;
-}
-
 bool serialSuspendInput (bool suspend)
 {
-    if(suspend)
-        hal.stream.read = serialGetNull;
-    else if(rxbuffer.backup)
-        memcpy(&rxbuffer, &rxbackup, sizeof(stream_rx_buffer_t));
-
-    return rxbuffer.tail != rxbuffer.head;
+    return stream_rx_suspend(&rxbuffer, suspend);
 }
 
 //
@@ -367,11 +355,8 @@ uint8_t ifg = sercom->USART.INTFLAG.reg;
         uint16_t sts = sercom->USART.STATUS.reg;
         data =  sercom->USART.DATA.bit.DATA;
         if(data == CMD_TOOL_ACK && !rxbuffer.backup) {
-            memcpy(&rxbackup, &rxbuffer, sizeof(stream_rx_buffer_t));
-            rxbuffer.backup = true;
-            rxbuffer.tail = rxbuffer.head;
+            stream_rx_backup(&rxbuffer);
             hal.stream.read = serialGetC; // restore normal input
-
         } else if(!hal.stream.enqueue_realtime_command(data)) {
 
             bptr = (rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1);  // Get next head pointer

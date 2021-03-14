@@ -106,12 +106,14 @@ static keycode_callback_ptr keypad_callback = NULL;
 
 void I2C_GetKeycode (uint32_t i2cAddr, keycode_callback_ptr callback)
 {
+    uint8_t c;
     keycode = 0;
     keypad_callback = callback;
 
-    HAL_I2C_Master_Receive_IT(&i2c_port, KEYPAD_I2CADDR << 1, &keycode, 1);
+    if(i2c_read_blocking(QI2C_PORT, KEYPAD_I2CADDR, &c, 1, false) == 1)
+        keypad_callback(c);
 }
-
+/*
 void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *hi2c)
 {
     if(keypad_callback && keycode != 0) {
@@ -119,7 +121,7 @@ void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *hi2c)
         keypad_callback = NULL;
     }
 }
-
+*/
 #endif
 
 #if TRINAMIC_ENABLE && TRINAMIC_I2C

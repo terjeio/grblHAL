@@ -868,29 +868,39 @@ static coolant_state_t coolantGetState (void)
     return state;
 }
 
+static void enable_irq (void)
+{
+    __enable_irq();
+}
+
+static void disable_irq (void)
+{
+    __disable_irq();
+}
+
 // Helper functions for setting/clearing/inverting individual bits atomically (uninterruptable)
 static void bitsSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t bits)
 {
-    __disable_interrupts();
+    __disable_irq();
     *ptr |= bits;
-    __enable_interrupts();
+    __enable_irq();
 }
 
 static uint_fast16_t bitsClearAtomic (volatile uint_fast16_t *ptr, uint_fast16_t bits)
 {
-    __disable_interrupts();
+    __disable_irq();
     uint_fast16_t prev = *ptr;
     *ptr &= ~bits;
-    __enable_interrupts();
+    __enable_irq();
     return prev;
 }
 
 static uint_fast16_t valueSetAtomic (volatile uint_fast16_t *ptr, uint_fast16_t value)
 {
-    __disable_interrupts();
+    __disable_irq();
     uint_fast16_t prev = *ptr;
     *ptr = value;
-    __enable_interrupts();
+    __enable_irq();
     return prev;
 }
 
@@ -1457,8 +1467,8 @@ bool driver_init (void)
     hal.stream.write_all = serialWriteS;
     hal.stream.suspend_read = serialSuspendInput;
 
-    hal.irq_enable = __enable_irq;
-    hal.irq_disable = __disable_irq;
+    hal.irq_enable = enable_irq;
+    hal.irq_disable = disable_irq;
     hal.set_bits_atomic = bitsSetAtomic;
     hal.clear_bits_atomic = bitsClearAtomic;
     hal.set_value_atomic = valueSetAtomic;

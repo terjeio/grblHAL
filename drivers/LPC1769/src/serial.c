@@ -4,7 +4,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2017-2020 Terje Io
+  Copyright (c) 2017-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -33,7 +33,6 @@
 #include "chip.h"
 
 static stream_rx_buffer_t rxbuffer = {0};
-static stream_rx_buffer_t rxbackup;
 static stream_tx_buffer_t txbuffer = {0};
 
 /* Pin muxing configuration */
@@ -221,20 +220,9 @@ int16_t serialGetC (void)
     return (int16_t)data;
 }
 
-// "dummy" version of serialGetC
-static int16_t serialGetNull (void)
-{
-    return -1;
-}
-
 bool serialSuspendInput (bool suspend)
 {
-    if(suspend)
-        hal.stream.read = serialGetNull;
-    else if(rxbuffer.backup)
-        memcpy(&rxbuffer, &rxbackup, sizeof(stream_rx_buffer_t));
-
-    return rxbuffer.tail != rxbuffer.head;
+    return stream_rx_suspend(&rxbuffer, suspend);
 }
 
 //
@@ -263,29 +251,25 @@ void SERIAL_IRQHandler (void)
         case UART_IIR_INTID_RDA:
         case UART_IIR_INTID_CTI:;
             while(SERIAL_MODULE->LSR & UART_LSR_RDR) {
-            uint32_t data = SERIAL_MODULE->RBR;
-            if(data == CMD_TOOL_ACK && !rxbuffer.backup) {
+                uint32_t data = SERIAL_MODULE->RBR;
+                if(data == CMD_TOOL_ACK && !rxbuffer.backup) {
+                    stream_rx_backup(&rxbuffer);
+                    hal.stream.read = serialGetC; // restore normal input
+                } else if(!hal.stream.enqueue_realtime_command(data)) { // Read character received
 
-                memcpy(&rxbackup, &rxbuffer, sizeof(stream_rx_buffer_t));
-                rxbuffer.backup = true;
-                rxbuffer.tail = rxbuffer.head;
-                hal.stream.read = serialGetC; // restore normal input
+                    bptr = (rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1);  // Temp head position (to avoid volatile overhead)
 
-            } else if(!hal.stream.enqueue_realtime_command(data)) { // Read character received
-
-                bptr = (rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1);  // Temp head position (to avoid volatile overhead)
-
-                if(bptr == rxbuffer.tail)                           // If buffer full
-                    rxbuffer.overflow = 1;                          // flag overflow
-                else {
-                    rxbuffer.data[rxbuffer.head] = data;            // Add data to buffer
-                    rxbuffer.head = bptr;                           // and update pointer
-                  #ifdef RTS_PORT
-                    if (!rts_state && BUFCOUNT(rxbuffer.head, rxbuffer.tail, RX_BUFFER_SIZE) >= RX_BUFFER_HWM) // Set RTS if at or above HWM
-                        BITBAND_PERI(RTS_PORT->OUT, RTS_PIN) = rts_state = 1;
-                  #endif
+                    if(bptr == rxbuffer.tail)                           // If buffer full
+                        rxbuffer.overflow = 1;                          // flag overflow
+                    else {
+                        rxbuffer.data[rxbuffer.head] = data;            // Add data to buffer
+                        rxbuffer.head = bptr;                           // and update pointer
+                      #ifdef RTS_PORT
+                        if (!rts_state && BUFCOUNT(rxbuffer.head, rxbuffer.tail, RX_BUFFER_SIZE) >= RX_BUFFER_HWM) // Set RTS if at or above HWM
+                            BITBAND_PERI(RTS_PORT->OUT, RTS_PIN) = rts_state = 1;
+                      #endif
+                    }
                 }
-            }
             }
             break;
     }
