@@ -31,7 +31,7 @@
 #define USART USART3
 #define USART_IRQHandler USART3_IRQHandler
 
-static stream_rx_buffer_t rxbuf = {0}, rxbackup;
+static stream_rx_buffer_t rxbuf = {0};
 static stream_tx_buffer_t txbuf = {0};
 
 void serialInit (void)
@@ -157,20 +157,9 @@ int16_t serialGetC (void)
     return (int16_t)data;
 }
 
-// "dummy" version of serialGetC
-static int16_t serialGetNull (void)
-{
-    return -1;
-}
-
 bool serialSuspendInput (bool suspend)
 {
-    if(suspend)
-        hal.stream.read = serialGetNull;
-    else if(rxbuf.backup)
-        memcpy(&rxbuf, &rxbackup, sizeof(stream_rx_buffer_t));
-
-    return rxbuf.tail != rxbuf.head;
+    return stream_rx_suspend(&rxbuf, suspend);
 }
 
 void USART_IRQHandler (void)
@@ -185,12 +174,8 @@ void USART_IRQHandler (void)
         } else {
             char data = USART->RDR;
             if(data == CMD_TOOL_ACK && !rxbuf.backup) {
-
-                memcpy(&rxbackup, &rxbuf, sizeof(stream_rx_buffer_t));
-                rxbuf.backup = true;
-                rxbuf.tail = rxbuf.head;
+                stream_rx_backup(&rxbuf);
                 hal.stream.read = serialGetC; // restore normal input
-
             } else if(!hal.stream.enqueue_realtime_command(data)) {     // Check and strip realtime commands,
                 rxbuf.data[rxbuf.head] = data;                          // if not add data to buffer
                 rxbuf.head = next_head;                                 // and update pointer

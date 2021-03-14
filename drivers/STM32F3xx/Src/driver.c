@@ -238,7 +238,7 @@ static void stepperWakeUp (void)
 
     STEPPER_TIMER->ARR = 5000; // delay to allow drivers time to wake up
     STEPPER_TIMER->EGR = TIM_EGR_UG;
-    STEPPER_TIMER->CR1 |= TIM_CR1_CEN;
+    STEPPER_TIMER->CR1 |= (TIM_CR1_CEN|TIM_CR1_ARPE);
 }
 
 // Disables stepper driver interrupts
@@ -252,10 +252,11 @@ static void stepperGoIdle (bool clear_signals)
 static void stepperCyclesPerTick (uint32_t cycles_per_tick)
 {
     cycles_per_tick = cycles_per_tick < (1UL << 20) ? cycles_per_tick : 0x000FFFFFUL;
-    if(cycles_per_tick < STEPPER_TIMER->CNT + 50)
-        STEPPER_TIMER->CNT = cycles_per_tick - 50;
 
     STEPPER_TIMER->ARR = cycles_per_tick;
+
+    if(STEPPER_TIMER->SR & TIM_SR_UIF)
+        STEPPER_TIMER->SR &= ~TIM_SR_UIF;
 }
 
 // Set stepper pulse output pins
@@ -337,6 +338,8 @@ static void limitsEnable (bool on, bool homing)
 inline static limit_signals_t limitsGetState()
 {
     limit_signals_t signals = {0};
+
+    signals.min.value = settings.limits.invert.mask;
 
 #if LIMIT_INMODE == GPIO_MAP
     uint32_t bits = LIMIT_PORT->IDR;
@@ -1179,7 +1182,7 @@ bool driver_init (void)
 // Main stepper driver
 void STEPPER_TIMER_IRQHandler (void)
 {
-    if ((STEPPER_TIMER->SR & TIM_SR_UIF) != 0)                  // check interrupt source
+    if (STEPPER_TIMER->SR & TIM_SR_UIF)                  // check interrupt source
     {
         STEPPER_TIMER->SR = ~TIM_SR_UIF; // clear UIF flag
         hal.stepper.interrupt_callback();
