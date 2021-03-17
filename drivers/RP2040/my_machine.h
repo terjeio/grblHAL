@@ -22,14 +22,14 @@
 // NOTE: Only one board may be enabled!
 // If none is enabled pin mappings from generic_map.h will be used.
 //#define BOARD_??
-//#define BOARD_CNC_BOOSTERPACK
+#define BOARD_CNC_BOOSTERPACK
 //#define BOARD_MY_MACHINE      // Add my_machine_map.h before enabling this!
 
 // Configuration
 // Uncomment to enable.
 
-//#define USB_SERIAL_CDC       1 // Serial communication via native USB.
-//#define SDCARD_ENABLE        1 // Run gcode programs from SD card, requires sdcard plugin.
+#define USB_SERIAL_CDC       1 // Serial communication via native USB.
+#define SDCARD_ENABLE        1 // Run gcode programs from SD card, requires sdcard plugin.
 //#define KEYPAD_ENABLE        1 // I2C keypad for jogging etc., requires keypad plugin.
 //#define ODOMETER_ENABLE      1 // Odometer plugin.
 //#define PPI_ENABLE           1 // Laser PPI plugin. To be completed.
@@ -39,5 +39,6 @@
 //#define TRINAMIC_DEV         1 // Development mode, adds a few M-codes to aid debugging. Do not enable in production code.
 //#define EEPROM_ENABLE        1 // I2C EEPROM support. Set to 1 for 24LC16(2K), 2 for larger sizes. Requires eeprom plugin.
 //#define EEPROM_IS_FRAM       1 // Uncomment when EEPROM is enabled and chip is FRAM, this to remove write delay.
+//#define MPG_MODE_ENABLE      1
 
 /**/

@@ -112,12 +112,8 @@ static void enetStreamWriteS (const char *data)
         .get_rx_buffer_available = TCPStreamRxFree,
         .reset_read_buffer = TCPStreamRxFlush,
         .cancel_read_buffer = TCPStreamRxCancel,
-        .enqueue_realtime_command = protocol_enqueue_realtime_command,
-    #if M6_ENABLE
-        .suspend_read = NULL // for now...
-    #else
-        .suspend_read = NULL
-    #endif
+        .suspend_read = TCPStreamSuspendInput,
+        .enqueue_realtime_command = protocol_enqueue_realtime_command
     };
   #endif
 
@@ -130,12 +126,8 @@ static void enetStreamWriteS (const char *data)
         .get_rx_buffer_available = WsStreamRxFree,
         .reset_read_buffer = WsStreamRxFlush,
         .cancel_read_buffer = WsStreamRxCancel,
-        .enqueue_realtime_command = protocol_enqueue_realtime_command,
-    #if M6_ENABLE
-        .suspend_read = NULL // for now...
-    #else
-        .suspend_read = NULL
-    #endif
+        .suspend_read = WsStreamSuspendInput,
+        .enqueue_realtime_command = protocol_enqueue_realtime_command
     };
   #endif
 
@@ -1674,7 +1666,7 @@ bool driver_init (void)
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
-    hal.driver_version = "210214";
+    hal.driver_version = "210314";
     hal.driver_setup = driver_setup;
 #if !USE_32BIT_TIMER
     hal.f_step_timer = hal.f_step_timer / (STEPPER_DRIVER_PRESCALER + 1);

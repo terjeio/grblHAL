@@ -1,5 +1,5 @@
 // Copyright 2015-2016 Espressif Systems (Shanghai) PTE LTD
-// Copyright 2018-2020 Terje Io : Modifications for grbl
+// Copyright 2018-2021 Terje Io : Modifications for grbl
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,10 +20,9 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
-#include "rom/ets_sys.h"
+#include "esp32/rom/ets_sys.h"
 #include "esp_attr.h"
-#include "esp_intr.h"
-#include "rom/uart.h"
+#include "esp32/rom/uart.h"
 #include "soc/uart_reg.h"
 #include "soc/uart_struct.h"
 #include "soc/io_mux_reg.h"
@@ -79,17 +78,11 @@ static const DRAM_ATTR uint16_t RX_BUFFER_SIZE_MASK = RX_BUFFER_SIZE - 1;
 static const DRAM_ATTR uint8_t ESP_CMD_TOOL_ACK = CMD_TOOL_ACK;
 
 static uart_t *uart1 = NULL;
-
-static stream_rx_buffer_t rxbuffer = {0}, rxbackup;
+static stream_rx_buffer_t rxbuffer = {0};
 
 #if SERIAL2_ENABLE
-
 static uart_t *uart2 = NULL;
-
 static stream_rx_buffer_t rxbuffer2 = {0};
-
-static stream_rx_buffer_t rxbackup2;
-
 #endif
 
 IRAM_ATTR static void _uart1_isr (void *arg)
@@ -105,10 +98,7 @@ IRAM_ATTR static void _uart1_isr (void *arg)
         c = uart1->dev->fifo.rw_byte;
 
         if(c == ESP_CMD_TOOL_ACK && !rxbuffer.backup) {
-
-            memcpy(&rxbackup, &rxbuffer, sizeof(stream_rx_buffer_t));
-            rxbuffer.backup = true;
-            rxbuffer.tail = rxbuffer.head;
+	        stream_rx_backup(&rxbuffer);
             hal.stream.read = serialRead; // restore normal input
 
         } else if(!hal.stream.enqueue_realtime_command(c)) {
@@ -264,12 +254,6 @@ uint32_t serialAvailableForWrite (void)
     return uart1 ? 0x7f - uart1->dev->status.txfifo_cnt : 0;
 }
 
-// "dummy" version of serialGetC
-static int16_t serialGetNull (void)
-{
-    return -1;
-}
-
 int16_t serialRead (void)
 {
     UART_MUTEX_LOCK(uart1);
@@ -328,14 +312,12 @@ IRAM_ATTR void serialCancel (void)
 
 IRAM_ATTR bool serialSuspendInput (bool suspend)
 {
+    bool ok;
     UART_MUTEX_LOCK(uart1);
-    if(suspend)
-        hal.stream.read = serialGetNull;
-    else if(rxbuffer.backup)
-        memcpy(&rxbuffer, &rxbackup, sizeof(stream_rx_buffer_t));
+    ok = stream_rx_suspend(&rxbuffer, suspend);
     UART_MUTEX_UNLOCK(uart1);
 
-    return rxbuffer.tail != rxbuffer.head;
+    return ok;
 }
 
 #if SERIAL2_ENABLE
@@ -371,12 +353,8 @@ static void IRAM_ATTR _uart2_isr (void *arg)
         }
 #else
         if(c == ESP_CMD_TOOL_ACK && !rxbuffer.backup) {
-
-            memcpy(&rxbackup2, &rxbuffer2, sizeof(stream_rx_buffer_t));
-            rxbuffer2.backup = true;
-            rxbuffer2.tail = rxbuffer.head;
+            stream_rx_backup(&rxbuffer2);
             hal.stream.read = serial2Read; // restore normal input
-
         } else if(!hal.stream.enqueue_realtime_command(c)) {
 
             uint32_t bptr = (rxbuffer2.head + 1) & RX_BUFFER_SIZE_MASK;  // Get next head pointer
@@ -556,14 +534,12 @@ IRAM_ATTR void serial2Cancel (void)
 
 bool serial2SuspendInput (bool suspend)
 {
+    bool ok;
     UART_MUTEX_LOCK(uart2);
-    if(suspend)
-        hal.stream.read = serialGetNull;
-    else if(rxbuffer2.backup)
-        memcpy(&rxbuffer2, &rxbackup2, sizeof(stream_rx_buffer_t));
+    ok = stream_rx_suspend(&rxbuffer2, suspend);
     UART_MUTEX_UNLOCK(uart2);
 
-    return rxbuffer2.tail != rxbuffer2.head;
+    return ok;
 }
 
 #endif

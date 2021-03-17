@@ -586,7 +586,7 @@ static void onReportCommandHelp (void)
     hal.stream.write("$F=<filename> - run SD card file" ASCII_EOL);
     hal.stream.write("$FM - mount SD card" ASCII_EOL);
     hal.stream.write("$FR - enable rewind mode for next SD card file to run" ASCII_EOL);
-    hal.stream.write("$F<<filename> - dump SD card file to output" ASCII_EOL);
+    hal.stream.write("$F<=<filename> - dump SD card file to output" ASCII_EOL);
 
     if(on_report_command_help)
         on_report_command_help();

@@ -3,6 +3,10 @@
     "editor.fontSize": 12,
     "files.associations": {
         "irq.h": "c",
-        "i2c.h": "c"
+        "i2c.h": "c",
+        "driverpio.pio.h": "c",
+        "tusb.h": "c",
+        "time.h": "c",
+        "stdbool.h": "c"
     }
 }

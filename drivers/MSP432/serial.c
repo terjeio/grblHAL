@@ -4,7 +4,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2017-2020 Terje Io
+  Copyright (c) 2017-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -29,7 +29,7 @@
 #define TXBUSY(uart) ((uart->IE & EUSCI_A_IE_TXIE) || (uart->STATW & EUSCI_A_STATW_BUSY))
 
 static stream_tx_buffer_t txbuffer = {0};
-static stream_rx_buffer_t rxbuffer = {0}, rxbackup;
+static stream_rx_buffer_t rxbuffer = {0};
 
 #ifdef SERIAL2_MOD
 static stream_tx_buffer_t txbuffer2 = {0};
@@ -214,20 +214,9 @@ int16_t serialGetC (void)
     return (int16_t)data;
 }
 
-// "dummy" version of serialGetC
-static int16_t serialGetNull (void)
-{
-    return -1;
-}
-
 bool serialSuspendInput (bool suspend)
 {
-    if(suspend)
-        hal.stream.read = serialGetNull;
-    else if(rxbuffer.backup)
-        memcpy(&rxbuffer, &rxbackup, sizeof(stream_rx_buffer_t));
-
-    return rxbuffer.tail != rxbuffer.head;
+    return stream_rx_suspend(&rxbuffer, suspend);
 }
 
 //
@@ -249,12 +238,8 @@ void SERIAL_IRQHandler (void)
         case 0x02:;
             uint16_t data = SERIAL_MODULE->RXBUF;           // Read character received
             if(data == CMD_TOOL_ACK && !rxbuffer.backup) {
-
-                memcpy(&rxbackup, &rxbuffer, sizeof(stream_rx_buffer_t));
-                rxbuffer.backup = true;
-                rxbuffer.tail = rxbuffer.head;
+                stream_rx_backup(&rxbuffer);
                 hal.stream.read = serialGetC; // restore normal input
-
             } else if(!hal.stream.enqueue_realtime_command((char)data)) {
 
                 bptr = (rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1);  // Get next head pointer

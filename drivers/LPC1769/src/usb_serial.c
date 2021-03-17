@@ -4,7 +4,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2017-2020 Terje Io
+  Copyright (c) 2017-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -120,7 +120,7 @@ typedef struct {
 } usb_tx_buf;
 
 static usb_tx_buf txbuf = {0};
-static stream_rx_buffer_t rxbuf = {0}, rxbackup;
+static stream_rx_buffer_t rxbuf = {0};
 
 void usbInit (void)
 {
@@ -233,20 +233,9 @@ int16_t usbGetC (void)
     return (int16_t)data;
 }
 
-// "dummy" version of serialGetC
-static int16_t usbGetNull (void)
-{
-    return -1;
-}
-
 bool usbSuspendInput (bool suspend)
 {
-    if(suspend)
-        hal.stream.read = usbGetNull;
-    else if(rxbuf.backup)
-        memcpy(&rxbuf, &rxbackup, sizeof(stream_rx_buffer_t));
-
-    return rxbuf.tail != rxbuf.head;
+    return stream_rx_suspend(&rxbuf, suspend);
 }
 
 void usbBufferInput (uint8_t *data, uint32_t length)
@@ -259,12 +248,8 @@ void usbBufferInput (uint8_t *data, uint32_t length)
             rxbuf.overflow = 1;                                             // flag overflow
         } else {
             if(*data == CMD_TOOL_ACK && !rxbuf.backup) {
-
-                memcpy(&rxbackup, &rxbuf, sizeof(stream_rx_buffer_t));
-                rxbuf.backup = true;
-                rxbuf.tail = rxbuf.head;
+                stream_rx_backup(&rxbuf);
                 hal.stream.read = usbGetC; // restore normal input
-
             } else if(!hal.stream.enqueue_realtime_command(*data)) {        // Check and strip realtime commands,
                 rxbuf.data[rxbuf.head] = *data;                             // if not add data to buffer
                 rxbuf.head = next_head;                                     // and update pointer

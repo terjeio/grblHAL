@@ -392,12 +392,8 @@ static void enetStreamWriteS (const char *data)
         .get_rx_buffer_available = TCPStreamRxFree,
         .reset_read_buffer = TCPStreamRxFlush,
         .cancel_read_buffer = TCPStreamRxCancel,
-        .enqueue_realtime_command = protocol_enqueue_realtime_command,
-    #if M6_ENABLE
-        .suspend_read = NULL // for now...
-    #else
-        .suspend_read = NULL
-    #endif
+        .suspend_read = TCPStreamSuspendInput,
+        .enqueue_realtime_command = protocol_enqueue_realtime_command
     };
   #endif
 
@@ -410,12 +406,8 @@ static void enetStreamWriteS (const char *data)
         .get_rx_buffer_available = WsStreamRxFree,
         .reset_read_buffer = WsStreamRxFlush,
         .cancel_read_buffer = WsStreamRxCancel,
-        .enqueue_realtime_command = protocol_enqueue_realtime_command,
-    #if M6_ENABLE
-        .suspend_read = NULL // for now...
-    #else
-        .suspend_read = NULL
-    #endif
+        .suspend_read = WsStreamSuspendInput,
+        .enqueue_realtime_command = protocol_enqueue_realtime_command
     };
   #endif
 
@@ -472,7 +464,7 @@ static void (*systick_isr_org)(void) = NULL;
 
 // Millisecond resolution delay function
 // Will return immediately if a callback function is provided
-static void driver_delay_ms (uint32_t ms, void (*callback)(void))
+static void driver_delay_ms (uint32_t ms, delay_callback_ptr callback)
 {
     if(ms) {
         grbl_delay.ms = ms;
@@ -2086,7 +2078,7 @@ bool driver_init (void)
         options[strlen(options) - 1] = '\0';
 
     hal.info = "iMXRT1062";
-    hal.driver_version = "210221";
+    hal.driver_version = "210313";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif

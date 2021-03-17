@@ -1,12 +1,12 @@
 //
 // TCPStream.h - lwIP stream implementation
 //
-// v1.0 / 2018-09-21 / Io Engineering / Terje
+// v1.3 / 2021-03-13 / Io Engineering / Terje
 //
 
 /*
 
-Copyright (c) 2018, Terje Io
+Copyright (c) 2018-2021, Terje Io
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -54,5 +54,6 @@ uint16_t TCPStreamRxCount(void);
 uint16_t TCPStreamRxFree(void);
 void TCPStreamRxFlush(void);
 void TCPStreamRxCancel(void);
+bool TCPStreamSuspendInput (bool suspend);
 
 #endif

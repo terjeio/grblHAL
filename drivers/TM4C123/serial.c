@@ -1,12 +1,12 @@
 //
 // serial.c - (UART) port library for Tiva
 //
-// v1.6 / 2019-12-20 / Io Engineering / Terje
+// v1.6 / 2021-03-14 / Io Engineering / Terje
 //
 
 /*
 
-Copyright (c) 2017-2019, Terje Io
+Copyright (c) 2017-2021, Terje Io
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -42,7 +42,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 static void uart_interrupt_handler (void);
 
 static stream_tx_buffer_t txbuffer = {0};
-static stream_rx_buffer_t rxbuffer = {0}, rxbackup;
+static stream_rx_buffer_t rxbuffer = {0};
 
 void serialInit (void)
 {
@@ -188,20 +188,9 @@ bool serialPutC (const char c)
     return true;
 }
 
-// "dummy" version of serialGetC
-static int16_t serialGetNull (void)
-{
-    return -1;
-}
-
 bool serialSuspendInput (bool suspend)
 {
-    if(suspend)
-        hal.stream.read = serialGetNull;
-    else if(rxbuffer.backup)
-        memcpy(&rxbuffer, &rxbackup, sizeof(stream_rx_buffer_t));
-
-    return rxbuffer.tail != rxbuffer.head;
+    return stream_rx_suspend(&rxbuffer, suspend);
 }
 
 uint16_t serialTxCount(void) {
@@ -248,11 +237,8 @@ static void uart_interrupt_handler (void)
         } else {
             data = UARTCharGet(UARTCH);
             if(data == CMD_TOOL_ACK && !rxbuffer.backup) {
-                memcpy(&rxbackup, &rxbuffer, sizeof(stream_rx_buffer_t));
-                rxbuffer.backup = true;
-                rxbuffer.tail = rxbuffer.head;
+                stream_rx_backup(&rxbuffer);
                 hal.stream.read = serialGetC; // restore normal input
-
             } else if(!hal.stream.enqueue_realtime_command((char)data)) {
                 rxbuffer.data[rxbuffer.head] = (char)data;  // Add data to buffer
                 rxbuffer.head = bptr;                       // and update pointer

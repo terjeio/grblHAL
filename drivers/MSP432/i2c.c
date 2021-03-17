@@ -312,13 +312,13 @@ void i2c_init (void)
 {
     memset(&i2c, 0, sizeof(i2c_tr_trans_t));
 
+    P6->SEL0 |= BIT4|BIT5;                                                          // Assign I2C pins to USCI_B1
+
     if(!I2CPOS()) {
         protocol_enqueue_rt_command(pos_failed);
         system_raise_alarm(Alarm_SelftestFailed);
         return;
     }
-
-    P6->SEL0 |= BIT4|BIT5;                                                          // Assign I2C pins to USCI_B1
 
     I2C_PORT->CTLW0 |= EUSCI_B_CTLW0_SWRST;                                         // Put I2C_PORT in reset state
     I2C_PORT->CTLW0 |= EUSCI_B_CTLW0_MODE_3|EUSCI_B_CTLW0_MST| EUSCI_B_CTLW0_SYNC;  // I2C master mode, SMCLK

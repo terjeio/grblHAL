@@ -36,7 +36,7 @@
 #include "nvs.h"
 #include "grbl/protocol.h"
 #include "esp_log.h"
-#include "grbl_esp32_if/grbl_esp32_if.h"
+//#include "grbl_esp32_if/grbl_esp32_if.h"
 
 #ifdef USE_I2S_OUT
 #include "i2s_out.h"
@@ -190,7 +190,7 @@ const io_stream_t telnet_stream = {
     .get_rx_buffer_available = TCPStreamRxFree,
     .reset_read_buffer = TCPStreamRxFlush,
     .cancel_read_buffer = TCPStreamRxCancel,
-    .suspend_read = serialSuspendInput,
+    .suspend_read = TCPStreamSuspendInput,
     .enqueue_realtime_command = protocol_enqueue_realtime_command
 };
 #endif
@@ -204,12 +204,8 @@ const io_stream_t websocket_stream = {
     .get_rx_buffer_available = WsStreamRxFree,
     .reset_read_buffer = WsStreamRxFlush,
     .cancel_read_buffer = WsStreamRxCancel,
+    .suspend_read = WsStreamSuspendInput,
     .enqueue_realtime_command = protocol_enqueue_realtime_command,
-#if M6_ENABLE
-    .suspend_read = NULL // for now...
-#else
-    .suspend_read = NULL
-#endif
 };
 #endif
 
@@ -517,7 +513,6 @@ inline IRAM_ATTR static void set_dir_outputs (axes_signals_t dir_outbits)
     DIGITAL_OUT(C_DIRECTION_PIN, dir_outbits.c);
 #endif
 }
-
 
 // Enable/disable steppers
 static void stepperEnable (axes_signals_t enable)
@@ -1479,7 +1474,7 @@ bool driver_init (void)
     serialInit();
 
     hal.info = "ESP32";
-    hal.driver_version = "210207";
+    hal.driver_version = "210314";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif

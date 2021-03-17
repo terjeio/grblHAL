@@ -5,7 +5,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2017-2019 Terje Io
+  Copyright (c) 2017-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -26,24 +26,13 @@
 
 static void uart_interrupt_handler (void);
 
-static stream_rx_buffer_t rxbuffer = {
-    .head = 0,
-    .tail = 0,
-    .backup = false,
-    .overflow = false,
- //   .rts_state = false
-};
-static stream_rx_buffer_t rxbackup;
+static stream_tx_buffer_t txbuffer = {0};
+static stream_rx_buffer_t rxbuffer = {0};
 
-static char txbuf[TX_BUFFER_SIZE];
-static volatile uint_fast16_t tx_head = 0, tx_tail = 0;
-
- #ifdef SERIAL2_MOD
-   static char rx2buf[RX_BUFFER_SIZE];
-   static volatile uint_fast16_t rx2_head = 0, rx2_tail = 0, rx2_overflow = 0;
-
-  static void uart2_interrupt_handler (void);
- #endif
+#ifdef SERIAL2_MOD
+static stream_rx_buffer_t rx2buf;
+static void uart2_interrupt_handler (void);
+#endif
 
 void serialInit (void)
 {
@@ -131,12 +120,6 @@ int16_t serialGetC (void)
     return (int16_t)c;
 }
 
-// "dummy" version of serialGetC
-static int16_t serialGetNull (void)
-{
-    return -1;
-}
-
 inline uint16_t serialRxCount (void)
 {
     uint16_t head = rxbuffer.head, tail = rxbuffer.tail;
@@ -173,17 +156,17 @@ bool serialPutC (const char c)
 {
     uint32_t next_head;
 
-    if(tx_head != tx_tail || !UARTCharPutNonBlocking(SERIAL1_BASE, c)) {  // Send character without buffering if possible
+    if(txbuffer.head != txbuffer.tail || !UARTCharPutNonBlocking(SERIAL1_BASE, c)) {  // Send character without buffering if possible
 
-        next_head = (tx_head + 1) & (TX_BUFFER_SIZE - 1);           // Get and update head pointer
+        next_head = (txbuffer.head + 1) & (TX_BUFFER_SIZE - 1);           // Get and update head pointer
 
-        while(tx_tail == next_head) {                               // Buffer full, block until space is available...
+        while(txbuffer.tail == next_head) {                               // Buffer full, block until space is available...
             if(!hal.stream_blocking_callback())
                 return false;
         }
 
-        txbuf[tx_head] = c;                                         // Add data to buffer
-        tx_head = next_head;                                        // and update head pointer
+        txbuffer.data[txbuffer.head] = c;                                         // Add data to buffer
+        txbuffer.head = next_head;                                        // and update head pointer
 
         UARTIntEnable(SERIAL1_BASE, UART_INT_TX); // Enable interrupts
     }
@@ -201,17 +184,12 @@ void serialWriteS (const char *data)
 
 bool serialSuspendInput (bool suspend)
 {
-    if(suspend)
-        hal.stream.read = serialGetNull;
-    else if(rxbuffer.backup)
-        memcpy(&rxbuffer, &rxbackup, sizeof(stream_rx_buffer_t));
-
-    return rxbuffer.tail != rxbuffer.head;
+    return stream_rx_suspend(&rxbuffer, suspend);
 }
 
 uint16_t serialTxCount (void)
 {
-    uint_fast16_t head = tx_head, tail = tx_tail;
+    uint_fast16_t head = txbuffer.head, tail = txbuffer.tail;
 
     return BUFCOUNT(head, tail, TX_BUFFER_SIZE);
 }
@@ -223,21 +201,21 @@ static void uart_interrupt_handler (void)
 
     if(iflags & UART_INT_TX) {
 
-        bptr = tx_tail;
+        bptr = txbuffer.tail;
 
-        if(tx_head != bptr) {
+        if(txbuffer.head != bptr) {
 
-            UARTCharPut(SERIAL1_BASE, txbuf[bptr++]);                   // Put character in TXT FIFO
+            UARTCharPut(SERIAL1_BASE, txbuffer.data[bptr++]);           // Put character in TXT FIFO
             bptr &= (TX_BUFFER_SIZE - 1);                               // and update tmp tail pointer
 
-            while(tx_head != bptr && UARTSpaceAvail(SERIAL1_BASE)) {    // While data in TX buffer and free space in TX FIFO
-                UARTCharPut(SERIAL1_BASE, txbuf[bptr++]);               // put next character
-                bptr &= (TX_BUFFER_SIZE - 1);                           // and update tmp tail pointer
+            while(txbuffer.head != bptr && UARTSpaceAvail(SERIAL1_BASE)) {  // While data in TX buffer and free space in TX FIFO
+                UARTCharPut(SERIAL1_BASE, txbuffer.data[bptr++]);           // put next character
+                bptr &= (TX_BUFFER_SIZE - 1);                               // and update tmp tail pointer
             }
 
-            tx_tail = bptr;                                     //  Update tail pinter
+            txbuffer.tail = bptr;                               //  Update tail pinter
 
-            if(bptr == tx_head)                                 // Disable TX  interrups
+            if(bptr == txbuffer.head)                           // Disable TX  interrups
                 UARTIntDisable(SERIAL1_BASE, UART_INT_TX);      // when TX buffer empty
         }
     }
@@ -247,12 +225,8 @@ static void uart_interrupt_handler (void)
         int32_t c = UARTCharGet(SERIAL1_BASE);
 
         if(c == CMD_TOOL_ACK && !rxbuffer.backup) {
-
-            memcpy(&rxbackup, &rxbuffer, sizeof(stream_rx_buffer_t));
-            rxbuffer.backup = true;
-            rxbuffer.tail = rxbuffer.head;
+            stream_rx_backup(&rxbuffer);
             hal.stream.read = serialGetC; // restore normal input
-
         } else if(!hal.stream.enqueue_realtime_command((char)c)) {
 
             bptr = (rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1);  // Get next head pointer
@@ -290,7 +264,7 @@ void serialSelect (bool mpg)
 //
 uint16_t serial2RxFree (void)
 {
-    uint_fast16_t tail = rx2_tail, head = rx2_head;
+    uint_fast16_t tail = rx2buf.tail, head = rx2buf.head;
 
     return (RX_BUFFER_SIZE - 1) - BUFCOUNT(head, tail, RX_BUFFER_SIZE);
 }
@@ -300,7 +274,7 @@ uint16_t serial2RxFree (void)
 //
 void serial2RxFlush (void)
 {
-    rx2_head = rx2_tail = 0;
+    rx2buf.head = rx2buf.tail;
 }
 
 //
@@ -308,9 +282,9 @@ void serial2RxFlush (void)
 //
 void serial2RxCancel (void)
 {
-    rx2buf[rx2_head] = ASCII_CAN;
-    rx2_tail = rx2_head;
-    rx2_head = (rx2_tail + 1) & (RX_BUFFER_SIZE - 1);
+    rx2buf.data[rx2buf.head] = ASCII_CAN;
+    rx2buf.tail = rx2buf.head;
+    rx2buf.head = (rx2buf.tail + 1) & (RX_BUFFER_SIZE - 1);
 }
 
 //
@@ -318,13 +292,13 @@ void serial2RxCancel (void)
 //
 int16_t serial2GetC (void)
 {
-    uint_fast16_t bptr = rx2_tail;
+    uint_fast16_t bptr = rx2buf.tail;
 
-    if(bptr == rx2_head)
+    if(bptr == rx2buf.head)
         return -1; // no data available else EOF
 
-    char data = rx2buf[bptr++];             // Get next character, increment tmp pointer
-    rx2_tail = bptr & (RX_BUFFER_SIZE - 1); // and update pointer
+    char data = rx2buf.data[bptr++];             // Get next character, increment tmp pointer
+    rx2buf.tail = bptr & (RX_BUFFER_SIZE - 1); // and update pointer
 
     return (int16_t)data;
 }
@@ -335,16 +309,16 @@ static void uart2_interrupt_handler (void)
 
     if(iflags & (UART_INT_RX|UART_INT_RT)) {
 
-        uint_fast16_t bptr = (rx2_head + 1) & (RX_BUFFER_SIZE - 1); // Get next head pointer
+        uint_fast16_t bptr = (rx2buf.head + 1) & (RX_BUFFER_SIZE - 1); // Get next head pointer
 
-        if(bptr == rx2_tail) {                                      // If buffer full
-            rx2_overflow = 1;                                       // flag overlow
+        if(bptr == rx2buf.tail) {                                      // If buffer full
+            rx2buf.overflow = 1;                                       // flag overlow
             UARTCharGet(SERIAL2_BASE);                              // and do dummy read to clear interrupt;
         } else {
             int32_t c = UARTCharGet(SERIAL2_BASE);
             if(!hal.stream.enqueue_realtime_command((char)c)) {
-                rx2buf[rx2_head] = (char)c; // Add data to buffer
-                rx2_head = bptr;            // and update pointer
+                rx2buf.data[rx2buf.head] = (char)c; // Add data to buffer
+                rx2buf.head = bptr;                 // and update pointer
             }
         }
     }

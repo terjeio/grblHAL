@@ -25,5 +25,5 @@
 
 int main (void)
 {
-  grbl_enter();
+    grbl_enter();
 }

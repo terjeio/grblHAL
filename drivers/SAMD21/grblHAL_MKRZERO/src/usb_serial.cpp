@@ -33,10 +33,9 @@ extern "C" {
 
 #define BLOCK_RX_BUFFER_SIZE 20
 
-static stream_block_tx_buffer_t txbuf = {0};
 static char rxbuf[BLOCK_RX_BUFFER_SIZE];
-
-static stream_rx_buffer_t usb_rxbuffer, usb_rxbackup;
+static stream_rx_buffer_t usb_rxbuffer;
+static stream_block_tx_buffer_t txbuf = {0};
 
 void usb_serialInit(void)
 {
@@ -176,20 +175,9 @@ int16_t usb_serialGetC (void)
     return (int16_t)data;
 }
 
-// "dummy" version of serialGetC
-static int16_t serialGetNull (void)
-{
-    return -1;
-}
-
 bool usb_serialSuspendInput (bool suspend)
 {
-    if(suspend)
-        hal.stream.read = serialGetNull;
-    else if(usb_rxbuffer.backup)
-        memcpy(&usb_rxbuffer, &usb_rxbackup, sizeof(stream_rx_buffer_t));
-
-    return usb_rxbuffer.tail != usb_rxbuffer.head;
+    return stream_rx_suspend(&usb_rxbuffer, suspend);
 }
 
 //
@@ -215,9 +203,7 @@ void usb_execute_realtime (uint_fast16_t state)
         while(avail--) {
             c = *dp++;
             if(c == CMD_TOOL_ACK && !usb_rxbuffer.backup) {
-                memcpy(&usb_rxbackup, &usb_rxbuffer, sizeof(stream_rx_buffer_t));
-                usb_rxbuffer.backup = true;
-                usb_rxbuffer.tail = usb_rxbuffer.head;
+                stream_rx_backup(&usb_rxbuffer);
                 hal.stream.read = usb_serialGetC; // restore normal input
             } else if(!hal.stream.enqueue_realtime_command(c)) {;
                 uint32_t bptr = (usb_rxbuffer.head + 1) & (RX_BUFFER_SIZE - 1); // Get next head pointer
