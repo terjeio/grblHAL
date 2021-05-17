@@ -579,6 +579,7 @@
 // for professional CNC machines, regardless of where the limit switches are located. Set this
 // define to 1 to force Grbl to always set the machine origin at the homed location despite switch orientation.
 //#define HOMING_FORCE_SET_ORIGIN // Default disabled. Uncomment to enable.
+#define HOMING_FORCE_SET_ORIGIN     1
 
 // To prevent the homing cycle from racking the dual axis, when one limit triggers before the
 // other due to switch failure or noise, the homing cycle will automatically abort if the second

@@ -233,16 +233,19 @@ static uint32_t dir_outmap[sizeof(c_dir_outmap) / sizeof(uint32_t)];
 
 #define DRIVER_IRQMASK (LIMIT_MASK|CONTROL_MASK|KEYPAD_STROBE_BIT|SPINDLE_INDEX_BIT)
 
-static void driver_delay (uint32_t ms, void (*callback)(void))
+static void driver_delay (uint32_t ms, delay_callback_ptr callback)
 {
     if((delay.ms = ms) > 0) {
         // Restart systick...
-        SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
-        SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
+//        SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
+//        SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
         if(!(delay.callback = callback))
             while(delay.ms);
-    } else if(callback)
-        callback();
+    } else {
+        delay.callback = NULL;
+        if(callback)
+            callback();
+    }
 }
 
 // Enable/disable stepper motors
@@ -1380,7 +1383,7 @@ bool driver_init (void)
 #else
     hal.info = "STM32F401CC";
 #endif
-    hal.driver_version = "210312";
+    hal.driver_version = "210423";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1434,6 +1437,7 @@ bool driver_init (void)
     hal.stream.read = usbGetC;
     hal.stream.write = usbWriteS;
     hal.stream.write_all = usbWriteS;
+    hal.stream.write_char = usbPutC;
     hal.stream.get_rx_buffer_available = usbRxFree;
     hal.stream.reset_read_buffer = usbRxFlush;
     hal.stream.cancel_read_buffer = usbRxCancel;
@@ -1442,6 +1446,7 @@ bool driver_init (void)
     hal.stream.read = serialGetC;
     hal.stream.write = serialWriteS;
     hal.stream.write_all = serialWriteS;
+    hal.stream.write_char = serialPutC;
     hal.stream.get_rx_buffer_available = serialRxFree;
     hal.stream.reset_read_buffer = serialRxFlush;
     hal.stream.cancel_read_buffer = serialRxCancel;
@@ -1662,7 +1667,7 @@ void EXTI0_IRQHandler(void)
             DEBOUNCE_TIMER->CR1 |= TIM_CR1_CEN; // Start debounce timer (40ms)
         } else
   #endif
-#elif KEYPAD_STROBE_BIT & (1<<0)
+#elif defined(KEYPAD_ENABLED) && KEYPAD_STROBE_BIT & (1<<0)
         keypad_keyclick_handler(BITBAND_PERI(KEYPAD_PORT->IDR, KEYPAD_STROBE_PIN) == 0);
 #else
         if(hal.driver_cap.software_debounce) {
@@ -1885,7 +1890,7 @@ void EXTI15_10_IRQHandler(void)
 #endif
 
 // Interrupt handler for 1 ms interval timer
-void HAL_IncTick(void)
+void Driver_IncTick (void)
 {
 #ifdef Z_LIMIT_POLL
     static bool z_limit_state = false;
@@ -1910,7 +1915,6 @@ void HAL_IncTick(void)
         fatfs_ticks = 10;
     }
 #endif
-    uwTick += uwTickFreq;
 
     if(delay.ms && !(--delay.ms)) {
         if(delay.callback) {

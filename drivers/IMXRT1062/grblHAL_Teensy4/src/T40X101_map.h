@@ -5,7 +5,7 @@
 
   Board by Phil Barrett: https://github.com/phil-barrett/grblHAL-teensy-4.x
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -29,6 +29,10 @@
 
 #if QEI_ENABLE
 #error No pins available for encoder input!
+#endif
+
+#if SPINDLE_SYNC_ENABLE
+#error Spindle sync is not supported for T40X101
 #endif
 
 // Default pin assignments allow only one axis to be ganged or auto squared.
@@ -74,7 +78,9 @@
 #if Z_GANGED || Z_AUTO_SQUARE
 #define Z2_STEP_PIN      (8u)
 #define Z2_DIRECTION_PIN (9u)
-#define Z2_LIMIT_PIN     (23u)
+#if Z_AUTO_SQUARE
+  #define Z2_LIMIT_PIN   (23u)
+#endif
 #endif
 
 #if N_AXIS > 3
@@ -113,6 +119,6 @@
 
 #if EEPROM_ENABLE || KEYPAD_ENABLE
 #define I2C_PORT    4
-#define I2C_SCL4    (24u) // Not used, for info only
-#define I2C_SDA4    (25u) // Not used, for info only
+#define I2C_SCL4    (24u) // Not referenced, for info only
+#define I2C_SDA4    (25u) // Not referenced, for info only
 #endif

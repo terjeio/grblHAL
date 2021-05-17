@@ -5,7 +5,7 @@
 
   Board by Phil Barrett: https://github.com/phil-barrett/grblHAL-teensy-4.x
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -24,10 +24,12 @@
 #define BOARD_NAME "T41U5XBB"
 #define HAS_BOARD_INIT
 
-void board_init (void);
-
 #if N_AXIS > 5
 #error Max number of axes is 5 for T41U5XBB
+#endif
+
+#if SPINDLE_SYNC_ENABLE
+#error Spindle sync is not supported for T41U5XBB
 #endif
 
 // Default pin assignments allow only one axis to be ganged or auto squared.
@@ -61,12 +63,13 @@ void board_init (void);
 #define Y_ENABLE_PIN    (40u)
 #define Y_LIMIT_PIN     (21u)
 
+// Changed to use A pins rather than B pins
 #if Y_GANGED || Y_AUTO_SQUARE
-#define Y2_STEP_PIN      (26u)
-#define Y2_DIRECTION_PIN (27u)
-#define Y2_ENABLE_PIN    (37u)
+#define Y2_STEP_PIN      (8u)
+#define Y2_DIRECTION_PIN (9u)
+#define Y2_ENABLE_PIN    (38u)
 #if Y_AUTO_SQUARE
-  #define Y2_LIMIT_PIN   (28u)
+  #define Y2_LIMIT_PIN   (23u)
 #endif
 #endif
 
@@ -79,7 +82,9 @@ void board_init (void);
 #define Z2_STEP_PIN      (26u)
 #define Z2_DIRECTION_PIN (27u)
 #define Z2_ENABLE_PIN    (37u)
-#define Z2_LIMIT_PIN     (28u)
+#if Z_AUTO_SQUARE
+  #define Z2_LIMIT_PIN   (28u)
+#endif
 #endif
 
 #if N_AXIS > 3
@@ -112,7 +117,13 @@ void board_init (void);
 #define SAFETY_DOOR_PIN     (29u)
 
 // Define probe switch input pin.
-#define PROBE_PIN           (15U)
+#define PROBE_PIN           (15u)
+
+#if QEI_ENABLE
+#define QEI_A_PIN           (30u) // ST1
+#define QEI_B_PIN           (34u) // ST2
+#define QEI_SELECT_PIN      (35u) // ST3
+#endif
 
 // Define auxillary input pins
 #define AUXINPUT0_PIN       (36u) // ST0
@@ -120,11 +131,6 @@ void board_init (void);
 #define AUXINPUT1_PIN       (30u) // ST1
 #define AUXINPUT2_PIN       (34u) // ST2
 #define AUXINPUT3_PIN       (35u) // ST3
-#define AUX_N_IN 4
-#define AUX_IN_MASK 0b1111
-#else
-#define AUX_N_IN 1
-#define AUX_IN_MASK 0b1
 #endif
 
 #define AUXOUTPUT0_PIN      (31u) // AUX0
@@ -139,12 +145,6 @@ void board_init (void);
 
 #if EEPROM_ENABLE || KEYPAD_ENABLE
 #define I2C_PORT    4
-#define I2C_SCL4    (24u) // Not used, for info only
-#define I2C_SDA4    (25u) // Not used, for info only
-#endif
-
-#if QEI_ENABLE
-#define QEI_A_PIN      (30u) // ST1
-#define QEI_B_PIN      (34u) // ST2
-#define QEI_SELECT_PIN (35u) // ST3
+#define I2C_SCL4    (24u) // Not referenced, for info only
+#define I2C_SDA4    (25u) // Not referenced, for info only
 #endif

@@ -207,7 +207,7 @@ void board_init (void);
 #define SPINDLE_PWM_USE_PRIMARY_PIN   false
 #define SPINDLE_PWM_USE_SECONDARY_PIN true
 
-#ifdef SDCARD_ENABLE
+#if SDCARD_ENABLE
 #define SD_SPI_PORT 1
 #define SD_CS_PN    0
 #define SD_CS_PORT  port(SD_CS_PN)

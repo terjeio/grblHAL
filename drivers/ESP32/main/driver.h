@@ -270,6 +270,8 @@ typedef struct {
   #include "bdring_i2s_6_axis_map.h"
 #elif defined(BOARD_ESPDUINO32)
   #include "espduino-32_wemos_d1_r32_uno_map.h"
+#elif defined(BOARD_SOURCERABBIT_4AXIS)
+  #include "sourcerabbit_4axis.h"
 #elif defined(BOARD_MY_MACHINE)
   #include "my_machine_map.h"
 #else // default board - NOTE: NOT FINAL VERSION!

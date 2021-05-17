@@ -4,6 +4,7 @@
   Part of grblHAL
 
   Copyright (c) 2021 Terje Io
+  Copyright (c) 2021 Volksolive
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by

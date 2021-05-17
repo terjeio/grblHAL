@@ -136,17 +136,17 @@ static void driverReset (void)
     }
 }
 
-static void onProgramCompleted (program_flow_t program_flow)
+static void onProgramCompleted (program_flow_t program_flow, bool check_mode)
 {
     // Keep coolant and exhaust (flood) on? Setting? Delayed task?
-    if(coolant_on) {
+    if(coolant_on && !check_mode) {
         coolant_on = false;
         hal.port.digital_out(LASER_COOLANT_ON_PORT, false);
         sys.report.coolant = On; // Set to report change immediately
     }
 
     if(on_program_completed)
-        on_program_completed(program_flow);
+        on_program_completed(program_flow, check_mode);
 }
 
 static void onRealtimeReport (stream_write_ptr stream_write, report_tracking_flags_t report)

@@ -34,6 +34,8 @@ static bool use_tx2data = false;
 static stream_rx_buffer_t rxbuf = {0};
 static stream_block_tx_buffer_t txbuf = {0};
 
+// NOTE: USB interrupt priority should be set lower than stepper/step timer to avoid jitter
+// It is set in HAL_PCD_MspInit() in usbd_conf.c
 void usbInit (void)
 {
     MX_USB_DEVICE_Init();
@@ -98,10 +100,26 @@ static inline bool usb_write (void)
 }
 
 //
+// Writes a single character to the USB output stream, blocks if buffer full
+//
+bool usbPutC (const char c)
+{
+    static uint8_t buf[1];
+
+    *buf = c;
+
+    while(CDC_Transmit_FS(buf, 1) == USBD_BUSY) {
+        if(!hal.stream_blocking_callback())
+            return false;
+    }
+
+    return true;
+}
+
+//
 // Writes a null terminated string to the USB output stream, blocks if buffer full
 // Buffers string up to EOL (LF) before transmitting
 //
-
 void usbWriteS (const char *s)
 {
     size_t length = strlen(s);
@@ -142,6 +160,7 @@ bool usbSuspendInput (bool suspend)
     return stream_rx_suspend(&rxbuf, suspend);
 }
 
+// NOTE: add a call to this function as the first line CDC_Receive_FS() in usbd_cdc_if.c
 void usbBufferInput (uint8_t *data, uint32_t length)
 {
     while(length--) {

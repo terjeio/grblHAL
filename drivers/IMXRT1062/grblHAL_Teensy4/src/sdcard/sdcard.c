@@ -46,6 +46,8 @@
   #include "grbl/state_machine.h"
 #endif
 
+#include "sdcard/ymodem.h"
+
 #ifdef __IMXRT1062__
 const char *dev = "1:/";
 #elif defined(NEW_FATFS)
@@ -124,7 +126,7 @@ static on_report_options_ptr on_report_options;
 static void sdcard_end_job (void);
 static void sdcard_report (stream_write_ptr stream_write, report_tracking_flags_t report);
 static void trap_state_change_request(uint_fast16_t state);
-static void sdcard_on_program_completed (program_flow_t program_flow);
+static void sdcard_on_program_completed (program_flow_t program_flow, bool check_mode);
 //static report_t active_reports;
 
 #ifdef __MSP432E401Y__
@@ -379,8 +381,10 @@ static int16_t sdcard_read (void)
                 c = '\n';
         }
 
-    } else if(state == STATE_IDLE) // TODO: end on ok count match line count?
-        sdcard_end_job();
+    } else if((state == STATE_IDLE || state == STATE_CHECK_MODE) && grbl.on_program_completed == sdcard_on_program_completed) { // TODO: end on ok count match line count?
+        sdcard_on_program_completed(ProgramFlow_CompletedM30, state == STATE_CHECK_MODE);
+        grbl.report.feedback_message(Message_ProgramEnd);
+    }
 
     return c;
 }
@@ -429,7 +433,9 @@ static status_code_t trap_status_report (status_code_t status_code)
 
 static void sdcard_report (stream_write_ptr stream_write, report_tracking_flags_t report)
 {
-    if(hal.stream.read != await_cycle_start) {
+    if(hal.stream.read == await_cycle_start)
+        stream_write("|SD:Pending");
+    else {
         char *pct_done = ftoa((float)file.pos / (float)file.size * 100.0f, 1);
 
         if(state_get() != STATE_IDLE && !strncmp(pct_done, "100.0", 5))
@@ -450,7 +456,7 @@ static void sdcard_restart_msg (sys_state_t state)
     report_feedback_message(Message_CycleStartToRerun);
 }
 
-static void sdcard_on_program_completed (program_flow_t program_flow)
+static void sdcard_on_program_completed (program_flow_t program_flow, bool check_mode)
 {
     frewind = frewind || program_flow == ProgramFlow_CompletedM2; // || program_flow == ProgramFlow_CompletedM30;
 
@@ -468,7 +474,7 @@ static void sdcard_on_program_completed (program_flow_t program_flow)
         sdcard_end_job();
 
     if(on_program_completed)
-        on_program_completed(program_flow);
+        on_program_completed(program_flow, check_mode);
 }
 
 #if M6_ENABLE
@@ -566,14 +572,29 @@ static status_code_t sd_cmd_to_output (sys_state_t state, char *args)
     return retval;
 }
 
+static status_code_t sd_cmd_unlink (sys_state_t state, char *args)
+{
+    status_code_t retval = Status_Unhandled;
+
+#if FF_FS_READONLY == 0 && FF_FS_MINIMIZE == 0
+    if (!(state == STATE_IDLE || state == STATE_CHECK_MODE))
+        retval = Status_SystemGClock;
+    else if(args)
+        retval = f_unlink(args) ? Status_OK : Status_SDReadError;
+#endif
+
+    return retval;
+}
+
 static void sdcard_reset (void)
 {
     if(hal.stream.type == StreamType_SDCard) {
         if(file.line > 0) {
             char buf[70];
-            sprintf(buf, "[MSG:Reset during streaming of SD file at line: " UINT32FMT "]" ASCII_EOL, file.line);
-            hal.stream.write(buf);
-        }
+            sprintf(buf, "Reset during streaming of SD file at line: " UINT32FMT, file.line);
+            report_message(buf, Message_Plain);
+        } else if(frewind)
+            report_feedback_message(Message_None);
         sdcard_end_job();
     }
 
@@ -585,6 +606,9 @@ static void onReportCommandHelp (void)
     hal.stream.write("$F - list files on SD card" ASCII_EOL);
     hal.stream.write("$F=<filename> - run SD card file" ASCII_EOL);
     hal.stream.write("$FM - mount SD card" ASCII_EOL);
+#if FF_FS_READONLY == 0 && FF_FS_MINIMIZE == 0
+    hal.stream.write("$FD=<filename> - delete SD card file" ASCII_EOL);
+#endif
     hal.stream.write("$FR - enable rewind mode for next SD card file to run" ASCII_EOL);
     hal.stream.write("$F<=<filename> - dump SD card file to output" ASCII_EOL);
 
@@ -597,15 +621,20 @@ static void onReportOptions (bool newopt)
     on_report_options(newopt);
 
     if(newopt)
+#if SDCARD_ENABLE == 2 && FF_FS_READONLY == 0
+        hal.stream.write(hal.stream.write_char == NULL ? ",SD" : ",SD,YM");
+#else
         hal.stream.write(",SD");
+#endif
     else
-        hal.stream.write("[PLUGIN:SDCARD v1.00]" ASCII_EOL);
+        hal.stream.write("[PLUGIN:SDCARD v1.02]" ASCII_EOL);
 }
 
 const sys_command_t sdcard_command_list[] = {
     {"F", false, sd_cmd_file},
     {"FM", true, sd_cmd_mount},
     {"FR", true, sd_cmd_rewind},
+    {"FD", false, sd_cmd_unlink},
     {"F<", false, sd_cmd_to_output},
 };
 
@@ -632,6 +661,11 @@ void sdcard_init (void)
 
     on_report_options = grbl.on_report_options;
     grbl.on_report_options = onReportOptions;
+
+#if SDCARD_ENABLE == 2 && FF_FS_READONLY == 0
+    if(hal.stream.write_char != NULL)
+        ymodem_init();
+#endif
 }
 
 FATFS *sdcard_getfs (void)

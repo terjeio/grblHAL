@@ -1053,7 +1053,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "TM4C123HP6PM";
-    hal.driver_version = "210206";
+    hal.driver_version = "210423";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1096,6 +1096,7 @@ bool driver_init (void)
     hal.stream.read = serialGetC;
     hal.stream.write = serialWriteS;
     hal.stream.write_all = serialWriteS;
+    hal.stream.write_char = serialPutC;
     hal.stream.get_rx_buffer_available = serialRxFree;
     hal.stream.reset_read_buffer = serialRxFlush;
     hal.stream.cancel_read_buffer = serialRxCancel;

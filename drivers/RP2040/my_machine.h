@@ -1,5 +1,5 @@
 /*
-  my_machine.h - configuration for STM32F4xx ARM processors
+  my_machine.h - configuration for Raspberry RP2040 ARM processors
 
   Part of grblHAL
 
@@ -21,15 +21,15 @@
 
 // NOTE: Only one board may be enabled!
 // If none is enabled pin mappings from generic_map.h will be used.
-//#define BOARD_??
-#define BOARD_CNC_BOOSTERPACK
+//#define BOARD_PICO_CNC
+//#define BOARD_CNC_BOOSTERPACK
 //#define BOARD_MY_MACHINE      // Add my_machine_map.h before enabling this!
 
 // Configuration
 // Uncomment to enable.
 
-#define USB_SERIAL_CDC       1 // Serial communication via native USB.
-#define SDCARD_ENABLE        1 // Run gcode programs from SD card, requires sdcard plugin.
+//#define USB_SERIAL_CDC       1 // Serial communication via native USB.
+//#define SDCARD_ENABLE        1 // Run gcode programs from SD card, requires sdcard plugin.
 //#define KEYPAD_ENABLE        1 // I2C keypad for jogging etc., requires keypad plugin.
 //#define ODOMETER_ENABLE      1 // Odometer plugin.
 //#define PPI_ENABLE           1 // Laser PPI plugin. To be completed.

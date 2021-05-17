@@ -23,33 +23,30 @@
 */
 
 #include "main.h"
-#include "usb_device.h"
-
 #include "grbl/grbllib.h"
 
-void SystemClock_Config(void);
-static void MX_GPIO_Init(void);
-uint8_t CDC_Transmit_FS(uint8_t* Buf, uint16_t Len);
+static void SystemClock_Config (void);
+static void MX_GPIO_Init (void);
 
 int main(void)
 {
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
+    /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+    HAL_Init();
 
-  /* Configure the system clock */
-  SystemClock_Config();
+    /* Configure the system clock */
+    SystemClock_Config();
 
-  /* Initialize all configured peripherals */
-  MX_GPIO_Init();
+    /* Initialize all configured peripherals */
+    MX_GPIO_Init();
 
-  grbl_enter();
+    grbl_enter();
 }
 
 /**
   * @brief System Clock Configuration
   * @retval None
   */
-void SystemClock_Config(void)
+static void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
@@ -125,7 +122,6 @@ void SystemClock_Config(void)
     RCC_OscInitStruct.PLL.PLLN = 192;
     RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
     RCC_OscInitStruct.PLL.PLLQ = 4;
-    //  RCC_OscInitStruct.PLL.PLLR = 2;
 
     #define FLASH_LATENCY FLASH_LATENCY_3
 

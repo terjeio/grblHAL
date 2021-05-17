@@ -168,6 +168,13 @@
   #include "generic_map.h"
 #endif
 
+
+#if defined(BOARD_PROTONEER_3XX) || defined(BOARD_GENERIC_UNO) || defined(BOARD_MORPHO_CNC) || defined(BOARD_MORPHO_DAC_CNC)
+#if USB_SERIAL_CDC
+#error "Nucleo based boards does not support USB CDC communication!"
+#endif
+#endif
+
 // Adjust STEP_PULSE_LATENCY to get accurate step pulse length when required, e.g if using high step rates.
 // The default value is calibrated for 10 microseconds length.
 // NOTE: step output mode, number of axes and compiler optimization settings may all affect this value.
@@ -228,5 +235,6 @@
 #endif
 
 bool driver_init (void);
+void Driver_IncTick (void);
 
 #endif // __DRIVER_H__

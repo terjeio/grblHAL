@@ -27,73 +27,79 @@
 
 // Define step pulse output pins.
 
-#define STEP_PN             2
-#define STEP_PORT           port(STEP_PN)
-#define X_STEP_PIN          0
-#define X_STEP_BIT          (1<<X_STEP_PIN)
-#define Y_STEP_PIN          1
-#define Y_STEP_BIT          (1<<Y_STEP_PIN)
-#define Z_STEP_PIN          2
-#define Z_STEP_BIT          (1<<Z_STEP_PIN)
+#define STEP_PN         2
+#define STEP_PORT       port(STEP_PN)
+#define X_STEP_PIN      0
+#define X_STEP_BIT      (1<<X_STEP_PIN)
+#define Y_STEP_PIN      1
+#define Y_STEP_BIT      (1<<Y_STEP_PIN)
+#define Z_STEP_PIN      2
+#define Z_STEP_BIT      (1<<Z_STEP_PIN)
 #ifdef A_AXIS
 #define A_STEP_PIN          3
 #define A_STEP_BIT          (1<<A_STEP_PIN)
 #define STEP_MASK           (X_STEP_BIT|Y_STEP_BIT|Z_STEP_BIT|A_STEP_BIT)
 #else
-#define STEP_MASK           (X_STEP_BIT|Y_STEP_BIT|Z_STEP_BIT)
+#define STEP_MASK       (X_STEP_BIT|Y_STEP_BIT|Z_STEP_BIT)
 #endif
-#define STEP_OUTMODE GPIO_SHIFT0
+#define STEP_OUTMODE    GPIO_SHIFT0
 
 // Define step direction output pins.
-#define DIRECTION_PN        0
-#define DIRECTION_PORT      port(DIRECTION_PN)
-#define X_DIRECTION_PIN     5
-#define X_DIRECTION_BIT     (1<<X_DIRECTION_PIN)
-#define Y_DIRECTION_PIN     11
-#define Y_DIRECTION_BIT     (1<<Y_DIRECTION_PIN)
-#define Z_DIRECTION_PIN     20
-#define Z_DIRECTION_BIT     (1<<Z_DIRECTION_PIN)
+#define DIRECTION_PN    0
+#define DIRECTION_PORT  port(DIRECTION_PN)
+#define X_DIRECTION_PIN 5
+#define X_DIRECTION_BIT (1<<X_DIRECTION_PIN)
+#define Y_DIRECTION_PIN 11
+#define Y_DIRECTION_BIT (1<<Y_DIRECTION_PIN)
+#define Z_DIRECTION_PIN 20
+#define Z_DIRECTION_BIT (1<<Z_DIRECTION_PIN)
 #ifdef A_AXIS
 #define A_DIRECTION_PIN     22
 #define A_DIRECTION_BIT     (1<<A_DIRECTION_PIN)
 #define DIRECTION_MASK      (X_DIRECTION_BIT|Y_DIRECTION_BIT|Z_DIRECTION_BIT|A_DIRECTION_BIT)
 #else
-#define DIRECTION_MASK      (X_DIRECTION_BIT|Y_DIRECTION_BIT|Z_DIRECTION_BIT)
+#define DIRECTION_MASK  (X_DIRECTION_BIT|Y_DIRECTION_BIT|Z_DIRECTION_BIT)
 #endif
 #define DIRECTION_OUTMODE GPIO_MAP
 
 // Define stepper driver enable/disable output pin(s).
-#define DISABLE_PN        0
-#define DISABLE_PORT      port(DISABLE_PN)
-#define X_DISABLE_PIN     4
-#define X_DISABLE_BIT     (1<<X_DISABLE_PIN)
-#define Y_DISABLE_PIN     10
-#define Y_DISABLE_BIT     (1<<Y_DISABLE_PIN)
-#define Z_DISABLE_PIN     19
-#define Z_DISABLE_BIT     (1<<Z_DISABLE_PIN)
+#define X_DISABLE_PN    0
+#define X_DISABLE_PORT  port(X_DISABLE_PN)
+#define X_DISABLE_PIN   4
+#define X_DISABLE_BIT   (1<<X_DISABLE_PIN)
+#define Y_DISABLE_PN    0
+#define Y_DISABLE_PORT  port(Y_DISABLE_PN)
+#define Y_DISABLE_PIN   10
+#define Y_DISABLE_BIT   (1<<Y_DISABLE_PIN)
+#define Z_DISABLE_PN    0
+#define Z_DISABLE_PORT  port(Z_DISABLE_PN)
+#define Z_DISABLE_PIN   19
+#define Z_DISABLE_BIT   (1<<Z_DISABLE_PIN)
 #ifdef A_AXIS
-#define A_DISABLE_PIN     21
-#define A_DISABLE_BIT     (1<<A_DISABLE_PIN)
+#define A_DISABLE_PN    0
+#define A_DISABLE_PORT  port(A_DISABLE_PN)
+#define A_DISABLE_PIN   21
+#define A_DISABLE_BIT   (1<<A_DISABLE_PIN)
 #endif
 #define DISABLE_OUTMODE GPIO_BITBAND
 
 // Define homing/hard limit switch input pins.
 // NOTE: All limit bits (needs to be on same port)
-#define LIMIT_PN            1
-#define LIMIT_PORT          port(LIMIT_PN)
-#define X_LIMIT_PIN         24
-#define X_LIMIT_BIT         (1<<X_LIMIT_PIN)
-#define Y_LIMIT_PIN         26
-#define Y_LIMIT_BIT         (1<<Y_LIMIT_PIN)
-#define Z_LIMIT_PIN         28
-#define Z_LIMIT_BIT         (1<<Z_LIMIT_PIN)
+#define LIMIT_PN        1
+#define LIMIT_PORT      port(LIMIT_PN)
+#define X_LIMIT_PIN     24
+#define X_LIMIT_BIT     (1<<X_LIMIT_PIN)
+#define Y_LIMIT_PIN     26
+#define Y_LIMIT_BIT     (1<<Y_LIMIT_PIN)
+#define Z_LIMIT_PIN     28
+#define Z_LIMIT_BIT     (1<<Z_LIMIT_PIN)
 #ifdef A_AXIS
-#define A_LIMIT_PORT        LIMIT_PORT
-#define A_LIMIT_PIN         29
-#define A_LIMIT_BIT         (1<<A_LIMIT_PIN)
-#define LIMIT_MASK (X_LIMIT_BIT|Y_LIMIT_BIT|Z_LIMIT_BIT|A_LIMIT_BIT)
+#define A_LIMIT_PORT    LIMIT_PORT
+#define A_LIMIT_PIN     29
+#define A_LIMIT_BIT     (1<<A_LIMIT_PIN)
+#define LIMIT_MASK      (X_LIMIT_BIT|Y_LIMIT_BIT|Z_LIMIT_BIT|A_LIMIT_BIT)
 #else
-#define LIMIT_MASK (X_LIMIT_BIT|Y_LIMIT_BIT|Z_LIMIT_BIT)
+#define LIMIT_MASK      (X_LIMIT_BIT|Y_LIMIT_BIT|Z_LIMIT_BIT)
 #endif
 
 #define LIMITS_POLL_PORT port(1) // NOTE: Port 1 is not interrupt capable, use polling instead!

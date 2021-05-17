@@ -27,6 +27,7 @@
 //#define BOARD_BDRING_V3P5
 //#define BOARD_BDRING_V4
 //#define BOARD_BDRING_I2S6A // NOT production ready!
+//#define BOARD_SOURCERABBIT_4AXIS
 //#define BOARD_MY_MACHINE // Add my_machine_map.h before enabling this!
 
 // Configuration

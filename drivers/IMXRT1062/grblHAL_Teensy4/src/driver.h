@@ -1,5 +1,5 @@
 /*
-  driver.h - driver code for IMXRT1062 processor (on Teensy 4.0 board)
+  driver.h - driver code for IMXRT1062 processor (on Teensy 4.x board)
 
   Part of grblHAL
 
@@ -36,7 +36,7 @@
 
 #include "grbl/hal.h"
 #include "grbl/nuts_bolts.h"
-
+#include "grbl/crossbar.h"
 
 #define DIGITAL_IN(gpio) (!!(gpio.reg->DR & gpio.bit))
 #define DIGITAL_OUT(gpio, on) { if(on) gpio.reg->DR_SET = gpio.bit; else gpio.reg->DR_CLEAR = gpio.bit; }
@@ -66,6 +66,9 @@
 #ifndef ODOMETER_ENABLE
 #define ODOMETER_ENABLE     0
 #endif
+#ifndef OPENPNP_ENABLE
+#define OPENPNP_ENABLE      0
+#endif
 
 #ifndef ETHERNET_ENABLE
 #define ETHERNET_ENABLE     0
@@ -88,6 +91,9 @@
 #endif
 #ifndef EEPROM_IS_FRAM
 #define EEPROM_IS_FRAM      0
+#endif
+#ifndef SPINDLE_SYNC_ENABLE
+#define SPINDLE_SYNC_ENABLE 0
 #endif
 #ifndef TRINAMIC_ENABLE
 #define TRINAMIC_ENABLE     0
@@ -160,10 +166,10 @@
   #include "T40X101_map.h"
 #elif defined(BOARD_T41U5XBB)
   #include "T41U5XBB_map.h"
-#elif defined(BOARD_T41U5XSS)
-  #include "T41U5XSS_map.h"
-#elif defined(BOARD_T41PROBB)
-  #include "T41ProBB_map.h"
+#elif defined(BOARD_T41U5XBB_SS)
+  #include "T41U5XBB_ss_map.h"
+#elif defined(BOARD_T41BB5X_PRO)
+  #include "T41BB5X_Pro_map.h"
 #elif defined(BOARD_MY_MACHINE)
   #include "my_machine_map.h"
 #else // default board
@@ -245,46 +251,6 @@
   #error "QEI_ENABLE requires encoder input pins A and B to be defined!"
 #endif
 
-typedef enum {
-    Input_Probe = 0,
-    Input_Reset,
-    Input_FeedHold,
-    Input_CycleStart,
-    Input_SafetyDoor,
-    Input_LimitsOverride,
-    Input_EStop,
-    Input_ModeSelect,
-    Input_LimitX,
-    Input_LimitX_Max,
-    Input_LimitY,
-    Input_LimitY_Max,
-    Input_LimitZ,
-    Input_LimitZ_Max,
-    Input_LimitA,
-    Input_LimitA_Max,
-    Input_LimitB,
-    Input_LimitB_Max,
-    Input_LimitC,
-    Input_LimitC_Max,
-    Input_KeypadStrobe,
-    Input_QEI_A,
-    Input_QEI_B,
-    Input_QEI_Select,
-    Input_QEI_Index,
-    Input_SpindleIndex,
-    Input_Aux0,
-    Input_Aux1,
-    Input_Aux2,
-    Input_Aux3
-} input_t;
-
-typedef enum {
-    IRQ_Mode_None    = 0b00,
-    IRQ_Mode_Change  = 0b01,
-    IRQ_Mode_Rising  = 0b10,
-    IRQ_Mode_Falling = 0b11
-} irq_mode_t;
-
 typedef struct {
     volatile uint32_t DR;
     volatile uint32_t GDIR;
@@ -306,16 +272,21 @@ typedef struct {
 } gpio_t;
 
 typedef struct {
-    input_t id;
-    uint8_t group;
+    pin_function_t id;
+    pin_group_t group;
     uint8_t pin;
     gpio_t *port;
     gpio_t gpio; // doubled up for now for speed...
-    irq_mode_t irq_mode;
+    pin_irq_mode_t irq_mode;
     uint8_t offset;
     volatile bool active;
     volatile bool debounce;
 } input_signal_t;
+
+typedef struct {
+    uint8_t n_pins;
+    input_signal_t *pins;
+} pin_group_pins_t;
 
 // The following struct is pulled from the Teensy Library core, Copyright (c) 2019 PJRC.COM, LLC.
 
@@ -330,8 +301,11 @@ typedef struct {
 
 void selectStream (stream_type_t stream);
 void pinModeOutput (gpio_t *gpio, uint8_t pin);
-
 uint32_t xTaskGetTickCount();
+
+#ifdef HAS_BOARD_INIT
+void board_init(pin_group_pins_t *aux_inputs);
+#endif
 
 #ifdef UART_DEBUG
 void uart_debug_write (char *s);

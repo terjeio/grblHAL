@@ -3,7 +3,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,6 +23,10 @@
 
 #if N_AXIS > 3
 #error Max number of axes is 3 for CNC BoosterPack
+#endif
+
+#if SPINDLE_SYNC_ENABLE
+#error Spindle sync is not supported for CNC BoosterPack
 #endif
 
 #ifdef EEPROM_ENABLE
@@ -73,13 +77,13 @@
 
 #if EEPROM_ENABLE || KEYPAD_ENABLE
 #define I2C_PORT    0
-#define I2C_SCL0    (19u) // Not used, for info only
-#define I2C_SDA0    (18u) // Not used, for info only
+#define I2C_SCL0    (19u) // Not referenced, for info only
+#define I2C_SDA0    (18u) // Not referenced, for info only
 #endif
 
 #define UART_PORT   5
-#define UART_RX5    (21u) // Not used, for info only
-#define UART_TX5    (20u) // Not used, for info only
+#define UART_RX5    (21u) // Not referenced, for info only
+#define UART_TX5    (20u) // Not referenced, for info only
 
 #define GPIO0_PIN   (3u)
 #define GPIO1_PIN   (29u)

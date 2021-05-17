@@ -4,7 +4,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2019 Terje Io
+  Copyright (c) 2019-2021 Terje Io
 
   This code reads/writes the whole RAM-based emulated EPROM contents from/to flash
 
@@ -27,15 +27,16 @@
 
 #include "main.h"
 #include "grbl/hal.h"
-//#include "stm32f4xx_hal_flash_ex.h"
 
-#define FLASH_SECTOR1_ADDR 0x8004000
+#define FLASH_SECTOR 1
+#define FLASH_SECTOR_ADDR 0x8004000
 
-static const uint8_t *flash_target = (uint8_t *)FLASH_SECTOR1_ADDR;    // Last page start adress
+static const uint8_t *flash_target = (uint8_t *)FLASH_SECTOR_ADDR;
 
 bool memcpy_from_flash (uint8_t *dest)
 {
     memcpy(dest, flash_target, hal.nvs.size);
+
     return true;
 }
 
@@ -44,31 +45,34 @@ bool memcpy_to_flash (uint8_t *source)
     if (!memcmp(source, flash_target, hal.nvs.size))
         return true;
 
-    HAL_FLASH_Unlock();
+    HAL_StatusTypeDef status;
 
-    FLASH_EraseInitTypeDef erase = {
-        .Banks = FLASH_BANK_1,
-		.Sector = 1,
-        .TypeErase = FLASH_TYPEERASE_SECTORS,
-        .NbSectors = 1,
-        .VoltageRange = FLASH_VOLTAGE_RANGE_3
-    };
+    if((status = HAL_FLASH_Unlock()) == HAL_OK) {
 
-    uint32_t error;
+        static FLASH_EraseInitTypeDef erase = {
+            .Banks = FLASH_BANK_1,
+            .Sector = FLASH_SECTOR,
+            .TypeErase = FLASH_TYPEERASE_SECTORS,
+            .NbSectors = 1,
+            .VoltageRange = FLASH_VOLTAGE_RANGE_3
+        };
 
-    HAL_StatusTypeDef status = HAL_FLASHEx_Erase(&erase, &error);
+        uint32_t error;
 
-    uint16_t *data = (uint16_t *)source;
-    uint32_t address = (uint32_t)flash_target, remaining = (uint32_t)hal.nvs.size;
+        status = HAL_FLASHEx_Erase(&erase, &error);
 
-    while(remaining && status == HAL_OK) {
-        status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, address, *data++);
-        status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, address + 2, *data++);
-        address += 4;
-        remaining -= 4;
+        uint16_t *data = (uint16_t *)source;
+        uint32_t address = (uint32_t)flash_target, remaining = (uint32_t)hal.nvs.size;
+
+        while(remaining && status == HAL_OK) {
+            status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, address, *data++);
+            status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, address + 2, *data++);
+            address += 4;
+            remaining -= 4;
+        }
+
+        HAL_FLASH_Lock();
     }
-
-    HAL_FLASH_Lock();
 
     return status == HAL_OK;
 }

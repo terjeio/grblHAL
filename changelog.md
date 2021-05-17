@@ -1,12 +1,23 @@
 ## grblHAL changelog
 
-2021-03-14:
+Build 20210515:
+
+* Fixed G43 "bug" by changing to LinuxCNC specification. NIST specification is ambiguous.
+* Added acceleration override handling, to be used by OpenPNP plugin M-code.
+
+Build 20210505:
+
+* Some bug fixes: relative canned cycles repeat error, comment handling...
+* Check mode changes to allow use with SD card streaming.
+* Internal buffer changes for reducing RAM footprint. Some HAL extensions.
+
+Build 20210314:
 
 * Added support for tool change protocol to networking protocols using shared stream buffer.
 * Added `$S` system command for toggling single step mode, when enabled cycle start has to be issued after each block.
 * Some bug fixes.
 
-2021-02-07:
+Build 20210207:
 
 * Added `#define BOARD_MY_MACHINE` option in _my_machine.h_ for building using _my_machine-map.c_, this for simpler handling of user defined pin mappings.  
 _my_machine-map.c_ is __*not*__ part of the distributed source and must by added to the project by the user before enabled, typically by copying an existing map file.

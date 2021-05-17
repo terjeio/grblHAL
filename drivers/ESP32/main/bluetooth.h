@@ -5,7 +5,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2018-2020 Terje Io
+  Copyright (c) 2018-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -34,6 +34,7 @@ char *bluetooth_get_client_mac (void);
 uint32_t BTStreamAvailable (void);
 uint16_t BTStreamRXFree (void);
 int16_t BTStreamGetC (void);
+bool BTStreamPutC (const char c);
 bool BTStreamSuspendInput (bool suspend);
 void BTStreamWriteS (const char *data);
 void BTStreamFlush (void);

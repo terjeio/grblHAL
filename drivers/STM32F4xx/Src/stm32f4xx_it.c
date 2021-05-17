@@ -21,6 +21,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "stm32f4xx_it.h"
+#include "driver.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 /* USER CODE END Includes */
@@ -187,7 +188,7 @@ void SysTick_Handler(void)
   /* USER CODE END SysTick_IRQn 0 */
   HAL_IncTick();
   /* USER CODE BEGIN SysTick_IRQn 1 */
-
+  Driver_IncTick();
   /* USER CODE END SysTick_IRQn 1 */
 }
 
@@ -201,6 +202,7 @@ void SysTick_Handler(void)
 /**
   * @brief This function handles USB On The Go FS global interrupt.
   */
+#if USB_SERIAL_CDC
 void OTG_FS_IRQHandler(void)
 {
   /* USER CODE BEGIN OTG_FS_IRQn 0 */
@@ -211,7 +213,7 @@ void OTG_FS_IRQHandler(void)
 
   /* USER CODE END OTG_FS_IRQn 1 */
 }
-
+#endif
 /* USER CODE BEGIN 1 */
 
 /* USER CODE END 1 */

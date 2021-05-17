@@ -29,6 +29,7 @@
 #include "grbl-lpc/pwm_driver.h"
 
 #include "grbl/limits.h"
+#include "grbl/crossbar.h"
 
 #if SDCARD_ENABLE
 #include "sdcard/sdcard.h"
@@ -89,33 +90,6 @@ static delay_t delay = { .ms = 1, .callback = NULL }; // NOTE: initial ms set to
 
 #define DEBOUNCE_QUEUE 8 // Must be a power of 2
 
-#define INPUT_GROUP_CONTROL 1
-#define INPUT_GROUP_PROBE   2
-#define INPUT_GROUP_LIMIT   4
-#define INPUT_GROUP_KEYPAD  8
-
-typedef enum {
-    Input_Unassigned = 0,
-    Input_Probe,
-    Input_Reset,
-    Input_FeedHold,
-    Input_CycleStart,
-    Input_SafetyDoor,
-    Input_LimitX,
-    Input_LimitX_Max,
-    Input_LimitY,
-    Input_LimitY_Max,
-    Input_LimitZ,
-    Input_LimitZ_Max,
-    Input_LimitA,
-    Input_LimitA_Max,
-    Input_LimitB,
-    Input_LimitB_Max,
-    Input_LimitC,
-    Input_LimitC_Max,
-    Input_KeypadStrobe
-} input_t;
-
 typedef enum {
     GPIO_Intr_None = 0,
     GPIO_Intr_Falling,
@@ -127,8 +101,8 @@ typedef struct {
     LPC_GPIO_T *port;
     uint32_t pin;
     uint32_t bit;
-    input_t id;
-    uint8_t group;
+    pin_function_t id;
+    pin_group_t group;
     bool debounce;
     gpio_intr_t intr_type;
 } input_signal_t;
@@ -147,52 +121,52 @@ static input_signal_t gpio0_signals[10] = {0}, gpio1_signals[10] = {0}, gpio2_si
 
 static input_signal_t inputpin[] = {
   #ifdef PROBE_PIN
-    { .id = Input_Probe,        .port = PROBE_PORT,        .pin = PROBE_PIN,         .group = INPUT_GROUP_PROBE },
+    { .id = Input_Probe,        .port = PROBE_PORT,        .pin = PROBE_PIN,         .group = PinGroup_Probe },
   #endif
   #ifdef RESET_PIN
-    { .id = Input_Reset,        .port = RESET_PORT,        .pin = RESET_PIN,         .group = INPUT_GROUP_CONTROL },
+    { .id = Input_Reset,        .port = RESET_PORT,        .pin = RESET_PIN,         .group = PinGroup_Control },
   #endif
   #ifdef FEED_HOLD_PIN
-    { .id = Input_FeedHold,     .port = FEED_HOLD_PORT,    .pin = FEED_HOLD_PIN,     .group = INPUT_GROUP_CONTROL },
+    { .id = Input_FeedHold,     .port = FEED_HOLD_PORT,    .pin = FEED_HOLD_PIN,     .group = PinGroup_Control },
   #endif
   #ifdef CYCLE_START_PIN
-    { .id = Input_CycleStart,   .port = CYCLE_START_PORT,  .pin = CYCLE_START_PIN,   .group = INPUT_GROUP_CONTROL },
+    { .id = Input_CycleStart,   .port = CYCLE_START_PORT,  .pin = CYCLE_START_PIN,   .group = PinGroup_Control },
   #endif
   #ifdef SAFETY_DOOR_PIN
-    { .id = Input_SafetyDoor,   .port = SAFETY_DOOR_PORT,  .pin = SAFETY_DOOR_PIN,   .group = INPUT_GROUP_CONTROL },
+    { .id = Input_SafetyDoor,   .port = SAFETY_DOOR_PORT,  .pin = SAFETY_DOOR_PIN,   .group = PinGroup_Control },
   #endif
-    { .id = Input_LimitX,       .port = X_LIMIT_PORT,      .pin = X_LIMIT_PIN,       .group = INPUT_GROUP_LIMIT },
+    { .id = Input_LimitX,       .port = X_LIMIT_PORT,      .pin = X_LIMIT_PIN,       .group = PinGroup_Limit },
   #ifdef X_LIMIT_PIN_MAX
-    { .id = Input_LimitX_Max,   .port = X_LIMIT_PORT_MAX,  .pin = X_LIMIT_PIN_MAX,   .group = INPUT_GROUP_LIMIT },
+    { .id = Input_LimitX_Max,   .port = X_LIMIT_PORT_MAX,  .pin = X_LIMIT_PIN_MAX,   .group = PinGroup_Limit },
   #endif
-    { .id = Input_LimitY,       .port = Y_LIMIT_PORT,      .pin = Y_LIMIT_PIN,       .group = INPUT_GROUP_LIMIT },
+    { .id = Input_LimitY,       .port = Y_LIMIT_PORT,      .pin = Y_LIMIT_PIN,       .group = PinGroup_Limit },
   #ifdef Y_LIMIT_PIN_MAX
-    { .id = Input_LimitY_Max,   .port = Y_LIMIT_PORT_MAX,  .pin = Y_LIMIT_PIN_MAX,   .group = INPUT_GROUP_LIMIT },
+    { .id = Input_LimitY_Max,   .port = Y_LIMIT_PORT_MAX,  .pin = Y_LIMIT_PIN_MAX,   .group = PinGroup_Limit },
   #endif
-    { .id = Input_LimitZ,       .port = Z_LIMIT_PORT,      .pin = Z_LIMIT_PIN,       .group = INPUT_GROUP_LIMIT },
+    { .id = Input_LimitZ,       .port = Z_LIMIT_PORT,      .pin = Z_LIMIT_PIN,       .group = PinGroup_Limit },
   #ifdef Z_LIMIT_PIN_MAX
-    { .id = Input_LimitZ_Max,   .port = Z_LIMIT_PORT_MAX,  .pin = Z_LIMIT_PIN_MAX,   .group = INPUT_GROUP_LIMIT },
+    { .id = Input_LimitZ_Max,   .port = Z_LIMIT_PORT_MAX,  .pin = Z_LIMIT_PIN_MAX,   .group = PinGroup_Limit },
   #endif
   #ifdef A_LIMIT_PIN
-    { .id = Input_LimitA,       .port = A_LIMIT_PORT,      .pin = A_LIMIT_PIN,       .group = INPUT_GROUP_LIMIT },
+    { .id = Input_LimitA,       .port = A_LIMIT_PORT,      .pin = A_LIMIT_PIN,       .group = PinGroup_Limit },
   #endif
   #ifdef A_LIMIT_PIN_MAX
-    { .id = Input_LimitA_Max,   .port = A_LIMIT_PORT_MAX,  .pin = A_LIMIT_PIN_MAX,   .group = INPUT_GROUP_LIMIT },
+    { .id = Input_LimitA_Max,   .port = A_LIMIT_PORT_MAX,  .pin = A_LIMIT_PIN_MAX,   .group = PinGroup_Limit },
   #endif
   #ifdef B_LIMIT_PIN
-    { .id = Input_LimitB,       .port = B_LIMIT_PORT,      .pin = B_LIMIT_PIN,       .group = INPUT_GROUP_LIMIT },
+    { .id = Input_LimitB,       .port = B_LIMIT_PORT,      .pin = B_LIMIT_PIN,       .group = PinGroup_Limit },
   #endif
   #ifdef B_LIMIT_PIN_MAX
-    { .id = Input_LimitB_Max,   .port = B_LIMIT_PORT_MAX,  .pin = B_LIMIT_PIN_MAX,   .group = INPUT_GROUP_LIMIT },
+    { .id = Input_LimitB_Max,   .port = B_LIMIT_PORT_MAX,  .pin = B_LIMIT_PIN_MAX,   .group = PinGroup_Limit },
   #endif
   #ifdef C_LIMIT_PIN
-    { .id = Input_LimitC,       .port = C_LIMIT_PORT,      .pin = C_LIMIT_PIN,       .group = INPUT_GROUP_LIMIT },
+    { .id = Input_LimitC,       .port = C_LIMIT_PORT,      .pin = C_LIMIT_PIN,       .group = PinGroup_Limit },
   #endif
   #ifdef C_LIMIT_PIN_MAX
-    { .id = Input_LimitC_Max,   .port = C_LIMIT_PORT_MAX,  .pin = C_LIMIT_PIN_MAX,   .group = INPUT_GROUP_LIMIT },
+    { .id = Input_LimitC_Max,   .port = C_LIMIT_PORT_MAX,  .pin = C_LIMIT_PIN_MAX,   .group = PinGroup_Limit },
   #endif
   #if KEYPAD_ENABLE
-  , { .id = Input_KeypadStrobe, .port = KEYPAD_STROBE_PORT .pin = KEYPAD_STROBE_PIN, .group = INPUT_GROUP_KEYPAD }
+  , { .id = Input_KeypadStrobe, .port = KEYPAD_STROBE_PORT .pin = KEYPAD_STROBE_PIN, .group = PinGroup_Keypad }
   #endif
 };
 
@@ -991,13 +965,13 @@ void settings_changed (settings_t *settings)
                         while(true);
                     }
 
-                    if(pin->group == INPUT_GROUP_LIMIT)
+                    if(pin->group == PinGroup_Limit)
                         pin->intr_type = GPIO_Intr_None;
                 }
 
                 if(pin->intr_type != GPIO_Intr_None) {
 
-                    pin->debounce = hal.driver_cap.software_debounce && !(pin->group == INPUT_GROUP_PROBE || pin->group == INPUT_GROUP_KEYPAD);
+                    pin->debounce = hal.driver_cap.software_debounce && !(pin->group == PinGroup_Probe || pin->group == PinGroup_Keypad);
 
                     if(pin->port == LPC_GPIO0) {
                         gpio0_int_enable(pin->bit, pin->intr_type);
@@ -1149,8 +1123,8 @@ static bool driver_setup (settings_t *settings)
 #endif
 
 #if SDCARD_ENABLE
-    BITBAND_GPIO(SD_CS_PORT->DIR, SD_CS_PIN) = 1;
-    BITBAND_GPIO(SD_CS_PORT->PIN, SD_CS_PIN) = 1;
+    SD_CS_PORT->DIR |= SD_CS_BIT;
+    DIGITAL_OUT(SD_CS_PORT, SD_CS_BIT, 1);
 
     sdcard_init();
 #endif
@@ -1194,7 +1168,7 @@ bool driver_init (void) {
 #endif
 
     hal.info = "LCP1769";
-    hal.driver_version = "210219";
+    hal.driver_version = "210504";
     hal.driver_setup = driver_setup;
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
@@ -1235,6 +1209,7 @@ bool driver_init (void) {
     hal.stream.read = usbGetC;
     hal.stream.write = usbWriteS;
     hal.stream.write_all = usbWriteS;
+    hal.stream.write_char = usbPutC;
     hal.stream.get_rx_buffer_available = usbRxFree;
     hal.stream.reset_read_buffer = usbRxFlush;
     hal.stream.cancel_read_buffer = usbRxCancel;
@@ -1244,6 +1219,7 @@ bool driver_init (void) {
     hal.stream.read = serialGetC;
     hal.stream.write = serialWriteS;
     hal.stream.write_all = serialWriteS;
+    hal.stream.write_char = serialPutC;
     hal.stream.get_rx_buffer_available = serialRxFree;
     hal.stream.reset_read_buffer = serialRxFlush;
     hal.stream.cancel_read_buffer = serialRxCancel;
@@ -1391,7 +1367,7 @@ void DEBOUNCE_IRQHandler (void)
         if(DIGITAL_IN(signal->port, signal->bit) == (signal->intr_type == GPIO_Intr_Falling ? 0 : 1))
           switch(signal->group) {
 
-            case INPUT_GROUP_LIMIT:
+            case PinGroup_Limit:
                 {
                     limit_signals_t state = limitsGetState();
                     if(limit_signals_merge(state).value) //TODO: add check for limit switches having same state as when limit_isr were invoked?
@@ -1399,8 +1375,11 @@ void DEBOUNCE_IRQHandler (void)
                 }
                 break;
 
-            case INPUT_GROUP_CONTROL:
+            case PinGroup_Control:
                 hal.control.interrupt_callback(systemGetState());
+                break;
+
+            default:
                 break;
         }
     }
@@ -1453,14 +1432,14 @@ void GPIO_IRQHandler (void)
         DEBOUNCE_TIMER->TCR = 0b01;
     }
 
-    if(grp & INPUT_GROUP_LIMIT)
+    if(grp & PinGroup_Limit)
         hal.limits.interrupt_callback(limitsGetState());
 
-    if(grp & INPUT_GROUP_CONTROL)
+    if(grp & PinGroup_Control)
         hal.control.interrupt_callback(systemGetState());
 
 #if KEYPAD_ENABLE
-    if(grp & INPUT_GROUP_KEYPAD)
+    if(grp & PinGroup_Keypad)
         keypad_keyclick_handler(BITBAND_PERI(KEYPAD_PORT->PIO_PDSR, KEYPAD_PIN));
 #endif
 }

@@ -1,9 +1,9 @@
 /*
-  generic_map.h - driver code for IMXRT1062 processor (on Teensy 4.0 board)
+  generic_map.h - driver code for IMXRT1062 processor (on Teensy 4.x board)
 
   Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -18,6 +18,10 @@
   You should have received a copy of the GNU General Public License
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
+
+#if SPINDLE_SYNC_ENABLE
+#error Spindle sync is not supported
+#endif
 
 // Define step pulse output pins.
 #define X_STEP_PIN      (2u)
@@ -69,8 +73,8 @@
 
 #if EEPROM_ENABLE || KEYPAD_ENABLE
 #define I2C_PORT    4
-#define I2C_SCL4    (24u) // Not used, for info only
-#define I2C_SDA4    (25u) // Not used, for info only
+#define I2C_SCL4    (24u) // Not referenced, for info only
+#define I2C_SDA4    (25u) // Not referenced, for info only
 #endif
 
 #if QEI_ENABLE

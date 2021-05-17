@@ -101,10 +101,26 @@ static inline bool usb_write (void)
 }
 
 //
+// Writes a single character to the USB output stream, blocks if buffer full
+//
+bool usbPutC (const char c)
+{
+    static uint8_t buf[1];
+
+    *buf = c;
+
+    while(CDC_Transmit_FS(buf, 1) == USBD_BUSY) {
+        if(!hal.stream_blocking_callback())
+            return false;
+    }
+
+    return true;
+}
+
+//
 // Writes a null terminated string to the USB output stream, blocks if buffer full
 // Buffers string up to EOL (LF) before transmitting
 //
-
 void usbWriteS (const char *s)
 {
     size_t length = strlen(s);

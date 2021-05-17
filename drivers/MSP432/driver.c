@@ -1420,7 +1420,7 @@ bool driver_init (void)
 #endif
 
     hal.info = "MSP432";
-    hal.driver_version = "210206";
+    hal.driver_version = "210423";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1465,6 +1465,7 @@ bool driver_init (void)
     hal.stream.cancel_read_buffer = serialRxCancel;
     hal.stream.write = serialWriteS;
     hal.stream.write_all = serialWriteS;
+    hal.stream.write_char = serialPutC;
     hal.stream.suspend_read = serialSuspendInput;
 
     hal.irq_enable = enable_irq;

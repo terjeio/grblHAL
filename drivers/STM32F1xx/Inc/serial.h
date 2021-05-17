@@ -27,10 +27,11 @@
 #define RX_BUFFER_HWM 900
 #define RX_BUFFER_LWM 300
 
-void serialInit(void);
-int16_t serialGetC(void);
-void serialWriteS(const char *s);
-uint16_t serialRxFree(void);
-void serialRxFlush(void);
-void serialRxCancel(void);
+void serialInit (void);
+int16_t serialGetC (void);
+bool serialPutC (const char c);
+void serialWriteS (const char *s);
+uint16_t serialRxFree (void);
+void serialRxFlush (void);
+void serialRxCancel (void);
 bool serialSuspendInput (bool suspend);

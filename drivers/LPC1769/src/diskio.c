@@ -64,14 +64,14 @@
 static inline
 void SELECT (void)
 {
-    BITBAND_GPIO(SD_CS_PORT->PIN, SD_CS_PIN) = 0;
+    DIGITAL_OUT(SD_CS_PORT, SD_CS_BIT, 0);
 }
 
 /* de-asserts the CS pin to the card */
 static inline
 void DESELECT (void)
 {
-    BITBAND_GPIO(SD_CS_PORT->PIN, SD_CS_PIN) = 1;
+    DIGITAL_OUT(SD_CS_PORT, SD_CS_BIT, 1);
 }
 
 /*--------------------------------------------------------------------------

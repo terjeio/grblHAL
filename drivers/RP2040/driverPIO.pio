@@ -1,8 +1,29 @@
-; RP2040 PIO driver specific program
+;
+;  driverPIO.pio - driver code for RP2040 ARM processors
+;
+;  Part of grblHAL
+;
+;  Copyright (c) 2021 Terje Io
+;  Copyright (c) 2021 Volksolive
+;
+;  Grbl is free software: you can redistribute it and/or modify
+;  it under the terms of the GNU General Public License as published by
+;  the Free Software Foundation, either version 3 of the License, or
+;  (at your option) any later version.
+;
+;  Grbl is distributed in the hope that it will be useful,
+;  but WITHOUT ANY WARRANTY; without even the implied warranty of
+;  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;  GNU General Public License for more details.
+;
+;  You should have received a copy of the GNU General Public License
+;  along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
+;
 
-; stepper_timer program generate an interrupt at a settable period interval 
+;
+; stepper_timer: Generates the main stepper interrupt
+;
 .program stepper_timer
-
     pull noblock    ; Pull timer period from the TX FIFO, loads X into OSR if empty
     mov x osr       ; Reload X from OSR
     mov y x
@@ -11,7 +32,7 @@ count:
     irq 0         
    
 % c-sdk {
-static inline void stepper_timer_program_init(PIO pio, uint sm, uint offset, float div ) {
+static inline void stepper_timer_program_init(PIO pio, uint32_t sm, uint32_t offset, float div) {
     pio_sm_config c = stepper_timer_program_get_default_config(offset);
 
     // Load our configuration, and jump to the start of the program
@@ -20,7 +41,7 @@ static inline void stepper_timer_program_init(PIO pio, uint sm, uint offset, flo
     pio_sm_set_clkdiv(pio, sm, div);
 }
 
-static inline void stepper_timer_set_period(PIO pio, uint sm, uint offset, uint32_t period) {
+static inline void stepper_timer_set_period(PIO pio, uint32_t sm, uint32_t offset, uint32_t period) {
 
     static uint32_t period_prev = 0;
 
@@ -36,7 +57,7 @@ static inline void stepper_timer_set_period(PIO pio, uint sm, uint offset, uint3
     }
  }
 
-static inline void stepper_timer_stop(PIO pio, uint sm) {
+static inline void stepper_timer_stop(PIO pio, uint32_t sm) {
     pio_sm_set_enabled(pio, sm, false);
     pio->inte0 &= ~PIO_INTR_SM0_BITS;
 }
@@ -46,9 +67,9 @@ static inline void stepper_timer_irq_clear(PIO pio) {
 }
 %}
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-; step pulse program generate a step pulse with a settable delay before the step is generated and a settable pulse length
+;
+; step_pulse: Generate step pulses for up to 6 axes with settable delay and pulse length
+;
 .program step_pulse
 
     pull block
@@ -62,13 +83,13 @@ delay:
     out pins, 6
 
 % c-sdk {
-static inline void step_pulse_program_init(PIO pio, uint sm, uint offset, uint32_t startPin, uint pinCount) {
+static inline void step_pulse_program_init(PIO pio, uint32_t sm, uint32_t offset, uint32_t startPin, uint32_t pinCount) {
     pio_sm_config c = step_pulse_program_get_default_config(offset); 
 
     // Map the state machine's OUT pin group to the provided pin in pin count in parameters
     sm_config_set_out_pins(&c, startPin, pinCount);
     // Set these pins GPIO function (connect PIO to the pad)
-    for(uint i=0;i<pinCount;i++)
+    for(uint32_t i=0;i<pinCount;i++)
         pio_gpio_init(pio, startPin+i);
     // Set the pin direction to output at the PIO
     pio_sm_set_consecutive_pindirs(pio, sm, startPin, pinCount, true);
@@ -81,8 +102,150 @@ static inline void step_pulse_program_init(PIO pio, uint sm, uint offset, uint32
     pio_sm_set_enabled(pio, sm, true);
 }
 
-static inline void step_pulse_generate(PIO pio, uint sm, uint32_t stepPulse) {
+static inline void step_pulse_generate(PIO pio, uint32_t sm, uint32_t stepPulse) {
     pio_sm_put(pio, sm, stepPulse);
 }
 %}
 
+;
+; step_dir_sr4: Generate dir signals and step pulses for up to 4 axes with settable delay and settable pulse length
+;               via a single 74HC595 shift register. Delay and pulse length timings are handled by separate programs.
+;
+.program step_dir_sr4
+.side_set 2
+    pull block          side 0x2
+    out y, 8            side 0x2
+    mov isr, y          side 0x0
+    mov x, osr          side 0x0
+; output direction signals
+    set y, 7            side 0x0
+loop1:
+    out pins, 1         side 0x0
+    jmp y-- loop1       side 0x1
+    irq set 4           side 0x2
+    set y, 7            side 0x2
+    mov osr, isr        side 0x0
+    wait 1 irq 5        side 0x0
+; output step signals
+loop2:
+    out pins, 1         side 0x0
+    jmp y-- loop2       side 0x1
+    irq set 6           side 0x2
+    set y, 7            side 0x2
+    mov osr, x          side 0x0
+    wait 1 irq 7        side 0x0
+; reset step signals
+loop3:
+    out pins, 1         side 0x0
+    jmp y-- loop3       side 0x1
+
+% c-sdk {
+#include "hardware/gpio.h"
+static inline void step_dir_sr4_program_init(PIO pio, uint32_t sm, uint32_t offset, uint32_t dataPin, uint32_t bckPin) {
+    pio_sm_config c = step_dir_sr4_program_get_default_config(offset);
+    sm_config_set_out_pins(&c, dataPin, 1);
+    sm_config_set_sideset_pins(&c, bckPin);
+    sm_config_set_clkdiv(&c, 1);
+
+    pio_sm_set_pins_with_mask(pio, sm, (3u << bckPin) | (1u << dataPin), (3u << bckPin) | (1u << dataPin));
+    pio_sm_set_pindirs_with_mask(pio, sm, (3u << bckPin) | (1u << dataPin), (3u << bckPin) | (1u << dataPin));
+    pio_gpio_init(pio, dataPin);
+    pio_gpio_init(pio, bckPin);
+    pio_gpio_init(pio, bckPin + 1);
+
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+static inline void step_dir_sr4_write(PIO pio, uint32_t sm, uint32_t data) {
+    pio_sm_put(pio, sm, data);
+}
+%}
+
+;
+; sr_delay: adds dir to step pulse delay for step_dir_sr4 above
+;
+.program sr_delay
+    pull noblock    ; Pull timer period from the TX FIFO, loads X into OSR if empty
+    mov x osr       ; Reload X from OSR
+    mov y x
+    wait 1 irq 4
+count:
+    jmp y-- count
+    irq set 5         
+   
+% c-sdk {
+static inline void sr_delay_program_init(PIO pio, uint32_t sm, uint32_t offset, float div) {
+    pio_sm_config c = sr_delay_program_get_default_config(offset);
+
+    // Load our configuration, and jump to the start of the program
+    pio_sm_init(pio, sm, offset, &c);
+    // Set the clock divider
+    pio_sm_set_clkdiv(pio, sm, div);
+    pio_sm_set_enabled(pio, sm, true);
+}
+
+static inline void sr_delay_set(PIO pio, uint32_t sm, uint32_t period) {
+    pio_sm_put(pio, sm, period);
+ }
+%}
+
+;
+; sr_hold: adds step pulse length delay for step_dir_sr4 above
+;
+.program sr_hold
+    pull noblock    ; Pull timer period from the TX FIFO, loads X into OSR if empty
+    mov x osr       ; Reload X from OSR
+    mov y x
+    wait 1 irq 6
+count:
+    jmp y-- count
+    irq set 7         
+   
+% c-sdk {
+static inline void sr_hold_program_init(PIO pio, uint32_t sm, uint32_t offset, float div) {
+    pio_sm_config c = sr_hold_program_get_default_config(offset);
+
+    // Load our configuration, and jump to the start of the program
+    pio_sm_init(pio, sm, offset, &c);
+    // Set the clock divider
+    pio_sm_set_clkdiv(pio, sm, div);
+    pio_sm_set_enabled(pio, sm, true);
+}
+
+static inline void sr_hold_set(PIO pio, uint32_t sm, uint32_t period) {
+    pio_sm_put(pio, sm, period);
+ }
+%}
+
+;
+; out_sr16: output up to 16 signals via two chained 74HC595 shift registers.
+;
+.program out_sr16
+.side_set 2
+    pull block          side 0x2 [1]
+    set y, 15           side 0x0
+loop1:
+    out pins, 1         side 0x0
+    jmp y-- loop1       side 0x1
+
+% c-sdk {
+#include "hardware/gpio.h"
+static inline void out_sr16_program_init(PIO pio, uint32_t sm, uint32_t offset, uint32_t dataPin, uint32_t bckPin) {
+    pio_sm_config c = out_sr16_program_get_default_config(offset);
+    sm_config_set_out_pins(&c, dataPin, 1);
+    sm_config_set_sideset_pins(&c, bckPin);
+    sm_config_set_clkdiv(&c, 4);
+
+    pio_sm_set_pins_with_mask(pio, sm, (3u << bckPin) | (1u << dataPin), (3u << bckPin) | (1u << dataPin));
+    pio_sm_set_pindirs_with_mask(pio, sm, (3u << bckPin) | (1u << dataPin), (3u << bckPin) | (1u << dataPin));
+    pio_gpio_init(pio, dataPin);
+    pio_gpio_init(pio, bckPin);
+    pio_gpio_init(pio, bckPin + 1);
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+static inline void out_sr16_write(PIO pio, uint32_t sm, uint32_t data) {
+    pio_sm_put(pio, sm, data);
+}
+%}

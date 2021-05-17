@@ -4,7 +4,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2017-2020 Terje Io
+  Copyright (c) 2017-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -29,12 +29,13 @@
 #define RX_BUFFER_HWM 900
 #define RX_BUFFER_LWM 300
 
-void serialInit(void);
-int16_t serialGetC(void);
-void serialWriteS(const char *s);
-uint16_t serialRxFree(void);
-void serialRxFlush(void);
-void serialRxCancel(void);
+void serialInit (void);
+int16_t serialGetC (void);
+bool serialPutC (const char c);
+void serialWriteS (const char *s);
+uint16_t serialRxFree (void);
+void serialRxFlush (void);
+void serialRxCancel (void);
 bool serialSuspendInput (bool suspend);
 
 #ifdef SERIAL2_MOD
@@ -46,8 +47,8 @@ void serial2RxCancel (void);
 uint16_t serial2RxCount (void);
 uint16_t serial2TxCount (void);
 void serial2TxFlush (void);
-void serial2Write(const char *s, uint16_t length);
-bool serial2PutC(const char c);
+void serial2Write (const char *s, uint16_t length);
+bool serial2PutC (const char c);
 int16_t serial2GetC (void);
 void serialSelect (bool mpg);
 #endif

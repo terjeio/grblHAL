@@ -38,7 +38,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <string.h>
 
-#include <trinamic/tmc26x.h>
+#include "tmc26x.h"
 
 static SPI_driver_t io;
 

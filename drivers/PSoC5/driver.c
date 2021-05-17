@@ -441,7 +441,7 @@ bool driver_init (void)
     EEPROM_Start();
 
     hal.info = "PSoC 5";
-    hal.driver_version = "210202";
+    hal.driver_version = "210423";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = 24000000UL;
     hal.rx_buffer_size = RX_BUFFER_SIZE;
@@ -477,6 +477,7 @@ bool driver_init (void)
     hal.stream.read = serialGetC;
     hal.stream.write = serialWriteS;
     hal.stream.write_all = serialWriteS;
+	hal.stream.write_char = serialPutC;
     hal.stream.get_rx_buffer_available = serialRxFree;
     hal.stream.reset_read_buffer = serialRxFlush;
     hal.stream.cancel_read_buffer = serialRxCancel;

@@ -111,6 +111,10 @@
 #define I2C_ENABLE 0
 #endif
 
+#ifndef SDCARD_ENABLE
+#define SDCARD_ENABLE 0
+#endif
+
 #if TRINAMIC_ENABLE
 #ifndef TRINAMIC_MIXED_DRIVERS
 #define TRINAMIC_MIXED_DRIVERS 1
@@ -206,6 +210,10 @@
 #define CYCLE_START_INTENR CONTROL_INTENR
 #define CYCLE_START_INTENF CONTROL_INTENF
 #define CYCLE_START_INTCLR CONTROL_INTCLR
+#endif
+
+#ifdef SD_CS_PIN
+#define SD_CS_BIT (1<<SD_CS_PIN)
 #endif
 
 // Driver initialization entry point

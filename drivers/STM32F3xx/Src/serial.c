@@ -45,6 +45,7 @@ void serialInit (void)
     __HAL_RCC_GPIOB_CLK_ENABLE();
     __HAL_RCC_USART3_CLK_ENABLE();
 
+    // tx = 10 (yl), rx = 11 (bl)
     GPIO_InitStruct.Pin = GPIO_PIN_10|GPIO_PIN_11;
     GPIO_InitStruct.Alternate = GPIO_AF7_USART3;
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);

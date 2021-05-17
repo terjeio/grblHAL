@@ -192,7 +192,10 @@ void usb_serialRxCancel (void)
 //
 bool usb_serialPutC (const char c)
 {
-  //  usb_serial_putchar(c);
+    static uint8_t buf[1];
+
+    *buf = c;
+    stdio_usb_out_chars(buf, 1);
 
     return true;
 }

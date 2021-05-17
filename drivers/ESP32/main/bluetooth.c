@@ -152,7 +152,7 @@ bool BTStreamPutC (const char c)
     if(txbuffer.head < BT_TX_BUFFER_SIZE)
         txbuffer.data[txbuffer.head++] = c;
 
-    if(c == '\n') {
+    if(c == ASCII_LF) {
         enqueue_tx_chunk(txbuffer.head, (uint8_t *)txbuffer.data);
         txbuffer.head = 0;
     }
@@ -261,7 +261,7 @@ static void esp_spp_cb (esp_spp_cb_event_t event, esp_spp_cb_param_t *param)
 
         case ESP_SPP_INIT_EVT:
             esp_bt_dev_set_device_name(bluetooth.device_name);
-            esp_bt_gap_set_scan_mode(ESP_BT_SCAN_MODE_CONNECTABLE_DISCOVERABLE);
+            esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE);
             esp_spp_start_srv(ESP_SPP_SEC_AUTHENTICATE, ESP_SPP_ROLE_SLAVE, 0, bluetooth.service_name);
             break;
 

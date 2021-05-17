@@ -23,7 +23,7 @@
 
 #include "driver.h"
 
-#ifdef BOARD_T41U5XBB
+#if defined(BOARD_T41U5XBB) || defined(BOARD_T41U5XBB_SS) || defined(BOARD_T41BB5X_PRO)
 
 //#include "Arduino.h"
 #include <math.h>
@@ -31,32 +31,20 @@
 
 #include "grbl/protocol.h"
 
-static gpio_t stx[AUX_N_IN];
+static input_signal_t *stx;
 static gpio_t aux_out[AUX_N_OUT];
 
 static void aux_settings_load (void);
 static status_code_t aux_set_invert_out (setting_id_t id, uint_fast16_t int_value);
 static uint32_t aux_get_invert_out (setting_id_t setting);
-
-static input_signal_t aux_in[] = {
-    { .id = Input_Aux0, .port = &stx[0], .pin = AUXINPUT0_PIN, .group = 0 }
-#if AUX_N_IN == 4
-  , { .id = Input_Aux1, .port = &stx[1], .pin = AUXINPUT1_PIN, .group = 0 },
-    { .id = Input_Aux2, .port = &stx[2], .pin = AUXINPUT2_PIN, .group = 0 },
-    { .id = Input_Aux3, .port = &stx[3], .pin = AUXINPUT3_PIN, .group = 0 }
-#endif
-};
+static char input_ports[30]; //
 
 static const setting_group_detail_t aux_groups[] = {
     { Group_Root, Group_AuxPorts, "Aux ports"}
 };
 
 static const setting_detail_t aux_settings[] = {
-#if AUX_N_IN == 4
-    { Settings_IoPort_InvertIn, Group_AuxPorts, "Invert I/O Port inputs", NULL, Format_Bitfield, "Port 0,Port 1,Port 2,Port 3", NULL, NULL, Setting_NonCore, &settings.ioport.invert_in.mask },
-#else
-    { Settings_IoPort_InvertIn, Group_AuxPorts, "Invert I/O Port inputs", NULL, Format_Bitfield, "Port 0", NULL, NULL, Setting_NonCore, &settings.ioport.invert_in.mask },
-#endif
+    { Settings_IoPort_InvertIn, Group_AuxPorts, "Invert I/O Port inputs", NULL, Format_Bitfield, input_ports, NULL, NULL, Setting_NonCore, &settings.ioport.invert_in.mask },
     { Settings_IoPort_InvertOut, Group_AuxPorts, "Invert I/O Port outputs", NULL, Format_Bitfield, "Port 0,Port 1,Port 2", NULL, NULL, Setting_NonCoreFn, aux_set_invert_out, aux_get_invert_out },
 };
 
@@ -142,8 +130,8 @@ static int32_t wait_on_input (bool digital, uint8_t port, wait_mode_t wait_mode,
     int32_t value = -1;
 
     if(digital) {
-        if(port < AUX_N_IN)
-            value = get_input(aux_in[port].port, (settings.ioport.invert_in.mask << port) & 0x01, wait_mode, timeout);
+        if(port < hal.port.num_digital_in)
+            value = get_input(stx[port].port, (settings.ioport.invert_in.mask << port) & 0x01, wait_mode, timeout);
     }
 //    else if(port == 0)
 //        value = analogRead(41);
@@ -157,32 +145,25 @@ static int32_t wait_on_input (bool digital, uint8_t port, wait_mode_t wait_mode,
     return value;
 }
 
-void board_init (void)
+void board_init (pin_group_pins_t *aux_inputs)
 {
+    stx = aux_inputs->pins;
+
     hal.port.digital_out = digital_out;
     hal.port.wait_on_input = wait_on_input;
 //    hal.port.num_analog_in  = 1;
-    hal.port.num_digital_in = AUX_N_IN;
+    hal.port.num_digital_in = aux_inputs->n_pins;
     hal.port.num_digital_out = AUX_N_OUT;
 
     details.on_get_settings = grbl.on_get_settings;
     grbl.on_get_settings = on_get_settings;
 
-    bool pullup;
-    uint32_t i = AUX_N_IN;
-    input_signal_t *signal;
-    do {
-        pullup = true; //??
-        signal = &aux_in[--i];
-        signal->irq_mode = IRQ_Mode_None;
+    uint32_t i;
 
-        pinMode(signal->pin, pullup ? INPUT_PULLUP : INPUT_PULLDOWN);
-        signal->gpio.reg = (gpio_reg_t *)digital_pin_to_info_PGM[signal->pin].reg;
-        signal->gpio.bit = digital_pin_to_info_PGM[signal->pin].mask;
-
-        if(signal->port != NULL)
-            memcpy(signal->port, &signal->gpio, sizeof(gpio_t));
-    } while(i);
+    for(i = 0; i < hal.port.num_digital_in; i++) {
+        strcat(input_ports, i == 0 ? "Port " : ",Port ");
+        strcat(input_ports, uitoa(i));
+    }
 
     pinModeOutput(&aux_out[0], AUXOUTPUT0_PIN);
     pinModeOutput(&aux_out[1], AUXOUTPUT1_PIN);

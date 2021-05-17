@@ -31,6 +31,7 @@
 
 void serialInit(uint32_t baud_rate);
 int16_t serialGetC(void);
+bool serialPutC (const char c);
 void serialWriteS(const char *s);
 uint16_t serialRxFree(void);
 void serialRxFlush(void);

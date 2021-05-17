@@ -157,6 +157,7 @@ const io_stream_t serial_stream = {
     .read = serialRead,
     .write = serialWriteS,
     .write_all = serialWriteS,
+    .write_char = serialPutC,
     .get_rx_buffer_available = serialRXFree,
     .reset_read_buffer = serialFlush,
     .cancel_read_buffer = serialCancel,
@@ -187,6 +188,7 @@ const io_stream_t telnet_stream = {
     .read = TCPStreamGetC,
     .write = TCPStreamWriteS,
     .write_all = tcpStreamWriteS,
+    .write_char = TCPStreamPutC,
     .get_rx_buffer_available = TCPStreamRxFree,
     .reset_read_buffer = TCPStreamRxFlush,
     .cancel_read_buffer = TCPStreamRxCancel,
@@ -201,6 +203,7 @@ const io_stream_t websocket_stream = {
     .read = WsStreamGetC,
     .write = WsStreamWriteS,
     .write_all = tcpStreamWriteS,
+    .write_char = WsStreamPutC,
     .get_rx_buffer_available = WsStreamRxFree,
     .reset_read_buffer = WsStreamRxFlush,
     .cancel_read_buffer = WsStreamRxCancel,
@@ -223,6 +226,7 @@ const io_stream_t bluetooth_stream = {
     .read = BTStreamGetC,
     .write = BTStreamWriteS,
     .write_all = btStreamWriteS,
+    .write_char = BTStreamPutC,
     .get_rx_buffer_available = BTStreamRXFree,
     .reset_read_buffer = BTStreamFlush,
     .cancel_read_buffer = BTStreamCancel,
@@ -1474,7 +1478,7 @@ bool driver_init (void)
     serialInit();
 
     hal.info = "ESP32";
-    hal.driver_version = "210314";
+    hal.driver_version = "210423";
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
@@ -1622,7 +1626,7 @@ bool driver_init (void)
 
 //    grbl_esp32_if_init();
 
-    my_plugin_init();
+//    my_plugin_init(); causes run time crash for some silly reason
 
     // no need to move version check before init - compiler will fail any mismatch for existing entries
     return hal.version == 8;

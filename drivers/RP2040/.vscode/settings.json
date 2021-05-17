@@ -7,6 +7,9 @@
         "driverpio.pio.h": "c",
         "tusb.h": "c",
         "time.h": "c",
-        "stdbool.h": "c"
+        "stdbool.h": "c",
+        "state_machine.h": "c",
+        "type_traits": "c",
+        "string.h": "c"
     }
 }

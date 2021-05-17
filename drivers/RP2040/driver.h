@@ -47,7 +47,7 @@
 // Set value to 1 to enable, 0 to disable
 
 #ifndef USB_SERIAL_CDC
-//#define USB_SERIAL_CDC      0 // for UART comms
+#define USB_SERIAL_CDC      0 // for UART comms
 #endif
 #ifndef SDCARD_ENABLE
 #define SDCARD_ENABLE       0
@@ -120,6 +120,8 @@
 
 #ifdef BOARD_CNC_BOOSTERPACK
   #include "cnc_boosterpack_map.h"
+#elif defined(BOARD_PICO_CNC)
+  #include "pico_cnc_map.h"
 #elif defined(BOARD_MY_MACHINE)
   #include "my_machine_map.h"
 #else // default board
@@ -167,6 +169,10 @@
 #endif
 
 bool driver_init (void);
+
+#if OUT_SHIFT_REGISTER
+void board_init (output_sr_t *reg);
+#endif
 
 /**
   \brief   Enable IRQ Interrupts

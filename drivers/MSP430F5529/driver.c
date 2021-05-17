@@ -674,7 +674,7 @@ bool driver_init (void)
     serialInit();
 
     hal.info = "MSP430F5529";
-    hal.driver_version = "210219";
+    hal.driver_version = "210423";
     hal.driver_setup = driver_setup;
     hal.f_step_timer = 24000000;
     hal.rx_buffer_size = RX_BUFFER_SIZE;
@@ -710,6 +710,7 @@ bool driver_init (void)
     hal.stream.read = serialGetC;
     hal.stream.write = serialWriteS;
     hal.stream.write_all = serialWriteS;
+    hal.stream.write_char = serialPutC;
     hal.stream.get_rx_buffer_available = serialRxFree;
     hal.stream.reset_read_buffer = serialRxFlush;
     hal.stream.cancel_read_buffer = serialRxCancel;

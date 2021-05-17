@@ -190,6 +190,23 @@ void usbRxCancel (void)
 }
 
 //
+// Writes a single character to the USB output stream, blocks if buffer full
+//
+bool usbPutC (const char c)
+{
+    static uint8_t buf[1];
+
+    *buf = c;
+
+    while(vcom_write(buf, 1) != 1) {
+        if(!hal.stream_blocking_callback())
+            return false;
+    }
+
+    return true;
+}
+
+//
 // Writes a null terminated string to the USB output stream, blocks if buffer full
 // Buffers string up to EOL (LF) before transmitting
 //

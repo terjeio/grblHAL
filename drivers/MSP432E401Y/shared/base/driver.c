@@ -109,6 +109,7 @@ static void enetStreamWriteS (const char *data)
         .read = TCPStreamGetC,
         .write = TCPStreamWriteS,
         .write_all = enetStreamWriteS,
+        .write_char = TCPStreamPutC,
         .get_rx_buffer_available = TCPStreamRxFree,
         .reset_read_buffer = TCPStreamRxFlush,
         .cancel_read_buffer = TCPStreamRxCancel,
@@ -123,6 +124,7 @@ static void enetStreamWriteS (const char *data)
         .read = WsStreamGetC,
         .write = WsStreamWriteS,
         .write_all = enetStreamWriteS,
+        .write_char = WsStreamPutC,
         .get_rx_buffer_available = WsStreamRxFree,
         .reset_read_buffer = WsStreamRxFlush,
         .cancel_read_buffer = WsStreamRxCancel,
@@ -142,6 +144,7 @@ const io_stream_t serial_stream = {
 #else
     .write_all = serialWriteS,
 #endif
+    .write_char = serialPutC,
     .get_rx_buffer_available = serialRxFree,
     .reset_read_buffer = serialRxFlush,
     .cancel_read_buffer = serialRxCancel,
@@ -1666,7 +1669,7 @@ bool driver_init (void)
 #ifdef BOARD_NAME
     hal.board = BOARD_NAME;
 #endif
-    hal.driver_version = "210314";
+    hal.driver_version = "210423";
     hal.driver_setup = driver_setup;
 #if !USE_32BIT_TIMER
     hal.f_step_timer = hal.f_step_timer / (STEPPER_DRIVER_PRESCALER + 1);

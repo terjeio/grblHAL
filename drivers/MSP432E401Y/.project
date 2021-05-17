@@ -28,33 +28,33 @@
 		<link>
 			<name>lwip/ports/msp432e4</name>
 			<type>2</type>
-			<location>C:/ti8/simplelink_msp432e4_sdk_2_30_00_14/source/third_party/lwip/ports/msp432e4</location>
+			<locationURI>COM_TI_SIMPLELINK_MSP432E4_SDK_INSTALL_DIR/source/third_party/lwip/ports/msp432e4</locationURI>
 		</link>
 		<link>
 			<name>lwip/src/api</name>
 			<type>2</type>
-			<location>C:/ti8/simplelink_msp432e4_sdk_2_30_00_14/source/third_party/lwip/src/api</location>
+			<locationURI>COM_TI_SIMPLELINK_MSP432E4_SDK_INSTALL_DIR/source/third_party/lwip/src/api</locationURI>
 		</link>
 		<link>
 			<name>lwip/src/core</name>
 			<type>2</type>
-			<location>C:/ti8/simplelink_msp432e4_sdk_2_30_00_14/source/third_party/lwip/src/core</location>
+			<locationURI>COM_TI_SIMPLELINK_MSP432E4_SDK_INSTALL_DIR/source/third_party/lwip/src/core</locationURI>
 		</link>
 		<link>
 			<name>lwip/src/include</name>
 			<type>2</type>
-			<location>C:/ti8/simplelink_msp432e4_sdk_2_30_00_14/source/third_party/lwip/src/include</location>
+			<locationURI>COM_TI_SIMPLELINK_MSP432E4_SDK_INSTALL_DIR/source/third_party/lwip/src/include</locationURI>
 		</link>
 		<link>
 			<name>lwip/src/netif</name>
 			<type>2</type>
-			<location>C:/ti8/simplelink_msp432e4_sdk_2_30_00_14/source/third_party/lwip/src/netif</location>
+			<locationURI>COM_TI_SIMPLELINK_MSP432E4_SDK_INSTALL_DIR/source/third_party/lwip/src/netif</locationURI>
 		</link>
 	</linkedResources>
 	<variableList>
 		<variable>
 			<name>FREERTOS_LOC</name>
-			<value>file:/D:/Projects/CCS8/freertos_builds_MSP_EXP432E401Y_release_ccs</value>
+			<value>file:/D:/Projects/CCS/freertos_builds_MSP_EXP432E401Y_release_ccs</value>
 		</variable>
 	</variableList>
 </projectDescription>
