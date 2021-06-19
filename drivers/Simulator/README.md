@@ -1,5 +1,9 @@
 # GRBL SIM 
 
+__NOTE:__ This driver has been moved to the [new grblHAL repository](https://github.com/grblHAL/Simulator), new issues should be opened there.
+
+---
+
 : by Jens Geisler, Adam Shelly  
 
 Modified by Terje Io for grblHAL. Original implementation for Grbl can be found [here](https://github.com/grbl/grbl-sim).

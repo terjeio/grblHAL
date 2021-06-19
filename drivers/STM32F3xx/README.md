@@ -1,5 +1,8 @@
 ## grblHAL driver for STM32F3xx processors
 
+__NOTE:__ This driver has been moved to the [new grblHAL repository](https://github.com/grblHAL/STM32F3xx), new issues should be opened there.
+
+---
 See the Wiki-page for [compiling grblHAL](https://github.com/terjeio/grblHAL/wiki/Compiling-GrblHAL) for instructions for how to import the project, configure the driver and compile.
 
 __NOTE:__ This is an initial version, currently only bench tested with an oscillocope using a [F303 Blackpill board](https://robotdyn.com/stm32f303cct6-256-kb-flash-stm32-arm-cortexr-m4-mini-system-dev-board-3326a9dd-3c19-11e9-910a-901b0ebb3621.html).

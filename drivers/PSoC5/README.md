@@ -1,5 +1,9 @@
 ## PSoC5 Driver
 
+__NOTE:__ This driver has been moved to the [new grblHAL repository](https://github.com/grblHAL/PSoC5), new issues should be opened there.
+
+---
+
 A GrblHAL driver for Cypress PSoC 5 \(CY8CKIT-059\
 
 ** EXPERIMENTAL **

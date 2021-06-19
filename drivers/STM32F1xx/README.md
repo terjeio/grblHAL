@@ -1,5 +1,9 @@
 ## grblHAL driver for STM32F1xx processors
 
+__NOTE:__ This driver has been moved to the [new grblHAL repository](https://github.com/grblHAL/STM32F1xx), new issues should be opened there.
+
+---
+
 __NOTE:__ [STM32F3xx Blackpill](../STM32F3xx/README.md) can often be used as a drop-in replacement of STM32F103 based *pills. It is likely that grblHAL support for F103 will be frozen at some point due to lack of memory.
 
 Loosely based on code from robomechs [6-AXIS-USBCNC-GRBL](https://github.com/robomechs/6-AXIS-USBCNC-GRBL) port, updated for [STM32CubeIDE](https://www.st.com/en/development-tools/stm32cubeide.htm) and the latest STM HAL drivers where appropriate.

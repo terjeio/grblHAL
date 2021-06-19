@@ -1,5 +1,9 @@
 ## STM32F4xx grblHAL driver
 
+__NOTE:__ This driver has been moved to the [new grblHAL repository](https://github.com/grblHAL/STM32F4xx), new issues should be opened there.
+
+---
+
 A grblHAL driver for the STM32F401xC, STM32F407xx, STM32F411xE and STM32F446xx ARM processors.
 
 Loosely based on code from robomechs [6-AXIS-USBCNC-GRBL](https://github.com/robomechs/6-AXIS-USBCNC-GRBL) port, updated for [STM32CubeIDE](https://www.st.com/en/development-tools/stm32cubeide.htm) and the latest STM HAL drivers where appropriate.

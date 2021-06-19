@@ -1,5 +1,9 @@
 ## SAMD21 Driver
 
+__NOTE:__ This driver has been moved to the [new grblHAL repository](https://github.com/grblHAL/SAMD21), new issues should be opened there.
+
+---
+
 __IMPORTANT:__ Arduino version 1.8.11 has breaking changes in the library code that causes compilation to fail. Use an earlier version or select another driver for your project.  
 See issue #224 for more information. Also note that I am __*not*__ going to make a workaround for this since the compilation error is in the shared grblHAL core code.
 

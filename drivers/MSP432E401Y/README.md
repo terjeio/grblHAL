@@ -1,5 +1,9 @@
 ## MSP432E401Y
 
+__NOTE:__ This driver has been moved to the [new grblHAL repository](https://github.com/grblHAL/MSP432E401Y), new issues should be opened there.
+
+---
+
 A GrblHAL driver for the Texas Instruments [MSP432E401Y LaunchPad](http://www.ti.com/tool/MSP-EXP432E401Y#).
 
 See the Wiki-page for [compiling grblHAL](https://github.com/terjeio/grblHAL/wiki/Compiling-GrblHAL) for instructions for how to import the project, configure the driver and compile.

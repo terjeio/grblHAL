@@ -1,5 +1,9 @@
 ## MSP432P401R
 
+__NOTE:__ This driver has been moved to the [new grblHAL repository](https://github.com/grblHAL/MSP432P401R), new issues should be opened there.
+
+---
+
 A GrblHAL driver for the MSP432P401R ARM processors.
 
 See the Wiki-page for [compiling grblHAL](https://github.com/terjeio/grblHAL/wiki/Compiling-GrblHAL) for instructions for how to import the project, configure the driver and compile.

@@ -1,6 +1,7 @@
 ## grblHAL ##
 
-__NEWS!__ grblHAL is moving to a [new home](https://github.com/grblHAL) where the project is split into separate repositories, one for the shared core, one for each plugin and one for for each driver. The driver dependencies to the core and plugins are set up as git submodules and drivers can thus be downloaded separately.
+__NEWS!__ grblHAL has moved to a [new home](https://github.com/grblHAL) where the project is split into separate repositories, one for the shared core, one for each plugin and one for for each driver.
+ The driver dependencies to the core and plugins are set up as git submodules and drivers can thus be downloaded separately.
 
 There are both upsides and downsides to this move, the most notable downside for users is that downloading the source code as a .zip-file no-longer get all dependencies resolved.
 Each submodule a driver is dependent on has to be downloaded separately and copied to the corresponding folder in the driver
@@ -8,11 +9,10 @@ This is a bit more involved than the copying that was needed in previous release
 
 An upside is that a driver download with [git](https://git-scm.com/downloads) or [GitHub desktop](https://desktop.github.com/) will fetch all dependencies automatically and the download is no longer "polluted" with unwanted drivers.
 
-For the time beeing I will keep this repository intact and the source code in sync.
 New issues should be raised, pull requests submitted and discussions started at the new home.
 Use the [core repository](https://github.com/grblHAL/core) for raising new issues or starting discussions if it is not clear to you where they belong. 
 
-This repository will eventually be moved to the new home and kept as an reference.
+This repository is only kept as an reference.
 
 ---
 
@@ -91,4 +91,4 @@ List of Supported G-Codes:
 ```
 
 ---
-2021-02-25
+2021-06-19

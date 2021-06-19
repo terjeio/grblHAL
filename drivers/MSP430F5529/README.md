@@ -1,5 +1,9 @@
 ## MSP430F5529
 
+__NOTE:__ This driver has been moved to the [new grblHAL repository](https://github.com/grblHAL/MSP430F5529), new issues should be opened there.
+
+---
+
 A GrblHAL driver for the Texas Instruments MSP430F5529 LaunchPad.
 
 I made this driver just to see if it could be done and for now I do not intend to use it myself... The only 16-bit grbl port available?

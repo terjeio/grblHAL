@@ -1,5 +1,9 @@
 ## iMXRT1062 Driver
 
+__NOTE:__ This driver has been moved to the [new grblHAL repository](https://github.com/grblHAL/iMXRT1062), new issues should be opened there.
+
+---
+
 A GrblHAL driver for the NXP iMXRT1062 processor on a [Teensy 4.x board](https://www.pjrc.com/store/teensy40.html).
 
 This driver compiles and uploads from the Arduino IDE and is partially dependent on the Arduino framework. [Teensyduino](https://www.pjrc.com/teensy/td_download.html) is required and must be added to the Arduino IDE.

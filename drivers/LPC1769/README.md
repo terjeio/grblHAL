@@ -1,5 +1,9 @@
 ## LPC176x grblHAL driver
 
+__NOTE:__ This driver has been moved to the [new grblHAL repository](https://github.com/grblHAL/LPC176x), new issues should be opened there.
+
+---
+
 A GrblHAL driver for NXP LPC1768 and LPC1769 processors.
 
 Loosely based on the official [grbl-LPC port](https://github.com/gnea/grbl-LPC).
